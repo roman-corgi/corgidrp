@@ -48,7 +48,7 @@ BRIGHT_EXPTIME = 5.0
 FWHM = 3
 FILTER_USED = '3C'
 INPUT_OD = 2.25
-CAL_FACTOR = 0.8
+CAL_FACTOR = 1e-7
 OD_RASTER_THRESHOLD = 0.1
 OD_TEST_TOLERANCE = 0.2
 FILESAVE = True
@@ -618,7 +618,7 @@ def test_calculate_od_at_new_location(output_dir):
     # Create a fake input dataset to set the filename
     input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
-    fake_input_image.filename = f"cgi_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l2b.fits"
+    fake_input_image.filename = f"cgi_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l2b.fits".replace(":", ".")
     fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
 
     # Build the NDFilterSweetSpotDataset
@@ -643,7 +643,7 @@ def test_calculate_od_at_new_location(output_dir):
 
     # Default FPAM/FSAM transformations
     fpamfsamcal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))    
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))    
 
     # Call the function under test
     interpolated_od = nd_filter_calibration.calculate_od_at_new_location(

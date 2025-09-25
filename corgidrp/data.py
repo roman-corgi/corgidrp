@@ -94,6 +94,15 @@ class Dataset():
         for filename, frame in zip(filenames, self.frames):
             frame.save(filename=filename, filedir=filedir)
 
+        # relink frames with all_data
+        self.all_data = np.array([frame.data for frame in self.frames])
+        self.all_err = np.array([frame.err for frame in self.frames])
+        self.all_dq = np.array([frame.dq for frame in self.frames])
+        for i, frame in enumerate(self.frames):
+            frame.data = self.all_data[i]
+            frame.err = self.all_err[i]
+            frame.dq = self.all_dq[i]
+
     def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None):
         """
         Updates the dataset after going through a processing step
@@ -173,25 +182,26 @@ class Dataset():
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
 
-    def rescale_error(self, input_error, err_name):
+    def rescale_error(self, scale_factor, scale_name):
         """
         Calls Image.rescale_errors() for each frame.
         Updates Dataset.all_err
 
         Args:
-          input_error (np.array): 2-d error layer or 3-d layer
-          err_name (str): name of the uncertainty layer
+          scale_factor (np.array or float): scale factor value or array
+          scale_name (str): name of the scaling reason
         """
-        if input_error.ndim == 3:
-            for i,frame in enumerate(self.frames):
-                frame.rescale_error(input_error[i], err_name)
-
-        elif input_error.ndim ==2:
+        if isinstance(scale_factor, float):
             for frame in self.frames:
-                frame.rescale_error(input_error, err_name)
-
+                frame.rescale_error(scale_factor, scale_name)
+        elif scale_factor.ndim == 2:
+            for frame in self.frames:
+                frame.rescale_error(scale_factor, scale_name)
+        elif scale_factor.ndim == 3:
+            for i,frame in enumerate(self.frames):
+                frame.rescale_error(scale_factor[i], scale_name)
         else:
-            raise ValueError("input_error is not either a 2D or 3D array.")
+            raise ValueError("scale_factor is neither a float nor a 2D or 3D array.")
 
         # Preserve pointer links between Dataset.all_err and Image.err
         self.all_err = np.array([frame.err for frame in self.frames])
@@ -459,6 +469,14 @@ class Image():
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
+        # recast header data to the appropriate bit depth as set by the pipeline settings
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+        if self.err is not None:
+            self.err = self.err.astype(corgidrp.image_dtype, copy=False)
+        if self.dq is not None:
+            self.dq = self.dq.astype(corgidrp.dq_dtype, copy=False)
+            
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
@@ -571,30 +589,27 @@ class Image():
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
-    def rescale_error(self, input_error, err_name):
+    def rescale_error(self, scale_factor, scale_name):
         """
-        Add a layer of a specific additive uncertainty on the 3-dim error array extension
-        and update the combined uncertainty in the first layer.
-        Update the error header and assign the error name.
-
-        Only tracks individual errors if the "track_individual_errors" setting is set to True
-        in the configuration file
+        scale the 3-dim error array extension with a factor.
+        Update the error header with the history and reason of the scaling.
 
         Args:
-          input_error (np.array): 2-d error layer
-          err_name (str): name of the uncertainty layer
+          scale_factor (np.array or float): scale factor value or array
+          scale_name (str): name of the scaling reason
         """
-        if input_error.ndim != 2 or input_error.shape != self.data.shape:
-            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        if isinstance(scale_factor, float):
+            pass
+        elif scale_factor.ndim == 2 or scale_factor.shape == self.data.shape:
+            pass
+        else:
+            raise ValueError("we expect a 2-dimensional input array with dimensions {0} or a float value".format(self.data.shape))
 
-        #first layer is always the updated combined error
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning) # catch any invalid value encountered in multiply
-            self.err = self.err*input_error
-        self.err_hdr["Layer_1"] = "combined_error"
-
+            self.err = self.err*scale_factor
         # record history since 2-D error map doesn't track individual terms
-        self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(err_name)
+        self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(scale_name)
 
 
     def get_hash(self):
@@ -605,8 +620,14 @@ class Image():
             str: the hash of the data, err, and dq
         """
         data_bytes = self.data.data.tobytes()
-        err_bytes = self.err.data.tobytes()
-        dq_bytes = self.dq.data.tobytes()
+        if self.err is not None:
+            err_bytes = self.err.data.tobytes()
+        else:
+            err_bytes = b''
+        if self.dq is not None:
+            dq_bytes = self.dq.data.tobytes()
+        else:
+            dq_bytes = b''
 
         total_bytes = data_bytes + err_bytes + dq_bytes
 
@@ -760,11 +781,10 @@ class SpectroscopyCentroidPSF(Image):
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new SpectroscopyCentroidPSF 
         if ext_hdr is not None:
             if input_dataset is None:
-                raise ValueError("Must pass `input_dataset` to create new PSFCentroidCalibration.")
+                raise ValueError("Must pass `input_dataset` to create new SpectroscopyCentroidPSF.")
             
             self.ext_hdr["EXTNAME"] = "CENTROIDS"
-
-            self.ext_hdr['DATATYPE'] = 'PSFCentroidCalibration'
+            self.ext_hdr['DATATYPE'] = 'SpectroscopyCentroidPSF'
             self.ext_hdr['DATALVL'] = 'CAL'
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
@@ -775,16 +795,118 @@ class SpectroscopyCentroidPSF(Image):
             self.pri_hdr['FILENAME'] = self.filename
             if err is None:
                 self.err = np.zeros(self.data.shape)
-                self.err_hdr = fits.Header
+                self.err_hdr = fits.Header()
 
-        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'PSFCentroidCalibration':
-            raise ValueError("This file is not a valid PSFCentroidCalibration.")
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SpectroscopyCentroidPSF':
+            raise ValueError("This file is not a valid SpectroscopyCentroidPSF.")
 
         self.xfit = self.data[:, 0]
         self.yfit = self.data[:, 1]
         self.xfit_err = self.err[0][:, 0]
         self.yfit_err = self.err[0][:, 1]
 
+class LineSpread(Image):
+    """
+    Calibration product that stores a flux profile vs. wavelength of a narrowband observation and the fitted Gaussian parameters
+
+    Args:
+        data_or_filepath (str or np.ndarray): 1D wavelength array (nm)
+                                              1D flux profile
+                                              with shape (N, 2), where N is the length of the wavelength array.
+        pri_hdr (fits.Header): Primary header.
+        ext_hdr (fits.Header): Extension header.
+        gauss_par (np.ndarray): Gaussian fit parameters + corresponding errors: [amplitude, mean_wavelen, fwhm, amp_err, wave_err, fwhm_err]
+        input_dataset (Dataset): Dataset used to generate this calibration.
+        
+    Attr:
+        wavlens (np.array): wavelengths in nm
+        flux_profile (np.array): normalized flux
+        gauss_par (np.array): Gaussian fit parameters: [amplitude, mean_wavelen, fwhm, amp_err, wave_err, fwhm_err]
+        amplitude (float): Gaussian amplitude
+        mean_wave (float): mean wavelength
+        fwhm (float): Gaussian FWHM
+        amp_err (float): fit error of the amplitude
+        wave_err (float): fit error of the mean wavelength
+        fwhm_err (float): fit error of the Gaussian fwhm
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, gauss_par=None, input_dataset=None):
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+
+        # if this is a new LineSpread, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new LineSpread 
+        if ext_hdr is not None:
+            if input_dataset is None:
+                raise ValueError("Must pass `input_dataset` to create new LineSpread calibration.")
+
+            self.ext_hdr['DATATYPE'] = 'LineSpread'
+            self.ext_hdr['DATALVL'] = 'CAL'
+            self.ext_hdr['EXTNAME'] = 'FLUX_PROF'
+            self._record_parent_filenames(input_dataset)
+            self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
+
+            # Generate default output filename
+            base = input_dataset[0].filename.split(".fits")[0]
+            self.filename = f"{base}_line_spread.fits"
+            if gauss_par is not None:
+                if not (gauss_par.ndim == 1 and len(gauss_par) == 6):
+                    raise ValueError('The LineSpread calibration gauss_par array must have 6 entries')
+                else:
+                    self.gauss_par = gauss_par
+            else:
+                raise ValueError('The LineSpread calibration must have also the Gaussian parameters')
+            self.gauss_hdr = fits.Header()
+            self.gauss_hdr["EXTNAME"] = "GAUSS_PAR"
+        else:
+            # a filepath is passed in
+            with fits.open(data_or_filepath) as hdulist:
+                #gauss par is in FITS extension
+                self.gauss_par = hdulist[2].data
+                self.gauss_hdr = hdulist[2].header
+            
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'LineSpread':
+            raise ValueError("This file is not a valid LineSpread calibration.")
+
+        if self.data.shape[0] != 2:
+            raise ValueError('The LineSpread calibration array must have a shape of (2,N)')
+        
+        #convenience attributes
+        self.wavlens = self.data[0, :]
+        self.flux_profile = self.data[1, :]
+        self.amplitude = self.gauss_par[0]
+        self.mean_wave = self.gauss_par[1]
+        self.fwhm = self.gauss_par[2]
+        self.amp_err = self.gauss_par[3]
+        self.wave_err = self.gauss_par[4]
+        self.fwhm_err = self.gauss_par[5]
+   
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+
+        gauss_hdu = fits.ImageHDU(data=self.gauss_par, header = self.gauss_hdr)
+        hdulist.append(gauss_hdu)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
 
 class DispersionModel(Image):
     """ 
@@ -834,8 +956,10 @@ class DispersionModel(Image):
                 raise ValueError("Input should either be a dictionary or a filepath string")
             if pri_hdr == None:
                 pri_hdr = fits.Header()
-            if ext_hdr == None:
-                ext_hdr = fits.Header()
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=VerifyWarning)
+                if ext_hdr == None:
+                    ext_hdr = fits.Header()
             ext_hdr['DRPCTIME'] =  time.Time.now().isot
             ext_hdr['DRPVERSN'] =  corgidrp.__version__
             self.pri_hdr = pri_hdr
@@ -1393,7 +1517,9 @@ class DetectorParams(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+            filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':','.')
+            self.filename = filename
             self.pri_hdr['FILENAME'] = self.filename
 
     def get_hash(self):
@@ -1408,7 +1534,6 @@ class DetectorParams(Image):
             hashing_str += str(self.params[key])
 
         return str(hash(hashing_str))
-        
             
 class AstrometricCalibration(Image):
     """
@@ -1711,8 +1836,9 @@ class FpamFsamCal(Image):
 
             # use the start date for the filename by default
             self.filedir = '.'
-            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':', '.') # compatible with Windows machines
             self.pri_hdr['FILENAME'] = self.filename
+
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1971,7 +2097,7 @@ class CoreThroughputCalibration(Image):
         r_good = radius_cor >= radii.min()
         
         if len(x_cor[r_good]) == 0:
-            raise ValueError('All target radius are less than the minimum '
+            raise ValueError('All target radii are less than the minimum '
                 'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
         radius_cor = radius_cor[r_good]
         # Update x_cor and y_cor
@@ -2833,12 +2959,12 @@ datatypes = { "Image" : Image,
               "TrapCalibration" : TrapCalibration,
               "FluxcalFactor" : FluxcalFactor,
               "FpamFsamCal" : FpamFsamCal,
+              "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,
-              "CoreThroughputMap": CoreThroughputMap,
-              "PSFCentroidCalibration": SpectroscopyCentroidPSF,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
-              "DispersionModel": DispersionModel
+              "DispersionModel": DispersionModel,
+              "LineSpread": LineSpread
               }
 
 def autoload(filepath):

@@ -17,10 +17,16 @@
             "name": "divide_by_exptime"
         },
         {
+            "name": "crop"
+        },
+        {
             "name": "update_to_l3"
         }, 
         {
             "name": "save"
+        },
+        {
+            "name": "replace_bad_pixels"
         },
         {
             "name": "distortion_correction", 

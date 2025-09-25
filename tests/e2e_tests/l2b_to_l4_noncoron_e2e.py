@@ -2,6 +2,7 @@ import argparse
 import os
 import numpy as np
 from astropy.io import fits
+import corgidrp
 from corgidrp.data import Image
 from corgidrp.mocks import (create_default_L2b_headers, create_default_L3_headers, 
                             create_synthetic_satellite_spot_image, create_ct_psfs)
@@ -75,6 +76,11 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     astrom_cal.save(filedir=e2eoutput_path, filename="mock_astro.fits" )
 
     # add calibration file to caldb
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(astrom_cal)
 
@@ -137,9 +143,10 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image.pri_hdr.set('ROLL', 0)
         new_image.ext_hdr.set('CFAMNAME','1F')
         new_image.ext_hdr.set('FSMLOS', 0) # non-coron
+        new_image.ext_hdr.set('LSAMNAME', 'OPEN') # non-coron
 
         # new_image.filename ="CGI_020000199900100{}00{}_20250415T0305102_L2b.fits".format(ibatch,i)
-        new_image.filename = "CGI_0200001999001000001_20250415T0305{0:02d}_L2b.fits".format(i)
+        new_image.filename = "CGI_0200001999001000001_20250415T0305{0:02d}_L2b.fits".format(i).lower()
 
 
         image_list.append(new_image)
@@ -158,11 +165,16 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #### Pass the data to the walker ####
     #####################################
 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+
     l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_data_path, "*.fits")))
     walker.walk_corgidrp(l2b_data_filelist, "", e2eoutput_path)
 
     #Read in an L3 file
-    l3_filename = glob.glob(os.path.join(e2eoutput_path, "*L3_.fits"))[0]
+    l3_filename = glob.glob(os.path.join(e2eoutput_path, "*l3_.fits"))[0]
     l3_image = Image(l3_filename)
 
     #Check if there's a WCS header
@@ -173,7 +185,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     assert l3_image.ext_hdr['BUNIT'] == 'photoelectron/s'
     
     #Clean up
-    this_caldb.remove_entry(astrom_cal)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
     shutil.rmtree(e2e_data_path)
     # shutil.rmtree(e2eoutput_path)
     
@@ -227,6 +240,11 @@ def test_l3_to_l4(e2eoutput_path):
     astrom_cal.save(filedir=e2eoutput_path_l4, filename="mock_astro.fits" )
 
     # add calibration file to caldb
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(astrom_cal)
 
@@ -247,7 +265,12 @@ def test_l3_to_l4(e2eoutput_path):
     #### Read in the L3 data and run ####
     #####################################
 
-    l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*L3_.fits")))
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
+    l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
     walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path_l4)
 
@@ -255,9 +278,9 @@ def test_l3_to_l4(e2eoutput_path):
     #### Read in the psf_subtracted images and test for source detection ###
     ########################################################################
 
-    l4_filename = glob.glob(os.path.join(e2eoutput_path_l4, "*L4_.fits"))[0]
+    l4_filename = glob.glob(os.path.join(e2eoutput_path_l4, "*l4_.fits"))[0]
     combined_image = Image(l4_filename)
-    assert combined_image.filename == l3_data_filelist[-1].split(os.path.sep)[-1].replace("_L3_", "_L4_")
+    assert combined_image.filename == l3_data_filelist[-1].split(os.path.sep)[-1].replace("_l3_", "_l4_")
     
     #Find the sources and get their (x,y) coordinate
     y_source, x_source = np.unravel_index(np.nanargmax(combined_image.data), combined_image.data.shape)
@@ -282,10 +305,8 @@ def test_l3_to_l4(e2eoutput_path):
     assert combined_image.ext_hdr['FILE3'] in input_filenames
     assert combined_image.ext_hdr['FILE4'] in input_filenames
 
-
-    #Clean up
-    this_caldb.remove_entry(astrom_cal)
-    this_caldb.remove_entry(fluxcal_fac)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
     # shutil.rmtree(e2eoutput_path_l4)
     # shutil.rmtree(e2eintput_path)
 
@@ -301,7 +322,7 @@ if __name__ == "__main__":
 
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data/" 
+    e2edata_dir = "/Users/sbogat/.corgidrp/" 
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 

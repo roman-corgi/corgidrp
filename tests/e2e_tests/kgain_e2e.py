@@ -9,7 +9,11 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+from corgidrp.sorting import sort_pupilimg_frames
+from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
+
 import warnings
+
 
 try:
     from cal.kgain.calibrate_kgain import calibrate_kgain
@@ -46,7 +50,29 @@ def fix_headers_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
+def set_vistype_for_tvac(
+    list_of_fits,
+    ):
+    """ Adds proper values to VISTYPE for non-linearity calibration.
 
+    This function is unnecessary with future data because data will have
+    the proper values in VISTYPE. Hence, the "tvac" string in its name.
+
+    Args:
+    list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Adding VISTYPE='PUPILIMG' to TVAC data")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        # Adjust VISTYPE
+        if prihdr['VISTYPE'] == 'N/A':
+            prihdr['VISTYPE'] = 'PUPILIMG'
+        exthdr = fits_file[1].header
+        if exthdr['EMGAIN_A'] == 1:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
 
 # tvac_kgain: 8.49404981510777 e-/DN, result from new iit code with specified file input order; used to be #8.8145 #e/DN,
 # tvac_readnoise: 121.76070832489948 e-, result from new iit code with specified file input order; used to be 130.12 e-
@@ -58,76 +84,78 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     default_config_file = os.path.join(cal.lib_dir, 'kgain', 'config_files', 'kgain_parms.yaml')
     stack_arr2_f = []
     stack_arr_f = []
-    box_data = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'kgain') 
+    box_data = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain') 
+    # for f in os.listdir(box_data):
+    #     file = os.path.join(box_data, f)
+    #     if not file.endswith('.fits'):
+    #         continue
+    #     for i in range(51841, 51871):
+    #         if str(i) in file:
+    #             stack_arr2_f.append(file)
+    #             with fits.open(file, mode='update') as hdus:
+    #                 try:
+    #                     hdus[0].header['VISTYPE'] = 'PUPILIMG'
+    #                     hdus[0].header['OBSTYPE'] = 'MNFRAME'
+    #                 except:
+    #                     pass
+    #                 try:
+    #                     hdus[1].header['OBSTYPE'] = 'MNFRAME'
+    #                 except:
+    #                     pass
+    #             exit
+    #     for i in range(51731, 51841):
+    #         if str(i) in file:
+    #             stack_arr_f.append(file)
+    #             with fits.open(file, mode='update') as hdus:
+    #                 try:
+    #                     hdus[0].header['VISTYPE'] = 'PUPILIMG'
+    #                     hdus[0].header['OBSTYPE'] = 'KGAIN'
+    #                 except:
+    #                     pass
+    #                 try:
+    #                     hdus[1].header['OBSTYPE'] = 'KGAIN'
+    #                 except:
+    #                     pass
+    #             exit
+    file_list = []
     for f in os.listdir(box_data):
         file = os.path.join(box_data, f)
-        if not file.endswith('.fits'):
+        if not file.lower().endswith('.fits'):
             continue
-        for i in range(51841, 51871):
-            if str(i) in file:
-                stack_arr2_f.append(file)
-                with fits.open(file, mode='update') as hdus:
-                    try:
-                        hdus[0].header['VISTYPE'] = 'PUPILIMG'
-                        hdus[0].header['OBSTYPE'] = 'MNFRAME'
-                    except:
-                        pass
-                    try:
-                        hdus[1].header['OBSTYPE'] = 'MNFRAME'
-                    except:
-                        pass
-                exit
-        for i in range(51731, 51841):
-            if str(i) in file:
-                stack_arr_f.append(file)
-                with fits.open(file, mode='update') as hdus:
-                    try:
-                        hdus[0].header['VISTYPE'] = 'PUPILIMG'
-                        hdus[0].header['OBSTYPE'] = 'KGAIN'
-                    except:
-                        pass
-                    try:
-                        hdus[1].header['OBSTYPE'] = 'KGAIN'
-                    except:
-                        pass
-                exit
+        file_list.append(file)
+    set_vistype_for_tvac(file_list)
+    file_dataset = data.Dataset(file_list)
+    out_dataset = sort_pupilimg_frames(file_dataset, cal_type='k-gain')
+    cal_list, mean_frame_list, exp_arr, _, _, _, datetimes_sort_inds, truncated_set_len = nonlin_kgain_dataset_2_stack(out_dataset, apply_dq = False, cal_type='kgain')
+    cal_arr = cal_list[0]
+    split_arr = np.arange(0,len(cal_arr), truncated_set_len)[1:]
+    cal_ed_list = np.split(cal_arr, split_arr)
+    stack_arr = np.stack(cal_ed_list)
+    stack_arr2 = np.stack(mean_frame_list)
+
     #stack_arr2 = np.stack(stack_arr2)
     # fileorder_filepath = os.path.join(os.path.split(box_data)[0], 'results', 'TVAC_kgain_file_order.npy')
     #np.save(fileorder_filepath, stack_arr_f+stack_arr2_f)
-    stack_arr_f = sorted(stack_arr_f)
-    stack_dat = data.Dataset(stack_arr_f)
-    stack2_dat = data.Dataset(stack_arr2_f)
-    stack_arr2 = stack2_dat.all_data
-
-    split, _ = stack_dat.split_dataset(exthdr_keywords=['EXPTIME'])
-    stack_arr = []
-    for dset in split:
-        # Breaking up the one set that has 10 frames at the same exptime (instead of 5 like all the rest);
-        # Making the set 2 separate sets of 5 each perhaps unfairly weights this exptime 
-        # which is doubly represented now, but doing this results in the same 8.8145 number from before
-        if dset.all_data.shape[0] == 10:
-            stack_arr.append(dset.all_data[:5])
-            # for ind in [5,6,7,8,9]:
-            #     fp = dset.frames[ind].filepath
-            #     stack_arr_f.remove(fp)
-            
-            stack_arr.append(dset.all_data[5:])
-            continue
-        stack_arr.append(dset.all_data)
-    stack_arr = np.stack(stack_arr)
-    pass
-    #### Done ordering files for II&T and DRP
+    # stack_arr_f = sorted(stack_arr_f)
+    # stack_dat = data.Dataset(stack_arr_f)
+    # stack2_dat = data.Dataset(stack_arr2_f)
 
     ####### ordered_filelist is simply the combination of the the two ordered stacks that are II&T inputs is the input needed for the DRP calibration
-    ordered_filelist = stack_arr_f+stack_arr2_f
+    #ordered_filelist = stack_arr_f+stack_arr2_f
+    ordered_filelist = []
+    for f in os.listdir(box_data):
+        if not f.lower().endswith('.fits'):
+            continue
+        ordered_filelist.append(os.path.join(box_data, f))
 
     ##### Fix TVAC headers
-    fix_headers_for_tvac(ordered_filelist)
+    #fix_headers_for_tvac(ordered_filelist)
 
     ########## Calling II&T code
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=RuntimeWarning)
         warnings.filterwarnings('ignore', category=DeprecationWarning)
+        warnings.filterwarnings('ignore', category=UserWarning)
         (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
                         binwidth=68, config_file=default_config_file, 
                         mkplot=None, verbose=None)
@@ -140,6 +168,19 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
         shutil.rmtree(kgain_outputdir)
     os.mkdir(kgain_outputdir)
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB()
+
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
     ####### Run the DRP walker
     print('Running walker')
     #walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
@@ -151,7 +192,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     walker.run_recipe(recipe[1], save_recipe_file=True)
 
     ####### Load in the output data. It should be the latest kgain file produced.
-    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_KRN_CAL*.fits'))
+    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_krn_cal*.fits'))
     kgain_file = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
 
     kgain = data.KGain(kgain_file)
@@ -172,8 +213,9 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     assert np.abs(diff_kgain) == 0
     assert np.abs(diff_readnoise) == 0 
 
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(kgain)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+
 
     
 if __name__ == "__main__":
@@ -182,7 +224,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/'  
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2/'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/''/home/jwang/Desktop/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")
