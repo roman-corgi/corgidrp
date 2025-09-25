@@ -571,7 +571,7 @@ def test_star_spec_registration():
     # 3/ VAP tests are performed along this test function too (https://github.com/roman-corgi/corgidrp/issues/545)
 
     # Directory to temporarily store the I/O of the test
-    dir_test = 'simdata'
+    dir_test = os.path.join(os.path.dirname(__file__), 'simdata')
     os.makedirs(dir_test, exist_ok=True)
 
     log_file = os.path.join(dir_test, 'star_spec_registration.log')
@@ -664,12 +664,13 @@ def test_star_spec_registration():
                 wv0_y = hdul[0].header['WV0_Y']
             except:
                 logger.info(f'Wavelength zero-point WV0_X, WV0_Y NOT present in template file {pathfile}. FAIL')
-        # At this step all individual tests above have passed
-        logger.info('Alignment offsets relative to FSAM slit present in all template files. PASS')
-        logger.info('WV0_X and WV0_Y present in all template files. PASS')
       
         # Add pathfilename to the list
         pathfiles_template += [pathfile]
+
+    # At this step all individual tests above have passed
+    logger.info('Alignment offsets relative to FSAM slit present in all template files. PASS')
+    logger.info('WV0_X and WV0_Y present in all template files. PASS')
 
     # Define a slit alignment offset for the FSM data that is close to one of the
     # templates to be able to predict which offset best matches the templates

@@ -911,7 +911,6 @@ def star_spec_registration(
     idx_best = None
     # cross-correlate data with expected slit error with template
     shift = get_shift_correlation(fsm_combined[slit_idx], temp_data)
-    import matplotlib.pyplot as plt
     for idx_img, img in enumerate(fsm_combined):
         # Bring img_data on top of img_template
         img = np.roll(img, (-shift[0], -shift[1]), axis=(0,1))
