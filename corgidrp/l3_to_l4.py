@@ -685,7 +685,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     return processed_dataset 
 
 
-def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None):
+def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
     """ 
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -700,7 +700,8 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
                           This will override the offset in the existing lookup table. 
         bb_nb_dy (float): vertical image offset between the narrowband and broadband filters, in EXCAM pixels. 
                           This will override the offset in the existing lookup table. 
-
+        return_all (boolean): if false (default) returns only the broad band science frames, if true it returns all (including narrow band) frames
+    
     Returns:
         corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
                                information as header keywords, which is WAVLEN0, WV0_X, WV0_XERR, WV0_Y, WV0_YERR, WV0_DIMX, WV0_DIMY
@@ -753,6 +754,8 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
         y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
     x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
     y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+    if return_all:
+        sci_dataset = dataset
 
     for frame in sci_dataset:
         frame.ext_hdr["WAVLEN0"] = cen_wave
