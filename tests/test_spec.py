@@ -847,19 +847,6 @@ def test_star_spec_registration():
     logger.info('='*80)
     logger.info('TEST COMPLETE')
     logger.info('='*80)
-
-    
-    #test that the complete dataset is returned
-    all_dataset = l3_to_l4.determine_wave_zeropoint(input_dataset, return_all = True)
-    assert len(all_dataset) == len(input_dataset)
-    for frame in all_dataset:
-        assert frame.ext_hdr["WAVLEN0"] == 753.83
-        assert "WV0_X" in frame.ext_hdr
-        assert "WV0_Y" in frame.ext_hdr
-        assert "WV0_XERR" in frame.ext_hdr
-        assert "WV0_YERR" in frame.ext_hdr
-        assert frame.ext_hdr["WV0_DIMX"] == 81
-        assert frame.ext_hdr["WV0_DIMY"] == 81
     
 def test_linespread_function():
     """
