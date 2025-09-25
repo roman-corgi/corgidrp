@@ -18,6 +18,7 @@ from scipy.ndimage import shift
 from astropy.io import fits
 from scipy.ndimage import generic_filter
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
+from corgidrp import pol
 
 
 def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
@@ -858,6 +859,98 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
     return dataset
 
+def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_mueller_matrix_cal):
+    """
+    Takes in polarimetric L3 images and their unocculted polarimetric observations,
+    computes and subtracts off the stellar polarization component from each image
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
+                                               taken with both wollastons at the same roll angle
+        system_mueller_matrix_cal (corgidrp.data.SystemMuellerMatrix): mueller matrix calibration of the system without a ND filter
+        nd_mueller_matrix_cal (corgidrp.data.NDFilterMuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
+
+    Returns:
+        corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
+    """
+    
+    # check that the data is at the L3 level, and only polarimetric observations are inputted
+    dataset = input_dataset.copy()
+    for frame in dataset:
+        if frame.ext_hdr['DATALVL'] != "L3":
+            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(frame.filename, frame.ext_hdr['DATALVL'])
+            raise ValueError(err_msg)
+        if frame.ext_hdr['DPAMNAME'] not in ['POL0', 'POL45']:
+            raise ValueError("{0} must be a polarimetric observation".format(frame.filename))
+        
+    # split the dataset by the target star
+    split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords='TARGET')
+
+    # process each target star
+    for target_dataset in split_datasets:
+        # split further based on if the observation is unocculted or not, and the wollaston used
+        reg_frames = []
+        unocculted_pol0_frames = []
+        unocculted_pol45_frames = []
+        target_name = target_dataset.frames[0].pri_hdr['TARGET']
+        for frame in target_dataset:
+            if frame.ext_hdr['LSAMNAME'] == 'OPEN':
+                # unocculted observations, separate by wollaston
+                if frame.ext_hdr['DPAMNAME'] == 'POL0':
+                    unocculted_pol0_frames.append(frame)
+                else:
+                    unocculted_pol45_frames.append(frame)
+            else:
+                # coronagraphic observation
+                reg_frames.append(frame)
+        
+        # make sure input dataset contains unocculted frames taken with both wollastons
+        if len(unocculted_pol0_frames) == 0:
+            raise ValueError(f"Input dataset must contain unocculted POL0 frame(s) for target {target_name}")
+        if len(unocculted_pol45_frames) == 0:
+            raise ValueError(f"Input dataset must contain unocculted POL45 frame(s) for target {target_name}")
+        
+        # find unocculted pol0 and pol45 frame with matching roll angle
+        unocculted_pol0_img = None
+        unocculted_pol45_img = None
+        found_match = False
+        for img_pol0 in unocculted_pol0_frames:
+            for img_pol45 in unocculted_pol45_frames:
+                if img_pol0.pri_hdr['ROLL'] == img_pol45.pri_hdr['ROLL']:
+                    unocculted_pol0_img = img_pol0
+                    unocculted_pol45_img = img_pol45
+                    end_loop = True
+                    break
+            if found_match:
+                break
+        if not found_match:
+            raise ValueError("Unocculted POL0 frames and unocculted POL45 frames must have matching roll angles")
+        
+        ## construct I, Q, U components after instrument with ND filter
+        # I = I_0 +I_90
+        I_nd = unocculted_pol0_img.data[0] + unocculted_pol0_img.data[1]
+        # Q = I_0 - I_90
+        Q_nd = unocculted_pol0_img.data[0] - unocculted_pol0_img.data[1]
+        # U = I_45 - I_135
+        U_nd = unocculted_pol45_img.data[0] - unocculted_pol45_img.data[1]
+        # assume V is basically 0
+        V_nd = np.zeros(shape=unocculted_pol0_img.data[0].shape)
+        # construct stokes vector after instrument with ND filter
+        S_nd = np.stack([I_nd, Q_nd, U_nd, V_nd], axis=0)
+
+        # propagate errors for construction of S_nd
+        I_nd_err = np.sqrt(unocculted_pol0_img.err[0]^2 + unocculted_pol0_img.err[1]^2)
+        Q_nd_err = I_nd_err
+        U_nd_err = unocculted_pol45_img.err[0]^2 + unocculted_pol45_img.err[1]^2
+        v_nd_err = np.zeros(shape=unocculted_pol0_img.err[0].shape)
+        # S_nd = M_nd * R(roll_angle) * S_in
+        # invert M_nd * R(roll_angle) to recover S_in
+        roll_angle = unocculted_pol0_img.pri_hdr['ROLL']
+        total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
+        system_nd_inv = np.linalg.pinv(total_system_mm_nd)
+
+
+        
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
     Updates the data level to L4. Only works on L3 data.

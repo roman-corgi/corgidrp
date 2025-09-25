@@ -2387,7 +2387,7 @@ class CoreThroughputMap(Image):
         if self.ext_hdr['DATATYPE'] != 'CoreThroughputMap':
             raise ValueError("File that was loaded was not a CoreThroughputMap file.")
         
-class InstrumentMuellerMatrix(Image):
+class SystemMuellerMatrix(Image):
     '''
     class containing the mueller matrix of the coronagraph instrument, a 4x4 matrix
     describing the instrument polarization
@@ -2410,9 +2410,9 @@ class InstrumentMuellerMatrix(Image):
 
 class NDFilterMuellerMatrix(Image):
     '''
-    class containing the mueller matrix of the ND filter, a 4x4 matrix
-    describing the ND filter polarization. Functionally the same as the instrument
-    mueller class, but kept separate so that CalDB can take in two mueller matrices at once
+    class containing the mueller matrix of the system with a ND filter, a 4x4 matrix
+    describing polarization. Functionally the same as the system mueller matrix
+    class, but kept separate so that CalDB can take in two mueller matrices at once
 
     Args:
         data_or_filepath (array or str): either the filepath to the FITS file to
