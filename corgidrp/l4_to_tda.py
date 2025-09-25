@@ -475,14 +475,13 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
     image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
     
     sn_source, xy_source = [], []
-    x_center = new_image.ext_hdr['CRPIX1']
-    y_center = new_image.ext_hdr['CRPIX2'] 
 
     # Iteratively detect sources above the SNR threshold
     while np.nanmax(image_snmap) >= nsigma_threshold:
 
         sn = np.nanmax(image_snmap)
         xy = np.unravel_index(np.nanargmax(image_snmap), image_snmap.shape)
+        
         if sn > nsigma_threshold:
             sn_source.append(sn)
             xy_source.append(xy)
