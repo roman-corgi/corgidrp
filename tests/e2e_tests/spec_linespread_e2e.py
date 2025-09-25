@@ -1,5 +1,4 @@
 import os
-import sys
 import glob
 import numpy as np
 import astropy.io.fits as fits
@@ -10,8 +9,7 @@ import argparse
 import warnings
 from astropy.io.fits.verify import VerifyWarning
 
-from corgidrp.data import Dataset, DispersionModel, LineSpread
-from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model
+from corgidrp.data import Dataset, LineSpread
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
@@ -60,7 +58,7 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         # Load test data
         datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
         file_path_science = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits")
-        file_path_spot = os.path.join(datadir, "g0v_vmag6_spc-spec_band3d_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits")
+        file_path_spot = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
 
         assert os.path.exists(file_path_science), f'Test file not found: {file_path_science}'
         assert os.path.exists(file_path_spot), f'Test file not found: {file_path_spot}'
@@ -133,11 +131,11 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
 
     # Validate all input images
     for i, frame in enumerate(l2b_dataset_with_filenames):
-        frame_info = f"Frame {i}"
+        frame_info = f"L2b Frame {i}"
         
         check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l2b.fits', frame_info, logger)
         check_dimensions(frame.data, (81, 81), frame_info, logger)
-        verify_header_keywords(frame.ext_hdr, ['CFAMNAME'], frame_info, logger)
+        verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info, logger)
         logger.info("")
 
@@ -180,18 +178,28 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
             logger.info("HDU0: Header only. Expected: header only. PASS.")
         else:
             logger.info(f"HDU0: Contains data with shape {hdu0.data.shape}. Expected: header only. FAIL.")
-        
-        # Verify HDU2 (Gaussian parameters)
-        if len(hdul) > 2:
-            if len(hdul[2].data) == 6:
-                gauss_par = hdul[2].data
-                logger.info(f"Gaussian parameters are available: {gauss_par}")
+        #verify HDU1
+        hdu1 = hdul[1]
+        check_dimensions(hdu1.data, (2,19), "data array containing the 1D wavelengths and the line spread function", logger)
+        if np.isnan(hdu1.data).any() is True:
+            logger.info(f"HDU1: Contains NANs in the data. Expected: no NANs. FAIL.")
         else:
-            logger.info("HDU2: Missing Gaussian Parameters. Expected: HDU2 present. FAIL.")
+            logger.info(f"HDU1: No NANs in the data. Expected: no NANs. PASS.")
+        if np.isinf(hdu1.data).any() is True:
+            logger.info(f"HDU1: Contains INFs in the data. Expected: no INFs. FAIL.")
+        else:
+            logger.info(f"HDU1: No INFs in the data. Expected: no INFs. PASS.")
+        #verify that the line spread function is normalized to 1
+        if np.float32(np.sum(hdu1.data[1,:])) != 1.:
+            logger.info(f"HDU1: sum of the line spread function is not approx. 1. Expected: line spread function normalized to 1. FAIL.")
+        else:
+            logger.info(f"HDU1: sum of the line spread function is approx. 1. Expected: line spread function normalized to 1. PASS.")
+        # Verify HDU2 (Gaussian parameters)
+        gauss_par = hdul[2].data
+        check_dimensions(gauss_par, (6,), "1D array with the Gaussian fit parameters", logger)
         
         # Verify header keywords
-        if len(hdul) > 1:
-            verify_header_keywords(hdul[1].header, {'DATALVL': 'CAL', 'DATATYPE': 'LineSpread', 'CFAMNAME' : '3D', 'FSAMNAME': 'R1C2'}, "linespread calibration product", logger)
+        verify_header_keywords(hdul[1].header, {'DATALVL': 'CAL', 'DATATYPE': 'LineSpread', 'CFAMNAME' : '3D', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3'}, "linespread calibration product", logger)
 
     logger.info("")
     
@@ -203,14 +211,15 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Load and display dispersion model results
-    cal_file = get_latest_cal_file(e2eoutput_path, '*_line_spread.fits', logger)
     linespread = LineSpread(cal_file)
     wavlens = linespread.data[0, :]
     flux_profile = linespread.data[1, :]
     logger.info(f"wavelengths: {wavlens} nm")
     logger.info(f"flux profile: {flux_profile}")
-    logger.info(f"Gaussian fit parameters: amplitude: {linespread.amplitude} +- {linespread.amp_err}")
-    logger.info(f"mean_wave: {linespread.mean_wave} +- {linespread.wave_err} nm, fwhm: {linespread.fwhm} +- {linespread.fwhm_err} nm")
+    logger.info(f"Gaussian fit parameters:") 
+    logger.info(f"amplitude: {linespread.amplitude} +- {linespread.amp_err}")
+    logger.info(f"mean_wave: {linespread.mean_wave} +- {linespread.wave_err} nm")
+    logger.info(f"fwhm: {linespread.fwhm} +- {linespread.fwhm_err} nm")
     logger.info("")
     
     return wavlens, flux_profile, gauss_par
