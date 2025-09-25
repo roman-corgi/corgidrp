@@ -18,7 +18,6 @@ from scipy.ndimage import shift
 from astropy.io import fits
 from scipy.ndimage import generic_filter
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
-from corgidrp.l4_to_tda import find_source
 
 
 def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
