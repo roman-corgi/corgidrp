@@ -717,8 +717,9 @@ def do_psf_subtraction(input_dataset,
             psf_subtracted_image_with_source = find_source(frame_copy, psf=source_psf, fwhm=source_fwhm, nsigma_threshold=source_nsigma_threshold,
                 image_without_planet=image_without_planet)
             source_header = psf_subtracted_image_with_source.ext_hdr
-
             snyx = np.array([list(map(float, source_header[key].split(','))) for key in source_header if key.startswith("SNYX")])
+            if len(snyx) == 0:
+                continue
             xcen = psf_subtracted_image_with_source.ext_hdr['CRPIX1']
             ycen = psf_subtracted_image_with_source.ext_hdr['CRPIX2']
             source_distances =np.sqrt((snyx[:,1] - xcen)**2 + (snyx[:,2] - ycen)**2)
@@ -740,36 +741,38 @@ def do_psf_subtraction(input_dataset,
             source_distances_list.append(source_distances)
             angles_list.append(angles)
             del frame_copy
-        source_thrupt_hdr = fits.Header()
-        source_thrupt_hdr['COMMENT'] = ('array of shape (KL_n,n_sources,4), where KL_n is the number of KL mode truncation choices and n_sources '
-            'is the maximum number of sources found out of all the KL mode truncation choices, and None is used to fill in the axis for number of sources '
-            'for KL modes that do have sources less than the maximum number of sources.  Here is an example for 4 KL mode truncation choices for which the '
-            'first one had the most found sources (2), where r is for separation (in pixels from the star center), '
-            'theta is for angle in degrees counterclockwise from north/up, thpt is for dimensionless KLIP throughput, and FWHM is the FWHM in pixels: '
-            '[ [[r_source1_KL1, theta_source1_KL1, thpt_source1_KL1, FWHM_source1_KL1], [r_source2_KL1, theta_source2_KL1, thpt_source2_KL1, FWHM_source2_KL1]], '
-            '  [[r_source1_KL2, theta_source1_KL2, thpt_source1_KL2, FWHM_source1_KL2], [None, None, None, None]], '
-            '  [[r_source1_KL3, theta_source1_KL3, thpt_source1_KL3, FWHM_source1_KL3], [None, None, None, None]], '
-            '  [[r_source1_KL4, theta_source1_KL4, thpt_source1_KL4, FWHM_source1_KL4], [None, None, None, None]] ]')
-        source_thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. Angle counterclockwise from north/up: degrees. KLIP throughput: values between 0 and 1. FWHM: EXCAM pixels'
-        source_klip_thpt = np.zeros((len(klip_src_thpt_list), max_num_sources, 4))
-        for kl in range(len(klip_src_thpt_list)): 
-            num_sources_kl = len(klip_src_thpt_list[kl])
-            for s in range(num_sources_kl):
-                source_klip_thpt[kl, s, 0] = source_distances_list[kl][s]
-                source_klip_thpt[kl, s, 1] = angles_list[kl][s]
-                source_klip_thpt[kl, s, 2] = klip_src_thpt_list[kl][s][0]
-                source_klip_thpt[kl, s, 3] = klip_src_thpt_list[kl][s][1]
-            for ss in range(num_sources_kl, max_num_sources):
-                source_klip_thpt[kl, ss, 0] = None
-                source_klip_thpt[kl, ss, 1] = None
-                source_klip_thpt[kl, ss, 2] = None
-                source_klip_thpt[kl, ss, 3] = None
-        source_thrupt_hdu_list = [fits.ImageHDU(data=source_klip_thpt, header=source_thrupt_hdr, name='KL_THRUS')]
-        dataset_out[0].hdu_list.extend(source_thrupt_hdu_list)
-        # Save throughput as an extension on the psf-subtracted Image
-        # Add history msg
-        source_history_msg = f'KLIP throughput measured at sources and saved to Image class HDU List extension "KL_THRUS".'
-
+        if len(klip_src_thpt_list) > 0:
+            source_thrupt_hdr = fits.Header()
+            source_thrupt_hdr['COMMENT'] = ('array of shape (KL_n,n_sources,4), where KL_n is the number of KL mode truncation choices and n_sources '
+                'is the maximum number of sources found out of all the KL mode truncation choices, and None is used to fill in the axis for number of sources '
+                'for KL modes that do have sources less than the maximum number of sources.  Here is an example for 4 KL mode truncation choices for which the '
+                'first one had the most found sources (2), where r is for separation (in pixels from the star center), '
+                'theta is for angle in degrees counterclockwise from north/up, thpt is for dimensionless KLIP throughput, and FWHM is the FWHM in pixels: '
+                '[ [[r_source1_KL1, theta_source1_KL1, thpt_source1_KL1, FWHM_source1_KL1], [r_source2_KL1, theta_source2_KL1, thpt_source2_KL1, FWHM_source2_KL1]], '
+                '  [[r_source1_KL2, theta_source1_KL2, thpt_source1_KL2, FWHM_source1_KL2], [None, None, None, None]], '
+                '  [[r_source1_KL3, theta_source1_KL3, thpt_source1_KL3, FWHM_source1_KL3], [None, None, None, None]], '
+                '  [[r_source1_KL4, theta_source1_KL4, thpt_source1_KL4, FWHM_source1_KL4], [None, None, None, None]] ]')
+            source_thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. Angle counterclockwise from north/up: degrees. KLIP throughput: values between 0 and 1. FWHM: EXCAM pixels'
+            source_klip_thpt = np.zeros((len(klip_src_thpt_list), max_num_sources, 4))
+            for kl in range(len(klip_src_thpt_list)): 
+                num_sources_kl = len(klip_src_thpt_list[kl])
+                for s in range(num_sources_kl):
+                    source_klip_thpt[kl, s, 0] = source_distances_list[kl][s]
+                    source_klip_thpt[kl, s, 1] = angles_list[kl][s]
+                    source_klip_thpt[kl, s, 2] = klip_src_thpt_list[kl][s][0]
+                    source_klip_thpt[kl, s, 3] = klip_src_thpt_list[kl][s][1]
+                for ss in range(num_sources_kl, max_num_sources):
+                    source_klip_thpt[kl, ss, 0] = None
+                    source_klip_thpt[kl, ss, 1] = None
+                    source_klip_thpt[kl, ss, 2] = None
+                    source_klip_thpt[kl, ss, 3] = None
+            source_thrupt_hdu_list = [fits.ImageHDU(data=source_klip_thpt, header=source_thrupt_hdr, name='KL_THRUS')]
+            dataset_out[0].hdu_list.extend(source_thrupt_hdu_list)
+            # Save throughput as an extension on the psf-subtracted Image
+            # Add history msg
+            source_history_msg = f'KLIP throughput measured at sources and saved to Image class HDU List extension "KL_THRUS".'
+        else:
+            source_history_msg = '' # no sources found
         # now for KLIP throughput for general (or specified) separations and angles
         klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
                             dataset_out,

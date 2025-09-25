@@ -3634,7 +3634,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
     for i in range(n_sci+n_ref):
 
         # Create default headers
-        prihdr, exthdr = create_default_L1_headers()
+        prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers()
         
         # Read in darkhole data, if provided
         if i<n_sci and not darkhole_scifiles is None:
