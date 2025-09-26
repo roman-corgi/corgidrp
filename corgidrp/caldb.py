@@ -56,7 +56,9 @@ labels = {data.Dark: "Dark",
           data.CoreThroughputCalibration: "CoreThroughputCalibration",
           data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
           data.SpectroscopyCentroidPSF: "SpectroscopyCentroidPSF",
-          data.DispersionModel: "DispersionModel"
+          data.DispersionModel: "DispersionModel",
+          data.MuellerMatrix: "MuellerMatrix",
+          data.NDMuellerMatrix: "NDMuellerMatrix"
           }
 
 class CalDB:
