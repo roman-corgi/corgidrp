@@ -6,8 +6,21 @@ from corgidrp.l4_to_tda import compute_QphiUphi
 
 def make_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
     """
-    Create a mock Image with [I,Q,U,V] planes for testing.
+    Create a mock Image with [I, Q, U, V] planes for testing.
+
+    Args:
+        n (int): Image height (pixels).
+        m (int): Image width (pixels).
+        fwhm (float): FWHM of the Gaussian PSF used for I.
+        amp (float): Peak amplitude of the Gaussian PSF.
+        pfrac (float): Polarization fraction. Q, U are scaled by this fraction.
+        bg (float): Background level added to the image.
+
+    Returns:
+        Image: Mock Image object with data of shape [4, n, m], err and dq arrays included.
     """
+
+
     y, x = np.mgrid[0:n, 0:m]
     x0, y0 = 0.5*(m-1), 0.5*(n-1)
 
@@ -74,4 +87,3 @@ if __name__ == "__main__":
     test_compute_QphiUphi_center_correct()
     test_compute_QphiUphi_center_wrong()
     test_compute_QphiUphi_err_shape()
-    print("All tests passed.")
