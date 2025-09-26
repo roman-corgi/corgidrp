@@ -645,21 +645,31 @@ def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
 
 def compute_QphiUphi(image, x_center=None, y_center=None):
     """
-    Compute Q_phi and U_phi from Stokes Q, U, and return an Image with shape [6,n,m]:
+    Compute Q_phi and U_phi from Stokes Q and U, returning an Image with shape [6, n, m]:
     [I, Q, U, V, Q_phi, U_phi].
 
     Args:
         image: Image
-            image.data.shape == [4, n, m] is assumed ([I, Q, U, V])
-            If 'STARLOCX', 'STARLOCY' exist in image.ext_hdr, they are used as the center
-        x_center, y_center: optional
-            Used only if header values are missing (with a print notice)
+            Input image whose `data` is shaped [4, n, m] as [I, Q, U, V]. If the extension
+            header contains 'STARLOCX' and 'STARLOCY', these are used as the stellar center.
+        x_center: float or None
+            Optional override for the x-coordinate of the center. Used only when the header
+            does not provide 'STARLOCX'. If both header and this argument are missing, the
+            image center ( (m-1)/2 ) is used.
+        y_center: float or None
+            Optional override for the y-coordinate of the center. Used only when the header
+            does not provide 'STARLOCY'. If both header and this argument are missing, the
+            image center ( (n-1)/2 ) is used.
 
     Returns:
-        out: Image
-            data.shape == [6, n, m] ([I, Q, U, V, Q_phi, U_phi])
-            err / dq are also expanded to match [6, n, m]
+        Image: A copy of the input image with data expanded to [6, n, m] as
+            [I, Q, U, V, Q_phi, U_phi]. The `err` array is expanded to match and the
+            uncertainties for Q_phi/U_phi are propagated from Q and U (assuming no covariance).
+            The `dq` planes are expanded to match; if I/Q/U/V have identical dq, that mask is
+            copied to both Q_phi and U_phi, otherwise Q_phi inherits Q’s dq and U_phi inherits
+            U’s dq.
     """
+
     # copy of the input image
     out = image.copy(copy_data=True)
 
