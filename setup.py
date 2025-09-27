@@ -10,7 +10,7 @@ def get_requires():
 
 setup(
     name='corgidrp',
-    version="3.0-alpha",
+    version="3.0rc3",
     description='(Roman Space Telescope) CORonaGraph Instrument Data Reduction Pipeline',
     #long_description="",
     #long_description_content_type="text/markdown",

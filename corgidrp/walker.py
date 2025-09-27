@@ -61,12 +61,15 @@ all_steps = {
     "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
     "find_star": corgidrp.l3_to_l4.find_star,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
+    "determine_wave_zeropoint": corgidrp.l3_to_l4.determine_wave_zeropoint,
+    "add_wavelength_map": corgidrp.l3_to_l4.add_wavelength_map,
     "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
     "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
     "create_ct_map": corgidrp.corethroughput.create_ct_map,
     "create_nd_filter_cal": corgidrp.nd_filter_calibration.create_nd_filter_cal,
     "compute_psf_centroid": corgidrp.spec.compute_psf_centroid,
     "calibrate_dispersion_model": corgidrp.spec.calibrate_dispersion_model,
+    "fit_line_spread_function": corgidrp.spec.fit_line_spread_function,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
