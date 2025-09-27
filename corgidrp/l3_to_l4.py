@@ -883,8 +883,8 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
                                                taken with both wollastons at the same roll angle
-        system_mueller_matrix_cal (corgidrp.data.SystemMuellerMatrix): mueller matrix calibration of the system without a ND filter
-        nd_mueller_matrix_cal (corgidrp.data.NDFilterMuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
+        system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
+        nd_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
 
     Returns:
         corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
