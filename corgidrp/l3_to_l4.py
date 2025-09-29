@@ -903,6 +903,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
     split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords='TARGET')
 
     # process each target star
+    updated_frames = []
     for target_dataset in split_datasets:
         # split further based on if the observation is unocculted or not, and the wollaston used
         reg_frames = []
@@ -954,16 +955,48 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         # construct stokes vector after instrument with ND filter
         S_nd = np.stack([I_nd, Q_nd, U_nd, V_nd], axis=0)
 
+        '''
         # propagate errors for construction of S_nd
         I_nd_err = np.sqrt(unocculted_pol0_img.err[0]^2 + unocculted_pol0_img.err[1]^2)
         Q_nd_err = I_nd_err
         U_nd_err = unocculted_pol45_img.err[0]^2 + unocculted_pol45_img.err[1]^2
         v_nd_err = np.zeros(shape=unocculted_pol0_img.err[0].shape)
+        '''
         # S_nd = M_nd * R(roll_angle) * S_in
         # invert M_nd * R(roll_angle) to recover S_in
         roll_angle = unocculted_pol0_img.pri_hdr['ROLL']
         total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
         system_nd_inv = np.linalg.pinv(total_system_mm_nd)
+        S_in = np.einsum('ij,jyx->iyx', system_nd_inv, S_nd)
+        
+        # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
+        S_out = np.einsum('ij,jyx->iyx', system_mueller_matrix_cal.data, S_in)
+        # construct I0, I45, I90, and I135 back from stokes vector
+        I_0_star = (S_out[0] + S_out[1]) / 2
+        I_90_star = (S_out[0] - S_out[1]) / 2
+        I_45_star = (S_out[0] + S_out[2]) / 2
+        I_135_star = (S_out[0] - S_out[2]) / 2
+
+        # subtract stellar polarization from the rest of the frames
+        for frame in reg_frames:
+            # calculate normalized difference for the specific wollaston
+            if frame.ext_hdr['DPAMNAME'] == 'POL0':
+                normalized_diff = (I_0_star - I_90_star) / (I_0_star + I_90_star)
+            else:
+                normalized_diff = (I_45_star - I_135_star) / (I_45_star + I_135_star)
+            # subtract
+            sum = frame.data[0] + frame.data[1]
+            diff = frame.data[0] - frame.data[1]
+            diff -= sum * normalized_diff
+            frame.data[0] = (sum + diff) / 2
+            frame.data[1] = (sum - diff) / 2
+            updated_frames.append(frame)
+
+    updated_dataset = data.Dataset(updated_frames)
+    history_msg = "Subtracted Apparent Stellar Polarization"
+    updated_dataset.update_after_processing_step(history_msg)
+    return updated_dataset
+
 
 
         
