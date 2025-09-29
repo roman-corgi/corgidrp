@@ -221,7 +221,8 @@ def split_image_by_polarization_state(input_dataset,
         
         # construct new datacube for data, err, and dq
         im_data_new = np.zeros(shape=(2, image_size, image_size))
-        im_err_new = np.zeros(shape=(2, image_size, image_size))
+        # make sure to keep the additional dimension for err array
+        im_err_new = np.zeros(shape=(im_err.shape[0], 2, image_size, image_size))
         im_dq_new = np.zeros(shape=(2, image_size, image_size))
 
         # define coordinates
@@ -232,26 +233,26 @@ def split_image_by_polarization_state(input_dataset,
         y_right = y + start_right[1]
         # fill in the first dimension, corresponding to 0 or 45 degree polarization
         im_data_new[0,:,:] = im_data[start_left[1]:start_left[1] + image_size, start_left[0]:start_left[0] + image_size]
-        im_err_new[0,:,:] = im_err[start_left[1]:start_left[1] + image_size, start_left[0]:start_left[0] + image_size]
+        im_err_new[:,0,:,:] = im_err[:, start_left[1]:start_left[1] + image_size, start_left[0]:start_left[0] + image_size]
         im_dq_new[0,:,:] = im_dq[start_left[1]:start_left[1] + image_size, start_left[0]:start_left[0] + image_size]
         # fill in the second dimension, corresponding to the 90 or 135 degree polarization
         im_data_new[1,:,:] = im_data[start_right[1]:start_right[1] + image_size, start_right[0]:start_right[0] + image_size]
-        im_err_new[1,:,:] = im_err[start_right[1]:start_right[1] + image_size, start_right[0]:start_right[0] + image_size]
+        im_err_new[:,1,:,:] = im_err[:, start_right[1]:start_right[1] + image_size, start_right[0]:start_right[0] + image_size]
         im_dq_new[1,:,:] = im_dq[start_right[1]:start_right[1] + image_size, start_right[0]:start_right[0] + image_size]
         # mark anything on the other side of the center line dividing the two images as NaN to avoid including the other image
         if prism == 'POL0':
             im_data_new[0, x_left >= image_center_x] = np.nan
             im_data_new[1, x_right <= image_center_x] = np.nan
-            im_err_new[0, x_left >= image_center_x] = np.nan
-            im_err_new[1, x_right <= image_center_x] = np.nan
+            im_err_new[:, 0, x_left >= image_center_x] = np.nan
+            im_err_new[:, 1, x_right <= image_center_x] = np.nan
             # update dq with corresponding flag for bad pixel
             im_dq_new[0, x_left >= image_center_x] = 1
             im_dq_new[1, x_right <= image_center_x] = 1
         else:
             im_data_new[0, y_left - image_center_y <= x_left - image_center_x] = np.nan
             im_data_new[1, y_right - image_center_y >= x_right - image_center_x] = np.nan
-            im_err_new[0, y_left - image_center_y <= x_left - image_center_x] = np.nan
-            im_err_new[1, y_right - image_center_y >= x_right - image_center_x] = np.nan
+            im_err_new[:, 0, y_left - image_center_y <= x_left - image_center_x] = np.nan
+            im_err_new[:, 1, y_right - image_center_y >= x_right - image_center_x] = np.nan
             im_dq_new[0, y_left - image_center_y <= x_left - image_center_x] = 1
             im_dq_new[1, y_right - image_center_y >= x_right - image_center_x] = 1           
 
