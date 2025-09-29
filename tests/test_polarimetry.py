@@ -3,6 +3,8 @@ import pytest
 import corgidrp.mocks as mocks
 import corgidrp.l2b_to_l3 as l2b_to_l3
 import corgidrp.data as data
+import os
+import shutil
 
 def test_image_splitting():
     """
@@ -17,6 +19,18 @@ def test_image_splitting():
 
     ## leave image_size parameter blank so the function automatically determines size
     output_dataset_autocrop_wfov = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov)
+
+    ## checks that saving and loading the image doesn't cause any issues
+    ### save
+    test_dir = os.path.join(os.getcwd(), 'pol_output')
+    if os.path.isdir(test_dir):
+        shutil.rmtree(test_dir)
+    os.mkdir(test_dir)
+    output_dataset_autocrop_wfov.save(test_dir, ['wfov_pol_img_{0}.fits'.format(i) for i in range(len(output_dataset_autocrop_wfov))])
+    ### load
+    autocrop_wfov_filelist = [os.path.join(test_dir, f) for f in os.listdir(test_dir)]
+    output_dataset_autocrop_wfov = data.Dataset(autocrop_wfov_filelist)
+
     ## create what the expected output data should look like
     radius_wfov = int(round((20.1 * ((0.8255 * 1e-6) / 2.363114) * 206265) / 0.0218))
     padding = 5
@@ -31,6 +45,10 @@ def test_image_splitting():
     ## check that actual output is as expected
     assert output_dataset_autocrop_wfov.frames[0].data == pytest.approx(expected_output_autocrop_wfov)
     assert output_dataset_autocrop_wfov.frames[1].data == pytest.approx(expected_output_autocrop_wfov)
+    assert output_dataset_autocrop_wfov.frames[0].err.shape == (1, 2, img_size_wfov, img_size_wfov)
+    assert output_dataset_autocrop_wfov.frames[1].err.shape == (1, 2, img_size_wfov, img_size_wfov)
+    assert output_dataset_autocrop_wfov.frames[0].dq.shape == (2, img_size_wfov, img_size_wfov)
+    assert output_dataset_autocrop_wfov.frames[1].dq.shape == (2, img_size_wfov, img_size_wfov)
 
     # test autocropping NFOV
     ## generate mock data
@@ -53,6 +71,10 @@ def test_image_splitting():
     ## check that actual output is as expected
     assert output_dataset_autocrop_nfov.frames[0].data == pytest.approx(expected_output_autocrop_nfov)
     assert output_dataset_autocrop_nfov.frames[1].data == pytest.approx(expected_output_autocrop_nfov)
+    assert output_dataset_autocrop_nfov.frames[0].err.shape == (1, 2, img_size_nfov, img_size_nfov)
+    assert output_dataset_autocrop_nfov.frames[1].err.shape == (1, 2, img_size_nfov, img_size_nfov)
+    assert output_dataset_autocrop_nfov.frames[0].dq.shape == (2, img_size_nfov, img_size_nfov)
+    assert output_dataset_autocrop_nfov.frames[1].dq.shape == (2, img_size_nfov, img_size_nfov)
 
     # test cropping with alignment angle input
     image_WP1_custom_angle = mocks.create_mock_l2b_polarimetric_image(dpamname='POL0', observing_mode='NFOV', left_image_value=1, right_image_value=2, alignment_angle=5)
