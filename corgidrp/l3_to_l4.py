@@ -882,7 +882,8 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
-                                               taken with both wollastons at the same roll angle
+                                               taken with both wollastons at the same roll angle. All frames for the
+                                               same target star must have the same x and y dimensions
         system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
         nd_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
 
@@ -927,21 +928,8 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         if len(unocculted_pol45_frames) == 0:
             raise ValueError(f"Input dataset must contain unocculted POL45 frame(s) for target {target_name}")
         
-        # find unocculted pol0 and pol45 frame with matching roll angle
-        unocculted_pol0_img = None
-        unocculted_pol45_img = None
-        found_match = False
-        for img_pol0 in unocculted_pol0_frames:
-            for img_pol45 in unocculted_pol45_frames:
-                if img_pol0.pri_hdr['ROLL'] == img_pol45.pri_hdr['ROLL']:
-                    unocculted_pol0_img = img_pol0
-                    unocculted_pol45_img = img_pol45
-                    end_loop = True
-                    break
-            if found_match:
-                break
-        if not found_match:
-            raise ValueError("Unocculted POL0 frames and unocculted POL45 frames must have matching roll angles")
+        unocculted_pol0_img = unocculted_pol0_frames[0]
+        unocculted_pol45_img = unocculted_pol45_frames[0]
         
         ## construct I, Q, U components after instrument with ND filter
         # I = I_0 +I_90
@@ -955,30 +943,46 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         # construct stokes vector after instrument with ND filter
         S_nd = np.stack([I_nd, Q_nd, U_nd, V_nd], axis=0)
 
-        '''
-        # propagate errors for construction of S_nd
-        I_nd_err = np.sqrt(unocculted_pol0_img.err[0]^2 + unocculted_pol0_img.err[1]^2)
-        Q_nd_err = I_nd_err
-        U_nd_err = unocculted_pol45_img.err[0]^2 + unocculted_pol45_img.err[1]^2
-        v_nd_err = np.zeros(shape=unocculted_pol0_img.err[0].shape)
-        '''
         # S_nd = M_nd * R(roll_angle) * S_in
         # invert M_nd * R(roll_angle) to recover S_in
         roll_angle = unocculted_pol0_img.pri_hdr['ROLL']
         total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
         system_nd_inv = np.linalg.pinv(total_system_mm_nd)
         S_in = np.einsum('ij,jyx->iyx', system_nd_inv, S_nd)
-        
-        # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
-        S_out = np.einsum('ij,jyx->iyx', system_mueller_matrix_cal.data, S_in)
-        # construct I0, I45, I90, and I135 back from stokes vector
-        I_0_star = (S_out[0] + S_out[1]) / 2
-        I_90_star = (S_out[0] - S_out[1]) / 2
-        I_45_star = (S_out[0] + S_out[2]) / 2
-        I_135_star = (S_out[0] - S_out[2]) / 2
+
+        # propagate errors to find uncertainty of S_in
+        I_nd_err = np.sqrt(unocculted_pol0_img.err[0]^2 + unocculted_pol0_img.err[1]^2)
+        Q_nd_err = I_nd_err
+        U_nd_err = np.sqrt(unocculted_pol45_img.err[0]^2 + unocculted_pol45_img.err[1]^2)
+        v_nd_err = np.zeros(shape=unocculted_pol0_img.err[0].shape)
+        # construct covariance matrix for S_nd
+        shape = unocculted_pol0_img.shape()
+        C_nd = np.array([[I_nd_err**2, np.zeros(shape=shape), np.zeros(shape=shape), np.zeros(shape=shape)],
+                         [np.zeros(shape=shape), Q_nd_err**2, np.zeros(shape=shape), np.zeros(shape=shape)],
+                         [np.zeros(shape=shape), np.zeros(shape=shape), U_nd_err**2, np.zeros(shape=shape)],
+                         [np.zeros(shape=shape), np.zeros(shape=shape), np.zeros(shape=shape), v_nd_err**2]])
+        # solve for covariance matrix of input stokes vector
+        C_in = np.einsum('ij,jkyx,kl->ilyx', system_nd_inv, C_nd, system_nd_inv.T)
+        # contract back to uncertainty
+        S_in_err = np.array([
+            np.sqrt(C_in[0,0,:,:]),
+            np.sqrt(C_in[1,1,:,:]),
+            np.sqrt(C_in[2,2,:,:]),
+            np.sqrt(C_in[3,3,:,:])
+        ])
 
         # subtract stellar polarization from the rest of the frames
         for frame in reg_frames:
+            # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
+            frame_roll_angle = frame.pri_hdr['ROLL']
+            total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_roll_angle)
+            S_out = np.einsum('ij,jyx->iyx', total_system_mm, S_in)
+            # construct I0, I45, I90, and I135 back from stokes vector
+            I_0_star = (S_out[0] + S_out[1]) / 2
+            I_90_star = (S_out[0] - S_out[1]) / 2
+            I_45_star = (S_out[0] + S_out[2]) / 2
+            I_135_star = (S_out[0] - S_out[2]) / 2
+
             # calculate normalized difference for the specific wollaston
             if frame.ext_hdr['DPAMNAME'] == 'POL0':
                 normalized_diff = (I_0_star - I_90_star) / (I_0_star + I_90_star)

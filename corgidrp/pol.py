@@ -1,7 +1,4 @@
-
-
-
-
+import numpy as np
 
 def generate_mueller_matrix_cal(input_dataset, path_to_pol_ref_file="./data/pol_ref_file.fits"):
     '''
@@ -34,12 +31,6 @@ def generate_mueller_matrix_cal(input_dataset, path_to_pol_ref_file="./data/pol_
 
 
     
-
-    '''
-file containing helper functions for polarimetric step functions
-'''
-
-import numpy as np
 
 def rotation_mueller_matrix(angle):
     '''
