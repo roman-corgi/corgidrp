@@ -879,6 +879,8 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
     """
     Takes in polarimetric L3 images and their unocculted polarimetric observations,
     computes and subtracts off the stellar polarization component from each image
+    TODO: make issue about error propagation, need to check that it is done correctly
+          and make changes if necessary to ensure the errors are accurate
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
@@ -962,13 +964,15 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
                          [np.zeros(shape=shape), np.zeros(shape=shape), U_nd_err**2, np.zeros(shape=shape)],
                          [np.zeros(shape=shape), np.zeros(shape=shape), np.zeros(shape=shape), v_nd_err**2]])
         # solve for covariance matrix of input stokes vector
+        # C_in = pinv(M) * C_nd * pinv(M)^T
+        #TODO: incoporate the error terms of the nd mueller matrix into this calculation if necessary 
         C_in = np.einsum('ij,jkyx,kl->ilyx', system_nd_inv, C_nd, system_nd_inv.T)
-        # contract back to uncertainty
-        S_in_err = np.array([
-            np.sqrt(C_in[0,0,:,:]),
-            np.sqrt(C_in[1,1,:,:]),
-            np.sqrt(C_in[2,2,:,:]),
-            np.sqrt(C_in[3,3,:,:])
+        # contract back to just the variance
+        S_in_var = np.array([
+            C_in[0,0,:,:],
+            C_in[1,1,:,:],
+            C_in[2,2,:,:],
+            C_in[3,3,:,:]
         ])
 
         # subtract stellar polarization from the rest of the frames
@@ -983,17 +987,49 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             I_45_star = (S_out[0] + S_out[2]) / 2
             I_135_star = (S_out[0] - S_out[2]) / 2
 
+            # propagate errors back to the new intensity terms for the unocculted star, assuming independence
+            # σS_out^2 = (σM^2)(I_in^2) + (M^2)(σI_in^2)
+            #TODO: double check if this is valid/invalid, change if necessary
+            system_mm_var = (system_mueller_matrix_cal.err)**2
+            system_mm_sq = (system_mueller_matrix_cal.data)**2
+            S_in_sq = S_in**2
+            S_out_var = np.einsum('ij,jyx->iyx', system_mm_var, S_in_sq) + np.einsum('ij,jyx->iyx', system_mm_sq, S_in_var)
+            I_0_star_err = np.sqrt(S_out_var[0] + S_out_var[1]) / 2
+            I_90_star_err = I_0_star_err
+            I_45_star_err = np.sqrt(S_out_var[0] + S_out_var[2]) / 2
+            I_135_star_err = I_45_star_err
+
             # calculate normalized difference for the specific wollaston
             if frame.ext_hdr['DPAMNAME'] == 'POL0':
                 normalized_diff = (I_0_star - I_90_star) / (I_0_star + I_90_star)
+                # error
+                normalized_diff_err = normalized_diff * np.sqrt(
+                    (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star - I_90_star))**2 +
+                    (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star + I_90_star))**2
+                )
             else:
                 normalized_diff = (I_45_star - I_135_star) / (I_45_star + I_135_star)
+                # error
+                normalized_diff_err = normalized_diff * np.sqrt(
+                    (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star - I_135_star))**2 +
+                    (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star + I_135_star))**2
+                )
             # subtract
             sum = frame.data[0] + frame.data[1]
             diff = frame.data[0] - frame.data[1]
             diff -= sum * normalized_diff
             frame.data[0] = (sum + diff) / 2
             frame.data[1] = (sum - diff) / 2
+
+            # propagate errors for the subtraction
+            sum_err = np.sqrt(frame.err[0]**2 + frame.err[1]**2)
+            diff_err = sum_err
+            diff_err = np.sqrt(diff_err**2 + 
+                               (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
+                        )
+            frame.err[0] = np.sqrt(sum_err**2 + diff_err**2) / 2
+            frame.err[1] = frame.err[0]
+            
             updated_frames.append(frame)
 
     updated_dataset = data.Dataset(updated_frames)
