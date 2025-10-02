@@ -1023,3 +1023,104 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
     
     line_spread = LineSpread(ls_data, pri_hdr = prihdr, ext_hdr = exthdr, gauss_par = gauss_profile, input_dataset = nar_dataset)
     return line_spread
+
+def slit_transmission(
+    slit_fsm_spectra,
+    open_fsm_spectra,
+    pos_arr=None,
+    kind='linear',
+    ):
+    """ This step function addresses:
+  
+      CGI-REQT-5475 – Given (1) a series of cleaned images of a prism-dispersed
+      unocculted star observed through the FSAM slit mask, observed with a CFAM
+      filter, and acquired over one or more FSM offsets, (2) a series of cleaned
+      images of the same prism-dispersed unocculted star observed with the FSAM
+      slit mask removed (FSAM in OPEN position), the same CFAM filter, and
+      acquired over one or more FSM offsets, the CTC GSW should compute the slit
+      transmission map.
+
+    Args:
+      slit_fsm_spectra (list of Dataset): Array containing a set of extracted spectra for
+        each FSM position with the FSAM slit in its position.
+      open_fsm_spectra (list of Dataset): Array containing a set of extracted spectra for
+        each FSM position with the FSAM slit in OPEN position.
+      pos_arr (array): array of values where the slit transmission is derived.
+        The reference point is the zero-point solution of each image. Units are
+        EXCAM pixels.
+      kind (string): Specifies the kind of interpolation. See scipy documentation.
+        Default is piecewise linear.
+
+    Returns:
+      Slit transmission map derived at different locations by linear
+      interpolation.
+    """
+    # The array of positions where the slit transmission will be derived must
+    # be increasing (to make interpolation meaningful). This array is returned
+    # together with the slit transmission
+    pos_arr.sort()
+    # Confirm spectroscopy configuration for different PAMs
+    # CFAM
+    cfam_name = slit_fsm_spectra[0][0].ext_hdr['CFAMNAME'].upper()
+    if cfam_name.find('3') != -1:
+        dpam_name = 'PRISM3'
+        # fsam_name = []
+    elif cfam_name.find('2') != -1:
+        dpam_name = 'PRISM2'
+        # fsam_name = []
+    else:
+        raise ValueError(f'{cfam_name} is not a spectroscopy filter')
+    # DPAM
+    if slit_fsm_spectra[0][0].ext_hdr['DPAMNAME'] != dpam_name:
+        raise ValueError(f'DPAMNAME should be {dpam_name}')
+    # FPAM
+    fpam_name = slit_fsm_spectra[0][0].ext_hdr['FPAMNAME'].upper()
+    if (fpam_name != 'OPEN' and fpam_name != 'ND225' and fpam_name != 'ND475'):
+        raise ValueError('FPAMNAME should be either OPEN, ND225 or ND475')
+    # SPAM
+    spam_name = slit_fsm_spectra[0][0].ext_hdr['SPAMNAME'].upper()
+    if spam_name[0:4] != 'SPEC':
+        raise ValueError('SPAMNAME should be SPEC')
+    # LSAM
+    lsam_name = slit_fsm_spectra[0][0].ext_hdr['LSAMNAME'].upper()
+    if lsam_name[0:4] != 'SPEC':
+        raise ValueError('LSAMNAME should be SPEC')
+    # FSAM
+    fsam_name = slit_fsm_spectra[0][0].ext_hdr['FSAMNAME'].upper()
+    if (fsam_name != 'OPEN' and fsam_name != 'R1C2' and fsam_name != 'R6C5' and
+        fsam_name != 'R3C1'):
+        raise ValueError('FSAMNAME should be either OPEN, R1C2, R6C5 or R3C1')
+
+    # All images must have the same setup
+    for ds in slit_fsm_spectra:
+        exthdr = ds[0].ext_hdr
+        assert exthdr['CFAMNAME'].upper() == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
+        assert exthdr['DPAMNAME'].upper() == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
+        assert exthdr['FPAMNAME'].upper() == fpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
+        assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
+        assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
+        assert exthdr['FSAMNAME'].upper() in fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
+
+    # All images with FSAM=OPEN  must have the same setup, but for FSAM
+    for ds in open_fsm_spectra:
+        exthdr = ds[0].ext_hdr
+        assert exthdr['CFAMNAME'].upper() == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
+        assert exthdr['DPAMNAME'].upper() == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
+        assert exthdr['FPAMNAME'].upper() == fpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
+        assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
+        assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
+        assert exthdr['FSAMNAME'].upper() == 'OPEN', f"FSAMNAME={exthdr['FSAMNAME']} differs from expected value OPEN"
+
+    # Sum up all spectra of the images with FSAM=OPEN
+    spec_open = np.sum([ds[0].data for ds in open_fsm_spectra], axis=0)
+
+    # Get the slit transmission
+    slit_pos_arr = [ds[0].ext_hdr['WV0_X'] for ds in slit_fsm_spectra]
+    slit_trans = [ds[0].data/spec_open for ds in slit_fsm_spectra]
+
+    # Derive slit transmission at desired locations
+    interpolant = interp1d(slit_pos_arr, slit_trans, axis=0, kind=kind)
+    slit_trans_interp = interpolant(pos_arr)
+    # TODO: Check for NaN and enough output points or raise ValueError
+    breakpoint()
+    return pos_arr, slit_trans_interp
