@@ -3,7 +3,7 @@ import glob
 import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, LinearNDInterpolator
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread
 import os
 from astropy.io import ascii, fits
@@ -1027,7 +1027,11 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
 def slit_transmission(
     slit_fsm_spectra,
     open_fsm_spectra,
-    pos_arr=None,
+    target_pix=None,
+    x_range=[40.,42],
+    y_range=[32.,34],
+    n_gridx=10,
+    n_gridy=10,
     kind='linear',
     ):
     """ This step function addresses:
@@ -1041,13 +1045,25 @@ def slit_transmission(
       transmission map.
 
     Args:
-      slit_fsm_spectra (list of Dataset): Array containing a set of extracted spectra for
-        each FSM position with the FSAM slit in its position.
-      open_fsm_spectra (list of Dataset): Array containing a set of extracted spectra for
-        each FSM position with the FSAM slit in OPEN position.
-      pos_arr (array): array of values where the slit transmission is derived.
-        The reference point is the zero-point solution of each image. Units are
-        EXCAM pixels.
+      slit_fsm_spectra (list of Dataset): Array containing a set of extracted
+        spectra for each FSM position with the FSAM slit in its position.
+      open_fsm_spectra (list of Dataset): Array containing a set of extracted
+        spectra for each FSM position with the FSAM slit in OPEN position.
+      target_pix (array) (optional): a user-defined Mx2 array containing the
+        pixel positions for M target pixels where the slit transmission will be
+        derived by interpolation. The target pixels are measured with respect
+        the zero-point in (fractional) EXCAM pixels. Default is None. In this
+        case, a rectangular grid of pixel positions is used. Using
+        matplotlib.pyplot, target_pix[0] is the horizontal axis (x), and
+        target_pix[1] is the vertical axis (y).
+      x_range (array): Two values [xmin, xmax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the zero-point
+        solution.
+      y_range (array): Two values [ymin, ymax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the zero-point
+        solution.
+      n_gridxi(int) (optional): Number of positions when pos_range is set.
+      n_gridyi(int) (optional): Number of positions when pos_range is set.
       kind (string): Specifies the kind of interpolation. See scipy documentation.
         Default is piecewise linear.
 
@@ -1055,10 +1071,6 @@ def slit_transmission(
       Slit transmission map derived at different locations by linear
       interpolation.
     """
-    # The array of positions where the slit transmission will be derived must
-    # be increasing (to make interpolation meaningful). This array is returned
-    # together with the slit transmission
-    pos_arr.sort()
     # Confirm spectroscopy configuration for different PAMs
     # CFAM
     cfam_name = slit_fsm_spectra[0][0].ext_hdr['CFAMNAME'].upper()
@@ -1101,7 +1113,7 @@ def slit_transmission(
         assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
         assert exthdr['FSAMNAME'].upper() in fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
 
-    # All images with FSAM=OPEN  must have the same setup, but for FSAM
+    # All images with FSAM=OPEN must have the same setup but for FSAM
     for ds in open_fsm_spectra:
         exthdr = ds[0].ext_hdr
         assert exthdr['CFAMNAME'].upper() == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
@@ -1111,16 +1123,61 @@ def slit_transmission(
         assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
         assert exthdr['FSAMNAME'].upper() == 'OPEN', f"FSAMNAME={exthdr['FSAMNAME']} differs from expected value OPEN"
 
-    # Sum up all spectra of the images with FSAM=OPEN
-    spec_open = np.sum([ds[0].data for ds in open_fsm_spectra], axis=0)
+    # Average all spectra of the images with FSAM=OPEN
+    spec_open = np.mean([ds[0].data for ds in open_fsm_spectra], axis=0)
 
-    # Get the slit transmission
-    slit_pos_arr = [ds[0].ext_hdr['WV0_X'] for ds in slit_fsm_spectra]
-    slit_trans = [ds[0].data/spec_open for ds in slit_fsm_spectra]
+    # Get the slit transmission and positions
+    slit_pos_x = np.array([ds[0].ext_hdr['WV0_X'] for ds in slit_fsm_spectra])
+    slit_pos_y = np.array([ds[0].ext_hdr['WV0_Y'] for ds in slit_fsm_spectra])
+    slit_trans = np.array([ds[0].data/spec_open for ds in slit_fsm_spectra])
 
-    # Derive slit transmission at desired locations
-    interpolant = interp1d(slit_pos_arr, slit_trans, axis=0, kind=kind)
-    slit_trans_interp = interpolant(pos_arr)
-    # TODO: Check for NaN and enough output points or raise ValueError
-    breakpoint()
-    return pos_arr, slit_trans_interp
+    # If there's only one position, there's no interpolation
+    if len(np.unique(slit_pos_y)) == len(np.unique(slit_pos_x)) == 1:
+        print('Only one unique position in the data. Returning slit transmission at that position.')
+        return (slit_trans,
+            slit_pos_x,
+            slit_pos_y)
+
+    # If no target pixels are provided, create a series
+    if target_pix == None:
+        # If the FSM images are along one direction:
+        if len(np.unique(slit_pos_x)) == 1:
+            x_tmp = np.ones(n_gridy) * np.unique(slit_pos_x)
+            y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
+        elif len(np.unique(slit_pos_y)) == 1:
+            x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
+            y_tmp = np.ones(n_gridx) * np.unique(slit_pos_y)
+        # If the FSM images span a 2-d grid:
+        else:
+            x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
+            y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
+        target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
+
+    # Derive slit transmission at desired locations 
+    # 2-d grid:
+    try:
+        interpolator = LinearNDInterpolator(np.c_[slit_pos_x, slit_pos_y], slit_trans)
+        slit_trans_interp = interpolator(target_pix[0], target_pix[1])
+    # 1-d cases
+    except:
+        # The positions along one of the slit dimensions is constant. P.S. scipy
+        # takes care of raising exceptions if there's any extrapolation
+        if len(np.unique(slit_pos_y)) == 1:
+            interpolant = interp1d(slit_pos_x, slit_trans, axis=0, kind=kind)
+            slit_trans_interp = interpolant(target_pix[0])
+        elif len(np.unique(slit_pos_x)) == 1:
+            interpolant = interp1d(slit_pos_y, slit_trans, axis=0, kind=kind)
+            slit_trans_interp = interpolant(target_pix[1])
+        else:
+            raise ValueError('Not enough independent values to derive a slit transmission map')
+
+    # Raise ValueError if all values are NaN
+    if np.all(np.isnan(slit_trans_interp)):
+        raise ValueError('There are no valid target positions within the ' +
+            'range of input PSF locations')
+
+    # Extrapolation: Remove NaN values
+    is_valid = np.where(np.isnan(slit_trans_interp) == False)[0]
+    return (slit_trans_interp[is_valid],
+        target_pix[0][is_valid],
+        target_pix[1][is_valid])

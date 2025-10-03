@@ -494,7 +494,7 @@ def create_ct_map(
       x_range (array): Two values [xmin, xmax] specifying the range of pixels to
         be considered. Units are EXCAM pixels measured with respect the center
         of the FPM. Notice that [-23,23] is approx. +/-10 l/D in band 1.
-      y_range (array): Two values [xmin, xmax] specifying the range of pixels to
+      y_range (array): Two values [ymin, ymax] specifying the range of pixels to
         be considered. Units are EXCAM pixels measured with respect the center
         of the FPM. Notice that [-23,23] is approx. +/-10 l/D in band 1.
       n_gridx (int) (optional): Number of x gridpoints.
