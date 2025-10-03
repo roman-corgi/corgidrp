@@ -190,7 +190,7 @@ def test_wcs_and_offset(save_mock_dataset=False):
    mock_dataset =  mock_dataset_ori.copy()
 
    # add an angle offset
-   mock_dataset[0].pri_hdr['ROLL']=(ang,'roll angle (deg)')
+   mock_dataset[0].pri_hdr['ROLL']=(north_angle,'roll angle (deg)')
 
    # create the wcs
    test_offset = (3.3, 1.0)
@@ -209,5 +209,8 @@ def test_wcs_and_offset(save_mock_dataset=False):
       updated_dataset[0].save(filedir='./',filename=f'mock_offset{ang+north_angle}deg_testoffset.fits')
 
 if __name__ == '__main__':
+   print('Running test_northup()...')
    test_northup()
    test_wcs_and_offset()  
+
+   # TODO: test both PC/CDELT and CD formalism!

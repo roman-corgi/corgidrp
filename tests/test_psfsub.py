@@ -708,27 +708,32 @@ def test_psf_sub_badmode():
                                 **klip_kwargs)
     
 if __name__ == '__main__':  
-    test_pyklipdata_ADI()
-    test_pyklipdata_RDI()
-    test_pyklipdata_ADIRDI()
-    test_pyklipdata_badtelescope()
-    test_pyklipdata_badinstrument()
-    test_pyklipdata_badcfamname()
-    test_pyklipdata_notdataset()
-    test_pyklipdata_badimgshapes()
-    test_pyklipdata_multiplepixscales()
+    # test_pyklipdata_ADI()
+    # test_pyklipdata_RDI()
+    # test_pyklipdata_ADIRDI()
+    # test_pyklipdata_badtelescope()
+    # test_pyklipdata_badinstrument()
+    # test_pyklipdata_badcfamname()
+    # test_pyklipdata_notdataset()
+    # test_pyklipdata_badimgshapes()
+    # test_pyklipdata_multiplepixscales()
 
-    test_nanflags_2D()
-    test_nanflags_3D() 
-    test_nanflags_mixed_dqvals()
-    test_flagnans_2D()
-    test_flagnans_3D()
-    test_flagnans_flagval2()
+    # test_nanflags_2D()
+    # test_nanflags_3D() 
+    # test_nanflags_mixed_dqvals()
+    # test_flagnans_2D()
+    # test_flagnans_3D()
+    # test_flagnans_flagval2()
 
-    test_psf_sub_split_dataset()
-    test_psf_sub_explicit_klip_kwargs()
+    # test_psf_sub_split_dataset()
+    # test_psf_sub_explicit_klip_kwargs()
 
-    test_psf_sub_ADI()
-    test_psf_sub_RDI()
+    # test_psf_sub_ADI()
+    # test_psf_sub_RDI()
     test_psf_sub_ADIRDI()
-    test_psf_sub_badmode()
+    # test_psf_sub_badmode()
+
+    # TODO: Test that errors are raised correctly when 
+    #       nans are present in sci/ref data
+    # TODO: Test dq threshold kwarg
+    

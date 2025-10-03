@@ -20,7 +20,7 @@ from scipy.ndimage import generic_filter
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
 from corgidrp import pol
 from corgidrp import fluxcal
-
+from pytest import approx
 
 def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
     """Interpolate over bad pixels in image and error arrays using a median filter.
@@ -346,6 +346,7 @@ def do_psf_subtraction(input_dataset,
                        kt_pas=None,
                        kt_snr=20.,
                        num_processes=None,
+                       dq_thresh=1,
                        **klip_kwargs
                        ):
     
@@ -383,6 +384,7 @@ def do_psf_subtraction(input_dataset,
             PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
         kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
         num_processes (int): number of processes for parallelizing the PSF subtraction
+        dq_thresh (int): DQ threshold for considering a pixel bad. Defaults to 1.
         klip_kwargs: Additional keyword arguments to be passed to pyKLIP fm.klip_dataset, as defined `here <https://pyklip.readthedocs.io/en/latest/pyklip.html#pyklip.fm.klip_dataset>`. 
             'mode', e.g. ADI/RDI/ADI+RDI, is chosen autonomously if not specified. 'annuli' defaults to 1. 'annuli_spacing' 
             defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. 'numbasis' defaults to [1,4,8,16].
@@ -454,26 +456,57 @@ def do_psf_subtraction(input_dataset,
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
+    # Assume replace_bad_pixels has been run on data already
     # Mask data where DQ > 0, let pyklip deal with the nans
-    sci_dataset_masked = nan_flags(sci_dataset)
-    ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
+    # sci_dataset_masked = nan_flags(sci_dataset)
+    # ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
+    if np.any(np.isnan(sci_dataset.all_data)):
+        raise ValueError('nans present in science data, please run replace_bad_pixels()')
+    if np.any(np.isnan(ref_dataset.all_data)):
+        raise ValueError('nans present in reference data, please run replace_bad_pixels()')
+
 
     # Initialize pyklip dataset class
-    pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
+    pyklip_dataset = data.PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)
     
     # Run pyklip
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                             **klip_kwargs,
                             calibrate_flux=False,psf_library=pyklip_dataset._psflib,
-                            fileprefix=fileprefix, numthreads=num_processes)
+                            fileprefix=fileprefix, numthreads=num_processes,
+                            skip_derot=True
+                            )
     
+
+    # Assign master output dq & error (before derotation)
+    # TODO: handle 3D data!
+    sci_output_dqs = sci_dataset.all_dq.copy()
+
+    # If using references, only flag pixels that are bad in all the ref frames
+    if 'RDI' in klip_kwargs['mode']:
+        sci_output_dqs = np.logical_or(sci_output_dqs,np.all(ref_dataset.all_dq>=dq_thresh,axis=0))
+
+    # Set errors to np.nan for now
+    sci_output_errs = np.full_like(sci_dataset.all_err,np.nan)
+
+    # Derotate & align all frames & dq & error
+    sci_dataset_temp = sci_dataset.copy()
+    sci_dataset_temp.all_dq[:] = sci_output_dqs
+    sci_dataset_temp.all_err[:] = sci_output_errs
+
+    northup(sci_dataset_temp)
+
+    # align all frames & dq & error
+
+    # Do time collapse of data, dq, & error
+
     # Construct corgiDRP dataset from pyKLIP result
     result_fpath = os.path.join(outdir,f'{fileprefix}-KLmodes-all.fits')   
-    pyklip_data = fits.getdata(result_fpath)
+    #pyklip_data = fits.getdata(result_fpath)
     pyklip_hdr = fits.getheader(result_fpath)
 
-    err = np.zeros([1,*pyklip_data.shape])
-    dq = np.zeros_like(pyklip_data) # This will get filled out later
+    # err = np.zeros([1,*pyklip_data.shape])
+    # dq = np.zeros_like(pyklip_data) # This will get filled out later
 
     # Collapse sci_dataset headers
     pri_hdr = sci_dataset[0].pri_hdr.copy()
@@ -525,7 +558,7 @@ def do_psf_subtraction(input_dataset,
         if cand_locs is None:
             cand_locs = []
 
-        klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
+        klip_thpt = meas_klip_thrupt(sci_dataset,ref_dataset, # pre-psf-subtracted dataset
                             dataset_out,
                             ct_calibration,
                             klip_params,
@@ -634,12 +667,26 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
                 astr_hdr = WCS(sci_hd)
-            CD1_2 = sci_hd['CD1_2']
-            CD2_2 = sci_hd['CD2_2']
-            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
+    
+            # Calculate CD matrix if it does not exist
+            if not 'CD1_1' in sci_hd.keys():
+                sci_hd['CD1_1'] = sci_hd['CDELT1'] * sci_hd['PC1_1']
+                sci_hd['CD1_2'] = sci_hd['CDELT1'] * sci_hd['PC1_2']
+                sci_hd['CD2_1'] = sci_hd['CDELT2'] * sci_hd['PC2_1']
+                sci_hd['CD2_2'] = sci_hd['CDELT2'] * sci_hd['PC2_2']
+
+                sci_hd['PC1_1'] = sci_hd['CD1_1']
+                sci_hd['PC1_2'] = sci_hd['CD1_2']
+                sci_hd['PC2_1'] = sci_hd['CD2_1']
+                sci_hd['PC2_2'] = sci_hd['CD2_2']
+
+                sci_hd['CDELT1'] = 1.
+                sci_hd['CDELT2'] = 1.
+
+            roll_angle = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
 
         else:
-            warnings.warn('use "ROLL" instead of WCS to estimate the north position angle')
+            warnings.warn('using "ROLL" instead of WCS to estimate the north position angle')
             astr_hdr = None
             # read the roll angle parameter, assuming this info is recorded in the primary header as requested
             roll_angle = processed_data.pri_hdr['ROLL']
@@ -653,10 +700,12 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
         # update WCS solutions
         if use_wcs:
+
             sci_hd['CD1_1'] = astr_hdr.wcs.cd[0,0]
             sci_hd['CD1_2'] = astr_hdr.wcs.cd[0,1]
             sci_hd['CD2_1'] = astr_hdr.wcs.cd[1,0]
             sci_hd['CD2_2'] = astr_hdr.wcs.cd[1,1]
+
         #############
 
         ## HDU ERR ##
@@ -831,6 +880,7 @@ def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials
     dataset.update_after_processing_step(history_msg)
     return dataset
 
+
 def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
     """
     extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
@@ -886,6 +936,7 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
     dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
     return dataset
+
 
 def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_mueller_matrix_cal):
     """
@@ -1075,8 +1126,6 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
     stellar U value: {S_in[2]}, stellar U err: {S_in_err[2]}."
     updated_dataset.update_after_processing_step(history_msg)
     return updated_dataset
-
-
 
         
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
