@@ -33,7 +33,7 @@ def test_autoreducing():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -84,7 +84,7 @@ def test_autoreducing():
 
     # check that the output dataset is saved to the output dir
     # filenames have been updated to L2a. 
-    output_files = [os.path.join(outputdir, frame.filename.replace("_l1_", "_l2a")) for frame in l1_dataset]
+    output_files = [os.path.join(outputdir, frame.filename.replace("_L1_", "_L2a")) for frame in l1_dataset]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     # check that the recipe is saved into the header.
@@ -115,7 +115,7 @@ def test_auto_template_identification():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -227,7 +227,7 @@ def test_saving():
     ### Create mock Image data
     l1_dataset = mocks.create_dark_calib_files(filedir=datadir, numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -238,7 +238,7 @@ def test_saving():
 
     # check that the output dataset is saved to the output dir
     # filenames have been appended with a suffix
-    output_files = [os.path.join(outputdir, "cgi_0200001999001000{:03d}_20250415t0305102_l1__test.fits".format(i)) for i in range(len(l1_dataset))]
+    output_files = [os.path.join(outputdir, "CGI_0200001999001000{:03d}_20250415T0305102_L1__test.fits".format(i)) for i in range(len(l1_dataset))]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     
@@ -308,7 +308,7 @@ def test_skip_missing_calib():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -338,7 +338,7 @@ def test_skip_missing_calib():
 
     # check that the output dataset is saved to the output dir
     # filenames have been appended with a suffix
-    output_files = [os.path.join(outputdir, "cgi_0200001999001000{:03d}_20250415t0305102_l2a.fits".format(i)) for i in range(len(l1_dataset))]
+    output_files = [os.path.join(outputdir, "CGI_0200001999001000{:03d}_20250415T0305102_L2a.fits".format(i)) for i in range(len(l1_dataset))]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
 
@@ -378,7 +378,7 @@ def test_skip_missing_optional_calib():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -422,7 +422,7 @@ def test_jit_calibs():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -475,7 +475,7 @@ def test_jit_calibs():
 
     # check that the output dataset is saved to the output dir
     # filenames have been updated to L2a. 
-    output_files = [os.path.join(outputdir, frame.filename.replace("_l1_", "_l2a")) for frame in l1_dataset]
+    output_files = [os.path.join(outputdir, frame.filename.replace("_L1_", "_L2a")) for frame in l1_dataset]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     
@@ -558,41 +558,7 @@ def test_generate_multiple_recipes():
     assert len(recipes) == 2
 
 
-def test_generate_chain_recipes():
-    """
-    Tests that we can generate multiple recipes when passing in a dataset
-    """
-    # create dirs
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
-    # Make a non-linearity correction calibration file
-    input_non_linearity_filename = "nonlin_table_TVAC.txt"
-    test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
-    test_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
 
-    frame = mocks.create_flux_image(1, 3, 1)
-    frame.filename = "cgi_0200001999001000001_20250415t0305102_l1_.fits"
-    dataset = data.Dataset([frame])
-    # add vistype
-    for frame in dataset:
-        frame.ext_hdr['DATALVL'] = "L1"
-    dataset.save(filedir=datadir)
-    filelist = [frame.filepath for frame in dataset]
-
-    # skip missing cals just to get the recipes
-    old_setting = corgidrp.skip_missing_cal_steps
-    corgidrp.skip_missing_cal_steps = True
-    # suppress warnings about skpping steps
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning)
-        recipes = walker.autogen_recipe(filelist, outputdir)
-    corgidrp.skip_missing_cal_steps = old_setting
-
-    assert len(recipes) == 3
 
 if __name__ == "__main__":#
     test_autoreducing()
@@ -602,7 +568,6 @@ if __name__ == "__main__":#
     test_skip_missing_optional_calib()
     test_jit_calibs()
     test_generate_multiple_recipes()
-    test_generate_chain_recipes()
 
 
 

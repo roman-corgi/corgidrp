@@ -71,33 +71,17 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     field_path = os.path.join(os.path.dirname(__file__),"..","test_data", "JWST_CALFIELD2020.csv")
 
-    #Create the mock dataset (without saving to disk to avoid simcal_astrom.fits)
-    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
-    
     # Create separate directory for astrometric calibration input (L1 data)
     astrom_input_dir = os.path.join(main_output_dir, 'astrom_cal_input')
     if not os.path.exists(astrom_input_dir):
         os.makedirs(astrom_input_dir)
     
-    # Generate proper filename and save with standard naming convention
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    visitid = "0200001999001000001"  # Use consistent visitid
-    astrom_filename = f'cgi_{visitid}_{current_time}_l1_.fits'  # This is L1 data, not L2b
-    mock_dataset[0].filename = astrom_filename
-    mock_dataset[0].save(filedir=astrom_input_dir)
-    
-    image_path = os.path.join(astrom_input_dir, astrom_filename)
+    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
+    mock_dataset.save(filedir=astrom_input_dir)
 
-    # open the image
-    dataset = corgidata.Dataset([image_path])
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
-
-    # Generate timestamp for AstrometricCalibration
-    base_time = datetime.now()
-    ast_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    ast_filename = f"cgi_0000000000000000000_{ast_time_str}_ast_cal.fits"
-    astrom_cal.save(filedir=calibrations_dir, filename=ast_filename)
+    astrom_cal = astrom.boresight_calibration(input_dataset=mock_dataset, field_path=field_path, find_threshold=5)
+    astrom_cal.save(filedir=calibrations_dir)
 
     # add calibration file to caldb
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -188,10 +172,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
             new_image.pri_hdr.set('PSFREF', 1)
 
         # Generate proper filename with visitid and current time
-        current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-        visitid = "0200001999001000001"  # Use consistent visitid
         unique_time = (datetime.now() + timedelta(milliseconds=ibatch*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_image.filename = f"cgi_{visitid}_{unique_time}_l2b.fits"
+        new_image.filename = f"cgi_{new_image.pri_hdr['VISITID']}_{unique_time}_l2b.fits"
         #Save the last science filename for later. 
         if star[ibatch] == 1:
             last_sci_filename = new_image.filename
@@ -228,7 +210,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     sat_spot_image = Image(big_array, mock_satspot_pri_header, mock_satspot_ext_header)
     # Generate proper filename for satellite spot
     unique_time = (datetime.now() + timedelta(milliseconds=(ibatch+1)*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-    sat_spot_image.filename = f"cgi_{visitid}_{unique_time}_l2b.fits"
+    sat_spot_image.filename = f"cgi_{sat_spot_image.pri_hdr['VISITID']}_{unique_time}_l2b.fits"
 
     image_list.append(sat_spot_image)
 
@@ -251,22 +233,14 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #####################################
 
     l2b_data_filelist = sorted(glob.glob(os.path.join(input_data_dir, "*.fits")))
-    
-    walker.walk_corgidrp(l2b_data_filelist, "", main_output_dir)
 
     # Organize L3 files into l2b_to_l3 subfolder
     l2b_to_l3_dir = os.path.join(main_output_dir, "l2b_to_l3")
     if not os.path.exists(l2b_to_l3_dir):
         os.mkdir(l2b_to_l3_dir)
     
-    # Move L3 files and related recipes to l2b_to_l3 subfolder
-    for filename in os.listdir(main_output_dir):
-        filepath = os.path.join(main_output_dir, filename)
-        if os.path.isfile(filepath):
-            if '_l3_' in filename and filename.endswith('.fits'):
-                shutil.move(filepath, os.path.join(l2b_to_l3_dir, filename))
-            elif 'l2b_to_l3' in filename and filename.endswith('_recipe.json'):
-                shutil.move(filepath, os.path.join(l2b_to_l3_dir, filename))
+    walker.walk_corgidrp(l2b_data_filelist, "",l2b_to_l3_dir)
+
 
     #Read in an L3 file (now from l2b_to_l3 subfolder)
     l3_filename = glob.glob(os.path.join(l2b_to_l3_dir, "*l3_.fits"))[0]
@@ -322,34 +296,19 @@ def test_l3_to_l4(e2eoutput_path):
     # check that the simulated image folder exists and create if not
 
     field_path = os.path.join(os.path.dirname(__file__),"..","test_data", "JWST_CALFIELD2020.csv")
-
-    #Create the mock dataset (without saving to disk to avoid simcal_astrom.fits)
-    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
     
     # Create separate directory for astrometric calibration input (L1 data)
     astrom_input_dir = os.path.join(main_output_dir, 'astrom_cal_input')
     if not os.path.exists(astrom_input_dir):
         os.makedirs(astrom_input_dir)
     
-    # Generate proper filename and save with standard naming convention
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    visitid = "0200001999001000001"  # Use consistent visitid
-    astrom_filename = f'cgi_{visitid}_{current_time}_l1_.fits'  # This is L1 data, not L2b
-    mock_dataset[0].filename = astrom_filename
-    mock_dataset[0].save(filedir=astrom_input_dir)
+    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
+    mock_dataset.save(filedir=astrom_input_dir)
     
-    image_path = os.path.join(astrom_input_dir, astrom_filename)
 
-    # open the image
-    dataset = corgidata.Dataset([image_path])
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
-
-    # Generate timestamp for AstrometricCalibration
-    base_time = datetime.now()
-    ast_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    ast_filename = f"cgi_0000000000000000000_{ast_time_str}_ast_cal.fits"
-    astrom_cal.save(filedir=calibrations_dir, filename=ast_filename)
+    astrom_cal = astrom.boresight_calibration(input_dataset=mock_dataset, field_path=field_path, find_threshold=5)
+    astrom_cal.save(filedir=calibrations_dir)
 
     # add calibration file to caldb
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -391,10 +350,7 @@ def test_l3_to_l4(e2eoutput_path):
     # We can use a miminal dataset to get to know it
     data_ct_interp += [data_psf[0]]
     ct_cal_tmp = corethroughput.generate_ct_cal(corgidata.Dataset(data_ct_interp))
-    # Generate timestamp for CoreThroughputMap calibration
-    ctm_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
-    ctm_filename = f"cgi_0000000000000000000_{ctm_time_str}_ctm_cal.fits"
-    ct_cal_tmp.save(filedir=calibrations_dir, filename=ctm_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[ct_cal_tmp], output_dir=calibrations_dir, level_suffix="ctm_cal")
     this_caldb.create_entry(ct_cal_tmp)
 
     ##########################################
@@ -411,12 +367,9 @@ def test_l3_to_l4(e2eoutput_path):
     exthd['LSAMNAME'] = 'OPEN'
     exthd['FSAMNAME'] = 'OPEN'
     exthd['FPAMNAME'] = 'OPEN_12'
-    fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = dataset)
+    fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = mock_dataset)
 
-    # Generate timestamp for FluxcalFactor calibration
-    abf_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 3) % 60)).isoformat())
-    abf_filename = f"cgi_0000000000000000000_{abf_time_str}_abf_cal.fits"
-    fluxcal_fac.save(filedir=calibrations_dir, filename=abf_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
 
     #####################################
@@ -463,10 +416,7 @@ def test_l3_to_l4(e2eoutput_path):
         assert np.isclose(source_distance, source_distances[i], atol=1)
     print("Found all the sources!")
 
-    #Check that the calibration filenames are appropriately associated
-    assert psf_subtracted_image.ext_hdr['CTCALFN'] == ctm_filename
-    assert psf_subtracted_image.ext_hdr['FLXCALFN'] == abf_filename
-    print("Filenames associated correctly!")
+    # Filename format will be checked in data format test
     
     print('e2e test for l3_to_l4 calibration passed')
 

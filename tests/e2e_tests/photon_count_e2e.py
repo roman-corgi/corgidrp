@@ -14,6 +14,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import shutil
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
@@ -25,7 +26,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5)
     output_dir = os.path.join(e2eoutput_path, 'photon_count_e2e')
     if os.path.exists(output_dir):
-        import shutil
         shutil.rmtree(output_dir)
     os.makedirs(output_dir)
 
@@ -53,24 +53,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         os.makedirs(output_dark_dir)
     if not os.path.exists(output_l2a_dir):
         os.makedirs(output_l2a_dir)
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    visitid = "0200001999001000001"  # Use consistent visitid
 
-    # Generate proper filenames for illuminated frames
-    ill_filenames = []
-    for i in range(len(ill_dataset)):
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        ill_filenames.append(f'cgi_{visitid}_{unique_time}_l1_.fits')
-    
-    # Generate proper filenames for dark frames
-    dark_filenames = []
-    for i in range(len(dark_dataset)):
-        unique_time = (datetime.now() + timedelta(milliseconds=(i+len(ill_dataset))*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        dark_filenames.append(f'cgi_{visitid}_{unique_time}_l1_.fits')
-
-    ill_dataset.save(output_ill_dir, ill_filenames)
-    dark_dataset.save(output_dark_dir, dark_filenames)
+    ill_dataset.save(output_ill_dir)
+    dark_dataset.save(output_dark_dir)
     l1_data_ill_filelist = []
     l1_data_dark_filelist = []
     for f in os.listdir(output_ill_dir):
@@ -97,11 +82,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
     kgain.ext_hdr['RN_ERR'] = 0
-    # Generate timestamp for KGain calibration
-    base_time = datetime.now()
-    kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    kgain_filename = f"cgi_0000000000000000000_{kgain_time_str}_krn_cal.fits"
-    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -115,10 +96,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    # Generate timestamp for DetectorNoiseMaps calibration
-    dnm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
-    dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
-    noise_map.save(filedir=calibrations_dir, filename=dnm_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
     here = os.path.abspath(os.path.dirname(__file__))
@@ -145,20 +123,14 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    # Generate timestamp for FlatField calibration
-    flt_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 3) % 60)).isoformat())
-    flt_filename = f"cgi_0000000000000000000_{flt_time_str}_flt_cal.fits"
-    flat.save(filedir=calibrations_dir, filename=flt_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat)
 
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    # Generate timestamp for BadPixelMap calibration
-    bpm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 4) % 60)).isoformat())
-    bpm_filename = f"cgi_0000000000000000000_{bpm_time_str}_bpm_cal.fits"
-    bp_map.save(filedir=calibrations_dir, filename=bpm_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     this_caldb.create_entry(bp_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -193,13 +165,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)
-    walker.walk_corgidrp(l2a_files, '', output_dir)
-
-    # Move L2b files and recipe to l2a_to_l2b_output directory
-    for f in os.listdir(output_dir):
-        if f.endswith('_l2b.fits') or (f.endswith('.json') and 'l2a_to_l2b' in f):
-            import shutil
-            shutil.move(os.path.join(output_dir, f), os.path.join(l2a_to_l2b_output_dir, f))
+    walker.walk_corgidrp(l2a_files, '', l2a_to_l2b_output_dir)
 
     # get photon-counted frame
     master_ill_filename_list = []

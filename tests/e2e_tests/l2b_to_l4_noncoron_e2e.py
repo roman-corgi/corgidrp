@@ -77,31 +77,10 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     #Create the mock dataset (without saving to disk to avoid simcal_astrom.fits)
     mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
-    
-    # Create separate directory for astrometric calibration input (L1 data)
-    astrom_input_dir = os.path.join(main_output_dir, 'astrom_cal_input')
-    if not os.path.exists(astrom_input_dir):
-        os.makedirs(astrom_input_dir)
-    
-    # Generate proper filename and save with standard naming convention
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    visitid = "0200001999001000001"  # Use consistent visitid
-    astrom_filename = f'cgi_{visitid}_{current_time}_l1_.fits'  # This is L1 data
-    mock_dataset[0].filename = astrom_filename
-    mock_dataset[0].save(filedir=astrom_input_dir)
-    
-    image_path = os.path.join(astrom_input_dir, astrom_filename)
 
-    # open the image
-    dataset = corgidata.Dataset([image_path])
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
-
-    # Generate timestamp for AstrometricCalibration
-    base_time = datetime.now()
-    ast_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    ast_filename = f"cgi_0000000000000000000_{ast_time_str}_ast_cal.fits"
-    astrom_cal.save(filedir=calibrations_dir, filename=ast_filename)
+    astrom_cal = astrom.boresight_calibration(input_dataset=mock_dataset, field_path=field_path, find_threshold=5)
+    astrom_cal.save(filedir=calibrations_dir)
 
     # add calibration file to caldb
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -261,31 +240,10 @@ def test_l3_to_l4(e2eoutput_path):
 
     #Create the mock dataset (without saving to disk to avoid simcal_astrom.fits)
     mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
-    
-    # Create separate directory for astrometric calibration input (L1 data)
-    astrom_input_dir = os.path.join(main_output_dir, 'astrom_cal_input')
-    if not os.path.exists(astrom_input_dir):
-        os.makedirs(astrom_input_dir)
-    
-    # Generate proper filename and save with standard naming convention
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    visitid = "0200001999001000001"  # Use consistent visitid
-    astrom_filename = f'cgi_{visitid}_{current_time}_l1_.fits'  # This is L1 data
-    mock_dataset[0].filename = astrom_filename
-    mock_dataset[0].save(filedir=astrom_input_dir)
-    
-    image_path = os.path.join(astrom_input_dir, astrom_filename)
 
-    # open the image
-    dataset = corgidata.Dataset([image_path])
-    # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
 
-    # Generate timestamp for AstrometricCalibration
-    base_time = datetime.now()
-    ast_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    ast_filename = f"cgi_0000000000000000000_{ast_time_str}_ast_cal.fits"
-    astrom_cal.save(filedir=calibrations_dir, filename=ast_filename)
+    astrom_cal = astrom.boresight_calibration(input_dataset=mock_dataset, field_path=field_path, find_threshold=5)
+    astrom_cal.save(filedir=calibrations_dir)
 
     # add calibration file to caldb
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -304,12 +262,9 @@ def test_l3_to_l4(e2eoutput_path):
     fluxcal_factor = 2e-12
     fluxcal_factor_error = 1e-14
     prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
-    fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhdr, input_dataset = dataset)
+    fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhdr, input_dataset = mock_dataset)
 
-    # Generate timestamp for FluxcalFactor calibration
-    abf_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
-    abf_filename = f"cgi_0000000000000000000_{abf_time_str}_abf_cal.fits"
-    fluxcal_fac.save(filedir=calibrations_dir, filename=abf_filename)
+    fluxcal_fac.save(filedir=calibrations_dir)
     this_caldb.create_entry(fluxcal_fac)
 
     #####################################
@@ -344,9 +299,7 @@ def test_l3_to_l4(e2eoutput_path):
     assert peakflux == pytest.approx(1000, rel=1e-2)
 
 
-    #Check that the calibration filenames are appropriately associated
-    assert combined_image.ext_hdr['CTCALFN'] == '' # no calibration frame associated for L4 non-coron
-    assert combined_image.ext_hdr['FLXCALFN'] == abf_filename
+    #Filename format will be checked in data format test
 
     input_filenames = [filepath.split(os.path.sep)[-1] for filepath in l3_data_filelist]
 

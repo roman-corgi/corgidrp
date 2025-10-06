@@ -12,6 +12,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import shutil
 
 try:
     from proc_cgi_frame.gsw_process import Process
@@ -39,32 +40,6 @@ def fix_str_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def fix_headers_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-        exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        prihdr['PHTCNT'] = False
-        exthdr['ISPC'] = False
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
-
 @pytest.mark.e2e
 def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
@@ -78,7 +53,6 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     # make output directory if needed
     l2a_outputdir = os.path.join(e2eoutput_path, "l1_to_l2a_e2e")
     if os.path.exists(l2a_outputdir):
-        import shutil
         shutil.rmtree(l2a_outputdir)
     os.makedirs(l2a_outputdir)
 
@@ -112,36 +86,11 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
     mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration
 
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Extract visit ID from primary header VISITID keyword of first file
-    if l1_data_filelist:
-        with fits.open(l1_data_filelist[0]) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                # Convert to string and pad to 19 digits
-                visitid = str(visitid).zfill(19)
-            else:
-                # Fallback: use default visitid
-                visitid = "0000000000000000000"
-    else:
-        visitid = "0000000000000000000"
-
-    # Copy files to input_data directory with proper naming
-    for i, file_path in enumerate(l1_data_filelist):
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
-        new_file_path = os.path.join(input_data_dir, new_filename)
-        import shutil
-        shutil.copy2(file_path, new_file_path)
-    
-    # Update l1_data_filelist to point to new files
-    l1_data_filelist = []
-    for f in os.listdir(input_data_dir):
-        if f.endswith('.fits'):
-            l1_data_filelist.append(os.path.join(input_data_dir, f)) 
+    # Copy files to input_data directory and update file list
+    l1_data_filelist = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in l1_data_filelist
+    ] 
     #tvac_l2a_filelist = [os.path.join(l2a_datadir, os.listdir(l2a_datadir)[i]) for i in [0,1]] #[os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
     # run the L1 data through the II&T code to process to L2a
     tvac_l2a_filelist = []
@@ -195,11 +144,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    # Generate timestamp for nonlinear calibration
-    base_time = datetime.now()
-    nln_time_str = data.format_ftimeutc(base_time.isoformat())
-    nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(nonlinear_cal)
 
     # NoiseMap
@@ -222,10 +167,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    # Generate timestamp for DetectorNoiseMaps calibration
-    dnm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
-    dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
-    noise_map.save(filedir=calibrations_dir, filename=dnm_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
     # KGain
@@ -235,10 +177,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    # Generate timestamp for KGain calibration
-    kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    kgain_filename = f"cgi_0000000000000000000_{kgain_time_str}_krn_cal.fits"
-    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)
 
     ####### Run the walker on some test_data

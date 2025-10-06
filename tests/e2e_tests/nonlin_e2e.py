@@ -14,6 +14,7 @@ from corgidrp import data
 from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
+import shutil
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
@@ -41,32 +42,6 @@ def set_vistype_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def fix_headers_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        prihdr['VISTYPE'] = 'PUPILIMG'
-        # Adjust other keywords
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-        exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
@@ -109,7 +84,6 @@ def test_nonlin_cal_e2e(
         raise FileNotFoundError(f'Please store L1 calibration data in {tvac_caldir}')
 
     if os.path.exists(e2eoutput_path):
-        import shutil
         shutil.rmtree(e2eoutput_path)
     os.makedirs(e2eoutput_path)
 
@@ -123,10 +97,17 @@ def test_nonlin_cal_e2e(
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
     
-    # Create tvac_reference subfolder
+    # Create tvac_reference subfolder and copy reference nonlinearity calibration
     tvac_reference_dir = os.path.join(e2eoutput_path, 'tvac_reference')
     if not os.path.exists(tvac_reference_dir):
         os.makedirs(tvac_reference_dir)
+    
+    # Copy TVAC reference nonlinearity calibration file
+    tvac_nonlin_file = os.path.join(tvac_caldir, 'nonlin_8_11_25.fits')
+    if os.path.exists(tvac_nonlin_file):
+        mocks.rename_files_to_cgi_format(list_of_fits=[tvac_nonlin_file], output_dir=tvac_reference_dir, level_suffix="nln_cal")
+    else:
+        raise FileNotFoundError(f"TVAC reference nonlinearity file not found at {tvac_nonlin_file}")
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
@@ -135,36 +116,11 @@ def test_nonlin_cal_e2e(
     kgain_l1_list.sort()
     nonlin_l1_list = nonlin_l1_list + kgain_l1_list
 
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Extract visit ID from primary header VISITID keyword of first file
-    if nonlin_l1_list:
-        with fits.open(nonlin_l1_list[0]) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                # Convert to string and pad to 19 digits
-                visitid = str(visitid).zfill(19)
-            else:
-                # Fallback: use default visitid
-                visitid = "0000000000000000000"
-    else:
-        visitid = "0000000000000000000"
-
-    # Copy files to input_data directory with proper naming
-    for i, file_path in enumerate(nonlin_l1_list):
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
-        new_file_path = os.path.join(input_data_dir, new_filename)
-        import shutil
-        shutil.copy2(file_path, new_file_path)
-    
-    # Update nonlin_l1_list to point to new files
-    nonlin_l1_list = []
-    for f in os.listdir(input_data_dir):
-        if f.endswith('.fits'):
-            nonlin_l1_list.append(os.path.join(input_data_dir, f))
+    # Copy files to input_data directory and update file list
+    nonlin_l1_list = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in nonlin_l1_list
+    ]
 
     # Set TVAC OBSNAME to MNFRAME/NONLIN (flight data should have these values)
     #fix_headers_for_tvac(nonlin_l1_list)
@@ -187,20 +143,13 @@ def test_nonlin_cal_e2e(
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    # Generate timestamp for TVAC reference NonLinearityCalibration
-    base_time = datetime.now()
-    tvac_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
-    tvac_nln_filename = f"cgi_0000000000000000000_{tvac_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=tvac_reference_dir, filename=tvac_nln_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
 
     # KGain
     kgain_val = 8.7
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    # Generate timestamp for KGain calibration
-    kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    kgain_filename = f"cgi_0000000000000000000_{kgain_time_str}_krn_cal.fits"
-    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -235,8 +184,12 @@ def test_nonlin_cal_e2e(
     nonlin_out_table = nonlin_out[1].data
     n_emgain = nonlin_out_table.shape[1]
 
-    # NL from TVAC
-    nonlin_tvac = fits.open(os.path.join(tvac_reference_dir, tvac_nln_filename))
+    # NL from TVAC - find the actual reference file
+    nonlin_tvac_files = glob.glob(os.path.join(tvac_reference_dir, '*nln_cal.fits'))
+    if not nonlin_tvac_files:
+        raise FileNotFoundError(f"No nonlinearity calibration file found in {tvac_reference_dir}")
+    nonlin_tvac_file = nonlin_tvac_files[0]
+    nonlin_tvac = fits.open(nonlin_tvac_file)
     nonlin_tvac_table = nonlin_tvac[1].data
 
     # Check

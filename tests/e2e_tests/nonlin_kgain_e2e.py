@@ -14,6 +14,7 @@ from corgidrp import data
 from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
+import shutil
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
@@ -41,29 +42,6 @@ def set_vistype_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def fix_headers_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-        exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_nonlin_and_kgain_e2e(
@@ -102,7 +80,6 @@ def test_nonlin_and_kgain_e2e(
             f'in {kgain_l1_datadir}')
 
     if os.path.exists(e2eoutput_path):
-        import shutil
         shutil.rmtree(e2eoutput_path)
     os.makedirs(e2eoutput_path)
 
@@ -130,36 +107,11 @@ def test_nonlin_and_kgain_e2e(
         if filepath.lower().endswith('.fits'):
             pupilimg_l1_list.append(filepath)
 
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Extract visit ID from primary header VISITID keyword of first file
-    if pupilimg_l1_list:
-        with fits.open(pupilimg_l1_list[0]) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                # Convert to string and pad to 19 digits
-                visitid = str(visitid).zfill(19)
-            else:
-                # Fallback: use default visitid
-                visitid = "0000000000000000000"
-    else:
-        visitid = "0000000000000000000"
-
-    # Copy files to input_data directory with proper naming
-    for i, file_path in enumerate(pupilimg_l1_list):
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
-        new_file_path = os.path.join(input_data_dir, new_filename)
-        import shutil
-        shutil.copy2(file_path, new_file_path)
-    
-    # Update pupilimg_l1_list to point to new files
-    pupilimg_l1_list = []
-    for f in os.listdir(input_data_dir):
-        if f.endswith('.fits'):
-            pupilimg_l1_list.append(os.path.join(input_data_dir, f))
+    # Copy files to input_data directory and update file list
+    nonlin_l1_list = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in nonlin_l1_list
+    ]
 
 
     # Set TVAC data to have VISTYPE=PUPILIMG (flight data should have these values)

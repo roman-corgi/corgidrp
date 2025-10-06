@@ -22,10 +22,8 @@ def test_expected_results_e2e(e2eoutput_path):
     star_flux_left = 0.6 * star_flux
     star_flux_right = 0.4 * star_flux
     flux_image_WP1 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL0')
-    flux_image_WP1.ext_hdr['BUNIT'] = 'photoelectron'
     flux_dataset_WP1 = data.Dataset([flux_image_WP1])
     flux_image_WP2 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL45')
-    flux_image_WP2.ext_hdr['BUNIT'] = 'photoelectron'
     flux_dataset_WP2 = data.Dataset([flux_image_WP2])
 
     output_dir = os.path.join(e2eoutput_path, 'flux_cal_pol_e2e')
@@ -47,24 +45,10 @@ def test_expected_results_e2e(e2eoutput_path):
     if not os.path.exists(input_data_dir_WP2):
         os.makedirs(input_data_dir_WP2)
 
-    # Generate proper filenames with visitid and current time
-    base_time = datetime.now()
-    current_time = base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Create second timestamp with 0.1 seconds added
-    current_time_wp2 = (base_time + timedelta(milliseconds=100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-    
-    # Extract visit ID from primary header VISITID keyword
-    visitid = flux_image_WP1.pri_hdr.get('VISITID', None)
-    if visitid is not None:
-        # Convert to string and pad to 19 digits
-        visitid = str(visitid).zfill(19)
-    else:
-        # Fallback: use default visitid
-        visitid = "0000000000000000000"
 
     # Create proper L2b filenames with unique timestamps
-    flux_dataset_WP1.save(input_data_dir_WP1, [f'cgi_{visitid}_{current_time}_l2b.fits'])
-    flux_dataset_WP2.save(input_data_dir_WP2, [f'cgi_{visitid}_{current_time_wp2}_l2b.fits'])
+    flux_dataset_WP1.save(input_data_dir_WP1)
+    flux_dataset_WP2.save(input_data_dir_WP2)
 
     data_filelist_WP1 = []
     data_filelist_WP2 = []

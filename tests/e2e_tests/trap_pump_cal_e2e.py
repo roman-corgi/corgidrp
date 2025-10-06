@@ -103,7 +103,6 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     
     # Create a mapping of files to their temperature/scheme info by reading headers
     file_info = {}
-    import astropy.io.fits as fits
     
     for filename in all_files:
         filepath = os.path.join(trap_pump_datadir, filename)
@@ -227,11 +226,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    # Generate timestamp for NonLinearityCalibration
-    base_time = datetime.now()
-    nln_time_str = data.format_ftimeutc(base_time.isoformat())
-    nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
 
 
     # Load and combine noise maps from various calibration files into a single array
@@ -262,10 +257,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    # Generate timestamp for DetectorNoiseMaps
-    dnm_time_str = data.format_ftimeutc((base_time + timedelta(seconds=1)).isoformat())
-    dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
-    noise_maps.save(filedir=calibrations_dir, filename=dnm_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_maps], output_dir=calibrations_dir, level_suffix="dnm_cal")
 
 
     # add calibration files to caldb

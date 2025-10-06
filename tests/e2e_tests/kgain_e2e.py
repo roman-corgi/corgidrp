@@ -10,6 +10,7 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import corgidrp.mocks as mocks
 from corgidrp.sorting import sort_pupilimg_frames
 from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
 
@@ -26,30 +27,6 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-
-def fix_headers_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-        exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
 
 def set_vistype_for_tvac(
     list_of_fits,
@@ -124,8 +101,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
         if not file.lower().endswith('.fits'):
             continue
         file_list.append(file)
-    
-    # Create dataset from original files (will be copied later)
+
     file_dataset = data.Dataset(file_list)
     out_dataset = sort_pupilimg_frames(file_dataset, cal_type='k-gain')
     cal_list, mean_frame_list, exp_arr, _, _, _, datetimes_sort_inds, truncated_set_len = nonlin_kgain_dataset_2_stack(out_dataset, apply_dq = False, cal_type='kgain')
@@ -175,29 +151,9 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Extract visit ID from primary header VISITID keyword of first file
-    if ordered_filelist:
-        with fits.open(ordered_filelist[0]) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                # Convert to string and pad to 19 digits
-                visitid = str(visitid).zfill(19)
-            else:
-                # Fallback: use default visitid
-                visitid = "0000000000000000000"
-    else:
-        visitid = "0000000000000000000"
-
     # Copy files to input_data directory with proper naming
     for i, file_path in enumerate(ordered_filelist):
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
-        new_file_path = os.path.join(input_data_dir, new_filename)
-        shutil.copy2(file_path, new_file_path)
+        shutil.copy2(file_path, input_data_dir)
     
     # Update ordered_filelist to point to new files
     ordered_filelist = []
@@ -205,7 +161,6 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
         if f.endswith('.fits'):
             ordered_filelist.append(os.path.join(input_data_dir, f))
     
-    # Now set VISTYPE on the COPIED files, not the originals
     set_vistype_for_tvac(ordered_filelist)
 
     # Initialize a connection to the calibration database

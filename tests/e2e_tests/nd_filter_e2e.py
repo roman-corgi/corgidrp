@@ -8,7 +8,6 @@ import corgidrp.walker as walker
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 from corgidrp import caldb
 import time
-from datetime import datetime, timedelta
 
 # ----------------------------------------------------------------------
 @pytest.mark.e2e
@@ -53,27 +52,12 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Extract visit ID from primary header VISITID keyword of first frame
-    if dim_frames:
-        visitid = dim_frames[0].pri_hdr.get('VISITID', None)
-        if visitid is not None:
-            # Convert to string and pad to 19 digits
-            visitid = str(visitid).zfill(19)
-        else:
-            # Fallback: use default visitid
-            visitid = "0000000000000000000"
-    else:
-        visitid = "0000000000000000000"
-
-    for i, frame in enumerate(dim_frames + bright_frames):
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_filename = f'cgi_{visitid}_{unique_time}_l3_.fits'
-        frame.save(input_data_dir, new_filename)
-
-    filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir)]
+    # Save all frames and collect file paths
+    all_frames = dim_frames + bright_frames
+    filelist = []
+    for frame in all_frames:
+        frame.save(input_data_dir)
+        filelist.append(frame.filepath)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')

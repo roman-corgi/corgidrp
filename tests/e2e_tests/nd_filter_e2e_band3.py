@@ -1,6 +1,5 @@
 import os, shutil, glob, argparse
 import pytest
-from datetime import datetime, timedelta
 
 import corgidrp.mocks as mocks
 import corgidrp.data as data
@@ -66,20 +65,15 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     # Create input_data subfolder
     input_data_dir = os.path.join(main_output_dir, 'input_l3')
     os.makedirs(input_data_dir)
-
-    # Save raw files with proper filename conventions
-    base_time = datetime.now()
-    visitid = "0200001999001000001"  # Use consistent visitid
     
-    for i, frame in enumerate(dim_frames + bright_frames):
-        # Generate unique timestamp for each frame
-        unique_time = (base_time + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        frame.filename = f"cgi_{visitid}_{unique_time}_l3_.fits"
-        frame.save(filedir=input_data_dir)
+    # Save all frames and collect file paths
+    all_frames = dim_frames + bright_frames
+    filelist = []
+    for frame in all_frames:
+        frame.save(input_data_dir)
+        filelist.append(frame.filepath)
 
-    filelist = sorted(glob.glob(os.path.join(input_data_dir, "*.fits")))
-
-    # 4. Run the DRP walker with outputs saved in the main output directory
+    # 4. Run the walker
     # Remove old NDF cal files first
     for old_file in glob.glob(os.path.join(main_output_dir, "*ndf_cal.fits")):
         os.remove(old_file)

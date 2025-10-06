@@ -143,7 +143,7 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     """
     
     # Create the output directory
-    corethroughput_outputdir = os.path.join(e2eoutput_path, 'corethroughput_cal_e2e/sim_data')
+    corethroughput_outputdir = os.path.join(e2eoutput_path, 'corethroughput_cal_e2e/band3_spc_data')
     if os.path.exists(corethroughput_outputdir):
         shutil.rmtree(corethroughput_outputdir)
     os.makedirs(corethroughput_outputdir)

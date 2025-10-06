@@ -4479,7 +4479,12 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             visitid = str(visitid).zfill(19)
         else:
             # Fallback: try to extract from filename or use file index
-            current_filename = os.path.basename(file)
+            if hasattr(file, 'filename'):
+                # Image object with filename attribute
+                current_filename = file.filename
+            else:
+                # File path string
+                current_filename = os.path.basename(file)
             if f'_{level_suffix}_' in current_filename:
                 # Extract the frame number after the level suffix
                 frame_number = current_filename.split(f'_{level_suffix}_')[-1].replace('.fits', '')
@@ -4502,6 +4507,17 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
                 filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-3]  # fallback to current time
         elif not filetime:
             filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-3]  # fallback to current time
+        
+        # Add small increment to ensure unique filenames when processing multiple files
+        if i > 0:
+            # Add milliseconds to make each filename unique
+            try:
+                base_dt = datetime.datetime.strptime(filetime, '%Y%m%dt%H%M%S%f')
+                unique_dt = base_dt + datetime.timedelta(milliseconds=i)
+                filetime = unique_dt.strftime('%Y%m%dt%H%M%S%f')[:-3]
+            except:
+                # If parsing fails, fall back to adding seconds
+                filetime = filetime[:-3] + f"{int(filetime[-3:]) + i:03d}"
         
         # Create new filename with correct convention
         if level_suffix in ['l2a', 'l2b']:

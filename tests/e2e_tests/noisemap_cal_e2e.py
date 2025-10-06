@@ -54,40 +54,6 @@ def set_obstype_for_darks(
         fits_file.writeto(file, overwrite=True)
 
 
-def fix_headers_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-        exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        exthdr['BUNIT'] = 'DN'
-        prihdr['PHTCNT'] = False
-        exthdr['ISPC'] = False
-        prihdr1, exthdr1 = mocks.create_default_L1_headers()
-        for key in prihdr1:
-            if key not in prihdr:
-                prihdr[key] = prihdr1[key]
-        for key in exthdr1:
-            if key not in exthdr:
-                exthdr[key] = exthdr1[key]
-        prihdr['VISTYPE'] = 'DARK'
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
@@ -131,29 +97,10 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     noisemap_outputdir = l1_to_dnm_dir
     input_data_dir = input_l1_dir
 
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Extract visit ID from primary header VISITID keyword of first file
-    if l1_data_filelist:
-        with fits.open(l1_data_filelist[0]) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                # Convert to string and pad to 19 digits
-                visitid = str(visitid).zfill(19)
-            else:
-                # Fallback: use default visitid
-                visitid = "0000000000000000000"
-    else:
-        visitid = "0000000000000000000"
 
     # Copy files to input_data directory with proper naming
     for i, file_path in enumerate(l1_data_filelist):
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
-        new_file_path = os.path.join(input_data_dir, new_filename)
-        shutil.copy2(file_path, new_file_path)
+        shutil.copy2(file_path, input_data_dir)
     
     # Update l1_data_filelist to point to new files
     l1_data_filelist = []
@@ -178,11 +125,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     det_params = this_caldb.get_calib(None, data.DetectorParams)
-    # Generate timestamp for DetectorParams calibration
-    base_time = datetime.now()
-    dpm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
-    dpm_filename = f"cgi_0000000000000000000_{dpm_time_str}_dpm_cal.fits"
-    det_params.save(filedir=calibrations_dir, filename=dpm_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[det_params], output_dir=calibrations_dir, level_suffix="dpm_cal")
     fwc_pp_e = int(det_params.params['FWC_PP_E']) # same as what is in DRP's DetectorParams
     fwc_em_e = int(det_params.params['FWC_EM_E']) # same as what is in DRP's DetectorParams
     telem_rows_start = det_params.params['TELRSTRT']
@@ -245,10 +188,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    # Generate timestamp for NonLinearityCalibration
-    nln_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 3) % 60)).isoformat())
-    nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain calibration 
@@ -258,10 +198,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
     kgain.ext_hdr['RN_ERR'] = 0
-    # Generate timestamp for KGain calibration
-    kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    kgain_filename = f"cgi_0000000000000000000_{kgain_time_str}_krn_cal.fits"
-    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)
 
     # getting output filename
@@ -289,8 +226,6 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     for f in os.listdir(noisemap_outputdir):
         if f.endswith('_l2a.fits'):
             shutil.move(os.path.join(noisemap_outputdir, f), os.path.join(processed_l2a_dir, f))
-    
-    # Recipe files stay in the main l1_to_dnm directory
 
     ##### Check against II&T ("TVAC") data
     for f in os.listdir(noisemap_outputdir):
@@ -424,31 +359,12 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     os.makedirs(input_l2a_dir)
     os.makedirs(calibrations_dir)
     
-    # Copy original L1 files to input_l1 directory with proper naming
-    base_time = datetime.now()
-    if l1_data_filelist:
-        with fits.open(l1_data_filelist[0]) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                visitid = str(visitid).zfill(19)
-            else:
-                visitid = "0000000000000000000"
-    else:
-        visitid = "0000000000000000000"
     
     for i, file_path in enumerate(l1_data_filelist):
-        unique_time = (base_time + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
-        new_file_path = os.path.join(input_l1_dir, new_filename)
-        shutil.copy2(file_path, new_file_path)
+        shutil.copy2(file_path, input_l1_dir)
     
-    noisemap_outputdir = l2a_to_dnm_dir
-    L2a_output_dir = input_l2a_dir
     # keep track of file order
     l2a_filepaths = []
-    if not os.path.exists(L2a_output_dir):
-        os.mkdir(L2a_output_dir)
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2a_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -473,7 +389,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
             ext_hdr['KGAINPAR'] = 8.7
             d1_data = data.Image(d1, pri_hdr=pri_hdr, ext_hdr=ext_hdr, dq=bp1)
             fname = dset.frames[j].filename.replace('_l1_.fits','_l2a.fits')
-            d1_data.save(L2a_output_dir, fname)
+            d1_data.save(input_l2a_dir, fname)
             l2a_filepaths.append(d1_data.filepath)
     stackl1_arr = np.stack(stackl1_arr)
     kgain_arr = [8.7]*len(exptime_arr)
@@ -496,8 +412,8 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     ####### Now prep and setup necessary calibration files for DRP run
 
     # remove old DetectorNoiseMaps
-    old_DNMs = sorted(glob(os.path.join(noisemap_outputdir,'*_DNM_CAL.fits')))
-    old_DNMs2 = sorted(glob(os.path.join(noisemap_outputdir,'*_dnm_cal.fits')))
+    old_DNMs = sorted(glob(os.path.join(l2a_to_dnm_dir,'*_DNM_CAL.fits')))
+    old_DNMs2 = sorted(glob(os.path.join(l2a_to_dnm_dir,'*_dnm_cal.fits')))
     for old_DNM in old_DNMs:
         os.remove(old_DNM)
     for old_DNM in old_DNMs2:
@@ -511,10 +427,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
     kgain.ext_hdr['RN_ERR'] = 0
-    # Generate timestamp for KGain calibration
-    kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    kgain_filename = f"cgi_0000000000000000000_{kgain_time_str}_krn_cal.fits"
-    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)
 
     # Update VISTPYE to "DARK" for DRP run
@@ -523,7 +436,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     ####### Run the DRP walker
     #template = "l2a_to_l2a_noisemap.json"
     #walker.walk_corgidrp(l2a_filepaths, "", noisemap_outputdir,template=template)
-    recipe = walker.autogen_recipe(l2a_filepaths, noisemap_outputdir)
+    recipe = walker.autogen_recipe(l2a_filepaths, l2a_to_dnm_dir)
     ### Modify a keyword
     for step in recipe['steps']:
         if step['name'] == "calibrate_darks":
@@ -531,16 +444,15 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
             step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
     walker.run_recipe(recipe, save_recipe_file=True)
 
-    # Recipe files stay in the main l2a_to_dnm directory
 
     # getting output filename
-    for f in os.listdir(noisemap_outputdir):
+    for f in os.listdir(l2a_to_dnm_dir):
         if f.endswith('_dnm_cal.fits'):
             output_filename = f
             break
 
     ##### Check against II&T ("TVAC") data
-    corgidrp_noisemap_fname = os.path.join(noisemap_outputdir,output_filename)
+    corgidrp_noisemap_fname = os.path.join(l2a_to_dnm_dir,output_filename)
 
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     # iit_noisemap = data.autoload(iit_noisemap_fname)

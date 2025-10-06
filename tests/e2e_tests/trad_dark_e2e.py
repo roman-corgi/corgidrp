@@ -13,6 +13,7 @@ import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import shutil
 try:
     from proc_cgi_frame.gsw_process import Process, mean_combine
 except:
@@ -39,53 +40,6 @@ def fix_str_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def fix_headers_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        if 'BUILD' in prihdr:
-            prihdr.remove("BUILD")
-        if 'OBSTYPE' in prihdr:
-            prihdr["OBSNAME"] = prihdr['OBSTYPE']
-            prihdr.remove('OBSTYPE')
-        if 'OBSID' in prihdr:
-            prihdr['OBSNUM'] = prihdr['OBSID']
-            prihdr.remove('OBSID')
-        if 'CMDGAIN' in exthdr:
-            exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-            exthdr.remove('CMDGAIN')
-        exthdr['EMGAIN_A'] = -1
-        if 'DATA_LEVEL' in exthdr:
-            exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-            exthdr.remove('DATA_LEVEL')
-        # exthdr['KGAINPAR'] = exthdr['KGAIN']
-        if 'OBSTYPE' in prihdr:
-            prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        prihdr['PHTCNT'] = False
-        exthdr['ISPC'] = False
-        exthdr['BUNIT'] = 'DN'
-        prihdr1, exthdr1 = mocks.create_default_L1_headers()
-        for key in prihdr1:
-            if key not in prihdr:
-                prihdr[key] = prihdr1[key]
-        for key in exthdr1:
-            if key not in exthdr:
-                exthdr[key] = exthdr1[key]
-        prihdr['VISTYPE'] = 'DARK'
-        # Update FITS file  
-        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_trad_dark(e2edata_path, e2eoutput_path):
@@ -113,7 +67,6 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     main_output_dir = os.path.join(e2eoutput_path, "trad_dark_e2e")
     build_trad_dark_outputdir = os.path.join(main_output_dir, "trad_dark_full_frame")
     if os.path.exists(build_trad_dark_outputdir):
-        import shutil
         shutil.rmtree(build_trad_dark_outputdir)
     os.makedirs(build_trad_dark_outputdir)
 
@@ -149,36 +102,11 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Extract visit ID from primary header VISITID keyword of first file
-    if trad_dark_data_filelist:
-        with fits.open(trad_dark_data_filelist[0]) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                # Convert to string and pad to 19 digits
-                visitid = str(visitid).zfill(19)
-            else:
-                # Fallback: use default visitid
-                visitid = "0000000000000000000"
-    else:
-        visitid = "0000000000000000000"
-
-    # Copy files to input_data directory with proper naming
-    for i, file_path in enumerate(trad_dark_data_filelist):
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
-        new_file_path = os.path.join(input_data_dir, new_filename)
-        import shutil
-        shutil.copy2(file_path, new_file_path)
-    
-    # Update trad_dark_data_filelist to point to new files
-    trad_dark_data_filelist = []
-    for f in os.listdir(input_data_dir):
-        if f.endswith('.fits'):
-            trad_dark_data_filelist.append(os.path.join(input_data_dir, f))
+    # Copy files to input_data directory and update file list
+    trad_dark_data_filelist = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in trad_dark_data_filelist
+    ]
 
     # modify headers from TVAC to in-flight headers
     #fix_headers_for_tvac(trad_dark_data_filelist)
@@ -354,7 +282,6 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     main_output_dir = os.path.join(e2eoutput_path, "trad_dark_e2e")
     build_trad_dark_outputdir = os.path.join(main_output_dir, "trad_dark_image_area")
     if os.path.exists(build_trad_dark_outputdir):
-        import shutil
         shutil.rmtree(build_trad_dark_outputdir)
     os.makedirs(build_trad_dark_outputdir)
 
@@ -389,30 +316,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Extract visit ID from primary header VISITID keyword of first file
-    if trad_dark_data_filelist:
-        with fits.open(trad_dark_data_filelist[0]) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                # Convert to string and pad to 19 digits
-                visitid = str(visitid).zfill(19)
-            else:
-                # Fallback: use default visitid
-                visitid = "0000000000000000000"
-    else:
-        visitid = "0000000000000000000"
-
     # Copy files to input_data directory with proper naming
     for i, file_path in enumerate(trad_dark_data_filelist):
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
-        new_file_path = os.path.join(input_data_dir, new_filename)
-        import shutil
-        shutil.copy2(file_path, new_file_path)
+        shutil.copy2(file_path, input_data_dir)
     
     # Update trad_dark_data_filelist to point to new files
     trad_dark_data_filelist = []

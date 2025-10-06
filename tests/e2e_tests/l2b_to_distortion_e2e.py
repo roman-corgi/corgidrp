@@ -11,6 +11,7 @@ import corgidrp.astrom as astrom
 import corgidrp.walker as walker
 import pytest
 import glob
+import shutil
 
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
@@ -37,7 +38,6 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
 
     distortion_outputdir = os.path.join(e2eoutput_path, "l2b_to_distortion_e2e")
     if os.path.exists(distortion_outputdir):
-        import shutil
         shutil.rmtree(distortion_outputdir)
     os.makedirs(distortion_outputdir)
 
@@ -58,25 +58,7 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=e2e_mockdata_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=3)
     # update headers to be L2b level
     l2b_pri_hdr, l2b_ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
-    
-    # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    visitid = "0200001999001000001"  # Use consistent visitid
-    
-    # Don't modify the mock dataset - just save it as-is to see if that fixes the issue
-    for i, mock_image in enumerate(mock_dataset):
-        # Generate proper filename
-        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        mock_image.filename = f'cgi_{visitid}_{unique_time}_l2b.fits'
-        
-        # Save the mock image to disk with the new filename
-        mock_image.save(filedir=e2e_mockdata_path)
-    
 
-    # Remove the old simcal_astrom.fits files that were created by create_astrom_data
-    old_files = glob.glob(os.path.join(e2e_mockdata_path, "simcal_astrom.fits"))
-    for old_file in old_files:
-        os.remove(old_file)
 
     # expected_platescale, expected_northangle = 21.8, 20.
     expected_coeffs = np.genfromtxt(distortion_coeffs_path)

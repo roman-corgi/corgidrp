@@ -106,30 +106,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     calibrations_dir = os.path.join(ctmap_outputdir, 'calibrations')
     os.mkdir(calibrations_dir)
     
-    # Generate filename variables
-    base_time = datetime.datetime.now()
+    renamed_files = mocks.rename_files_to_cgi_format(list_of_fits=list(corDataset), output_dir=output_dir, level_suffix="l2b")
     
-    # List of filenames with proper format
-    corDataset_filelist = []
-    for i in range(len(corDataset)):
-        # Generate unique timestamp by incrementing seconds (with rollover to minutes)
-        current_time = (base_time + datetime.timedelta(seconds=i)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        
-        # Extract visit ID from primary header VISITID keyword
-        prihdr = corDataset[i].pri_hdr
-        visitid = prihdr.get('VISITID', None)
-        if visitid is not None:
-            # Convert to string and pad to 19 digits
-            visitid = str(visitid).zfill(19)
-        else:
-            # Fallback: use file index padded to 19 digits
-            visitid = str(i).zfill(19)
-        
-        filename = f'cgi_{visitid}_{current_time}_l2b.fits'
-        corDataset_filelist.append(filename)
-    
-    # Save them in input_data directory
-    corDataset.save(output_dir, corDataset_filelist)
+    # Update the dataset with the new filenames
+    corDataset_filelist = [os.path.basename(f) for f in renamed_files]
     
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
