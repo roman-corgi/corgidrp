@@ -13,7 +13,6 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
-from corgidrp.check import generate_fits_excel_documentation
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -36,97 +35,6 @@ def fix_str_for_tvac(
             exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
-
-def fix_headers_for_tvac(
-    list_of_fits
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers and updates filenames.
-    Works in-place, updating files with proper L1 naming convention.
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    
-    Returns:
-        list: updated list of file paths with new filenames
-    """
-    print("Fixing TVAC headers and filenames")
-    for i, file in enumerate(list_of_fits):
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        
-        # Extract visit ID from primary header VISITID keyword
-        visitid = prihdr.get('VISITID', None)
-        if visitid is not None:
-            # Convert to string and pad to 19 digits
-            visitid = str(visitid).zfill(19)
-        else:
-            # Fallback: try to extract from filename or use file index
-            current_filename = os.path.basename(file)
-            if '_l1_' in current_filename:
-                # Extract the frame number after '_l1_'
-                frame_number = current_filename.split('_l1_')[-1].replace('.fits', '')
-                visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
-            else:
-                visitid = f"{i:019d}"  # Fallback- use file index padded to 19 digits
-        
-        filetime = exthdr.get('FILETIME', prihdr.get('FILETIME', None))
-        
-        # Convert filetime to the format expected in filenames (YYYYMMDDtHHMMSS)
-        if filetime and 'T' in filetime:
-            try:
-                dt = datetime.datetime.fromisoformat(filetime.replace('Z', '+00:00'))
-                filetime = dt.strftime('%Y%m%dt%H%M%S%f')[:-5]
-            except:
-                filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # fallback to current time
-        elif not filetime:
-            filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # fallback to current time
-        
-        
-        # Create new filename with proper L1 convention (in same directory)
-        file_dir = os.path.dirname(file)
-        new_filename = os.path.join(file_dir, f'cgi_{visitid}_{filetime}_l1_.fits')
-        
-        # Adjust headers - only modify if keywords exist
-        if 'OBSID' in prihdr:
-            prihdr['OBSNUM'] = prihdr['OBSID']
-        else:
-            prihdr['OBSNUM'] = visitid  # Use the visitid as fallback
-            
-        if 'CMDGAIN' in exthdr:
-            exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-        else:
-            exthdr['EMGAIN_C'] = 1  # Default value
-            
-        exthdr['EMGAIN_A'] = -1
-        
-        if 'DATA_LEVEL' in exthdr:
-            exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        else:
-            exthdr['DATALVL'] = 'L1'  # Default value
-            
-        exthdr['ISPC'] = False
-        
-        if 'OBSTYPE' in prihdr:
-            prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        else:
-            prihdr["OBSNAME"] = "BORESITE"  # Default value
-            
-        prihdr['PHTCNT'] = False
-        
-        # Update FITS file with new filename
-        fits_file.writeto(new_filename, overwrite=True)
-        fits_file.close()
-        
-        # Remove old file if it's different from new filename
-        if file != new_filename and os.path.exists(file):
-            os.remove(file)
-        
-        # Update the file in the list
-        list_of_fits[i] = new_filename
-    
-    return list_of_fits
 
 
 @pytest.mark.e2e
@@ -225,10 +133,8 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
         if len(mock_cal_filelist) == 2:
             break
 
-    # update headers of TVAC data (works in-place and returns updated file list)
-    sim_data_filelist = fix_headers_for_tvac(sim_data_filelist)
     
-    # Now fix the string values in the new files
+    # Fix string values
     fix_str_for_tvac(sim_data_filelist)
 
     ###### Setup necessary calibration files
@@ -252,11 +158,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    # Generate timestamp for nonlinear calibration
-    base_time = datetime.datetime.now()
-    nln_time_str = data.format_ftimeutc(base_time.isoformat())
-    nln_filename = f"cgi_0000000000000090526_{nln_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -266,10 +168,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    # Generate timestamp for KGain calibration
-    kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
-    kgain_filename = f"cgi_0000000000000090526_{kgain_time_str}_krn_cal.fits"
-    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -292,30 +191,21 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    # Generate timestamp for DetectorNoiseMaps calibration
-    dnm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
-    dnm_filename = f"cgi_0000000000000090526_{dnm_time_str}_dnm_cal.fits"
-    noise_map.save(filedir=calibrations_dir, filename=dnm_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    # Generate timestamp for FlatField calibration
-    flat_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 3) % 60)).isoformat())
-    flat_filename = f"cgi_0000000000000090526_{flat_time_str}_flt_cal.fits"
-    flat.save(filedir=calibrations_dir, filename=flat_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat)
 
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    # Generate timestamp for BadPixelMap calibration
-    bpm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 4) % 60)).isoformat())
-    bpm_filename = f"cgi_0000000000000090526_{bpm_time_str}_bpm_cal.fits"
-    bp_map.save(filedir=calibrations_dir, filename=bpm_filename)
+    mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     this_caldb.create_entry(bp_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -390,11 +280,6 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
-    
-    # Generate Excel documentation
-    excel_output_path = os.path.join(astrom_cal_outputdir, "ast_cal_documentation.xlsx")
-    generate_fits_excel_documentation(astrom_cal_files[0], excel_output_path)
-    print(f"Excel documentation generated: {excel_output_path}")
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

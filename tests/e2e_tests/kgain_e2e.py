@@ -11,7 +11,6 @@ import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 from corgidrp.sorting import sort_pupilimg_frames
-from corgidrp.check import generate_fits_excel_documentation
 from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
 
 import warnings
@@ -125,7 +124,8 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
         if not file.lower().endswith('.fits'):
             continue
         file_list.append(file)
-    set_vistype_for_tvac(file_list)
+    
+    # Create dataset from original files (will be copied later)
     file_dataset = data.Dataset(file_list)
     out_dataset = sort_pupilimg_frames(file_dataset, cal_type='k-gain')
     cal_list, mean_frame_list, exp_arr, _, _, _, datetimes_sort_inds, truncated_set_len = nonlin_kgain_dataset_2_stack(out_dataset, apply_dq = False, cal_type='kgain')
@@ -204,6 +204,9 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     for f in os.listdir(input_data_dir):
         if f.endswith('.fits'):
             ordered_filelist.append(os.path.join(input_data_dir, f))
+    
+    # Now set VISTYPE on the COPIED files, not the originals
+    set_vistype_for_tvac(ordered_filelist)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -249,12 +252,6 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
 
     assert np.abs(diff_kgain) == 0
     assert np.abs(diff_readnoise) == 0 
-
-    # Generate Excel documentation for the KGain calibration product
-    kgain_file = glob.glob(os.path.join(kgain_outputdir, "*_krn_cal.fits"))[0]
-    excel_output_path = os.path.join(kgain_outputdir, "krn_cal_documentation.xlsx")
-    generate_fits_excel_documentation(kgain_file, excel_output_path)
-    print(f"Excel documentation generated: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

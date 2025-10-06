@@ -15,7 +15,6 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
-from corgidrp.check import generate_fits_excel_documentation
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -459,11 +458,6 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
-
-    # Generate Excel documentation for the flat field calibration product (Uranus test)
-    excel_output_path = os.path.join(flat_outputdir, "flt_cal_documentation.xlsx")
-    generate_fits_excel_documentation(os.path.join(flat_outputdir, flat_filename), excel_output_path)
-    print(f"Excel documentation generated: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

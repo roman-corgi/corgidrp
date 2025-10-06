@@ -14,7 +14,6 @@ import corgidrp.astrom as astrom
 import corgidrp.data as corgidata
 import corgidrp.walker as walker
 from corgidrp import corethroughput
-from corgidrp.check import generate_fits_excel_documentation
 import pytest
 import glob
 from datetime import datetime, timedelta
@@ -470,15 +469,6 @@ def test_l3_to_l4(e2eoutput_path):
     print("Filenames associated correctly!")
     
     print('e2e test for l3_to_l4 calibration passed')
-
-    # Generate Excel documentation for L4 science data files
-    l4_files = glob.glob(os.path.join(main_output_dir, "*_l4_.fits"))
-    if l4_files:
-        # Document the first L4 file as a representative example
-        l4_file = l4_files[0]
-        excel_output_path = os.path.join(main_output_dir, "l4_data_documentation.xlsx")
-        generate_fits_excel_documentation(l4_file, excel_output_path)
-        print(f"Excel documentation generated for L4 data: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

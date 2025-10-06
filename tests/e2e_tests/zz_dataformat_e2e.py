@@ -6,6 +6,7 @@ import pytest
 import numpy as np
 import astropy.io.fits as fits
 from datetime import datetime, timedelta
+from corgidrp.check import generate_fits_excel_documentation
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -251,6 +252,7 @@ def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
     #l2a_data_file = os.path.join(l2a_data_dir, "90499.fits")
     fits_files = glob.glob(os.path.join(l2a_data_dir, "*.fits"))
     l2a_data_file = max(fits_files, key=os.path.getmtime)
+    generate_fits_excel_documentation(l2a_data_file, os.path.join(l2a_data_dir, "l2a_documentation.xlsx"))
 
     doc_output_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_output_dir):
@@ -278,6 +280,7 @@ def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
     l2b_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_e2e")
     fits_files = glob.glob(os.path.join(l2b_data_dir, "*.fits"))
     l2b_data_file = max(fits_files, key=os.path.getmtime)
+    generate_fits_excel_documentation(l2b_data_file, os.path.join(l2b_data_dir, "l2b_analog_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -304,6 +307,7 @@ def test_l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l2b_data_dir = os.path.join(thisfile_dir, "photon_count_e2e", "l2a_to_l2b")
     l2b_data_file = glob.glob(os.path.join(l2b_data_dir, "*_l2b.fits"))[0]
+    generate_fits_excel_documentation(l2b_data_file, os.path.join(l2b_data_dir, "l2b_pc_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -331,6 +335,7 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l3_data_dir = os.path.join(thisfile_dir, "l2b_to_l4_e2e", "l2b_to_l3")
     l3_data_file = glob.glob(os.path.join(l3_data_dir, "*_l3_.fits"))[0]
+    generate_fits_excel_documentation(l3_data_file, os.path.join(l3_data_dir, "l3_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -354,10 +359,11 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def test_l4coron_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l4_data_dir = os.path.join(thisfile_dir, "l2b_to_l4_e2e")
     l4_data_file = glob.glob(os.path.join(l4_data_dir, "*_l4_.fits"))[0]
+    generate_fits_excel_documentation(l4_data_file, os.path.join(l4_data_dir, "l4_coron_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -380,9 +386,10 @@ def test_l4coron_dataformat_e2e(e2edata_path, e2eoutput_path):
         compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
-def test_l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     kgain_data_file = glob.glob(os.path.join(thisfile_dir, "l2b_to_l4_noncoron_e2e", "*_l4_.fits"))[0]
+    generate_fits_excel_documentation(kgain_data_file, os.path.join(thisfile_dir, "l2b_to_l4_noncoron_e2e", "l4_noncoron_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -408,6 +415,7 @@ def test_l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     astrom_data_file = glob.glob(os.path.join(thisfile_dir, "astrom_cal_e2e", "*_ast_cal.fits"))[0]
+    generate_fits_excel_documentation(astrom_data_file, os.path.join(thisfile_dir, "astrom_cal_e2e", "ast_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -433,6 +441,7 @@ def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     bpmap_data_file = glob.glob(os.path.join(thisfile_dir, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits"))[0]
+    generate_fits_excel_documentation(bpmap_data_file, os.path.join(thisfile_dir, "bp_map_cal_e2e", "bpm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -459,6 +468,7 @@ def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     flat_data_file = glob.glob(os.path.join(thisfile_dir, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits"))[0]
+    generate_fits_excel_documentation(flat_data_file, os.path.join(thisfile_dir, "flatfield_cal_e2e", "flat_neptune_output", "flt_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -485,6 +495,7 @@ def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     ct_data_file = glob.glob(os.path.join(thisfile_dir, "corethroughput_cal_e2e", "*_ctp_cal.fits"))[0]
+    generate_fits_excel_documentation(ct_data_file, os.path.join(thisfile_dir, "corethroughput_cal_e2e", "ctp_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -510,6 +521,7 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     ctmap_data_file = glob.glob(os.path.join(thisfile_dir, "ctmap_cal_e2e", "*_ctm_cal.fits"))[0]
+    generate_fits_excel_documentation(ctmap_data_file, os.path.join(thisfile_dir, "ctmap_cal_e2e", "ctm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -535,6 +547,7 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     fluxcal_data_file = glob.glob(os.path.join(thisfile_dir, "flux_cal_e2e", "*_abf_cal.fits"))[0]
+    generate_fits_excel_documentation(fluxcal_data_file, os.path.join(thisfile_dir, "flux_cal_e2e", "abf_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -560,6 +573,7 @@ def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     kgain_data_file = glob.glob(os.path.join(thisfile_dir, "kgain_cal_e2e", "*_krn_cal.fits"))[0]
+    generate_fits_excel_documentation(kgain_data_file, os.path.join(thisfile_dir, "kgain_cal_e2e", "krn_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -586,6 +600,7 @@ def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     nonlin_data_file = glob.glob(os.path.join(thisfile_dir, "nonlin_cal_e2e", "*_nln_cal.fits"))[0]
+    generate_fits_excel_documentation(nonlin_data_file, os.path.join(thisfile_dir, "nonlin_cal_e2e", "nln_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -611,6 +626,7 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     nonlin_data_file = glob.glob(os.path.join(thisfile_dir, "nd_filter_cal_e2e", "*_ndf_cal.fits"))[0]
+    generate_fits_excel_documentation(nonlin_data_file, os.path.join(thisfile_dir, "nd_filter_cal_e2e", "ndf_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -636,6 +652,7 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     noisemaps_data_file = glob.glob(os.path.join(thisfile_dir, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits"))[0]
+    generate_fits_excel_documentation(noisemaps_data_file, os.path.join(thisfile_dir, "noisemap_cal_e2e", "l1_to_dnm", "dnm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -662,6 +679,7 @@ def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     dark_data_file = glob.glob(os.path.join(thisfile_dir, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits"))[0]
+    generate_fits_excel_documentation(dark_data_file, os.path.join(thisfile_dir, "trad_dark_e2e", "trad_dark_full_frame", "drk_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -688,6 +706,7 @@ def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     tpump_data_file = glob.glob(os.path.join(thisfile_dir, "trap_pump_cal_e2e", "*_tpu_cal.fits"))[0]
+    generate_fits_excel_documentation(tpump_data_file, os.path.join(thisfile_dir, "trap_pump_cal_e2e", "tpu_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -733,8 +752,8 @@ if __name__ == "__main__":
     test_l2a_dataformat_e2e(e2edata_dir, outputdir)
     test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
     test_l3_dataformat_e2e(e2edata_dir, outputdir)
-    test_l4coron_dataformat_e2e(e2edata_dir, outputdir)
-    test_l4noncoron_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
     test_astrom_dataformat_e2e(e2edata_dir, outputdir)
     test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
     test_flat_dataformat_e2e(e2edata_dir, outputdir)

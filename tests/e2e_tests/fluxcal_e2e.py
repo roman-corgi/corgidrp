@@ -13,7 +13,6 @@ import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.fluxcal as fluxcal
 from corgidrp import caldb
-from corgidrp.check import generate_fits_excel_documentation
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2eoutput_path):
@@ -22,7 +21,6 @@ def test_expected_results_e2e(e2eoutput_path):
     star_flux = 1.5e-09 #erg/(s*cm^2*AA)
     cal_factor = star_flux/200
     flux_image = mocks.create_flux_image(star_flux, fwhm, cal_factor)
-    flux_image.ext_hdr['BUNIT'] = 'photoelectron'
     flux_dataset = data.Dataset([flux_image])
     output_dir = os.path.join(e2eoutput_path, 'flux_cal_e2e')
 
@@ -73,11 +71,6 @@ def test_expected_results_e2e(e2eoutput_path):
     print("fluxcal factor", flux_fac.fluxcal_fac)
     print("fluxcal factor error", flux_fac.fluxcal_err)
     assert flux_fac.fluxcal_fac == pytest.approx(cal_factor, abs = 1.5 * flux_fac.fluxcal_err)
-    
-    # Generate Excel documentation for the flux calibration factor product
-    excel_output_path = os.path.join(output_dir, "abf_cal_documentation.xlsx")
-    generate_fits_excel_documentation(fluxcal_file, excel_output_path)
-    print(f"Excel documentation generated: {excel_output_path}")
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

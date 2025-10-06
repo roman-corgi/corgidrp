@@ -12,7 +12,6 @@ import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
 import corgidrp.data as corgidata
 import corgidrp.walker as walker
-from corgidrp.check import generate_fits_excel_documentation
 import pyklip.fakes
 import pytest
 import glob
@@ -356,15 +355,6 @@ def test_l3_to_l4(e2eoutput_path):
     assert combined_image.ext_hdr['FILE2'] in input_filenames
     assert combined_image.ext_hdr['FILE3'] in input_filenames
     assert combined_image.ext_hdr['FILE4'] in input_filenames
-
-    # Generate Excel documentation for L4 non-coronagraphic science data files
-    l4_files = glob.glob(os.path.join(main_output_dir, "*_l4_.fits"))
-    if l4_files:
-        # Document the first L4 file as a representative example
-        l4_file = l4_files[0]
-        excel_output_path = os.path.join(main_output_dir, "l4_noncoron_data_documentation.xlsx")
-        generate_fits_excel_documentation(l4_file, excel_output_path)
-        print(f"Excel documentation generated for L4 non-coronagraphic data: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

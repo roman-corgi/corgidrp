@@ -11,7 +11,6 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.fluxcal as fluxcal
 from corgidrp import caldb
-from corgidrp.check import generate_fits_excel_documentation
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2eoutput_path):
@@ -121,15 +120,6 @@ def test_expected_results_e2e(e2eoutput_path):
 
     #check the flux values are similar regardless of the wollaston used
     assert flux_fac_WP1.fluxcal_fac == pytest.approx(flux_fac_WP2.fluxcal_fac, rel=0.05)
-
-    # Generate Excel documentation for the polarimetric flux calibration factor products
-    excel_output_path_wp1 = os.path.join(wp1_dir, "abf_cal_documentation.xlsx")
-    generate_fits_excel_documentation(fluxcal_file_WP1, excel_output_path_wp1)
-    print(f"Excel documentation generated for WP1: {excel_output_path_wp1}")
-    
-    excel_output_path_wp2 = os.path.join(wp2_dir, "abf_cal_documentation.xlsx")
-    generate_fits_excel_documentation(fluxcal_file_WP2, excel_output_path_wp2)
-    print(f"Excel documentation generated for WP2: {excel_output_path_wp2}")
 
     # Print success message
     print('e2e test for polarimetric flux calibration factor passed')

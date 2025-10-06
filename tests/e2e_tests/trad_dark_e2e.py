@@ -13,7 +13,6 @@ import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
-from corgidrp.check import generate_fits_excel_documentation
 try:
     from proc_cgi_frame.gsw_process import Process, mean_combine
 except:
@@ -204,11 +203,10 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    # Generate timestamp for NonLinearityCalibration
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
     base_time = datetime.now()
-    nln_time_str = data.format_ftimeutc(base_time.isoformat())
-    nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
+    nonlinear_cal.ext_hdr['FILETIME'] = base_time.isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
 
 
     # Load and combine noise maps from various calibration files into a single array
@@ -239,10 +237,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    # Generate timestamp for DetectorNoiseMaps
-    dnm_time_str = data.format_ftimeutc((base_time + timedelta(seconds=1)).isoformat())
-    dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
-    noise_maps.save(filedir=calibrations_dir, filename=dnm_filename)
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    noise_maps.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=1)).isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_maps], output_dir=calibrations_dir, level_suffix="dnm_cal")
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -251,10 +248,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
                                 input_dataset=mock_input_dataset)
-    # Generate timestamp for KGain
-    krn_time_str = data.format_ftimeutc((base_time + timedelta(seconds=2)).isoformat())
-    krn_filename = f"cgi_0000000000000000000_{krn_time_str}_krn_cal.fits"
-    kgain.save(filedir=calibrations_dir, filename=krn_filename)
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    kgain.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=2)).isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
 
     # add calibration files to caldb
     this_caldb.create_entry(nonlinear_cal)
@@ -325,14 +321,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     TVAC_trad_dark = mean_frame #fits.getdata(TVAC_dark_path) 
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
-    
-    # Generate Excel documentation for the traditional dark calibration product
-    dark_file = glob.glob(os.path.join(build_trad_dark_outputdir, "*_drk_cal.fits"))[0]
-    excel_output_path = os.path.join(build_trad_dark_outputdir, "drk_cal_documentation.xlsx")
-    generate_fits_excel_documentation(dark_file, excel_output_path)
-    print(f"Excel documentation generated: {excel_output_path}")
-    
-    # Print success message
+
     print('e2e test for trad_dark calibration passed')
     
     # remove temporary caldb file
@@ -453,11 +442,10 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    # Generate timestamp for NonLinearityCalibration
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
     base_time = datetime.now()
-    nln_time_str = data.format_ftimeutc(base_time.isoformat())
-    nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
+    nonlinear_cal.ext_hdr['FILETIME'] = base_time.isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
 
 
     # Load and combine noise maps from various calibration files into a single array
@@ -488,10 +476,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    # Generate timestamp for DetectorNoiseMaps
-    dnm_time_str = data.format_ftimeutc((base_time + timedelta(seconds=1)).isoformat())
-    dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
-    noise_maps.save(filedir=calibrations_dir, filename=dnm_filename)
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    noise_maps.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=1)).isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_maps], output_dir=calibrations_dir, level_suffix="dnm_cal")
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -500,10 +487,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
                                 input_dataset=mock_input_dataset)
-    # Generate timestamp for KGain
-    krn_time_str = data.format_ftimeutc((base_time + timedelta(seconds=2)).isoformat())
-    krn_filename = f"cgi_0000000000000000000_{krn_time_str}_krn_cal.fits"
-    kgain.save(filedir=calibrations_dir, filename=krn_filename)
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    kgain.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=2)).isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
 
     # add calibration files to caldb
     this_caldb.create_entry(nonlinear_cal)
@@ -581,14 +567,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     test_filename = os.path.basename(test_filepath)
     test_filename = re.sub('_l[0-9].', '', test_filename)
     assert(trad_dark.filename == test_filename)
-    
-    # Generate Excel documentation for the traditional dark calibration product (image area)
-    dark_file = glob.glob(os.path.join(build_trad_dark_outputdir, "*_drk_cal.fits"))[0]
-    excel_output_path = os.path.join(build_trad_dark_outputdir, "drk_cal_documentation.xlsx")
-    generate_fits_excel_documentation(dark_file, excel_output_path)
-    print(f"Excel documentation generated: {excel_output_path}")
-    
-    # Print success message
+
     print('e2e test for trad_dark_im calibration passed')
     
     # remove temporary caldb file

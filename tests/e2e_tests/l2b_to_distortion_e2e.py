@@ -9,7 +9,6 @@ import corgidrp.caldb as caldb
 import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
 import corgidrp.walker as walker
-from corgidrp.check import generate_fits_excel_documentation
 import pytest
 import glob
 
@@ -122,18 +121,8 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     true_1arcsec_x = true_xdiff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
     true_1arcsec_y = true_ydiff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
 
-    
     assert np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < 0.1835)
     assert np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < 0.1835)
-
-    # Generate Excel documentation for the astrometric calibration product
-    ast_files = glob.glob(os.path.join(distortion_outputdir, "*_ast_cal.fits"))
-    if ast_files:
-        # Document the astrometric calibration file
-        ast_file = ast_files[0]
-        excel_output_path = os.path.join(distortion_outputdir, "ast_cal_documentation.xlsx")
-        generate_fits_excel_documentation(ast_file, excel_output_path)
-        print(f"Excel documentation generated for astrometric calibration: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

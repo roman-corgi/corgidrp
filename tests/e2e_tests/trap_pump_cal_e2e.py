@@ -12,7 +12,6 @@ import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
-from corgidrp.check import generate_fits_excel_documentation
 import shutil
 from datetime import datetime, timedelta
 try:
@@ -361,12 +360,6 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     pass
     # trap densities should all match if the above passes; that was tested in II&T tests mainly
     # b/c all the outputs of the trap-pump function were tested
-
-    # Generate Excel documentation for the trap pump calibration product
-    tpump_file = glob.glob(os.path.join(trap_pump_outputdir, "*_tpu_cal.fits"))[0]
-    excel_output_path = os.path.join(trap_pump_outputdir, "tpu_cal_documentation.xlsx")
-    generate_fits_excel_documentation(tpump_file, excel_output_path)
-    print(f"Excel documentation generated: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

@@ -14,7 +14,6 @@ from corgidrp import data
 from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
-from corgidrp.check import generate_fits_excel_documentation
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
@@ -267,12 +266,6 @@ def test_nonlin_cal_e2e(
 
     # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
-
-    # Generate Excel documentation for the nonlinearity calibration product
-    nonlin_file = os.path.join(e2eoutput_path, nonlin_drp_filename)
-    excel_output_path = os.path.join(e2eoutput_path, "nln_cal_documentation.xlsx")
-    generate_fits_excel_documentation(nonlin_file, excel_output_path)
-    print(f"Excel documentation generated: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
