@@ -171,14 +171,14 @@ def test_subtract_stellar_polarization():
     # create default header
     prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
     # create image objects using the constructed data
-    star_1_nd_wp1_img = data.Image(star_1_nd_wp1_data, pri_hdr=prihdr, ext_hdr=exthdr)
-    star_1_nd_wp2_img = data.Image(star_1_nd_wp2_data, pri_hdr=prihdr, ext_hdr=exthdr)
-    star_2_nd_wp1_img = data.Image(star_2_nd_wp1_data, pri_hdr=prihdr, ext_hdr=exthdr)
-    star_2_nd_wp2_img = data.Image(star_2_nd_wp2_data, pri_hdr=prihdr, ext_hdr=exthdr)
-    star_1_fpm_wp1_img = data.Image(star_1_fpm_wp1_data, pri_hdr=prihdr, ext_hdr=exthdr)
-    star_1_fpm_wp2_img = data.Image(star_1_fpm_wp2_data, pri_hdr=prihdr, ext_hdr=exthdr)
-    star_2_fpm_wp1_img = data.Image(star_2_fpm_wp1_data, pri_hdr=prihdr, ext_hdr=exthdr)
-    star_2_fpm_wp2_img = data.Image(star_2_fpm_wp2_data, pri_hdr=prihdr, ext_hdr=exthdr)
+    star_1_nd_wp1_img = data.Image(star_1_nd_wp1_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    star_1_nd_wp2_img = data.Image(star_1_nd_wp2_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    star_2_nd_wp1_img = data.Image(star_2_nd_wp1_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    star_2_nd_wp2_img = data.Image(star_2_nd_wp2_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    star_1_fpm_wp1_img = data.Image(star_1_fpm_wp1_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    star_1_fpm_wp2_img = data.Image(star_1_fpm_wp2_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    star_2_fpm_wp1_img = data.Image(star_2_fpm_wp1_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    star_2_fpm_wp2_img = data.Image(star_2_fpm_wp2_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
     input_list = [star_1_nd_wp1_img, star_1_nd_wp2_img, star_2_nd_wp1_img, star_2_nd_wp2_img, 
                      star_1_fpm_wp1_img, star_1_fpm_wp2_img, star_2_fpm_wp1_img, star_2_fpm_wp2_img]
     # update headers
@@ -197,15 +197,17 @@ def test_subtract_stellar_polarization():
             input_list[i].pri_hdr['ROLL'] = roll
         # distinguish between the two different target stars
         if i in [0, 1, 4, 5]:
-            input_list[i].pri_hdr['TARGET'] = 'star_1'
+            input_list[i].pri_hdr['TARGET'] = '1'
         else:
-            input_list[i].pri_hdr['TARGET'] = 'star_2'
+            input_list[i].pri_hdr['TARGET'] = '2'
+
     # construct dataset
     input_dataset = data.Dataset(input_list)
+       
     # construct mueller matrix calibration objects
     mm_prihdr, mm_exthdr, mm_errhdr, mm_dqhdr = mocks.create_default_calibration_product_headers()
-    system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr, ext_hdr=mm_exthdr)
-    nd_mm_cal = data.MuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr, ext_hdr=mm_exthdr)
+    system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
+    nd_mm_cal = data.MuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
 
     # run step function
     output_dataset = l3_to_l4.subtract_stellar_polarization(input_dataset=input_dataset, 

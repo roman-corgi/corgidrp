@@ -903,7 +903,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             raise ValueError("{0} must be a polarimetric observation".format(frame.filename))
         
     # split the dataset by the target star
-    split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords='TARGET')
+    split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=['TARGET'])
 
     # process each target star
     updated_frames = []
@@ -953,12 +953,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         S_in = np.einsum('ij,jyx->iyx', system_nd_inv, S_nd)
 
         # propagate errors to find uncertainty of S_in
-        I_nd_err = np.sqrt(unocculted_pol0_img.err[0]^2 + unocculted_pol0_img.err[1]^2)
+        I_nd_err = np.sqrt(unocculted_pol0_img.err[0,0,:,:]**2 + unocculted_pol0_img.err[0,1,:,:]**2)
         Q_nd_err = I_nd_err
-        U_nd_err = np.sqrt(unocculted_pol45_img.err[0]^2 + unocculted_pol45_img.err[1]^2)
-        v_nd_err = np.zeros(shape=unocculted_pol0_img.err[0].shape)
+        U_nd_err = np.sqrt(unocculted_pol45_img.err[0,0,:,:]**2 + unocculted_pol45_img.err[0,1,:,:]**2)
+        v_nd_err = np.zeros(shape=unocculted_pol0_img.err[0,0].shape)
         # construct covariance matrix for S_nd
-        shape = unocculted_pol0_img.shape()
+        shape = unocculted_pol0_img.data[0].shape
         C_nd = np.array([[I_nd_err**2, np.zeros(shape=shape), np.zeros(shape=shape), np.zeros(shape=shape)],
                          [np.zeros(shape=shape), Q_nd_err**2, np.zeros(shape=shape), np.zeros(shape=shape)],
                          [np.zeros(shape=shape), np.zeros(shape=shape), U_nd_err**2, np.zeros(shape=shape)],
@@ -990,7 +990,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             # propagate errors back to the new intensity terms for the unocculted star, assuming independence
             # σS_out^2 = (σM^2)(I_in^2) + (M^2)(σI_in^2)
             #TODO: double check if this is valid/invalid, change if necessary
-            system_mm_var = (system_mueller_matrix_cal.err)**2
+            system_mm_var = (system_mueller_matrix_cal.err[0])**2
             system_mm_sq = (system_mueller_matrix_cal.data)**2
             S_in_sq = S_in**2
             S_out_var = np.einsum('ij,jyx->iyx', system_mm_var, S_in_sq) + np.einsum('ij,jyx->iyx', system_mm_sq, S_in_var)
@@ -1022,13 +1022,13 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             frame.data[1] = (sum - diff) / 2
 
             # propagate errors for the subtraction
-            sum_err = np.sqrt(frame.err[0]**2 + frame.err[1]**2)
+            sum_err = np.sqrt(frame.err[0,0,:,:]**2 + frame.err[0,1,:,:]**2)
             diff_err = sum_err
             diff_err = np.sqrt(diff_err**2 + 
                                (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
                         )
-            frame.err[0] = np.sqrt(sum_err**2 + diff_err**2) / 2
-            frame.err[1] = frame.err[0]
+            frame.err[0,0,:,:] = np.sqrt(sum_err**2 + diff_err**2) / 2
+            frame.err[0,1,:,:] = frame.err[0,0,:,:]
             
             updated_frames.append(frame)
 
