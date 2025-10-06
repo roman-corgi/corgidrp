@@ -1,11 +1,9 @@
 import argparse
 import os
-import glob
 import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
-from datetime import datetime, timedelta
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks

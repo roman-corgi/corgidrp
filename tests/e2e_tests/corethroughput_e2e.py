@@ -6,7 +6,6 @@ import glob
 import pytest
 import numpy as np
 import astropy.time as time
-import datetime
 from astropy.io import fits
 
 import corgidrp
@@ -78,10 +77,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         image.ext_hdr['FSAM_H'] = FSAM_H_CT
         image.ext_hdr['FSAM_V'] = FSAM_V_CT
         
-        # Set proper CGI filename for each image
-        visitid = "0000000000000000000"  # Default visitid
-        timestamp = f"20240101t0000000_{i:03d}"
-        image.filename = f'cgi_{visitid}_{timestamp}_l2b.fits'
         
     corethroughput_dataset = data.Dataset(corethroughput_image_list)
 
@@ -89,7 +84,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     input_l2b_dir = os.path.join(corethroughput_outputdir, 'input_l2b')
     os.makedirs(input_l2b_dir)
     
-    # Save with proper CGI naming convention
     corethroughput_dataset.save(filedir=input_l2b_dir)
     
     # Initialize a connection to the calibration database
@@ -124,7 +118,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     assert np.all(ct_cal_drp.dq == ct_cal_mock.dq)
     assert np.all(ct_cal_drp.ct_fpam == ct_cal_mock.ct_fpam)
     assert np.all(ct_cal_drp.ct_fsam == ct_cal_mock.ct_fsam)
-
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -208,7 +201,6 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     
     assert np.min(ct_cal_drp.ct_excam[2]) > 0, "CoreThroughput measurements have non-positive values"
     assert np.max(ct_cal_drp.ct_excam[2]) <= 1, "CoreThroughput measurements exceed 1"
-
 
     # Print success message
     print('e2e test for corethroughput calibration with simulated band 3 shaped pupil data passed')

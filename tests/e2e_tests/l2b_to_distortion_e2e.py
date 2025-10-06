@@ -2,7 +2,6 @@ import argparse
 import os
 import numpy as np
 from corgidrp.data import AstrometricCalibration
-from datetime import datetime, timedelta
 
 import corgidrp
 import corgidrp.caldb as caldb
@@ -58,7 +57,6 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=e2e_mockdata_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=3)
     # update headers to be L2b level
     l2b_pri_hdr, l2b_ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
-
 
     # expected_platescale, expected_northangle = 21.8, 20.
     expected_coeffs = np.genfromtxt(distortion_coeffs_path)

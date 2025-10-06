@@ -6,7 +6,6 @@ import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
-import datetime
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -133,7 +132,6 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
         if len(mock_cal_filelist) == 2:
             break
 
-    
     # Fix string values
     fix_str_for_tvac(sim_data_filelist)
 
@@ -218,34 +216,32 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir)
     
     # Organize output files into subdirectories
+    subdirs = {
+        'l1_to_l2a': os.path.join(astrom_cal_outputdir, "l1_to_l2a"),
+        'l2a_to_l2b': os.path.join(astrom_cal_outputdir, "l2a_to_l2b")
+    }
     
-    # Create subdirectories for L2a and L2b files
-    l1_to_l2a_dir = os.path.join(astrom_cal_outputdir, "l1_to_l2a")
-    l2a_to_l2b_dir = os.path.join(astrom_cal_outputdir, "l2a_to_l2b")
+    # Create subdirectories
+    for subdir in subdirs.values():
+        os.makedirs(subdir, exist_ok=True)
     
-    if not os.path.exists(l1_to_l2a_dir):
-        os.mkdir(l1_to_l2a_dir)
-    if not os.path.exists(l2a_to_l2b_dir):
-        os.mkdir(l2a_to_l2b_dir)
-    
-    # Move L2a and L2b files to appropriate subdirectories
+    # Move files to appropriate subdirectories
     for filename in os.listdir(astrom_cal_outputdir):
         filepath = os.path.join(astrom_cal_outputdir, filename)
-        if os.path.isfile(filepath):
-            if '_l2a' in filename and filename.endswith('.fits'):
-                shutil.move(filepath, os.path.join(l1_to_l2a_dir, filename))
-            elif '_l2b' in filename and filename.endswith('.fits'):
-                shutil.move(filepath, os.path.join(l2a_to_l2b_dir, filename))
-            elif filename.endswith('_recipe.json'):
-                # Only move recipes that explicitly match the expected patterns
-                if 'l1_to_l2a' in filename:
-                    shutil.move(filepath, os.path.join(l1_to_l2a_dir, filename))
-                elif 'l2a_to_l2b' in filename:
-                    shutil.move(filepath, os.path.join(l2a_to_l2b_dir, filename))
-                # Leave other recipes (like l2b_to_boresight) in the main directory
-            elif '_cal.fits' in filename and not filename.endswith('_ast_cal.fits'):
-                # Move calibration files to calibrations folder, but exclude ast_cal (test output)
-                shutil.move(filepath, os.path.join(calibrations_dir, filename))
+        if not os.path.isfile(filepath):
+            continue
+            
+        if '_l2a' in filename and filename.endswith('.fits'):
+            shutil.move(filepath, os.path.join(subdirs['l1_to_l2a'], filename))
+        elif '_l2b' in filename and filename.endswith('.fits'):
+            shutil.move(filepath, os.path.join(subdirs['l2a_to_l2b'], filename))
+        elif filename.endswith('_recipe.json'):
+            if 'l1_to_l2a' in filename:
+                shutil.move(filepath, os.path.join(subdirs['l1_to_l2a'], filename))
+            elif 'l2a_to_l2b' in filename:
+                shutil.move(filepath, os.path.join(subdirs['l2a_to_l2b'], filename))
+        elif '_cal.fits' in filename and not filename.endswith('_ast_cal.fits'):
+            shutil.move(filepath, os.path.join(calibrations_dir, filename))
 
     ## Check against astrom ground truth -- target= [80.553428801, -69.514096821],
     ## plate scale = 21.8[mas/pixel], north angle = 45 [deg]

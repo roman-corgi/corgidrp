@@ -8,7 +8,6 @@ import numpy as np
 import warnings
 import astropy.time as time
 from astropy.io import fits
-from datetime import datetime, timedelta
 
 from glob import glob
 

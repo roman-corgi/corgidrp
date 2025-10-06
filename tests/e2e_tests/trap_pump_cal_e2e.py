@@ -2,7 +2,6 @@ import argparse
 import os
 import pytest
 import json
-import glob
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
@@ -13,7 +12,6 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import shutil
-from datetime import datetime, timedelta
 try:
     from corgidrp.pump_trap_calibration import rebuild_dict
     from cal.tpumpanalysis.tpump_final import tpump_analysis
@@ -191,7 +189,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
         sample_data = sample_data)
     ######################
 
-    # define the raw science data to process (from organized directory structure)
+    # define the raw science data to process
     trap_pump_data_filelist = []
     trap_cal_filename = None
     

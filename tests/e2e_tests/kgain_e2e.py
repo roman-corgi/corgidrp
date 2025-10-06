@@ -5,12 +5,10 @@ import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
-from datetime import datetime, timedelta
 import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
-import corgidrp.mocks as mocks
 from corgidrp.sorting import sort_pupilimg_frames
 from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
 
@@ -101,7 +99,6 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
         if not file.lower().endswith('.fits'):
             continue
         file_list.append(file)
-
     file_dataset = data.Dataset(file_list)
     out_dataset = sort_pupilimg_frames(file_dataset, cal_type='k-gain')
     cal_list, mean_frame_list, exp_arr, _, _, _, datetimes_sort_inds, truncated_set_len = nonlin_kgain_dataset_2_stack(out_dataset, apply_dq = False, cal_type='kgain')

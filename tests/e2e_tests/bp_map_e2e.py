@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 from astropy.io import fits
 import corgidrp
-import datetime
 from corgidrp import data
 from corgidrp import caldb
 from corgidrp import detector
@@ -81,7 +80,6 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
 
     # update TVAC files
     fix_str_for_tvac(l1_data_filelist)
-
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
@@ -294,7 +292,6 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
-
     ## Load and save flat field calibration data
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
@@ -390,8 +387,6 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         output_path = os.path.join(bp_map_outputdir, "bp_map_simulated_dark_test.png")
         plt.savefig(output_path)
     
-    # Skip removal of generated_bp_map_img since it doesn't have a proper filepath
-    # this_caldb.remove_entry(generated_bp_map_img)
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments

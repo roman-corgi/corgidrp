@@ -6,7 +6,6 @@ import pytest
 import numpy as np
 import astropy.time as time
 from astropy.io import fits
-from datetime import datetime, timedelta
 
 import corgidrp
 import corgidrp.data as data

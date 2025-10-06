@@ -3,7 +3,7 @@ import os, shutil
 import glob
 import pytest
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import corgidrp
 import corgidrp.data as data

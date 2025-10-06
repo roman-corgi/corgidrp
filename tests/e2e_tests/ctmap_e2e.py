@@ -6,8 +6,6 @@ import glob
 import pytest
 import numpy as np
 import astropy.time as time
-import datetime
-import time as time_module
 from astropy.io import fits
 
 import corgidrp

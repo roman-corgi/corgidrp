@@ -36,7 +36,6 @@ def test_expected_results_e2e(e2eoutput_path):
     #LSAMNAME= 'NFOV'
     #FPAMNAME= 'HOLE'
     #SPAMNAME= 'OPEN
-    flux_dataset = data.Dataset([flux_image])
     output_dir = os.path.join(e2eoutput_path, 'flux_cal_band3_e2e')
 
     if os.path.exists(output_dir):
@@ -45,31 +44,14 @@ def test_expected_results_e2e(e2eoutput_path):
     
     # Create input_data subfolder
     input_data_dir = os.path.join(output_dir, 'input_l2b')
-    if not os.path.exists(input_data_dir):
-        os.makedirs(input_data_dir)
-
-    # Generate proper filename with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
-    # Extract visit ID from primary header VISITID keyword
-    visitid = flux_image.pri_hdr.get('VISITID', None)
-    if visitid is not None:
-        # Convert to string and pad to 19 digits
-        visitid = str(visitid).zfill(19)
-    else:
-        # Fallback: use default visitid
-        visitid = "0000000000000000000"
-
-    # Create proper L2b filename: cgi_{visitid}_{current_time}_l2b.fits
-    flux_dataset.save(input_data_dir, [f'cgi_{visitid}_{current_time}_l2b.fits'])
-    flux_data_filelist = []
-    for f in os.listdir(input_data_dir):
-        flux_data_filelist.append(os.path.join(input_data_dir, f))
-    #print(flux_data_filelist)
+    os.makedirs(input_data_dir, exist_ok=True)
+    
+    flux_image.save(input_data_dir)
+    flux_data_filelist = [flux_image.filepath]
 
     # One last check
-    for img in flux_dataset:
-        if img.ext_hdr['CFAMNAME'] != cfam_name:
-            raise ValueError(f'CFAMNAME should be {cfam_name:s}')
+    if flux_image.ext_hdr['CFAMNAME'] != cfam_name:
+        raise ValueError(f'CFAMNAME should be {cfam_name:s}')
 
     ####### Run the DRP walker
     print('Running walker')

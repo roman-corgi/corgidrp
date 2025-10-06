@@ -1,6 +1,5 @@
 import argparse
 import os
-import glob
 import pytest
 import re
 import numpy as np
@@ -249,7 +248,6 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     TVAC_trad_dark = mean_frame #fits.getdata(TVAC_dark_path) 
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
-
     print('e2e test for trad_dark calibration passed')
     
     # remove temporary caldb file
@@ -473,9 +471,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     test_filename = os.path.basename(test_filepath)
     test_filename = re.sub('_l[0-9].', '', test_filename)
     assert(trad_dark.filename == test_filename)
-
     print('e2e test for trad_dark_im calibration passed')
-    
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 

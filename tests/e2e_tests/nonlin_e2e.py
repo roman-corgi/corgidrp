@@ -7,7 +7,6 @@ import numpy as np
 from astropy import time
 from astropy.io import fits
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
 
 import corgidrp
 from corgidrp import data

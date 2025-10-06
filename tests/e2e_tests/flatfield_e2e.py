@@ -94,9 +94,6 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
-    # Generate proper calibration filenames
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # Remove last 5 digits to get 3 digits for seconds
-    visitid = "0000000000000000000"
 
     # Extract the timestamp part from the original filename
     l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
@@ -164,7 +161,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -177,7 +174,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -201,7 +198,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -246,11 +243,6 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
-
-    # Generate Excel documentation for the flat field calibration product (Neptune test)
-    excel_output_path = os.path.join(flat_outputdir, "flt_cal_documentation.xlsx")
-    generate_fits_excel_documentation(os.path.join(flat_outputdir, flat_filename), excel_output_path)
-    print(f"Excel documentation generated: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -313,10 +305,6 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
 
     # Create proper L1 filenames following the convention
     
-    # Generate proper calibration filenames
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # Remove last 5 digits to get 3 digits for seconds
-    visitid = "0000000000000000000"
-
     # Extract the timestamp part from the original filename
     l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
     # Find the timestamp pattern (YYYYMMDDtHHMMSSS)
@@ -383,7 +371,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -396,7 +384,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -420,7 +408,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
