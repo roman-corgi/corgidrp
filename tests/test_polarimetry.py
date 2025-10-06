@@ -15,6 +15,15 @@ def test_image_splitting():
     ## generate mock data
     image_WP1_wfov = mocks.create_mock_l2b_polarimetric_image(dpamname='POL0', observing_mode='WFOV', left_image_value=1, right_image_value=2)
     image_WP2_wfov = mocks.create_mock_l2b_polarimetric_image(dpamname='POL45', observing_mode='WFOV', left_image_value=1, right_image_value=2)
+    # modify err and dq value for testing
+    image_WP1_wfov.err[0, 512, 340] = 1
+    image_WP1_wfov.err[0, 512, 684] = 2
+    image_WP1_wfov.dq[512, 340] = 1
+    image_WP1_wfov.dq[512, 684] = 2
+    image_WP2_wfov.err[0, 634, 390] = 1
+    image_WP2_wfov.err[0, 390, 634] = 2
+    image_WP2_wfov.dq[634, 390] = 1
+    image_WP2_wfov.dq[390, 634] = 2
     input_dataset_wfov = data.Dataset([image_WP1_wfov, image_WP2_wfov])
 
     ## leave image_size parameter blank so the function automatically determines size
@@ -36,19 +45,26 @@ def test_image_splitting():
     padding = 5
     img_size_wfov = 2 * (radius_wfov + padding)
     expected_output_autocrop_wfov = np.zeros(shape=(2, img_size_wfov, img_size_wfov))
+    expected_err_autocrop_wfov = np.zeros(shape=(1, 2, img_size_wfov, img_size_wfov))
+    expected_dq_autocrop_wfov = np.zeros(shape=(2, img_size_wfov, img_size_wfov))
     ## fill in expected values
     img_center_wfov = radius_wfov + padding
     y_wfov, x_wfov = np.indices([img_size_wfov, img_size_wfov])
     expected_output_autocrop_wfov[0, ((x_wfov-img_center_wfov)**2) + ((y_wfov-img_center_wfov)**2) <= radius_wfov**2] = 1
     expected_output_autocrop_wfov[1, ((x_wfov-img_center_wfov)**2) + ((y_wfov-img_center_wfov)**2) <= radius_wfov**2] = 2
+    expected_err_autocrop_wfov[0, 0, img_center_wfov, img_center_wfov] = 1
+    expected_err_autocrop_wfov[0, 1, img_center_wfov, img_center_wfov] = 2
+    expected_dq_autocrop_wfov[0, img_center_wfov, img_center_wfov] = 1
+    expected_dq_autocrop_wfov[1, img_center_wfov, img_center_wfov] = 2
 
     ## check that actual output is as expected
     assert output_dataset_autocrop_wfov.frames[0].data == pytest.approx(expected_output_autocrop_wfov)
     assert output_dataset_autocrop_wfov.frames[1].data == pytest.approx(expected_output_autocrop_wfov)
-    assert output_dataset_autocrop_wfov.frames[0].err.shape == (1, 2, img_size_wfov, img_size_wfov)
-    assert output_dataset_autocrop_wfov.frames[1].err.shape == (1, 2, img_size_wfov, img_size_wfov)
-    assert output_dataset_autocrop_wfov.frames[0].dq.shape == (2, img_size_wfov, img_size_wfov)
-    assert output_dataset_autocrop_wfov.frames[1].dq.shape == (2, img_size_wfov, img_size_wfov)
+    # test err and dq cropping
+    assert (output_dataset_autocrop_wfov.frames[0].err == expected_err_autocrop_wfov).all()
+    assert (output_dataset_autocrop_wfov.frames[1].err == expected_err_autocrop_wfov).all()
+    assert (output_dataset_autocrop_wfov.frames[0].dq == expected_dq_autocrop_wfov).all()
+    assert (output_dataset_autocrop_wfov.frames[1].dq == expected_dq_autocrop_wfov).all()
 
     # test autocropping NFOV
     ## generate mock data
