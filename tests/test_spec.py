@@ -515,9 +515,9 @@ def test_determine_zeropoint():
         )
         psf_images.append(image)
 
-    #test it as non-coronagraphic observation of only psf narrowband, so no science frames
+    #test it as non-coronagraphic observation of only psf narrowband, so no science frames, a warning should be raised
     input_dataset2 = Dataset(psf_images)
-    with pytest.raises(AttributeError):
+    with pytest.warns(UserWarning):
         dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2)
     
     #only 1 fake science dataset frame
