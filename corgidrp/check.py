@@ -392,7 +392,8 @@ def dictionary(var, vname, vexc):
 # Validation functions for E2E tests
 # ================================================================================
 
-def check_filename_convention(filename, expected_pattern, frame_info="", logger=None):
+def check_filename_convention(filename, expected_pattern, frame_info="",
+     logger=None, data_level="l2b"):
     """Check if filename follows the expected naming convention.
 
     Args:
@@ -400,6 +401,7 @@ def check_filename_convention(filename, expected_pattern, frame_info="", logger=
         expected_pattern (str): Expected pattern (e.g., 'cgi_*_l2b.fits')
         frame_info (str): Additional info for logging (e.g., "Frame 0")
         logger: Logger instance to use. If None, uses module logger.
+        data_level (str): data level to be considered. 
 
     Returns:
         bool: True if filename matches convention
@@ -412,13 +414,13 @@ def check_filename_convention(filename, expected_pattern, frame_info="", logger=
         return False
     
     # Basic pattern check
-    if expected_pattern == 'cgi_*_l2b.fits':
+    if expected_pattern == f'cgi_*_{data_level}.fits':
         parts = filename.split('_')
         valid = (len(parts) >= 4 and 
                 parts[0] == 'cgi' and 
                 len(parts[2]) == 16 and parts[2][8] == 't' and 
                 parts[2][:8].isdigit() and parts[2][9:].isdigit() and
-                filename.endswith('_l2b.fits'))
+                filename.endswith(f'_{data_level}.fits'))
     elif expected_pattern == 'cgi_*_dpm_cal.fits':
         valid = filename.startswith('cgi_') and '_dpm_cal.fits' in filename
     elif expected_pattern == 'cgi_*_line_spread.fits':

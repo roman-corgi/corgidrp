@@ -1158,6 +1158,10 @@ def slit_transmission(
     try:
         interpolator = LinearNDInterpolator(np.c_[slit_pos_x, slit_pos_y], slit_trans)
         slit_trans_interp = interpolator(target_pix[0], target_pix[1])
+        # If there's some extrapolation, redefine target points to be within limits
+        if np.sum(np.isnan(slit_trans_interp) == True):
+            raise ValueError('Some target points require extrapolation.'
+                'Make sure all target points are within the interpolator support.')   
     # 1-d cases
     except:
         # The positions along one of the slit dimensions is constant. P.S. scipy
@@ -1176,8 +1180,6 @@ def slit_transmission(
         raise ValueError('There are no valid target positions within the ' +
             'range of input PSF locations')
 
-    # Extrapolation: Remove NaN values
-    is_valid = np.where(np.isnan(slit_trans_interp) == False)[0]
-    return (slit_trans_interp[is_valid],
-        target_pix[0][is_valid],
-        target_pix[1][is_valid])
+    return (slit_trans_interp,
+        target_pix[0],
+        target_pix[1])
