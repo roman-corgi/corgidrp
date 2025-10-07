@@ -1062,8 +1062,8 @@ def slit_transmission(
       y_range (array): Two values [ymin, ymax] specifying the range of pixels to
         be considered. Units are EXCAM pixels measured with respect the zero-point
         solution.
-      n_gridxi(int) (optional): Number of positions when pos_range is set.
-      n_gridyi(int) (optional): Number of positions when pos_range is set.
+      n_gridx (int) (optional): Number of positions when pos_range is set.
+      n_gridy (int) (optional): Number of positions when pos_range is set.
       kind (string): Specifies the kind of interpolation. See scipy documentation.
         Default is piecewise linear.
 
