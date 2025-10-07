@@ -183,10 +183,73 @@ def generate_header_table(hdu):
 
     return header_table
 
+def validate_cgi_filename(filepath, expected_suffix):
+    """
+    Validate that a FITS file follows the CGI filename convention:
+    cgi_VISITID_YYYYMMDDtHHMMSSS_suffix.fits
+    
+    Args:
+        filepath (str): Path to the FITS file
+        expected_suffix (str): Expected suffix (e.g., 'l2a', 'l2b', 'ast_cal', 'bpm_cal', etc.)
+    
+    Returns:
+        bool: True if filename is valid
+    
+    Raises:
+        AssertionError: If filename doesn't match expected format
+    """
+    import re
+    from astropy.io import fits
+    
+    filename = os.path.basename(filepath)
+    
+    # Check that all alphabetical characters are lowercase
+    assert filename == filename.lower(), \
+        f"Filename '{filename}' contains uppercase characters. All letters must be lowercase."
+    
+    # Pattern: cgi_VISITID(19 digits)_YYYYMMDDtHHMMSSS_SUFFIX.fits
+    # VISITID should be 19 digits
+    # Timestamp should be YYYYMMDDtHHMMSSS
+    pattern = r'^cgi_(\d{19})_(\d{8}t\d{7})_(.+)\.fits$'
+    
+    match = re.match(pattern, filename)
+    assert match, f"Filename '{filename}' doesn't match CGI convention 'cgi_VISITID_YYYYMMDDtHHMMSSS_SUFFIX.fits' (8 digits + 't' + 7 digits)"
+    
+    visitid_in_filename, timestamp, suffix = match.groups()
+    
+    # Check suffix matches expected
+    assert suffix.lower() == expected_suffix.lower(), \
+        f"Filename suffix '{suffix}' doesn't match expected '{expected_suffix}'"
+    
+    # Validate timestamp format, should be YYYYMMDDtHHMMSSs
+    ts_pattern = r'^(\d{4})(\d{2})(\d{2})t(\d{2})(\d{2})(\d{2})(\d{1})$'
+    ts_match = re.match(ts_pattern, timestamp)
+    assert ts_match, f"Timestamp '{timestamp}' doesn't match YYYYMMDDtHHMMSSS format (8 digits + 't' + 7 digits)"
+    
+    year, month, day, hour, minute, second, decisec = ts_match.groups()
+    
+    assert 1 <= int(month) <= 12, f"Invalid month '{month}' in timestamp"
+    assert 1 <= int(day) <= 31, f"Invalid day '{day}' in timestamp"
+    assert 0 <= int(hour) <= 23, f"Invalid hour '{hour}' in timestamp"
+    assert 0 <= int(minute) <= 59, f"Invalid minute '{minute}' in timestamp"
+    
+    # Open FITS and check VISITID matches (do not do this for now because of mocks)
+    '''
+    with fits.open(filepath) as hdul:
+        visitid_in_header = str(hdul[0].header.get('VISITID', '')).strip()
+        # VISITID in header should match filename (allow for leading zeros or string conversion)
+        if visitid_in_header:
+            assert visitid_in_header.zfill(19) == visitid_in_filename, \
+                f"VISITID in header '{visitid_in_header}' doesn't match filename VISITID '{visitid_in_filename}'"
+    '''
+
+    print(f"Filename validation passed: {filename}")
+    return True
+
 custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'FILE0', 'DATETIME', 'FTIMEUTC', 'DETPIX0X', 'DETPIX0Y', 'PYKLIPV']
 def compare_docs(ref_doc, new_doc):
     """
-    Compare reference doc to new doc
+    Compare reference doc to new doc. Checks that all headers are present regardless of order
 
     Args:
         ref_doc (str): full content of reference doc
@@ -197,47 +260,61 @@ def compare_docs(ref_doc, new_doc):
     ref_lines = ref_doc.strip().splitlines()
     new_lines = new_doc.strip().splitlines()
 
-    # certain rows need custom checking
-    mod_ref_lines = []
-    mod_new_lines = []
-
-    # grab all the rows that need special checking out of the way
-    for i, line in enumerate(ref_lines):
-        if '|' in line: # check if sphinx table
-            line_args = line.split("|")
-            name = line_args[1].strip()
-            dtype = line_args[2].strip()
-            mask_value = (name.upper() in custom_header_keys) or (dtype.lower() == "float")
-            if mask_value:
-                # remove the value of the entry from the line
-                line_args[3] = '[value ignored]'
-                # remove the comment value from the line as well
-                line_args[4] = '[comment ignored]'
-                mod_line = "|".join(line_args)
-                # move into the custom checking section
-                mod_ref_lines.append(mod_line)
-
-    for i, line in enumerate(new_lines):
-        if '|' in line: # check if sphinx table
-            line_args = line.split("|")
-            name = line_args[1].strip()
-            dtype = line_args[2].strip()
-            mask_value = (name.upper() in custom_header_keys) or (dtype.lower() == "float")
-            if mask_value:
-                # remove the value of the entry from the line
-                line_args[3] = '[value ignored]'
-                # remove the comment value from the line as well
-                line_args[4] = '[comment ignored]'
-                mod_line = "|".join(line_args)
-                # move into the custom checking section
-                mod_new_lines.append(mod_line)
-
-    # diff the regular part of the doc
-    diff = difflib.unified_diff(mod_ref_lines, mod_new_lines)
-    diff = list(diff)
-    diff_output = "\n".join(diff)
-    print(diff_output)
-    assert len(diff) == 0
+    # Get header entries (keyword, datatype, hdu) from both documents
+    # Ignore order, values, and comments. Only check that keywords and datatypes match
+    def extract_headers(lines):
+        headers = set()
+        current_hdu = None
+        in_hdu_structure_table = False
+        for line in lines:
+            # Check if we're in the HDU structure table (first table in doc)
+            if 'Index' in line and 'Name' in line and 'Datatype' in line:
+                in_hdu_structure_table = True
+            elif in_hdu_structure_table and (line.strip().endswith('^^^') or 'Header (HDU' in line):
+                in_hdu_structure_table = False
+            
+            # Check which HDU section we're in 
+            if 'Header (HDU' in line and not line.strip().startswith('|'):
+                # Get HDU name
+                try:
+                    hdu_name = line.split('Header')[0].strip()
+                    hdu_num = line.split('HDU ')[1].split(')')[0]
+                    current_hdu = f"{hdu_name} (HDU {hdu_num})"
+                except:
+                    pass 
+            elif '|' in line and line.count('|') >= 4 and not in_hdu_structure_table:
+                line_args = line.split("|")
+                if len(line_args) >= 5:
+                    name = line_args[1].strip()
+                    dtype = line_args[2].strip()
+                    # Skip table header/delimiter rows
+                    if name and dtype and name != 'Keyword' and name != '=' * len(name) and name != '-' * len(name) and not name.isdigit():
+                        # Store keyword name, datatype, and HDU
+                        headers.add((name, dtype, current_hdu or 'Unknown'))
+        return headers
+    
+    ref_headers = extract_headers(ref_lines)
+    new_headers = extract_headers(new_lines)
+    
+    # Find headers that are in reference but not in fits file
+    missing_headers = ref_headers - new_headers
+    # Find headers that are in fits file but not in reference
+    extra_headers = new_headers - ref_headers
+    
+    if missing_headers or extra_headers:
+        print("\n=== Header comparison failed ===")
+        if missing_headers:
+            print("\nHeaders in reference documentation but missing from FITS output:")
+            for header in sorted(missing_headers):
+                print(f"  - {header[0]} ({header[1]}) in {header[2]}")
+        if extra_headers:
+            print("\nHeaders in FITS output but missing from reference documentation:")
+            for header in sorted(extra_headers):
+                print(f"  + {header[0]} ({header[1]}) in {header[2]}")
+        assert False, "Header mismatch"
+    else:
+        print(f"Header comparison passed: All {len(ref_headers)} headers match between reference and actual output")
+    
 
  
 ###########################
@@ -252,6 +329,9 @@ def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
     #l2a_data_file = os.path.join(l2a_data_dir, "90499.fits")
     fits_files = glob.glob(os.path.join(l2a_data_dir, "*.fits"))
     l2a_data_file = max(fits_files, key=os.path.getmtime)
+    
+    validate_cgi_filename(l2a_data_file, 'l2a')
+    
     generate_fits_excel_documentation(l2a_data_file, os.path.join(l2a_data_dir, "l2a_documentation.xlsx"))
 
     doc_output_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -280,6 +360,9 @@ def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
     l2b_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_e2e")
     fits_files = glob.glob(os.path.join(l2b_data_dir, "*.fits"))
     l2b_data_file = max(fits_files, key=os.path.getmtime)
+    
+    validate_cgi_filename(l2b_data_file, 'l2b')
+    
     generate_fits_excel_documentation(l2b_data_file, os.path.join(l2b_data_dir, "l2b_analog_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -307,6 +390,9 @@ def test_l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l2b_data_dir = os.path.join(thisfile_dir, "photon_count_e2e", "l2a_to_l2b")
     l2b_data_file = glob.glob(os.path.join(l2b_data_dir, "*_l2b.fits"))[0]
+    
+    validate_cgi_filename(l2b_data_file, 'l2b')
+    
     generate_fits_excel_documentation(l2b_data_file, os.path.join(l2b_data_dir, "l2b_pc_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -335,6 +421,9 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l3_data_dir = os.path.join(thisfile_dir, "l2b_to_l4_e2e", "l2b_to_l3")
     l3_data_file = glob.glob(os.path.join(l3_data_dir, "*_l3_.fits"))[0]
+    
+    validate_cgi_filename(l3_data_file, 'l3_')
+    
     generate_fits_excel_documentation(l3_data_file, os.path.join(l3_data_dir, "l3_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -363,6 +452,9 @@ def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l4_data_dir = os.path.join(thisfile_dir, "l2b_to_l4_e2e")
     l4_data_file = glob.glob(os.path.join(l4_data_dir, "*_l4_.fits"))[0]
+    
+    validate_cgi_filename(l4_data_file, 'l4_')
+    
     generate_fits_excel_documentation(l4_data_file, os.path.join(l4_data_dir, "l4_coron_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -389,6 +481,9 @@ def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     kgain_data_file = glob.glob(os.path.join(thisfile_dir, "l2b_to_l4_noncoron_e2e", "*_l4_.fits"))[0]
+    
+    validate_cgi_filename(kgain_data_file, 'l4_')
+    
     generate_fits_excel_documentation(kgain_data_file, os.path.join(thisfile_dir, "l2b_to_l4_noncoron_e2e", "l4_noncoron_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -415,6 +510,9 @@ def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     astrom_data_file = glob.glob(os.path.join(thisfile_dir, "astrom_cal_e2e", "*_ast_cal.fits"))[0]
+    
+    validate_cgi_filename(astrom_data_file, 'ast_cal')
+    
     generate_fits_excel_documentation(astrom_data_file, os.path.join(thisfile_dir, "astrom_cal_e2e", "ast_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -441,6 +539,9 @@ def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     bpmap_data_file = glob.glob(os.path.join(thisfile_dir, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits"))[0]
+    
+    validate_cgi_filename(bpmap_data_file, 'bpm_cal')
+    
     generate_fits_excel_documentation(bpmap_data_file, os.path.join(thisfile_dir, "bp_map_cal_e2e", "bpm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -468,6 +569,9 @@ def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     flat_data_file = glob.glob(os.path.join(thisfile_dir, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits"))[0]
+    
+    validate_cgi_filename(flat_data_file, 'flt_cal')
+    
     generate_fits_excel_documentation(flat_data_file, os.path.join(thisfile_dir, "flatfield_cal_e2e", "flat_neptune_output", "flt_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -494,8 +598,11 @@ def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    ct_data_file = glob.glob(os.path.join(thisfile_dir, "corethroughput_cal_e2e", "*_ctp_cal.fits"))[0]
-    generate_fits_excel_documentation(ct_data_file, os.path.join(thisfile_dir, "corethroughput_cal_e2e", "ctp_cal_documentation.xlsx"))
+    ct_data_file = glob.glob(os.path.join(thisfile_dir, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits"))[0]
+    
+    validate_cgi_filename(ct_data_file, 'ctp_cal')
+    
+    generate_fits_excel_documentation(ct_data_file, os.path.join(thisfile_dir, "corethroughput_cal_e2e", "band3_spc_data", "ctp_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -521,6 +628,9 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     ctmap_data_file = glob.glob(os.path.join(thisfile_dir, "ctmap_cal_e2e", "*_ctm_cal.fits"))[0]
+    
+    validate_cgi_filename(ctmap_data_file, 'ctm_cal')
+    
     generate_fits_excel_documentation(ctmap_data_file, os.path.join(thisfile_dir, "ctmap_cal_e2e", "ctm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -547,6 +657,9 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     fluxcal_data_file = glob.glob(os.path.join(thisfile_dir, "flux_cal_e2e", "*_abf_cal.fits"))[0]
+    
+    validate_cgi_filename(fluxcal_data_file, 'abf_cal')
+    
     generate_fits_excel_documentation(fluxcal_data_file, os.path.join(thisfile_dir, "flux_cal_e2e", "abf_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -573,6 +686,9 @@ def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     kgain_data_file = glob.glob(os.path.join(thisfile_dir, "kgain_cal_e2e", "*_krn_cal.fits"))[0]
+    
+    validate_cgi_filename(kgain_data_file, 'krn_cal')
+    
     generate_fits_excel_documentation(kgain_data_file, os.path.join(thisfile_dir, "kgain_cal_e2e", "krn_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -600,6 +716,9 @@ def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     nonlin_data_file = glob.glob(os.path.join(thisfile_dir, "nonlin_cal_e2e", "*_nln_cal.fits"))[0]
+    
+    validate_cgi_filename(nonlin_data_file, 'nln_cal')
+    
     generate_fits_excel_documentation(nonlin_data_file, os.path.join(thisfile_dir, "nonlin_cal_e2e", "nln_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -626,6 +745,9 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     nonlin_data_file = glob.glob(os.path.join(thisfile_dir, "nd_filter_cal_e2e", "*_ndf_cal.fits"))[0]
+    
+    validate_cgi_filename(nonlin_data_file, 'ndf_cal')
+    
     generate_fits_excel_documentation(nonlin_data_file, os.path.join(thisfile_dir, "nd_filter_cal_e2e", "ndf_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -652,6 +774,9 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     noisemaps_data_file = glob.glob(os.path.join(thisfile_dir, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits"))[0]
+    
+    validate_cgi_filename(noisemaps_data_file, 'dnm_cal')
+    
     generate_fits_excel_documentation(noisemaps_data_file, os.path.join(thisfile_dir, "noisemap_cal_e2e", "l1_to_dnm", "dnm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -679,6 +804,9 @@ def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     dark_data_file = glob.glob(os.path.join(thisfile_dir, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits"))[0]
+    
+    validate_cgi_filename(dark_data_file, 'drk_cal')
+    
     generate_fits_excel_documentation(dark_data_file, os.path.join(thisfile_dir, "trad_dark_e2e", "trad_dark_full_frame", "drk_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
@@ -706,6 +834,9 @@ def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     tpump_data_file = glob.glob(os.path.join(thisfile_dir, "trap_pump_cal_e2e", "*_tpu_cal.fits"))[0]
+    
+    validate_cgi_filename(tpump_data_file, 'tpu_cal')
+    
     generate_fits_excel_documentation(tpump_data_file, os.path.join(thisfile_dir, "trap_pump_cal_e2e", "tpu_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")

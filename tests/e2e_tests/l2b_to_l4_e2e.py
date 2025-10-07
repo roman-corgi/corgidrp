@@ -164,8 +164,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image.ext_hdr.set('FPAMNAME', 'HLC12_C2R1')
         new_image.ext_hdr.set('MASKLOCX', big_cols//2)
         new_image.ext_hdr.set('MASKLOCY', big_cols//2)
-        new_image.ext_hdr.set('EACQ_ROW', big_cols//2)
-        new_image.ext_hdr.set('EACQ_COL', big_cols//2)
+        new_image.ext_hdr.set('EACQ_ROW', big_cols/2.0)
+        new_image.ext_hdr.set('EACQ_COL', big_cols/2.0)
 
         #If Reference star then flag it. 
         if star[ibatch] == 2:

@@ -27,11 +27,21 @@ def fix_str_for_tvac(
     """
     for file in list_of_fits:
         fits_file = fits.open(file)
+        prihdr = fits_file[0].header
         exthdr = fits_file[1].header
         if float(exthdr['EMGAIN_A']) == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         if type(exthdr['EMGAIN_C']) is str:
             exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+        
+        if 'OBSTYPE' in prihdr:
+            prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        else:
+            prihdr["OBSNAME"] = "BORESITE"  # Default value
+        prihdr["PHTCNT"] = False
+        
+        exthdr["ISPC"] = False
+        
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 

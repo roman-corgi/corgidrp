@@ -4475,7 +4475,7 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
         # Visit ID from primary header VISITID keyword
         visitid = prihdr.get('VISITID', None)
         if visitid is not None:
-            # Convert to string and pad to 19 digits
+            # Convert to string and pad to 19 digits if necessary
             visitid = str(visitid).zfill(19)
         else:
             # Fallback: try to extract from filename or use file index
@@ -4488,36 +4488,34 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             if f'_{level_suffix}_' in current_filename:
                 # Extract the frame number after the level suffix
                 frame_number = current_filename.split(f'_{level_suffix}_')[-1].replace('.fits', '')
-                visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+                visitid = frame_number.zfill(19)  
             elif current_filename.replace('.fits', '').isdigit():
                 # Handle numbered files like 90500.fits
                 frame_number = current_filename.replace('.fits', '')
-                visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+                visitid = frame_number.zfill(19)  
             else:
                 visitid = f"{i:019d}"  # Fallback: use file index padded to 19 digits
         
         filetime = exthdr.get('FILETIME', prihdr.get('FILETIME', None))
         
-        # Convert filetime to the format expected in filenames (YYYYMMDDtHHMMSS)
+        # Convert filetime to the format expected in filenames (YYYYMMDDtHHMMSSs)
         if filetime and 'T' in filetime:
             try:
                 dt = datetime.datetime.fromisoformat(filetime.replace('Z', '+00:00'))
-                filetime = dt.strftime('%Y%m%dt%H%M%S%f')[:-3]  # Include milliseconds (3 digits)
+                filetime = dt.strftime('%Y%m%dt%H%M%S%f')[:-5] 
             except:
-                filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-3]  # fallback to current time
+                filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # fallback to current time
         elif not filetime:
-            filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-3]  # fallback to current time
+            filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5] 
         
         # Add small increment to ensure unique filenames when processing multiple files
         if i > 0:
-            # Add milliseconds to make each filename unique
             try:
                 base_dt = datetime.datetime.strptime(filetime, '%Y%m%dt%H%M%S%f')
-                unique_dt = base_dt + datetime.timedelta(milliseconds=i)
-                filetime = unique_dt.strftime('%Y%m%dt%H%M%S%f')[:-3]
+                unique_dt = base_dt + datetime.timedelta(milliseconds=i*100)  # Increment by 0.1s
+                filetime = unique_dt.strftime('%Y%m%dt%H%M%S%f')[:-5]
             except:
-                # If parsing fails, fall back to adding seconds
-                filetime = filetime[:-3] + f"{int(filetime[-3:]) + i:03d}"
+                filetime = filetime[:-1] + f"{(int(filetime[-1:]) + i) % 10}"
         
         # Create new filename with correct convention
         if level_suffix in ['l2a', 'l2b']:

@@ -76,15 +76,18 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         image.ext_hdr['FPAM_V'] = FPAM_V_CT
         image.ext_hdr['FSAM_H'] = FSAM_H_CT
         image.ext_hdr['FSAM_V'] = FSAM_V_CT
-        
-        
     corethroughput_dataset = data.Dataset(corethroughput_image_list)
 
     # Create input data directory
     input_l2b_dir = os.path.join(corethroughput_outputdir, 'input_l2b')
     os.makedirs(input_l2b_dir)
     
-    corethroughput_dataset.save(filedir=input_l2b_dir)
+    # Save with proper CGI naming convention
+    corethroughput_data_filepath = mocks.rename_files_to_cgi_format(
+        list_of_fits=corethroughput_image_list, 
+        output_dir=input_l2b_dir, 
+        level_suffix="l2b"
+    )
     
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -95,9 +98,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     # Run the DRP walker
     print('Running walker')
-    # Get the saved files
-    corethroughput_data_filepath = glob.glob(os.path.join(input_l2b_dir, '*.fits'))
-    corethroughput_data_filepath.sort()
     walker.walk_corgidrp(corethroughput_data_filepath, '', corethroughput_outputdir)
     
     # Load in the output data. It should be the latest ctp_cal file produced.
