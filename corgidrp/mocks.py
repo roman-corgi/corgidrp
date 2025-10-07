@@ -1143,14 +1143,14 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
     return dataset
 
 
-def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
+def create_cr_dataset(nonlin_filepath, filedir=None, obs_datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
     """
     Create simulated non-linear data with cosmic rays to test CR detection.
 
     Args:
         nonlin_filepath (str): path to FITS file containing nonlinear calibration data (e.g., tests/test_data/nonlin_sample.fits)
         filedir (str): (Optional) Full path to directory to save to.
-        datetime (astropy.time.Time): (Optional) Date and time of the observations to simulate.
+        obs_datetime (astropy.time.Time): (Optional) Date and time of the observations to simulate.
         numfiles (int): Number of files in dataset.  Defaults to 2 (not creating the cal here, just testing the function)
         em_gain (int): The EM gain to use for the simulated data.  Defaults to 2000.
         numCRs (int): The number of CR hits to inject. Defaults to 5.
@@ -1161,8 +1161,8 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
             The simulated dataset.
     """
 
-    if datetime is None:
-        datetime = Time('2024-01-01T11:00:00.000Z')
+    if obs_datetime is None:
+        obs_datetime = Time('2024-01-01T11:00:00.000Z')
 
     detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
 
@@ -1182,7 +1182,7 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
     for i in range(len(dataset.all_data)):
 
         # Save the date
-        dataset[i].ext_hdr['DATETIME'] = str(datetime)
+        dataset[i].ext_hdr['DATETIME'] = str(obs_datetime)
 
         # Pick random locations to add a cosmic ray
         for x in range(numCRs):
