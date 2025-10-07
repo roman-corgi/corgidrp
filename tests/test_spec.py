@@ -1037,7 +1037,7 @@ def test_slit_trans():
                 spec_slit_cp[0].ext_hdr['WV0_Y'] = (spec_slit[0].ext_hdr['WV0_Y']
                     + idx_y * fsm[1])
                 # Change the spectrum by a known factor so that the slit transmission
-                # interpolation can be tested later
+                # interpolation can be tested later.
                 spec_slit_cp[0].data = (spec_slit[0].data * (1 + idx_x*fsm[0])
                     * (1 + idx_y*fsm[1]))
                 # Set conventional filename
@@ -1097,26 +1097,27 @@ def test_slit_trans():
         for idx_pam, pam in enumerate(pam_list):
             spec_open[0].ext_hdr[pam+'NAME'] = pam_values[idx_pam]
         # Build some set of extracted spectra (the different FSM datasets)
-        spec_open_list = [spec_open, spec_open, spec_open]
+        # Choose an arbitrary number of replica to test the average value
+        spec_open_list = [spec_open, spec_open, spec_open, spec_open]
 
         logger.info('Images with slit out')
         n_images = 0
         for i, frame in enumerate(spec_open_list):
             frame_info = f"Frame {i}"
-            # Check dimensions
-            check_dimensions(frame[0].data, spec_open[0].data.shape, frame_info,
+            # Check dimensions (same as with slit in)
+            check_dimensions(frame[0].data, spec_slit[0].data.shape, frame_info,
                 logger)
-            # Check data level is L4
+            # Check data level is L4 (same as eith slit in)
             verify_header_keywords(frame[0].ext_hdr, {'DATALVL': dt_lvl},
                 frame_info, logger)
             # Verify filename convention: cgi_<visitid>_<yyyymmddthhmmsss>_l4_.fits
             check_filename_convention(getattr(frame[0], 'filename', None),
                 f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger,
                 data_level=dt_lvl.lower())
-            # Verify all images have identical CFAMNAME values
+            # Verify all images have identical CFAMNAME values (same as with slit in)
             verify_header_keywords(frame[0].ext_hdr, {'CFAMNAME': cfam_expected},
                 frame_info, logger)
-            # Verify all images have FSAMNAME = SLIT
+            # Verify all images have FSAMNAME = OPEN
             verify_header_keywords(frame[0].ext_hdr, {'FSAMNAME': 'OPEN'},
                 frame_info, logger)
             # Verify all images have (FSMX, FSMY) values
@@ -1151,16 +1152,20 @@ def test_slit_trans():
             # In this case, the interpolation is linear. 
             assert slit_trans_out == pytest.approx(slit_trans_design, rel=1e-7)
 
-        # VAP testing for the slit transmission
- 
-        # Check dimensions and header values per L4 documentation
-
-        # Check DATALVL = TDA
-
-        # Check filename convention: cgi_<visitid>_<yyyymmddthhmmsss>_tda.fits
-
-        # Confirm data structure of the slit transmission
-
+        # VAP testing: Confirm data structure of the slit transmission
+        logger.info(f'Output slit transmission')
+        # Same wavelength bins as input data
+        assert slit_trans_out.shape[1] == spec_slit[0].data.shape[0], logger.info(f'Slit transmission does not have the same wavelength steps as input data ({spec_slit[0].data.shape[0]}). FAIL')
+        logger.info(f'Slit transmission has the same wavelength steps as input data ({spec_slit[0].data.shape[0]}). PASS')
+        # Same locations as slit transmission values
+        assert slit_pos_x.shape[0] == slit_trans_out.shape[0], logger.info(f'Slit transmission locations and wavelength steps are inconsistent (X). FAIL')
+        logger.info(f'Slit transmission locations and wavelength steps are consistent (X). PASS')
+        assert slit_pos_y.shape[0] == slit_trans_out.shape[0], logger.info(f'Slit transmission locations and wavelength steps are inconsistent (Y). FAIL')
+        logger.info(f'Slit transmission locations and wavelength steps are consistent (Y). PASS')
+        # VAP requirement
+        logger.info(f'The peak value of the slit transmission is {slit_trans_out.max()}')
+        logger.info(f'The mean value of the slit transmission is {slit_trans_out.mean()}')
+        
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
     test_psf_centroid()
