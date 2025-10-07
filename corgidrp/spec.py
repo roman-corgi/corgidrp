@@ -217,10 +217,12 @@ def fit_psf_centroid(psf_data, psf_template,
         y_precis (float): Statistical precision of the y centroid fit, estimated from
                 peak-pixel S/N ratio
     """
-
+    if not isinstance(halfheight, int):
+        raise ValueError("halfheight must be an integer")
     # Use the center of mass as a starting point if positions were not provided.
     if xcent_template is None or ycent_template is None: 
         xcom_template, ycom_template = np.rint(get_center_of_mass(psf_template))
+        xcent_template, ycent_template = xcom_template, ycom_template
     else:
         xcom_template, ycom_template = (np.rint(xcent_template), np.rint(ycent_template))
 
@@ -490,7 +492,7 @@ def estimate_dispersion_clocking_angle(xpts, ypts, weights):
 
 def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wavlen, pixel_pitch_um=13.0):
     """ 
-    Given arrays of wavlengths and positions, fit two polynomials:  
+    Given arrays of wavelengths and positions, fit two polynomials:  
     1. Displacement from a reference wavelength along the dispersion axis, 
        in millimeters as a function of wavelength  
     2. Wavelength as a function of displacement along the dispersion axis
@@ -570,7 +572,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
     
     #PRISM2 not yet available
     if prism == 'PRISM2':
-        subband_list = ['2A', '2B', '2C']
+        subband_list = ['2A', '2B', '2C', '2F']
         ref_cfam = '2'
         ref_wavlen = 660.
     else:
@@ -741,6 +743,203 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
 
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
+
+def get_shift_correlation(
+    img_data,
+    img_template,
+    ):
+    """ Find the array shift that maximizes the phase correlation between two
+      images.
+
+    Args:
+      img_data (array): first two dimensional array.
+      img_template (array): second two dimensional array. Its size must be the same or
+      less than img1, because img2 is the noiseless template used to find the
+      spectrum on the L2b data and it is a cropped frame.
+
+    Returns:
+      Image shift in image pixels that maximizes the phase correlation of the
+      first image with the second one.
+    """
+    if np.any(img_data.shape < img_template.shape):
+        raise Exception('The template image cannot have a larger size then the data one')  
+
+    # Pad img_template to be the same size as img_data
+    img2 = np.zeros_like(img_data)
+    img2[img_data.shape[0]//2-img_template.shape[0]//2:img_data.shape[0]//2+img_template.shape[0]//2 + 1,
+        img_data.shape[1]//2-img_template.shape[1]//2:img_data.shape[1]//2+img_template.shape[1]//2 + 1] = img_template
+
+    dft1 = np.fft.fftshift(np.fft.fft2(img_data))
+    dft2 = np.fft.fftshift(np.fft.fft2(img2))
+
+    # Cross-power spectrum (Add epsilon to avoid division by zero, from Google Labs)
+    R = (dft1 * np.conj(dft2)) / (np.abs(dft1 * np.conj(dft2)) + 1e-10)
+
+    # Inverse FFT: Imaginary part are numerical residuals. The original data are real.
+    poc_real = np.real(np.fft.ifft2(R))
+
+    # Find the peak location (shift)
+    shift = np.unravel_index(np.argmax(np.abs(poc_real)), poc_real.shape)
+
+    return shift
+
+def star_spec_registration(
+    dataset_fsm,
+    pathfiles_template,
+    slit_align_err=0,
+    halfheight=40):
+    """ This function addresses:
+
+      CGI-REQT-5465 – Given (1) a series of cleaned images of a prism-dispersed
+      unocculted star observed through the FSAM slit mask, observed with the
+      same CFAM filter, and acquired over a grid of FSM offsets and (2) an
+      estimate of the spectroscopic target source position on EXCAM and its
+      alignment error from the FSAM slit, the CTC GSW should identify the
+      dispersed star image whose PSF-to-FSAM slit alignment most closely matches
+      that of the target source.
+
+      NOTE: This calibration is repeated for each roll angle in the observation
+      campaign
+  
+    Args:
+      dataset_fsm (Dataset): Dataset containing a series of L2b cleaned images of a
+        prism-dispersed unocculted star observed through the FSAM slit mask,
+        observed with the same CFAM filter, and acquired over a grid of FSM
+        offsets. By default, the grid of FSM offsets spans a 3×3 FSM offset grid. 
+        Each of the L2b images must have the following header keywords:
+          – FSMX, FSMY (float64)
+          – CFAMNAME (same for all images)
+          – FSAMNAME = OPEN, R1C2, R6C5, R3C1
+      pathfiles_template (array): array of path and filenames containing the 
+        simulated star spectrum that are used as a template to find the image
+        in dataset_fsm that best matches it.
+      slit_align_err (float64): Distance between the source and the center of
+        the slit aperture, measured along the narrow axis of the slit aperture,
+        in units of mas. It is determined after each observation by
+        looking at the data.
+      halfheight: 1/2 the height of the box used for the fit.
+
+    Returns:
+      Filenames with the star image whose PSF-to-FSAM slit alignment most
+      closely matches that of the target source.
+      
+    """
+    # Confirm spectroscopy configuration for different PAMs
+    # CFAM
+    cfam_name = dataset_fsm[0].ext_hdr['CFAMNAME'].upper()
+    if cfam_name.find('3') != -1:
+        dpam_name = 'PRISM3'
+        # fsam_name = []
+    elif cfam_name.find('2') != -1:
+        dpam_name = 'PRISM2'
+        # fsam_name = []
+    else:
+        raise ValueError(f'{cfam_name} is not a spectroscopy filter')
+    # DPAM
+    if dataset_fsm[0].ext_hdr['DPAMNAME'] != dpam_name:
+        raise ValueError(f'DPAMNAME should be {dpam_name}')
+    # FPAM
+    fpam_name = dataset_fsm[0].ext_hdr['FPAMNAME'].upper()
+    if (fpam_name != 'OPEN' and fpam_name != 'ND225' and fpam_name != 'ND475'):
+        raise ValueError('FPAMNAME should be either OPEN, ND225 or ND475')
+    # SPAM
+    spam_name = dataset_fsm[0].ext_hdr['SPAMNAME'].upper()
+    if spam_name[0:4] != 'SPEC':
+        raise ValueError('SPAMNAME should be SPEC')
+    # LSAM
+    lsam_name = dataset_fsm[0].ext_hdr['LSAMNAME'].upper()
+    if lsam_name[0:4] != 'SPEC':
+        raise ValueError('LSAMNAME should be SPEC')
+    # FSAM
+    fsam_name = dataset_fsm[0].ext_hdr['FSAMNAME'].upper()
+    if (fsam_name != 'OPEN' and fsam_name != 'R1C2' and fsam_name != 'R6C5' and
+        fsam_name != 'R3C1'):
+        raise ValueError('FSAMNAME should be either OPEN, R1C2, R6C5 or R3C1')
+
+    # All images must have the same setup
+    for img in dataset_fsm:
+        exthdr = img.ext_hdr
+        assert exthdr['CFAMNAME'].upper() == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
+        assert exthdr['DPAMNAME'].upper() == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
+        assert exthdr['FPAMNAME'].upper() == fpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
+        assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
+        assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
+        assert exthdr['FSAMNAME'].upper() in fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
+        # Confirm presence of FSMX, FSMY
+        assert 'FSMX' in exthdr.keys() and 'FSMY' in exthdr.keys(), 'Missing FSMX/Y'
+
+    # Templates
+    yoffset_arr = []
+    for file in pathfiles_template:
+        # Make sure that all template files exist
+        if os.path.exists(file) == False:
+            raise Exception(f'Template file {file} not found.')
+        # Collect FSAM offsets
+        yoffset_arr += [fits.open(file)[0].header['FSM_OFF']]
+
+    # Find closest template offset to the one measured in the data
+    slit_idx = int(np.abs(slit_align_err - yoffset_arr).argmin())
+    
+    # Template data
+    temp = fits.open(pathfiles_template[slit_idx])[0]
+    temp_data = temp.data
+    # Associated zeropoint
+    try:
+        wv0_x = temp.header['WV0_X']
+    except:
+        raise ValueError(f'WV0_X missing from {pathfiles_template[slit_idx]:s}')
+    try:
+        wv0_y = temp.header['WV0_Y']
+    except:
+        raise ValueError(f'WV0_Y missing from {pathfiles_template[slit_idx]:s}')
+    
+    # Split FSM dataset according to their FSM values
+    dataset_list, fsm_values = dataset_fsm.split_dataset(exthdr_keywords=['FSMY'])
+    
+    # Combine frames with the same FSMY to increase SNR before the analysis
+    fsm_combined = []
+    for dataset in dataset_list:
+        fsm_tmp = []
+        for img in dataset:
+            fsm_tmp += [img.data]
+        fsm_combined += [np.median(np.array(fsm_tmp), axis=0)]
+
+    # Find best PSF centroid fit for each image compared to the template
+    # Cost function: Start with any large value that cannot happen. P.S. Units
+    # are EXCAM pixels
+    zeropt_dist = 1e8
+    idx_best = None
+    # cross-correlate data with expected slit error with template
+    shift = get_shift_correlation(fsm_combined[slit_idx], temp_data)
+    for idx_img, img in enumerate(fsm_combined):
+        # Bring img_data on top of img_template
+        img = np.roll(img, (-shift[0], -shift[1]), axis=(0,1))
+        # Crop it to match img2 size
+        img_cropped = img[img.shape[0]//2-temp_data.shape[0]//2:img.shape[0]//2+temp_data.shape[0]//2+1,
+        img.shape[1]//2-temp_data.shape[1]//2:img.shape[1]//2+temp_data.shape[1]//2+1]
+        # Find best centroid
+        x_fit, y_fit = fit_psf_centroid(img_cropped, temp_data,
+            xcent_template = wv0_x,
+            ycent_template = wv0_y,
+            halfheight = halfheight)[0:2]
+        # best-matching image is wrt zero-point
+        zeropt_dist_img = np.sqrt((x_fit - wv0_x)**2 + (y_fit - wv0_y)**2)
+
+        # Keep track of absolute minimum
+        if zeropt_dist_img < zeropt_dist:
+            zeropt_dist = zeropt_dist_img
+            idx_best = idx_img
+
+    # Check that there's at least one solution
+    assert idx_best != None, 'No suitable best image found.'        
+    
+    # List of filenames of frames with the same FSM value that best matches the
+    # stellar template
+    list_of_best_fsm = []
+    for img in dataset_list[idx_best]:
+        list_of_best_fsm += [img.filename]
+
+    return list_of_best_fsm
 
 def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm = 15.):
     """

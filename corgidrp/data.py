@@ -840,6 +840,7 @@ class LineSpread(Image):
                 raise ValueError("Must pass `input_dataset` to create new LineSpread calibration.")
 
             self.ext_hdr['DATATYPE'] = 'LineSpread'
+            self.ext_hdr['DATALVL'] = 'CAL'
             self.ext_hdr['EXTNAME'] = 'FLUX_PROF'
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."

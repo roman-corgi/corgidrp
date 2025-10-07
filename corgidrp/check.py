@@ -422,6 +422,8 @@ def check_filename_convention(filename, expected_pattern, frame_info="", logger=
                 filename.endswith('_l2b.fits'))
     elif expected_pattern == 'cgi_*_dpm_cal.fits':
         valid = filename.startswith('cgi_') and '_dpm_cal.fits' in filename
+    elif expected_pattern == 'cgi_*_line_spread.fits':
+        valid = filename.startswith('cgi_') and '_line_spread.fits' in filename
     else:
         valid = expected_pattern in filename
     
