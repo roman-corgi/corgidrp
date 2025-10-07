@@ -940,7 +940,6 @@ def test_extract_spec():
 
 def test_slit_trans():
     """ Test the step function that derives the slit transmission. """
-    #TODO: Update https://github.com/roman-corgi/corgidrp/issues/543
 
     # The tests are of two types:
     # 1/ UTs with mock data showing that the step function derives the expected
