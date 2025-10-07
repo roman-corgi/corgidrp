@@ -12,7 +12,8 @@ from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
 from datetime import datetime, timedelta
 # VAP testing
-from corgidrp.check import check_filename_convention, verify_header_keywords
+from corgidrp.check import (check_filename_convention, verify_header_keywords,
+    check_dimensions)
 
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy")) 
 test_datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
@@ -580,6 +581,9 @@ def test_star_spec_registration():
     os.makedirs(dir_test, exist_ok=True)
 
     log_file = os.path.join(dir_test, 'star_spec_registration.log')
+    # If file exists, remove it
+    if os.path.exists(os.path.join(dir_test, log_file)):
+        os.remove(os.path.join(dir_test, log_file))
 
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('star_spec_registration')
@@ -948,6 +952,9 @@ def test_slit_trans():
     os.makedirs(dir_test, exist_ok=True)
 
     log_file = os.path.join(dir_test, 'slit_transmission.log')
+    # If file exists, remove it
+    if os.path.exists(os.path.join(dir_test, log_file)):
+        os.remove(os.path.join(dir_test, log_file))
 
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('slit_transmission')
@@ -1034,6 +1041,7 @@ def test_slit_trans():
                 # interpolation can be tested later
                 spec_slit_cp[0].data = (spec_slit[0].data * (1 + idx_x*fsm[0])
                     * (1 + idx_y*fsm[1]))
+                # Set conventional filename
                 # Remove microseconds, keep milliseconds
                 dt = basetime + timedelta(seconds=n_fsm*idx_y+idx_x)
                 timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
@@ -1042,11 +1050,13 @@ def test_slit_trans():
                 spec_slit_list += [spec_slit_cp]
 
         logger.info(f'FSM case ({idx_fsm+1}/{len(fsm_motion)}): ')
+        logger.info('Images with slit in')
         n_images = 0
         for i, frame in enumerate(spec_slit_list):
             frame_info = f"Frame {i}"
-            # TODO: Check dimensions and header values per L4 documentation
-
+            # Check dimensions
+            check_dimensions(frame[0].data, spec_slit[0].data.shape, frame_info,
+                logger)
             # Check data level is L4
             verify_header_keywords(frame[0].ext_hdr, {'DATALVL': dt_lvl},
                 frame_info, logger)
@@ -1068,30 +1078,58 @@ def test_slit_trans():
             logger.info("")
             n_images += 1
 
-        logger.info(f"Total input images validated: {n_images}")
+        logger.info(f"Total input images with validated with FSAM={fsam_expected}: {n_images}")
         logger.info("")
 
         # Get one spectrum with FSAM=OPEN 
         spec_open = l3_to_l4.extract_spec(output_dataset)
+        # Set current data level
+        spec_open[0].ext_hdr['DATALVL'] = dt_lvl
+        # Set conventional filename
+        # Remove microseconds, keep milliseconds
+        dt = basetime + timedelta(seconds=n_fsm*idx_y+idx_x)
+        timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+        spec_open[0].filename = \
+            f'cgi_0000000000000000000_{timestamp}_{dt_lvl.lower()}.fits'
         # Make sure it is consistent with a spectroscopy observation
         pam_list = ['CFAM', 'DPAM', 'FPAM', 'SPAM', 'LSAM', 'FSAM']
         pam_values = ['3F', 'PRISM3', 'ND225', 'SPEC', 'SPEC', 'OPEN']
+        # For VAP testing
         for idx_pam, pam in enumerate(pam_list):
             spec_open[0].ext_hdr[pam+'NAME'] = pam_values[idx_pam]
         # Build some set of extracted spectra (the different FSM datasets)
         spec_open_list = [spec_open, spec_open, spec_open]
 
-        # Check dimensions and header values per L4 documentation
+        logger.info('Images with slit out')
+        n_images = 0
+        for i, frame in enumerate(spec_open_list):
+            frame_info = f"Frame {i}"
+            # Check dimensions
+            check_dimensions(frame[0].data, spec_open[0].data.shape, frame_info,
+                logger)
+            # Check data level is L4
+            verify_header_keywords(frame[0].ext_hdr, {'DATALVL': dt_lvl},
+                frame_info, logger)
+            # Verify filename convention: cgi_<visitid>_<yyyymmddthhmmsss>_l4_.fits
+            check_filename_convention(getattr(frame[0], 'filename', None),
+                f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger,
+                data_level=dt_lvl.lower())
+            # Verify all images have identical CFAMNAME values
+            verify_header_keywords(frame[0].ext_hdr, {'CFAMNAME': cfam_expected},
+                frame_info, logger)
+            # Verify all images have FSAMNAME = SLIT
+            verify_header_keywords(frame[0].ext_hdr, {'FSAMNAME': 'OPEN'},
+                frame_info, logger)
+            # Verify all images have (FSMX, FSMY) values
+            verify_header_keywords(frame[0].ext_hdr, ['FSMX'],
+                frame_info, logger)
+            verify_header_keywords(frame[0].ext_hdr, ['FSMY'],
+                frame_info, logger)
+            logger.info("")
+            n_images += 1
 
-        # Check data level is L4
-
-        # Verify all images have identical CFAMNAME values
-
-        # Verify all images have FSAMNAME = OPEN
-
-        # Verify all images have (FSMX, FSMY) values
-
-        # Verify filename convention: cgi_<visitid>_<yyyymmddthhmmsss>_l4_.fits
+        logger.info(f"Total input images validated with FSAM=OPEN: {n_images}")
+        logger.info("")
 
         # Estimate slit transmission
         slit_trans_out, slit_pos_x, slit_pos_y = steps.slit_transmission(
@@ -1132,8 +1170,7 @@ if __name__ == "__main__":
     test_calibrate_dispersion_model()
     test_determine_zeropoint()
     test_add_wavelength_map()
-    # TODO: uncomment when submitting PR
-    #test_star_spec_registration()
+    test_star_spec_registration()
     test_linespread_function()
     test_extract_spec()
     test_slit_trans()
