@@ -1068,8 +1068,12 @@ def slit_transmission(
         Default is piecewise linear.
 
     Returns:
-      Slit transmission map derived at different locations by linear
-      interpolation.
+      3-element tuple with:
+          1/ Slit transmission map derived at different locations by interpolation.
+          2/ Locations along the wider dimension of the slit with respect the
+          zero-point in (fractional) EXCAM pixels.
+          3/ Locations along the wider dimension of the slit with respect the
+          zero-point in (fractional) EXCAM pixels.
     """
     # Confirm spectroscopy configuration for different PAMs
     # CFAM
@@ -1123,6 +1127,10 @@ def slit_transmission(
         assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
         assert exthdr['FSAMNAME'].upper() == 'OPEN', f"FSAMNAME={exthdr['FSAMNAME']} differs from expected value OPEN"
 
+    breakpoint()
+    # Split first by FSAM: two sets
+    # Split then each subset by FSM to coadd NFRAMES
+
     # Average all spectra of the images with FSAM=OPEN
     spec_open = np.mean([ds[0].data for ds in open_fsm_spectra], axis=0)
 
@@ -1154,25 +1162,24 @@ def slit_transmission(
         target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
 
     # Derive slit transmission at desired locations 
+    # 1-d cases: The positions along one of the slit dimensions is constant.
+    # P.S. scipy takes care of raising exceptions if there's any extrapolation
+    if len(np.unique(slit_pos_y)) == 1:
+        interpolant = interp1d(slit_pos_x, slit_trans, axis=0, kind=kind)
+        slit_trans_interp = interpolant(target_pix[0])
+    elif len(np.unique(slit_pos_x)) == 1:
+        interpolant = interp1d(slit_pos_y, slit_trans, axis=0, kind=kind)
+        slit_trans_interp = interpolant(target_pix[1])
+    else:
     # 2-d grid:
-    try:
-        interpolator = LinearNDInterpolator(np.c_[slit_pos_x, slit_pos_y], slit_trans)
-        slit_trans_interp = interpolator(target_pix[0], target_pix[1])
-        # If there's some extrapolation, redefine target points to be within limits
-        if np.sum(np.isnan(slit_trans_interp) == True):
-            raise ValueError('Some target points require extrapolation.'
-                'Make sure all target points are within the interpolator support.')   
-    # 1-d cases
-    except:
-        # The positions along one of the slit dimensions is constant. P.S. scipy
-        # takes care of raising exceptions if there's any extrapolation
-        if len(np.unique(slit_pos_y)) == 1:
-            interpolant = interp1d(slit_pos_x, slit_trans, axis=0, kind=kind)
-            slit_trans_interp = interpolant(target_pix[0])
-        elif len(np.unique(slit_pos_x)) == 1:
-            interpolant = interp1d(slit_pos_y, slit_trans, axis=0, kind=kind)
-            slit_trans_interp = interpolant(target_pix[1])
-        else:
+        try:
+            interpolator = LinearNDInterpolator(np.c_[slit_pos_x, slit_pos_y], slit_trans)
+            slit_trans_interp = interpolator(target_pix[0], target_pix[1])
+            # If there's some extrapolation, redefine target points to be within limits
+            if np.sum(np.isnan(slit_trans_interp) == True):
+                raise ValueError('Some target points require extrapolation.'
+                    'Make sure all target points are within the interpolator support.')   
+        except:
             raise ValueError('Not enough independent values to derive a slit transmission map')
 
     # Raise ValueError if all values are NaN

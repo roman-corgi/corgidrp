@@ -999,13 +999,11 @@ def test_slit_trans():
     logger.info('='*80)
     logger.info('Template data')
 
-    # Simulated input data: Set of 
-    # Set of extracted spectra at different FSM positions
-    n_fsm = 5
-    # Get one extracted spectrum with FSAM 
-    spec_slit = l3_to_l4.extract_spec(output_dataset)
+    # Simulated input data: Set of extracted spectra at different FSM positions
+    # Get one extracted spectrum with FSAM as an Image object
+    spec_slit = l3_to_l4.extract_spec(output_dataset)[0]
     # Set current data level
-    spec_slit[0].ext_hdr['DATALVL'] = dt_lvl
+    spec_slit.ext_hdr['DATALVL'] = dt_lvl
     # Make sure it is consistent with a spectroscopy observation
     pam_list = np.array(['CFAM', 'DPAM', 'FPAM', 'SPAM', 'LSAM', 'FSAM'])
     pam_values = np.array(['3F', 'PRISM3', 'ND225', 'SPEC', 'SPEC', 'R1C2'])
@@ -1013,72 +1011,90 @@ def test_slit_trans():
     cfam_expected = pam_values[pam_list == 'CFAM']
     fsam_expected = pam_values[pam_list == 'FSAM']
     for idx_pam, pam in enumerate(pam_list):
-        spec_slit[0].ext_hdr[pam+'NAME'] = pam_values[idx_pam]
+        spec_slit.ext_hdr[pam+'NAME'] = pam_values[idx_pam]
     # Build some set of extracted spectra (the different FSM datasets)
     # We need different values for the zero-point for each FSM position 
     # Some arbitrary number of FSM positions
-    n_fsm = 3
+    n_fsm = 5
+    # Mock error and data quality
+    err = np.zeros_like(spec_slit.data)
+    dq = np.zeros_like(spec_slit.data, dtype=int)
+    # Define NFRAMES for each FSM position (can be different number of frames)
+    np.random.seed(0)
+    # Arbitraily choosing between 1 and 10 frames for each FSM position
+    n_frames_fsm = np.random.randint(1, 11, size=n_fsm*n_fsm)
     # Test when the FSM moves along both directions (x,y) or only along one of them
     fsm_motion = [[1,1], [1,0], [0,1]]
     # Some range within the simulated positions (avoid falling exactly on edges
     # that would trigger known errors in the interpolation functions)
-    xrange0 = spec_slit[0].ext_hdr['WV0_X'] + 1e-8
+    xrange0 = spec_slit.ext_hdr['WV0_X'] + 1e-8
     xrange1 = xrange0 + n_fsm - 1 - 1e-8
-    yrange0 = spec_slit[0].ext_hdr['WV0_Y'] + 1e-8
+    yrange0 = spec_slit.ext_hdr['WV0_Y'] + 1e-8
     yrange1 = yrange0 + n_fsm - 1 - 1e-8
     for idx_fsm, fsm in enumerate(fsm_motion):
+        # Each different FSM scan pattern is a new set of data
+        spec_slit_cp = spec_slit.copy()
         spec_slit_list = []
         basetime = datetime.now()
         for idx_x in range(n_fsm):
             for idx_y in range(n_fsm):
-                spec_slit_cp = spec_slit.copy()
-                spec_slit_cp[0].ext_hdr['WV0_X'] = (spec_slit[0].ext_hdr['WV0_X']
-                    + idx_x * fsm[0])
-                spec_slit_cp[0].ext_hdr['WV0_Y'] = (spec_slit[0].ext_hdr['WV0_Y']
+                # Associate different FSM positions to each distinct FSM case
+                spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0]
+                spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1]
+                spec_slit_cp.ext_hdr['WV0_X'] = (spec_slit.ext_hdr['WV0_X']
+                + idx_x * fsm[0])
+                spec_slit_cp.ext_hdr['WV0_Y'] = (spec_slit.ext_hdr['WV0_Y']
                     + idx_y * fsm[1])
-                # Change the spectrum by a known factor so that the slit transmission
-                # interpolation can be tested later.
-                spec_slit_cp[0].data = (spec_slit[0].data * (1 + idx_x*fsm[0])
-                    * (1 + idx_y*fsm[1]))
-                # Set conventional filename
-                # Remove microseconds, keep milliseconds
-                dt = basetime + timedelta(seconds=n_fsm*idx_y+idx_x)
-                timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-                spec_slit_cp[0].filename = \
-                    f'cgi_0000000000000000000_{timestamp}_{dt_lvl.lower()}.fits'
-                spec_slit_list += [spec_slit_cp]
+                # Create NFRAMES
+                n_frames_fsm_now = n_frames_fsm[idx_x + n_fsm*idx_y]
+                for idx_frame in range(n_frames_fsm_now):
+                    # Change the spectrum by a known factor so that the slit transmission
+                    # interpolation can be tested later.
+                    spec_slit_cp.data = (spec_slit.data * (1 + idx_x*fsm[0])
+                        * (1 + idx_y*fsm[1]))
+                    # Set conventional filename for each frame
+                    # Remove microseconds, keep milliseconds
+                    dt = basetime + timedelta(seconds=
+                        1.0*(n_fsm*idx_y+idx_x)*n_frames_fsm_now + idx_frame)
+                    timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+                    spec_slit_cp.filename = \
+                        f'cgi_0000000000000000000_{timestamp}_{dt_lvl.lower()}.fits'
+                    spec_slit_list += [spec_slit_cp]
 
+        # Create Dataset
+        spec_slit_ds = Dataset(spec_slit_list)
         logger.info(f'FSM case ({idx_fsm+1}/{len(fsm_motion)}): ')
         logger.info('Images with slit in')
         n_images = 0
-        for i, frame in enumerate(spec_slit_list):
+        for i, frame in enumerate(spec_slit_ds):
             frame_info = f"Frame {i}"
             # Check dimensions
-            check_dimensions(frame[0].data, spec_slit[0].data.shape, frame_info,
+            check_dimensions(frame.data, spec_slit.data.shape, frame_info,
                 logger)
             # Check data level is L4
-            verify_header_keywords(frame[0].ext_hdr, {'DATALVL': dt_lvl},
+            verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
                 frame_info, logger)
             # Verify filename convention: cgi_<visitid>_<yyyymmddthhmmsss>_l4_.fits
-            check_filename_convention(getattr(frame[0], 'filename', None),
+            check_filename_convention(getattr(frame, 'filename', None),
                 f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger,
                 data_level=dt_lvl.lower())
             # Verify all images have identical CFAMNAME values
-            verify_header_keywords(frame[0].ext_hdr, {'CFAMNAME': cfam_expected},
+            verify_header_keywords(frame.ext_hdr, {'CFAMNAME': cfam_expected},
                 frame_info, logger)
             # Verify all images have FSAMNAME = SLIT
-            verify_header_keywords(frame[0].ext_hdr, {'FSAMNAME': fsam_expected},
+            verify_header_keywords(frame.ext_hdr, {'FSAMNAME': fsam_expected},
                 frame_info, logger)
             # Verify all images have (FSMX, FSMY) values
-            verify_header_keywords(frame[0].ext_hdr, ['FSMX'],
+            verify_header_keywords(frame.ext_hdr, ['FSMX'],
                 frame_info, logger)
-            verify_header_keywords(frame[0].ext_hdr, ['FSMY'],
+            verify_header_keywords(frame.ext_hdr, ['FSMY'],
                 frame_info, logger)
             logger.info("")
             n_images += 1
 
         logger.info(f"Total input images with validated with FSAM={fsam_expected}: {n_images}")
         logger.info("")
+        breakpoint()
 
         # Get one spectrum with FSAM=OPEN 
         spec_open = l3_to_l4.extract_spec(output_dataset)
@@ -1174,7 +1190,8 @@ if __name__ == "__main__":
     test_calibrate_dispersion_model()
     test_determine_zeropoint()
     test_add_wavelength_map()
-    test_star_spec_registration()
+    # TODO: uncomment when PRing
+#    test_star_spec_registration()
     test_linespread_function()
     test_extract_spec()
     test_slit_trans()
