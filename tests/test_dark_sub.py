@@ -1,5 +1,4 @@
 import os
-import glob
 import pickle
 import pytest
 import numpy as np
@@ -46,12 +45,8 @@ def test_dark_sub():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    mocks.create_dark_calib_files(filedir=datadir)
-
     ####### test data architecture
-    dark_filenames = glob.glob(os.path.join(datadir, "simcal_dark*.fits"))
-
-    dark_dataset = data.Dataset(dark_filenames)
+    dark_dataset = mocks.create_dark_calib_files(filedir=datadir)
 
     assert len(dark_dataset) == 10
 

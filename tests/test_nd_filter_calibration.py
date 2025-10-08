@@ -641,9 +641,9 @@ def test_calculate_od_at_new_location(output_dir):
     clean_frame_entry = Image(data_or_filepath=clean_image_data, pri_hdr=cframe_prihdr, 
                               ext_hdr=cframe_exthdr)
 
-    # Default FPAM/FSAM transformations
-    fpamfsamcal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))    
+    # Default FPAM/FSAM transformations (use mock instead of loading from file which
+    # seems to be inconsistent)
+    fpamfsamcal = mocks.create_mock_fpamfsam_cal(save_file=False)    
 
     # Call the function under test
     interpolated_od = nd_filter_calibration.calculate_od_at_new_location(

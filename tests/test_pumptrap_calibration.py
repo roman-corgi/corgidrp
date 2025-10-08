@@ -33,35 +33,80 @@ def test_tpump_analysis():
     test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
     metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
     output_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data')
+    
+    # Clean up any existing files to ensure testing with latest data
+    if os.path.exists(test_data_dir):
+        import shutil
+        shutil.rmtree(test_data_dir)
+    os.makedirs(test_data_dir)
+    
     print("Generating mock data")
     mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file)
     print("Done generating mock data")
 
-    #Read in all the data. 
-    # Get all FITS files with updated naming convention
-    all_files = glob.glob(os.path.join(test_data_dir, "cgi_*.fits"))
+    #Read in all the data and organize into temperature/scheme directories
+    # (tpump_analysis expects this directory structure)
+    import shutil
+    all_files = [f for f in os.listdir(test_data_dir) if f.endswith('.fits') and f.startswith('cgi_')]
     
-    # Sort files by reading headers instead of filename
-    # Group by temperature and scheme using header keywords
-    file_info_list = []
-    for filepath in all_files:
+    # Create a mapping of files to their temperature/scheme info by reading headers
+    file_info = {}
+    
+    for filename in all_files:
+        filepath = os.path.join(test_data_dir, filename)
         with fits.open(filepath) as hdul:
-            if len(hdul) > 1:
-                temp = hdul[1].header.get('EXCAMT', 0)
-                # Determine scheme from TPSCHEM headers
-                scheme = 0
-                for i in range(1, 5):
-                    if hdul[1].header.get(f'TPSCHEM{i}', 0) > 0:
-                        scheme = i
-                        break
-                phase_time = hdul[1].header.get('TPTAU', 0)
-                file_info_list.append((temp, scheme, phase_time, filepath))
+            # Read temperature and scheme from extension header
+            if len(hdul) > 1 and 'EXCAMT' in hdul[1].header:
+                temp = str(hdul[1].header['EXCAMT']) 
+                if temp not in file_info:
+                    file_info[temp] = []
+                file_info[temp].append(filename)
     
-    # Sort by temperature, then scheme, then phase time
-    file_info_list.sort(key=lambda x: (x[0], x[1], x[2]))
-    data_filenames = [f[3] for f in file_info_list]
+    # Organize files into temperature/scheme directories based on headers
+    for temp, temp_files in file_info.items():
+        temp_dir = os.path.join(test_data_dir, temp)
+        if not os.path.exists(temp_dir):
+            os.mkdir(temp_dir)
+        
+        # Group files by scheme using header keywords
+        scheme_files = {1: [], 2: [], 3: [], 4: []}
+        
+        for filename in temp_files:
+            filepath = os.path.join(test_data_dir, filename)
+            with fits.open(filepath) as hdul:
+                if len(hdul) > 1:
+                    # Determine scheme from TPSCHEM headers
+                    for i in range(1, 5):
+                        if hdul[1].header.get(f'TPSCHEM{i}', 0) > 0:
+                            scheme_files[i].append(filename)
+                            break
+        
+        # Move files to scheme subdirectories
+        for sc, sc_files in scheme_files.items():
+            if sc_files:  # Only create directory if there are files for this scheme
+                sch_dir = os.path.join(temp_dir, f'Scheme_{sc}')
+                if not os.path.exists(sch_dir):
+                    os.mkdir(sch_dir)
+                
+                # Sort files for consistent ordering
+                sc_files.sort()
+                
+                for filename in sc_files:
+                    old_filepath = os.path.join(test_data_dir, filename)
+                    organized_filepath = os.path.join(sch_dir, filename)
+                    
+                    # Move file to organized directory structure
+                    shutil.move(old_filepath, organized_filepath)
     
-    pump_trap_dataset = Dataset(data_filenames)
+    # Collect all files from the organized directory structure
+    pump_trap_data_filelist = []
+    for root, dirs, files in os.walk(test_data_dir):
+        for name in files:
+            if name.endswith('.fits') and name.startswith('cgi_'):
+                f = os.path.join(root, name)
+                pump_trap_data_filelist.append(f)
+    
+    pump_trap_dataset = Dataset(pump_trap_data_filelist)
 
     #Parse the first three characters of each filename into a temperature
     # temps = [int(os.path.basename(f)[:3]) for f in data_filenames]
