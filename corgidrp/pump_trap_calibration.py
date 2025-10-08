@@ -2319,7 +2319,9 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
         #Sort the things so that Scheme 1 is first
         sch_order = np.argsort(sch_list)
         sch_list = np.array(sch_list)[sch_order]
-        scheme_datasets = np.array(scheme_datasets)[sch_order]
+        # Reorder the list of datasets using list comprehension instead of numpy array
+        # (datasets can have different lengths, so can't convert to numpy array)
+        scheme_datasets = [scheme_datasets[i] for i in sch_order]
         scheme_num_pumps = np.array(scheme_num_pumps)[sch_order]
 
         #Make a check to make sure that one of the schemes is Scheme 1
@@ -2343,7 +2345,9 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             #Grab the number of pumps associated with this scheme. 
             num_pumps = scheme_num_pumps[(sch_list == curr_sch)][0]
             
-            for frame in scheme_datasets[(sch_list == curr_sch),:][0]:
+            # Get the dataset for this scheme (scheme_datasets is now a list, not numpy array)
+            scheme_idx = np.where(sch_list == curr_sch)[0][0]
+            for frame in scheme_datasets[scheme_idx]:
 
                 #Get the data and the phase time - convert from us to seconds
                 phase_time = float(frame.ext_hdr[time_head])/10**6

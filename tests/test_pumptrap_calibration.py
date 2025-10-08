@@ -3,6 +3,7 @@ import os
 import glob
 import pickle
 import numpy as np
+import astropy.io.fits as fits
 # from corgidrp.mocks import generate_mock_pump_trap_data
 import corgidrp.mocks as mocks
 from corgidrp.detector import imaging_area_geom
@@ -37,8 +38,29 @@ def test_tpump_analysis():
     print("Done generating mock data")
 
     #Read in all the data. 
-    # test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data")
-    data_filenames = sorted(glob.glob(os.path.join(test_data_dir, "*.fits")))
+    # Get all FITS files with updated naming convention
+    all_files = glob.glob(os.path.join(test_data_dir, "cgi_*.fits"))
+    
+    # Sort files by reading headers instead of filename
+    # Group by temperature and scheme using header keywords
+    file_info_list = []
+    for filepath in all_files:
+        with fits.open(filepath) as hdul:
+            if len(hdul) > 1:
+                temp = hdul[1].header.get('EXCAMT', 0)
+                # Determine scheme from TPSCHEM headers
+                scheme = 0
+                for i in range(1, 5):
+                    if hdul[1].header.get(f'TPSCHEM{i}', 0) > 0:
+                        scheme = i
+                        break
+                phase_time = hdul[1].header.get('TPTAU', 0)
+                file_info_list.append((temp, scheme, phase_time, filepath))
+    
+    # Sort by temperature, then scheme, then phase time
+    file_info_list.sort(key=lambda x: (x[0], x[1], x[2]))
+    data_filenames = [f[3] for f in file_info_list]
+    
     pump_trap_dataset = Dataset(data_filenames)
 
     #Parse the first three characters of each filename into a temperature

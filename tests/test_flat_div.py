@@ -1,5 +1,4 @@
 import os
-import glob
 import pytest
 import numpy as np
 import corgidrp
@@ -23,17 +22,13 @@ def test_flat_div():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir) 
-    mocks.create_simflat_dataset(filedir=datadir)
     
     # simulated images to be checked in flat division
-    simdata_filenames=glob.glob(os.path.join(datadir, "sim_flat*.fits"))
-    simflat_dataset=data.Dataset(simdata_filenames)
+    simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
      
     # creat one dummy flat field perform flat division
-    mocks.create_flatfield_dummy(filedir=datadir)
-	#test data architecture
-    flat_filenames = glob.glob(os.path.join(datadir, "flat_field*.fits"))
-    flat_dataset = data.Dataset(flat_filenames)
+    #test data architecture
+    flat_dataset = mocks.create_flatfield_dummy(filedir=datadir)
     #check that data is consistently modified
     flat_dataset.all_data[0,0,0] = 1
     assert flat_dataset[0].data[0,0] == 1
@@ -95,7 +90,7 @@ def test_flat_div():
 
     ## Check that all the pixels that were zeroed out have the DQ flag set to 4. 
     for pixel in pixel_list:
-        for i in range(len(simdata_filenames)):
+        for i in range(len(simflat_dataset)):
             assert np.bitwise_and(flatdivided_dataset_w_zeros.all_dq[i,pixel[0],pixel[1]],4)
 
     

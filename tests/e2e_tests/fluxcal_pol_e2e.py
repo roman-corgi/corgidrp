@@ -16,9 +16,15 @@ from corgidrp.check import (check_filename_convention, check_dimensions, verify_
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
+    # create output dir first
+    output_dir = os.path.join(e2eoutput_path, 'fluxcal_pol_e2e')
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+    
     # set up logging
     global logger
-    log_file = os.path.join(e2eoutput_path, 'fluxcal_pol_e2e.log')
+    log_file = os.path.join(output_dir, 'fluxcal_pol_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('fluxcal_pol_e2e')
@@ -49,12 +55,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
-
-    # create output dir
-    output_dir = os.path.join(e2eoutput_path, 'fluxcal_pol_e2e')
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
 
     #mock a point source image
     fwhm = 3

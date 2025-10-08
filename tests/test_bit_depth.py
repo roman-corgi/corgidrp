@@ -38,7 +38,7 @@ def test_bit_depth():
     os.mkdir(output_dir)
 
     # generate mock image for testing
-    generate_coron_dataset_with_companions(outdir=output_dir)
+    dataset = generate_coron_dataset_with_companions(outdir=output_dir)
     
     # reset configuration file to its original state
     # reset the file before assert statements so that if the test fails the config file will not be affected
@@ -49,8 +49,7 @@ def test_bit_depth():
     corgidrp.update_pipeline_settings()
 
     # load image and check data and error is type float64, dq is type int16
-    img_path = os.path.join(output_dir, 'mock_coron_000.fits')
-    img = Image(img_path)
+    img = dataset[0]
     assert img.data.dtype.type == np.float64
     assert img.err.dtype.type == np.float64
     assert img.dq.dtype.type == np.uint16
@@ -61,7 +60,7 @@ def test_bit_depth():
     with open(corgidrp.config_filepath, 'w') as f:
         config.write(f)
     corgidrp.update_pipeline_settings()
-    generate_coron_dataset_with_companions(outdir=output_dir)
+    dataset2 = generate_coron_dataset_with_companions(outdir=output_dir)
 
     # reset config file
     config['DATA']['image_dtype'] = original_image_dtype
@@ -71,7 +70,7 @@ def test_bit_depth():
     corgidrp.update_pipeline_settings()
 
     # load image and check data and error is type float32, dq is type int8
-    img = Image(img_path)
+    img = dataset2[0]
     assert img.data.dtype.type == np.float32
     assert img.err.dtype.type == np.float32
     assert img.dq.dtype.type == np.uint8
