@@ -999,21 +999,24 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             I_45_star_err = np.sqrt(S_out_var[0] + S_out_var[2]) / 2
             I_135_star_err = I_45_star_err
 
-            # calculate normalized difference for the specific wollaston
-            if frame.ext_hdr['DPAMNAME'] == 'POL0':
-                normalized_diff = (I_0_star - I_90_star) / (I_0_star + I_90_star)
-                # error
-                normalized_diff_err = normalized_diff * np.sqrt(
-                    (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star - I_90_star))**2 +
-                    (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star + I_90_star))**2
-                )
-            else:
-                normalized_diff = (I_45_star - I_135_star) / (I_45_star + I_135_star)
-                # error
-                normalized_diff_err = normalized_diff * np.sqrt(
-                    (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star - I_135_star))**2 +
-                    (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star + I_135_star))**2
-                )
+            with warnings.catch_warnings():
+                # catch divide by zero warnings
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                # calculate normalized difference for the specific wollaston
+                if frame.ext_hdr['DPAMNAME'] == 'POL0':
+                    normalized_diff = (I_0_star - I_90_star) / (I_0_star + I_90_star)
+                    # error
+                    normalized_diff_err = normalized_diff * np.sqrt(
+                        (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star - I_90_star))**2 +
+                        (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star + I_90_star))**2
+                    )
+                else:
+                    normalized_diff = (I_45_star - I_135_star) / (I_45_star + I_135_star)
+                    # error
+                    normalized_diff_err = normalized_diff * np.sqrt(
+                        (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star - I_135_star))**2 +
+                        (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star + I_135_star))**2
+                    )
             # subtract
             sum = frame.data[0] + frame.data[1]
             diff = frame.data[0] - frame.data[1]

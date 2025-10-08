@@ -5,6 +5,7 @@ import corgidrp.l2b_to_l3 as l2b_to_l3
 import corgidrp.l3_to_l4 as l3_to_l4
 import corgidrp.data as data
 import corgidrp.pol as pol
+import matplotlib.pyplot as plt
 
 def test_image_splitting():
     """
@@ -100,26 +101,23 @@ def test_subtract_stellar_polarization():
     nd_mueller_matrix = np.array([
         [0.5, 0.1, 0, 0],
         [0.1, -0.5, 0, 0],
-        [0, 0, 0.5, 0],
+        [0.05, 0.05, 0.5, 0],
         [0, 0, 0, 0.5]
     ])
     system_mueller_matrix = np.array([
-        [0.7, -0.2, 0, 0],
-        [0.1, -0.8, 0, 0],
-        [0, 0, 0.8, 0.05],
+        [0.9, -0.02, 0, 0],
+        [0.01, -0.8, 0, 0],
+        [0, 0, 0.8, 0.005],
         [0, 0, -0.01, 0.9]
     ])
     star_1_pol = np.array([1, 0, 0, 0])
-    comp_1_pol = np.array([1, -0.4, 0.2, 0])
     star_2_pol = np.array([1, -0.01, -0.02, 0])
-    comp_2_pol = np.array([1, 0.3, -0.5, 0])
 
     # create mock images and dataset
-    # use gaussians as mock star and companions, scale by polarized intensity to construct polarimetric data
-    star_1 = mocks.gaussian_array(amp=100)
-    comp_1 = mocks.gaussian_array(amp=10, xoffset=10, yoffset=10)
-    star_2 = mocks.gaussian_array(amp=150)
-    comp_2 = mocks.gaussian_array(amp=25, xoffset=-10, yoffset=-10)
+    # use gaussians as mock star, scale by polarized intensity to construct polarimetric data
+    # add background noise to star to prevent divide by zero
+    star_1 = mocks.gaussian_array(amp=100) + 0.001
+    star_2 = mocks.gaussian_array(amp=150) + 0.001
     # give unocculted images with ND filter a roll angle of 30, images with FPM will have a roll angle of 45
     roll_unocculted = 30
     roll = 45
@@ -127,9 +125,7 @@ def test_subtract_stellar_polarization():
     star_1_nd_pol = nd_mueller_matrix @ pol.rotation_mueller_matrix(roll_unocculted) @ star_1_pol
     star_2_nd_pol = nd_mueller_matrix @ pol.rotation_mueller_matrix(roll_unocculted) @ star_2_pol
     star_1_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(roll) @ star_1_pol
-    comp_1_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(roll) @ comp_1_pol
     star_2_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(roll) @ star_2_pol
-    comp_2_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(roll) @ comp_2_pol
     star_1_nd_I_0 = (pol.lin_polarizer_mueller_matrix(0) @ star_1_nd_pol)[0]
     star_1_nd_I_45 = (pol.lin_polarizer_mueller_matrix(45) @ star_1_nd_pol)[0]
     star_1_nd_I_90 = (pol.lin_polarizer_mueller_matrix(90) @ star_1_nd_pol)[0]
@@ -142,32 +138,20 @@ def test_subtract_stellar_polarization():
     star_1_fpm_I_45 = (pol.lin_polarizer_mueller_matrix(45) @ star_1_fpm_pol)[0]
     star_1_fpm_I_90 = (pol.lin_polarizer_mueller_matrix(90) @ star_1_fpm_pol)[0]
     star_1_fpm_I_135 = (pol.lin_polarizer_mueller_matrix(135) @ star_1_fpm_pol)[0]
-    comp_1_fpm_I_0 = (pol.lin_polarizer_mueller_matrix(0) @ comp_1_fpm_pol)[0]
-    comp_1_fpm_I_45 = (pol.lin_polarizer_mueller_matrix(45) @ comp_1_fpm_pol)[0]
-    comp_1_fpm_I_90 = (pol.lin_polarizer_mueller_matrix(90) @ comp_1_fpm_pol)[0]
-    comp_1_fpm_I_135 = (pol.lin_polarizer_mueller_matrix(135) @ comp_1_fpm_pol)[0]
     star_2_fpm_I_0 = (pol.lin_polarizer_mueller_matrix(0) @ star_2_fpm_pol)[0]
     star_2_fpm_I_45 = (pol.lin_polarizer_mueller_matrix(45) @ star_2_fpm_pol)[0]
     star_2_fpm_I_90 = (pol.lin_polarizer_mueller_matrix(90) @ star_2_fpm_pol)[0]
     star_2_fpm_I_135 = (pol.lin_polarizer_mueller_matrix(135) @ star_2_fpm_pol)[0]
-    comp_2_fpm_I_0 = (pol.lin_polarizer_mueller_matrix(0) @ comp_2_fpm_pol)[0]
-    comp_2_fpm_I_45 = (pol.lin_polarizer_mueller_matrix(45) @ comp_2_fpm_pol)[0]
-    comp_2_fpm_I_90 = (pol.lin_polarizer_mueller_matrix(90) @ comp_2_fpm_pol)[0]
-    comp_2_fpm_I_135 = (pol.lin_polarizer_mueller_matrix(135) @ comp_2_fpm_pol)[0]
     # construct polarimetric data
     star_1_nd_wp1_data = np.array([star_1_nd_I_0 * star_1, star_1_nd_I_90 * star_1])
     star_1_nd_wp2_data = np.array([star_1_nd_I_45 * star_1, star_1_nd_I_135 * star_1])
     star_2_nd_wp1_data = np.array([star_2_nd_I_0 * star_2, star_2_nd_I_90 * star_2])
     star_2_nd_wp2_data = np.array([star_2_nd_I_45 * star_2, star_2_nd_I_135 * star_2])
     # combine star and companion data for image with fpm
-    star_1_fpm_wp1_data = np.array([(star_1_fpm_I_0 * star_1) + (comp_1_fpm_I_0 * comp_1), 
-                                    (star_1_fpm_I_90 * star_1) + (comp_1_fpm_I_90 * comp_1)])
-    star_1_fpm_wp2_data = np.array([(star_1_fpm_I_45 * star_1) + (comp_1_fpm_I_45 * comp_1), 
-                                    (star_1_fpm_I_135 * star_1) + (comp_1_fpm_I_135 * comp_1)])
-    star_2_fpm_wp1_data = np.array([(star_2_fpm_I_0 * star_2) + (comp_2_fpm_I_0 * comp_2), 
-                                    (star_2_fpm_I_90 * star_2) + (comp_2_fpm_I_90 * comp_2)])
-    star_2_fpm_wp2_data = np.array([(star_2_fpm_I_45 * star_2) + (comp_2_fpm_I_45 * comp_2), 
-                                    (star_2_fpm_I_135 * star_2) + (comp_1_fpm_I_135 * comp_2)])
+    star_1_fpm_wp1_data = np.array([star_1_fpm_I_0 * star_1, star_1_fpm_I_90 * star_1])
+    star_1_fpm_wp2_data = np.array([star_1_fpm_I_45 * star_1, star_1_fpm_I_135 * star_1])
+    star_2_fpm_wp1_data = np.array([star_2_fpm_I_0 * star_2, star_2_fpm_I_90 * star_2])
+    star_2_fpm_wp2_data = np.array([star_2_fpm_I_45 * star_2, star_2_fpm_I_135 * star_2])
     # create default header
     prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
     # create image objects using the constructed data
@@ -213,7 +197,21 @@ def test_subtract_stellar_polarization():
     output_dataset = l3_to_l4.subtract_stellar_polarization(input_dataset=input_dataset, 
                                                             system_mueller_matrix_cal=system_mm_cal,
                                                             nd_mueller_matrix_cal=nd_mm_cal)
+    
+    # length of output dataset should now be 4 with the unocculted observations removed
+    assert len(output_dataset) == 4
+
+    # check that orthogonal speckle fields now subtract out 
+    zero_image = np.zeros(shape=(50, 50))
+    for output_frame in output_dataset:
+        assert np.allclose(output_frame.data[0] - output_frame.data[1], zero_image)
+    
+    # check that total intensity stayed the same before and after
+    assert np.allclose(star_1_fpm_wp1_data[0] + star_1_fpm_wp1_data[1], output_dataset.frames[0].data[0] + output_dataset.frames[0].data[1])
+    assert np.allclose(star_1_fpm_wp2_data[0] + star_1_fpm_wp2_data[1], output_dataset.frames[1].data[0] + output_dataset.frames[1].data[1])
+    assert np.allclose(star_2_fpm_wp1_data[0] + star_2_fpm_wp1_data[1], output_dataset.frames[2].data[0] + output_dataset.frames[2].data[1])
+    assert np.allclose(star_2_fpm_wp2_data[0] + star_2_fpm_wp2_data[1], output_dataset.frames[3].data[0] + output_dataset.frames[3].data[1])
 
 if __name__ == "__main__":
-    #test_image_splitting()
+    test_image_splitting()
     test_subtract_stellar_polarization()
