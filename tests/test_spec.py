@@ -1113,6 +1113,9 @@ def test_slit_trans():
         # Choose an new arbitrary number of frames to test the average value
         n_frames_fsm = np.random.randint(1, 11, size=n_fsm*n_fsm)
         spec_open_list = []
+        # Keep track of the overall multiplicative factor to compare the output
+        # of the step function with the dataset below
+        fact_open = 0
         for idx_x in range(n_fsm):
             for idx_y in range(n_fsm):
                 # Each different FSM position is a new set of data
@@ -1123,13 +1126,14 @@ def test_slit_trans():
                 spec_open_cp.ext_hdr['FSMY'] = idx_y * fsm[1] + n_fsm**2
                 # Create NFRAMES
                 n_frames_fsm_now = n_frames_fsm[idx_x + n_fsm*idx_y]
+                # Change the spectrum by a known factor so that the slit
+                # transmission interpolation can be tested later. Slitless
+                # spectra are averaged
+                fact_tmp = ((1 + (idx_x - n_fsm/2 + 0.5)*fsm[0]) *
+                    (1 + (idx_y - n_fsm/2 + 0.5)*fsm[1]))
+                fact_open += (fact_tmp*n_frames_fsm_now/n_frames_fsm.sum())
                 for idx_frame in range(n_frames_fsm_now):
-                    # Change the spectrum by a known factor so that the slit
-                    # transmission interpolation can be tested later. Slitless
-                    # spectra are averaged
-                    spec_open_cp.data = (spec_open.data * 
-                          (1 + (idx_x - n_fsm/2 + 0.5)*fsm[0]) *
-                          (1 + (idx_y - n_fsm/2 + 0.5)*fsm[1]))
+                    spec_open_cp.data = spec_open.data * fact_tmp
                     # Set conventional filename for each frame
                     # Remove microseconds, keep milliseconds
                     dt = basetime + timedelta(seconds=n_frames)
@@ -1190,13 +1194,12 @@ def test_slit_trans():
         slit_trans_design = np.ones_like(slit_trans_out)
         for idx in range(slit_trans_out.shape[0]):
                slit_trans_design[idx,:] *= ((1+slit_pos_x[idx]-xrange0) *
-                   (1+slit_pos_y[idx]-yrange0))
+                   (1+slit_pos_y[idx]-yrange0) / fact_open)
         # Notice that LinearNDInterpolator uses triangulation and barycentric
         # linear interpolation. Besides the own scipy validation, we can compare
         # the output with a rough bilinear approximation and allow for ~10% tolerance
         if fsm == [1,1]: 
-            breakpoint()
-            assert slit_trans_out == pytest.approx(slit_trans_design, rel=0.105)
+            assert slit_trans_out == pytest.approx(slit_trans_design, rel=0.10)
         else:
             # In this case, the interpolation is linear. 
             assert slit_trans_out == pytest.approx(slit_trans_design, rel=1e-7)
@@ -1204,8 +1207,8 @@ def test_slit_trans():
         # VAP testing: Confirm data structure of the slit transmission
         logger.info(f'Output slit transmission')
         # Same wavelength bins as input data
-        assert slit_trans_out.shape[1] == spec_slit[0].data.shape[0], logger.info(f'Slit transmission does not have the same wavelength steps as input data ({spec_slit[0].data.shape[0]}). FAIL')
-        logger.info(f'Slit transmission has the same wavelength steps as input data ({spec_slit[0].data.shape[0]}). PASS')
+        assert slit_trans_out.shape[1] == spec_slit.data.shape[0], logger.info(f'Slit transmission does not have the same wavelength steps as input data ({spec_slit[0].data.shape[0]}). FAIL')
+        logger.info(f'Slit transmission has the same wavelength steps as input data ({spec_slit.data.shape[0]}). PASS')
         # Same locations as slit transmission values
         assert slit_pos_x.shape[0] == slit_trans_out.shape[0], logger.info(f'Slit transmission locations and wavelength steps are inconsistent (X). FAIL')
         logger.info(f'Slit transmission locations and wavelength steps are consistent (X). PASS')
@@ -1223,8 +1226,7 @@ if __name__ == "__main__":
     test_calibrate_dispersion_model()
     test_determine_zeropoint()
     test_add_wavelength_map()
-    # TODO: uncomment when PRing
-#    test_star_spec_registration()
+    test_star_spec_registration()
     test_linespread_function()
     test_extract_spec()
     test_slit_trans()
