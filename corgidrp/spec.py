@@ -1045,7 +1045,7 @@ def slit_transmission(
       transmission map.
 
     Args:
-      spec_ds (Dataset) : Dataset containing data with the slit in and out.
+      spec_ds (Dataset): Dataset containing data with the slit in and out.
         First set: Images containing a set of extracted spectra for some set of
         FSM positions with the FSAM slit in its position. There can be a different
         number of frames for each FSM position.
