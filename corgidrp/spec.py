@@ -1176,7 +1176,7 @@ def slit_transmission(
     # If there's only one position, there's no interpolation
     if len(np.unique(slit_pos_y)) == len(np.unique(slit_pos_x)) == 1:
         print('Only one unique position in the data. Returning slit transmission at that position.')
-        return (slit_trans,
+        return (slit_trans_fsm,
             slit_pos_x,
             slit_pos_y)
 
