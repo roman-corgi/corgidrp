@@ -1094,58 +1094,59 @@ def test_slit_trans():
 
         logger.info(f"Total input images with validated with FSAM={fsam_expected}: {n_images}")
         logger.info("")
-        breakpoint()
 
-        # Get one spectrum with FSAM=OPEN 
-        spec_open = l3_to_l4.extract_spec(output_dataset)
+        # Get one spectrum with FSAM=OPEN as an Image
+        spec_open = l3_to_l4.extract_spec(output_dataset)[0]
         # Set current data level
-        spec_open[0].ext_hdr['DATALVL'] = dt_lvl
+        spec_open.ext_hdr['DATALVL'] = dt_lvl
         # Set conventional filename
         # Remove microseconds, keep milliseconds
-        dt = basetime + timedelta(seconds=n_fsm*idx_y+idx_x)
+        dt = basetime + timedelta(seconds=1.0*n_fsm*n_fsm*n_frames_fsm_now)
         timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-        spec_open[0].filename = \
+        spec_open.filename = \
             f'cgi_0000000000000000000_{timestamp}_{dt_lvl.lower()}.fits'
-        # Make sure it is consistent with a spectroscopy observation
-        pam_list = ['CFAM', 'DPAM', 'FPAM', 'SPAM', 'LSAM', 'FSAM']
-        pam_values = ['3F', 'PRISM3', 'ND225', 'SPEC', 'SPEC', 'OPEN']
+        # Make sure it is consistent with the spectroscopy observation
         # For VAP testing
         for idx_pam, pam in enumerate(pam_list):
-            spec_open[0].ext_hdr[pam+'NAME'] = pam_values[idx_pam]
-        # Build some set of extracted spectra (the different FSM datasets)
+            spec_open.ext_hdr[pam+'NAME'] = pam_values[idx_pam]
+        # This set has FSAM=OPEN
+        spec_open.ext_hdr['FSAMNAME'] = 'OPEN'
+        # Build some Dataset of extracted spectra (the different FSM datasets)
         # Choose an arbitrary number of replica to test the average value
-        spec_open_list = [spec_open, spec_open, spec_open, spec_open]
+        spec_open_ds = Dataset([spec_open, spec_open, spec_open, spec_open])
 
         logger.info('Images with slit out')
         n_images = 0
-        for i, frame in enumerate(spec_open_list):
+        for i, frame in enumerate(spec_open_ds):
             frame_info = f"Frame {i}"
             # Check dimensions (same as with slit in)
-            check_dimensions(frame[0].data, spec_slit[0].data.shape, frame_info,
+            check_dimensions(frame.data, spec_slit.data.shape, frame_info,
                 logger)
             # Check data level is L4 (same as eith slit in)
-            verify_header_keywords(frame[0].ext_hdr, {'DATALVL': dt_lvl},
+            verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
                 frame_info, logger)
             # Verify filename convention: cgi_<visitid>_<yyyymmddthhmmsss>_l4_.fits
-            check_filename_convention(getattr(frame[0], 'filename', None),
+            check_filename_convention(getattr(frame, 'filename', None),
                 f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger,
                 data_level=dt_lvl.lower())
             # Verify all images have identical CFAMNAME values (same as with slit in)
-            verify_header_keywords(frame[0].ext_hdr, {'CFAMNAME': cfam_expected},
+            verify_header_keywords(frame.ext_hdr, {'CFAMNAME': cfam_expected},
                 frame_info, logger)
             # Verify all images have FSAMNAME = OPEN
-            verify_header_keywords(frame[0].ext_hdr, {'FSAMNAME': 'OPEN'},
+            verify_header_keywords(frame.ext_hdr, {'FSAMNAME': 'OPEN'},
                 frame_info, logger)
             # Verify all images have (FSMX, FSMY) values
-            verify_header_keywords(frame[0].ext_hdr, ['FSMX'],
+            verify_header_keywords(frame.ext_hdr, ['FSMX'],
                 frame_info, logger)
-            verify_header_keywords(frame[0].ext_hdr, ['FSMY'],
+            verify_header_keywords(frame.ext_hdr, ['FSMY'],
                 frame_info, logger)
             logger.info("")
             n_images += 1
 
         logger.info(f"Total input images validated with FSAM=OPEN: {n_images}")
         logger.info("")
+
+        breakpoint()
 
         # Estimate slit transmission
         slit_trans_out, slit_pos_x, slit_pos_y = steps.slit_transmission(
