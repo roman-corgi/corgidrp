@@ -4,6 +4,7 @@ import glob
 import pickle
 import numpy as np
 import astropy.io.fits as fits
+import shutil
 # from corgidrp.mocks import generate_mock_pump_trap_data
 import corgidrp.mocks as mocks
 from corgidrp.detector import imaging_area_geom
@@ -36,17 +37,16 @@ def test_tpump_analysis():
     
     # Clean up any existing files to ensure testing with latest data
     if os.path.exists(test_data_dir):
-        import shutil
         shutil.rmtree(test_data_dir)
-    os.makedirs(test_data_dir)
+    os.makedirs(test_data_dir, exist_ok=True)
     
     print("Generating mock data")
     mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file)
     print("Done generating mock data")
 
-    #Read in all the data and organize into temperature/scheme directories
+    #Code to read in all the data and organize into temperature/scheme directories since files have
+    # been renamed to follow cgi naming convention
     # (tpump_analysis expects this directory structure)
-    import shutil
     all_files = [f for f in os.listdir(test_data_dir) if f.endswith('.fits') and f.startswith('cgi_')]
     
     # Create a mapping of files to their temperature/scheme info by reading headers
@@ -68,7 +68,7 @@ def test_tpump_analysis():
         if not os.path.exists(temp_dir):
             os.mkdir(temp_dir)
         
-        # Group files by scheme using header keywords
+        # Group files by scheme using header keywords, including phase time for sorting
         scheme_files = {1: [], 2: [], 3: [], 4: []}
         
         for filename in temp_files:
@@ -76,9 +76,10 @@ def test_tpump_analysis():
             with fits.open(filepath) as hdul:
                 if len(hdul) > 1:
                     # Determine scheme from TPSCHEM headers
+                    phase_time = hdul[1].header.get('TPTAU', 0)
                     for i in range(1, 5):
                         if hdul[1].header.get(f'TPSCHEM{i}', 0) > 0:
-                            scheme_files[i].append(filename)
+                            scheme_files[i].append((phase_time, filename))
                             break
         
         # Move files to scheme subdirectories
@@ -88,10 +89,11 @@ def test_tpump_analysis():
                 if not os.path.exists(sch_dir):
                     os.mkdir(sch_dir)
                 
-                # Sort files for consistent ordering
-                sc_files.sort()
+                # Sort by phase time, then filename for deterministic ordering,
+                # otherwise tests will sometimes pass, sometimes fail on different systems
+                sc_files.sort(key=lambda x: (x[0], x[1]))
                 
-                for filename in sc_files:
+                for phase_time, filename in sc_files:
                     old_filepath = os.path.join(test_data_dir, filename)
                     organized_filepath = os.path.join(sch_dir, filename)
                     
@@ -227,6 +229,7 @@ def test_tpump_analysis():
             # non-normal noise from the detector, some of the tests below
             # occasionally fail if we only consider 1 std dev.  In light
             # of that, we use 2 standard deviations instead.
+            
             assert(np.isclose(trap_dict[t]['E'], trap_dict_E[i], atol = 0.05))
             assert(np.isclose(trap_dict[t]['cs'], trap_dict_cs[i], rtol = 0.1))
             # must multiply cs (in cm^2) by 1e15 to get the cs input to

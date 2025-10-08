@@ -9,10 +9,12 @@ import argparse
 import warnings
 from astropy.io.fits.verify import VerifyWarning
 
-from corgidrp.data import Dataset, LineSpread
+from corgidrp.data import Dataset, LineSpread, DispersionModel
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
+import corgidrp
+import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
                            get_latest_cal_file)
@@ -142,6 +144,17 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info(f"Total input images validated: {len(l2b_dataset_with_filenames)}")
     logger.info("")
     
+    # Create a temporary caldb and add the default DispersionModel calibration
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB()
+    
+    # Scan for default calibrations
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
     # ================================================================================
     # (3) Run Processing Pipeline
     # ================================================================================
@@ -221,6 +234,10 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info(f"mean_wave: {linespread.mean_wave} +- {linespread.wave_err} nm")
     logger.info(f"fwhm: {linespread.fwhm} +- {linespread.fwhm_err} nm")
     logger.info("")
+    
+    # Clean up temporary caldb file
+    if os.path.exists(tmp_caldb_csv):
+        os.remove(tmp_caldb_csv)
     
     return wavlens, flux_profile, gauss_par
 

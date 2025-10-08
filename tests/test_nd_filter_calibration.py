@@ -139,6 +139,9 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
             add_gauss_noise=add_gauss_noise_val,
             noise_scale=1.0, file_save=True
         )
+        # ND filter calibration requires photoelectron/s units (L3 data)
+        flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
+        flux_image.ext_hdr['DATALVL'] = 'L3'
         dim_star_images.append(flux_image)
     return dim_star_images
 
@@ -181,6 +184,9 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
                     add_gauss_noise=add_gauss_noise_val,
                     noise_scale=1.0, file_save=True
                 )
+                # ND filter calibration requires photoelectron/s units (L3 data)
+                flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
+                flux_image.ext_hdr['DATALVL'] = 'L3'
                 bright_star_images.append(flux_image)
     return bright_star_images
 
@@ -430,6 +436,10 @@ def test_multiple_nd_levels(dim_dir, output_dir, test_od):
 
     dim_filepaths = glob.glob(os.path.join(dim_dir, "*")) # use cached dim images
     dim_images = [Image(path) for path in dim_filepaths]
+    # Update BUNIT for ND filter calibration requirements
+    for img in dim_images:
+        img.ext_hdr['BUNIT'] = 'photoelectron/s'
+        img.ext_hdr['DATALVL'] = 'L3'
     combined_files = bright_images + dim_images
     combined_dataset = Dataset(combined_files)
 
@@ -456,6 +466,10 @@ def test_nd_filter_calibration_with_fluxcal(dim_dir, stars_dataset_cached, phot_
     assert len(dim_filepaths) > 0, f"No FITS files found in {dim_dir}"
     
     dim_images = [Image(path) for path in dim_filepaths]
+    # Update BUNIT for ND filter calibration requirements
+    for img in dim_images:
+        img.ext_hdr['BUNIT'] = 'photoelectron/s'
+        img.ext_hdr['DATALVL'] = 'L3'
 
     # Convert list of Image objects into a Dataset
     dim_dataset = Dataset(dim_images)

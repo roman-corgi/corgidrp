@@ -1355,7 +1355,7 @@ class DetectorNoiseMaps(Image):
                 orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0] 
             
             self.filename = "{0}_dnm_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9][a-z]', '', self.filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'

@@ -705,7 +705,7 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain computed from coefficients and calibration temperature
     exthdr['DATALVL']      = 'CalibrationProduct'
     exthdr['DATATYPE']      = 'DetectorNoiseMaps'
-    exthdr['DRPNFILE']      = "Mocks"         # What files are used to create this calibration product 
+    exthdr['DRPNFILE']      = 2         # Number of files used to create this calibration product 
     exthdr['FILE0']         = "Mock0.fits"
     exthdr['FILE1']         = "Mock1.fits"
     exthdr['B_O'] = 0.01
