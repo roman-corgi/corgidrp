@@ -1021,7 +1021,7 @@ def test_slit_trans():
     dq = np.zeros_like(spec_slit.data, dtype=int)
     # Define NFRAMES for each FSM position (can be different number of frames)
     np.random.seed(0)
-    # Arbitraily choosing between 1 and 10 frames for each FSM position
+    # Arbitrarily choosing between 1 and 10 frames for each FSM position
     n_frames_fsm = np.random.randint(1, 11, size=n_fsm*n_fsm)
     # Test when the FSM moves along both directions (x,y) or only along one of them
     fsm_motion = [[1,1], [1,0], [0,1]]
@@ -1032,12 +1032,15 @@ def test_slit_trans():
     yrange0 = spec_slit.ext_hdr['WV0_Y'] + 1e-8
     yrange1 = yrange0 + n_fsm - 1 - 1e-8
     for idx_fsm, fsm in enumerate(fsm_motion):
-        # Each different FSM scan pattern is a new set of data
-        spec_slit_cp = spec_slit.copy()
+        # Each FSM configuration is an independent test
+        # Counter used to generate unique filenames
+        n_frames = 0.
         spec_slit_list = []
         basetime = datetime.now()
         for idx_x in range(n_fsm):
             for idx_y in range(n_fsm):
+                # Each different FSM position is a new set of data
+                spec_slit_cp = spec_slit.copy()
                 # Associate different FSM positions to each distinct FSM case
                 spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0]
                 spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1]
@@ -1054,16 +1057,18 @@ def test_slit_trans():
                         * (1 + idx_y*fsm[1]))
                     # Set conventional filename for each frame
                     # Remove microseconds, keep milliseconds
-                    dt = basetime + timedelta(seconds=
-                        1.0*(n_fsm*idx_y+idx_x)*n_frames_fsm_now + idx_frame)
+                    dt = basetime + timedelta(seconds=n_frames)
                     timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
                     spec_slit_cp.filename = \
                         f'cgi_0000000000000000000_{timestamp}_{dt_lvl.lower()}.fits'
                     spec_slit_list += [spec_slit_cp]
+                    n_frames += 1
 
         # Create Dataset
         spec_slit_ds = Dataset(spec_slit_list)
-        logger.info(f'FSM case ({idx_fsm+1}/{len(fsm_motion)}): ')
+
+        # VAP testing
+        logger.info(f'FSM scan pattern ({idx_fsm+1}/{len(fsm_motion)}): ')
         logger.info('Images with slit in')
         n_images = 0
         for i, frame in enumerate(spec_slit_ds):
@@ -1095,26 +1100,47 @@ def test_slit_trans():
         logger.info(f"Total input images with validated with FSAM={fsam_expected}: {n_images}")
         logger.info("")
 
+        # Build the Dataset with the slit off
         # Get one spectrum with FSAM=OPEN as an Image
         spec_open = l3_to_l4.extract_spec(output_dataset)[0]
         # Set current data level
         spec_open.ext_hdr['DATALVL'] = dt_lvl
-        # Set conventional filename
-        # Remove microseconds, keep milliseconds
-        dt = basetime + timedelta(seconds=1.0*n_fsm*n_fsm*n_frames_fsm_now)
-        timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-        spec_open.filename = \
-            f'cgi_0000000000000000000_{timestamp}_{dt_lvl.lower()}.fits'
         # Make sure it is consistent with the spectroscopy observation
-        # For VAP testing
         for idx_pam, pam in enumerate(pam_list):
             spec_open.ext_hdr[pam+'NAME'] = pam_values[idx_pam]
         # This set has FSAM=OPEN
         spec_open.ext_hdr['FSAMNAME'] = 'OPEN'
-        # Build some Dataset of extracted spectra (the different FSM datasets)
-        # Choose an arbitrary number of replica to test the average value
-        spec_open_ds = Dataset([spec_open, spec_open, spec_open, spec_open])
+        # Choose an new arbitrary number of frames to test the average value
+        n_frames_fsm = np.random.randint(1, 11, size=n_fsm*n_fsm)
+        spec_open_list = []
+        for idx_x in range(n_fsm):
+            for idx_y in range(n_fsm):
+                # Each different FSM position is a new set of data
+                spec_open_cp = spec_open.copy()
+                # Associate different FSM positions to each distinct FSM case
+                # They can be different to the frames with the slit in
+                spec_open_cp.ext_hdr['FSMX'] = idx_x * fsm[0] + n_fsm**2
+                spec_open_cp.ext_hdr['FSMY'] = idx_y * fsm[1] + n_fsm**2
+                # Create NFRAMES
+                n_frames_fsm_now = n_frames_fsm[idx_x + n_fsm*idx_y]
+                for idx_frame in range(n_frames_fsm_now):
+                    # Change the spectrum by a known factor so that the slit
+                    # transmission interpolation can be tested later. Slitless
+                    # spectra are averaged
+                    spec_open_cp.data = (spec_open.data * 
+                          (1 + (idx_x - n_fsm/2 + 0.5)*fsm[0]) *
+                          (1 + (idx_y - n_fsm/2 + 0.5)*fsm[1]))
+                    # Set conventional filename for each frame
+                    # Remove microseconds, keep milliseconds
+                    dt = basetime + timedelta(seconds=n_frames)
+                    timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+                    spec_open_cp.filename = \
+                        f'cgi_0000000000000000000_{timestamp}_{dt_lvl.lower()}.fits'
+                    spec_open_list += [spec_open_cp]
+                    n_frames += 1
+        spec_open_ds = Dataset(spec_open_list)
 
+        # VAP testing
         logger.info('Images with slit out')
         n_images = 0
         for i, frame in enumerate(spec_open_ds):
@@ -1169,6 +1195,7 @@ def test_slit_trans():
         # linear interpolation. Besides the own scipy validation, we can compare
         # the output with a rough bilinear approximation and allow for ~10% tolerance
         if fsm == [1,1]: 
+            breakpoint()
             assert slit_trans_out == pytest.approx(slit_trans_design, rel=0.105)
         else:
             # In this case, the interpolation is linear. 

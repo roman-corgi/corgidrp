@@ -1032,6 +1032,7 @@ def slit_transmission(
     n_gridx=10,
     n_gridy=10,
     kind='linear',
+    average='mean',
     ):
     """ This step function addresses:
   
@@ -1067,6 +1068,10 @@ def slit_transmission(
       n_gridy (int) (optional): Number of positions when pos_range is set.
       kind (string): Specifies the kind of interpolation. See scipy documentation.
         Default is piecewise linear.
+      average (str): The type of average (first momentum) applied to each subset
+        of spectra. The slitless spectra are all averaged at once regardless of
+        their FSMX, FSMY values. The spectra with the slit in are averaged over
+        subsets with the same FSMX, FSMY values. Options are 'mean' and 'median'.
 
     Returns:
       3-element tuple with:
@@ -1127,17 +1132,46 @@ def slit_transmission(
         # It can only be OPEN or fsam_name (unique)
         assert (exthdr['FSAMNAME'].upper() == fsam_name or exthdr['FSAMNAME'].upper() == 'OPEN'), f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name} or OPEN"
 
-    breakpoint()
     # Split first by FSAM: two sets
-    # Split then each subset by FSM to coadd NFRAMES
-
+    dataset_list, fsam_values = spec_ds.split_dataset(exthdr_keywords=['FSAMNAME'])
+    # Double check (FSAM=OPEN and one other value only)
+    if len(dataset_list) != 2 or len(fsam_values) != 2 or 'OPEN' not in fsam_values :
+        raise ValueError('There must be two FSAMNAME values only (including OPEN)')
+    dataset_slit = dataset_list[fsam_values != 'OPEN']
+    dataset_open = dataset_list[fsam_values == 'OPEN']
+    # Split each subset with the slit in by FSMX/Y values (FSM values are not used)
+    dataset_slit_subsets = []
+    dataset_slit_y = dataset_slit.split_dataset(exthdr_keywords=['FSMY'])[0]
+    for ds_1 in dataset_slit_y:
+        dataset_slit_subsets += ds_1.split_dataset(exthdr_keywords=['FSMX'])[0]
+        
     # Average all spectra of the images with FSAM=OPEN
-    spec_open = np.mean([ds[0].data for ds in open_fsm_spectra], axis=0)
+    if average.lower() == 'mean': 
+        spec_open = np.mean([ds.data for ds in dataset_open], axis=0)
+    elif average.lower() == 'median':
+        spec_open = np.median([ds.data for ds in dataset_open], axis=0)
+    else:
+        raise ValueError(f'Averaging method {average} not recognized.')
 
-    # Get the slit transmission and positions
-    slit_pos_x = np.array([ds[0].ext_hdr['WV0_X'] for ds in slit_fsm_spectra])
-    slit_pos_y = np.array([ds[0].ext_hdr['WV0_Y'] for ds in slit_fsm_spectra])
-    slit_trans = np.array([ds[0].data/spec_open for ds in slit_fsm_spectra])
+    # Average all spectra of the images with the slit in by FSM position and get
+    # the wavelength zero-point solution for each one
+    slit_trans_fsm = []
+    slit_pos_x = []
+    slit_pos_y = []
+    for subset in dataset_slit_subsets:
+        slit_pos_x += [subset[0].ext_hdr['WV0_X']]
+        slit_pos_y += [subset[0].ext_hdr['WV0_Y']]
+        if average.lower() == 'mean':
+            slit_trans_fsm += [np.mean([ds.data/spec_open for ds in subset], axis=0)]
+        # At this point average can only take 'mean' and 'median' values
+        else:
+            slit_trans_fsm += [np.median([ds.data/spec_open for ds in subset], axis=0)]
+    # Double check they all have the same length
+    slit_pos_x = np.array(slit_pos_x)
+    slit_pos_y = np.array(slit_pos_y)
+    slit_trans_fsm = np.array(slit_trans_fsm) 
+    if not (len(slit_pos_x) == len(slit_pos_y) == len(slit_trans_fsm)):
+        raise ValueError('The lengths of distinct FSM positions and averaged spectra is different.')
 
     # If there's only one position, there's no interpolation
     if len(np.unique(slit_pos_y)) == len(np.unique(slit_pos_x)) == 1:
@@ -1165,16 +1199,21 @@ def slit_transmission(
     # 1-d cases: The positions along one of the slit dimensions is constant.
     # P.S. scipy takes care of raising exceptions if there's any extrapolation
     if len(np.unique(slit_pos_y)) == 1:
-        interpolant = interp1d(slit_pos_x, slit_trans, axis=0, kind=kind)
+        interpolant = interp1d(slit_pos_x, slit_trans_fsm, axis=0, kind=kind)
         slit_trans_interp = interpolant(target_pix[0])
     elif len(np.unique(slit_pos_x)) == 1:
-        interpolant = interp1d(slit_pos_y, slit_trans, axis=0, kind=kind)
+        interpolant = interp1d(slit_pos_y, slit_trans_fsm, axis=0, kind=kind)
         slit_trans_interp = interpolant(target_pix[1])
     else:
     # 2-d grid:
         try:
-            interpolator = LinearNDInterpolator(np.c_[slit_pos_x, slit_pos_y], slit_trans)
-            slit_trans_interp = interpolator(target_pix[0], target_pix[1])
+            if kind.lower() != 'linear':
+                raise ValueError('Only linear interpolation is available for',
+                    'two dimensional scattered data.')
+            else:
+                interpolator = LinearNDInterpolator(np.c_[slit_pos_x, slit_pos_y],
+                    slit_trans_fsm)
+                slit_trans_interp = interpolator(target_pix[0], target_pix[1])
             # If there's some extrapolation, redefine target points to be within limits
             if np.sum(np.isnan(slit_trans_interp) == True):
                 raise ValueError('Some target points require extrapolation.'
