@@ -867,6 +867,10 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
     Create a cross-reference Excel file showing which headers appear in which data products.
     Each sheet represents an HDU extension, with rows for each unique header keyword and columns 
     for each data product, marked with 'X' where the header is present.
+
+    Args:
+        e2edata_path (str): Path to the test data
+        e2eoutput_path (str): Path to the output directory
     """
     
     # Define all data products and their file locations
