@@ -594,6 +594,34 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
     if not os.path.exists(fits_filepath):
         raise FileNotFoundError(f"FITS file not found: {fits_filepath}")
     
+    # Load keyword descriptions from RST documentation files if available
+    keyword_descriptions = {}
+    try:
+        import re
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        docs_dir = os.path.join(current_dir, '..', 'docs', 'source', 'data_formats')
+        
+        if os.path.exists(docs_dir):
+            # Read all RST files and extract keyword descriptions
+            for rst_file in os.listdir(docs_dir):
+                if rst_file.endswith('.rst') and rst_file != 'index.rst':
+                    rst_path = os.path.join(docs_dir, rst_file)
+                    with open(rst_path, 'r') as f:
+                        for line in f:
+                            # Match table rows: | KEYWORD | datatype | value | description |
+                            match = re.match(r'^\|\s+([A-Z0-9_]+)\s+\|\s+\S+\s+\|\s+.+?\s+\|\s+(.+?)\s+\|$', line)
+                            if match:
+                                keyword = match.group(1)
+                                description = match.group(2).strip()
+                                # Only store if we have a real description (not empty, not just structural info)
+                                if description and description not in ['0', '1', '2', '3', '4']:
+                                    # Prefer longer descriptions (keep the most complete one)
+                                    if keyword not in keyword_descriptions or len(description) > len(keyword_descriptions[keyword]):
+                                        keyword_descriptions[keyword] = description
+    except Exception as e:
+        # If we can't load RST files, just continue without reference descriptions
+        pass
+    
     # Open the FITS file
     with fits.open(fits_filepath) as hdulist:
         
@@ -670,7 +698,15 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
                 header_data = []
                 for keyword in hdu.header:
                     value = hdu.header[keyword]
-                    comment = hdu.header.comments[keyword]
+                    fits_comment = hdu.header.comments[keyword]
+                    
+                    # Use RST description if available, otherwise use FITS comment
+                    if keyword in keyword_descriptions:
+                        description = keyword_descriptions[keyword]
+                    elif fits_comment and fits_comment.strip():
+                        description = fits_comment
+                    else:
+                        description = ''
                     
                     # Determine data type
                     if isinstance(value, bool):
@@ -692,10 +728,24 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
                                         'TTYPE8', 'TFORM8', 'TTYPE9', 'TFORM9', 'TTYPE10', 'TFORM10']
                     is_fits_auto = keyword in fits_auto_keywords
                     
-                    # Determine if optional (customize this later)
-                    required_keywords = ['SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND', 'TELESCOP', 'INSTRUME', 
-                                       'DETECTOR', 'DATALVL', 'FILENAME', 'VISITID']
-                    is_optional = keyword not in required_keywords
+                    # Determine if optional based on data level and keyword
+                    # Get data level from Image HDU if available
+                    datalvl = None
+                    if len(hdulist) > 1 and 'DATALVL' in hdulist[1].header:
+                        datalvl = hdulist[1].header['DATALVL']
+                    
+                    # Trap pump keywords are optional for all levels
+                    trap_pump_keywords = ['TPINJCYC', 'TPOSCCYC', 'TPTAU', 'TPSCHEM1', 'TPSCHEM2', 'TPSCHEM3', 'TPSCHEM4']
+                    
+                    # L2b-specific optional keywords
+                    l2b_optional_keywords = ['PCTHRESH', 'NUM_FR']
+                    
+                    # Check if this keyword should be marked as optional
+                    is_optional = False
+                    if keyword in trap_pump_keywords:
+                        is_optional = True
+                    elif datalvl == 'L2b' and keyword in l2b_optional_keywords:
+                        is_optional = True
                     
                     header_data.append({
                         'Keyword': keyword,
@@ -703,7 +753,7 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
                         'Data Type': dtype,
                         'FITS Auto-populated': is_fits_auto,
                         'Optional': is_optional,
-                        'Comment': comment
+                        'Description': description
                     })
                 
                 # Create DataFrame and save to sheet

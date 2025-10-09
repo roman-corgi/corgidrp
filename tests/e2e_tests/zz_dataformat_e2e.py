@@ -7,6 +7,7 @@ import numpy as np
 import astropy.io.fits as fits
 from datetime import datetime, timedelta
 from corgidrp.check import generate_fits_excel_documentation
+import pandas as pd
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -860,6 +861,118 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
         compare_docs(ref_doc_contents, doc_contents)
 
 
+@pytest.mark.e2e
+def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
+    """
+    Create a cross-reference Excel file showing which headers appear in which data products.
+    Each sheet represents an HDU extension, with rows for each unique header keyword and columns 
+    for each data product, marked with 'X' where the header is present.
+    """
+    
+    # Define all data products and their file locations
+    data_products = {
+        'L2a': glob.glob(os.path.join(thisfile_dir, "l1_to_l2a_e2e", "*.fits")),
+        'L2b_Analog': glob.glob(os.path.join(thisfile_dir, "l1_to_l2b_e2e", "*.fits")),
+        'L2b_PC': glob.glob(os.path.join(thisfile_dir, "photon_count_e2e", "l2a_to_l2b", "*_l2b.fits")),
+        'L3': glob.glob(os.path.join(thisfile_dir, "l2b_to_l4_e2e", "l2b_to_l3", "*_l3_.fits")),
+        'L4_Coron': glob.glob(os.path.join(thisfile_dir, "l2b_to_l4_e2e", "*_l4_.fits")),
+        'L4_Noncoron': glob.glob(os.path.join(thisfile_dir, "l2b_to_l4_noncoron_e2e", "*_l4_.fits")),
+        'Astrom': glob.glob(os.path.join(thisfile_dir, "astrom_cal_e2e", "*_ast_cal.fits")),
+        'BPMap': glob.glob(os.path.join(thisfile_dir, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits")),
+        'Flat': glob.glob(os.path.join(thisfile_dir, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits")),
+        'CoreThroughput': glob.glob(os.path.join(thisfile_dir, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits")),
+        'CoreThroughputMap': glob.glob(os.path.join(thisfile_dir, "ctmap_cal_e2e", "*_ctm_cal.fits")),
+        'FluxCal': glob.glob(os.path.join(thisfile_dir, "flux_cal_e2e", "*_abf_cal.fits")),
+        'KGain': glob.glob(os.path.join(thisfile_dir, "kgain_cal_e2e", "*_krn_cal.fits")),
+        'NonLin': glob.glob(os.path.join(thisfile_dir, "nonlin_cal_e2e", "*_nln_cal.fits")),
+        'NDFilter': glob.glob(os.path.join(thisfile_dir, "nd_filter_cal_e2e", "*_ndf_cal.fits")),
+        'NoiseMaps': glob.glob(os.path.join(thisfile_dir, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits")),
+        'Dark': glob.glob(os.path.join(thisfile_dir, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits")),
+        'TrapPump': glob.glob(os.path.join(thisfile_dir, "trap_pump_cal_e2e", "*_tpu_cal.fits")),
+    }
+    
+    # Get the most recent file for each data product
+    data_files = {}
+    for product_name, file_list in data_products.items():
+        if file_list:
+            data_files[product_name] = max(file_list, key=os.path.getmtime)
+        else:
+            print(f"Warning: No files found for {product_name}")
+    
+    # Collect all headers from all data products, organized by HDU
+    # Structure: {hdu_name: {keyword: {product_name: True/False}}}
+    all_headers = {}
+    hdu_names_by_product = {}  # Track HDU names for each product
+    
+    for product_name, filepath in data_files.items():
+        with fits.open(filepath) as hdulist:
+            hdu_names_by_product[product_name] = []
+            
+            for i, hdu in enumerate(hdulist):
+                # Get HDU name
+                if i == 0:
+                    hdu_name = "Primary"
+                elif i == 1:
+                    hdu_name = "Image"
+                else:
+                    hdu_name = hdu.header.get('EXTNAME', f'HDU{i}')
+                
+                hdu_names_by_product[product_name].append(hdu_name)
+                
+                # Initialize this HDU if not seen before
+                if hdu_name not in all_headers:
+                    all_headers[hdu_name] = {}
+                
+                # Collect all keywords from this HDU
+                for keyword in hdu.header.keys():
+                    # Skip FILE* keywords (FILE0, FILE1, etc.)
+                    if keyword.startswith('FILE') and len(keyword) > 4 and keyword[4:].isdigit():
+                        continue
+                    
+                    if keyword not in all_headers[hdu_name]:
+                        all_headers[hdu_name][keyword] = {}
+                    all_headers[hdu_name][keyword][product_name] = True
+    
+    # Create Excel file with one sheet per HDU
+    output_file = os.path.join(thisfile_dir, "header_crossreference.xlsx")
+    
+    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        # Process each HDU
+        for hdu_name in sorted(all_headers.keys()):
+            # Get all keywords for this HDU
+            keywords = sorted(all_headers[hdu_name].keys())
+            product_names = sorted(data_files.keys())
+            
+            # Create a DataFrame with keywords as rows and products as columns
+            data = []
+            for keyword in keywords:
+                row = {'Keyword': keyword}
+                for product in product_names:
+                    # Mark with 'X' if this header exists in this product's HDU
+                    row[product] = 'X' if all_headers[hdu_name][keyword].get(product, False) else ''
+                data.append(row)
+            
+            df = pd.DataFrame(data)
+            
+            # Write to Excel sheet (sheet names can't have special chars)
+            sheet_name = hdu_name.replace('/', '_').replace('\\', '_')[:31]  # Excel sheet name limit
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+            
+            # Auto-adjust column widths
+            worksheet = writer.sheets[sheet_name]
+            for idx, col in enumerate(df.columns):
+                max_length = max(
+                    df[col].astype(str).apply(len).max(),
+                    len(col)
+                ) + 2
+                worksheet.column_dimensions[chr(65 + idx)].width = min(max_length, 50)
+    
+    print(f"Header cross-reference created: {output_file}")
+
+    # Verify file was created
+    assert os.path.exists(output_file), "Cross-reference Excel file was not created"
+
+
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
     # that call this script with the correct arguments and they do not need
@@ -896,3 +1009,4 @@ if __name__ == "__main__":
     test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
     test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
     test_tpump_dataformat_e2e(e2edata_dir, outputdir)
+    test_header_crossreference_e2e(e2edata_dir, outputdir)
