@@ -1229,3 +1229,61 @@ def slit_transmission(
     return (slit_trans_interp,
         target_pix[0],
         target_pix[1])
+
+def star_pos_spec(
+    dataset,
+    r_lamD=0,
+    phi_deg=0,
+    ):
+    """ Translate the position of a satellite spot from polar coordinates into
+      (X,Y) EXCAM pixel coordinates. The radial distance of the satellite spot
+      is measured in units lambda/D, with lambda the band reference wavelength,
+      either 730 nm (band 3) or 660 nm (band 2), and D=2.4 m, and the angle is
+      measured in degrees, with 0 degrees meaning +X and 90 degrees meaning +Y.
+
+      Args:
+        dataset (Dataset): A Dataset with L3 spectroscopy frames.
+        r_lamD (float): Radial distance of the satellite spot on EXCAM with respect
+        the occulted star in units of lambda/D.
+        phi_deg (float): Polar angle of the satellite spot on EXCAM with respect
+        the occulted star in degrees, with 0 degrees meaning +X and 90 degrees
+        meaning +Y.
+
+      Returns:
+          Input Dataset with updated keywords recording the satellite position
+          in EXCAM pixels.
+    """ 
+    # Primary diameter of Roman Space Telescope in meters
+    D_m=2.4
+    # Basic checks
+    if r_lamD <= 0:
+        raise ValueError('r_lamD must be positive. Usual range is 3-20.')
+
+    dataset_cp = dataset.copy()
+    for img in dataset_cp:
+        # Check it is L3
+        if img.ext_hdr['DATALVL'] != 'L3':
+            raise ValueError(f"The data level must be L3 and it is {img.ext_hdr['DATALVL']}")
+        cfamname = img.ext_hdr['CFAMNAME']
+        if '3' in cfamname:
+            lam_ref_nm = 730
+        elif '2' in cfamname:
+            lam_ref_nm = 660
+        else:
+            raise ValueError(f'Band {cfamname} is not implemented in this function yet.')
+
+        # Conversion from EXCAM pixels to milliarsec
+        plate_scale_mas = img.ext_hdr['PLTSCALE']
+        # Conversion from radians to milliarsec
+        rad2mas = 180/np.pi*3600*1e3
+        # lam/D to EXCAM pixels
+        lamDrad = 1e-9*lam_ref_nm/D_m
+        r_pix = r_lamD*lamDrad*rad2mas/plate_scale_mas
+        # EXCAM (X,Y) coordinates
+        X_pix = r_pix * np.cos(phi_deg*np.pi/180)
+        Y_pix = r_pix * np.sin(phi_deg*np.pi/180)
+        # Add them to a keyword
+        img.ext_hdr['SATPOSX'] = X_pix
+        img.ext_hdr['SATPOSY'] = Y_pix
+
+    return dataset_cp
