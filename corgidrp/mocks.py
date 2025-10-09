@@ -4496,26 +4496,42 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             else:
                 visitid = f"{i:019d}"  # Fallback: use file index padded to 19 digits
         
-        filetime = exthdr.get('FILETIME', prihdr.get('FILETIME', None))
+        # For pump trap data, create deterministic timestamps based on file metadata
+        # Use EXCAMT (temperature), TPSCHEM (scheme), and TPTAU (phase time) to create unique timestamps
+        excamt = exthdr.get('EXCAMT', None)
+        tptau = exthdr.get('TPTAU', None)
+        # Find which scheme this is (TPSCHEM1-4)
+        scheme = None
+        for j in range(1, 5):
+            if exthdr.get(f'TPSCHEM{j}', 0) > 0:
+                scheme = j
+                break
         
-        # Convert filetime to the format expected in filenames (YYYYMMDDtHHMMSSs)
-        if filetime and 'T' in filetime:
-            try:
-                dt = datetime.datetime.fromisoformat(filetime.replace('Z', '+00:00'))
-                filetime = dt.strftime('%Y%m%dt%H%M%S%f')[:-5] 
-            except:
-                filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # fallback to current time
-        elif not filetime:
-            filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5] 
+        # Use file index as primary increment, but if we have pump trap metadata, use that for better uniqueness
+        if excamt is not None and scheme is not None and tptau is not None:
+            # Create unique timestamp based on temperature, scheme, and phase time
+            # Start from a fixed base time
+            base_dt = datetime.datetime(2025, 1, 1, 0, 0, 0)
+            # Add seconds based on: temperature*10000 + scheme*1000 + file_index
+            # This spreads files across a wide timestamp range
+            temp_offset = int(float(excamt)) * 10  # e.g., 180K → 1800 seconds
+            scheme_offset = scheme * 2000  # Each scheme gets 2000 seconds
+            unique_dt = base_dt + datetime.timedelta(seconds=temp_offset + scheme_offset + i)
+        else:
+            # Fallback for non-pump-trap data
+            filetime_hdr = exthdr.get('FILETIME', prihdr.get('FILETIME', None))
+            if filetime_hdr and 'T' in filetime_hdr:
+                try:
+                    dt = datetime.datetime.fromisoformat(filetime_hdr.replace('Z', '+00:00'))
+                    base_dt = dt
+                except:
+                    base_dt = datetime.datetime(2025, 1, 1, 0, 0, 0)
+            else:
+                base_dt = datetime.datetime(2025, 1, 1, 0, 0, 0)
+            unique_dt = base_dt + datetime.timedelta(seconds=i)
         
-        # Add small increment to ensure unique filenames when processing multiple files
-        if i > 0:
-            try:
-                base_dt = datetime.datetime.strptime(filetime, '%Y%m%dt%H%M%S%f')
-                unique_dt = base_dt + datetime.timedelta(milliseconds=i*100)  # Increment by 0.1s
-                filetime = unique_dt.strftime('%Y%m%dt%H%M%S%f')[:-5]
-            except:
-                filetime = filetime[:-1] + f"{(int(filetime[-1:]) + i) % 10}"
+        # Format as YYYYMMDDtHHMMSSd (deciseconds = 1 digit)
+        filetime = unique_dt.strftime('%Y%m%dt%H%M%S%f')[:-5]
         
         # Create new filename with correct convention
         if level_suffix in ['l2a', 'l2b']:
@@ -4535,6 +4551,11 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             # Rename in same directory
             file_dir = os.path.dirname(file)
             new_filename = os.path.join(file_dir, filename_template)
+        
+        # Check if file already exists (collision detection)
+        if os.path.exists(new_filename):
+            import warnings
+            warnings.warn(f"File collision detected: {os.path.basename(new_filename)} already exists! This file will be overwritten.")
         
         if is_image_object:
             # Update headers in the Image object

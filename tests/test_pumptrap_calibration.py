@@ -2,6 +2,7 @@ import re
 import os
 import glob
 import pickle
+import random
 import numpy as np
 import astropy.io.fits as fits
 import shutil
@@ -30,6 +31,7 @@ def test_tpump_analysis():
 
     # Set the seed - II&T ut tests don't work everytime, so let's fix it. 
     np.random.seed(39)
+    random.seed(39)
     #Generate the mock data:
     test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
     metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
@@ -68,6 +70,9 @@ def test_tpump_analysis():
         if not os.path.exists(temp_dir):
             os.mkdir(temp_dir)
         
+        # Sort files by filename first to ensure deterministic ordering
+        temp_files.sort()
+        
         # Group files by scheme using header keywords, including phase time for sorting
         scheme_files = {1: [], 2: [], 3: [], 4: []}
         
@@ -97,16 +102,26 @@ def test_tpump_analysis():
                     old_filepath = os.path.join(test_data_dir, filename)
                     organized_filepath = os.path.join(sch_dir, filename)
                     
-                    # Move file to organized directory structure
-                    shutil.move(old_filepath, organized_filepath)
+                    # Move file to organized directory structure (only if it still exists in original location)
+                    if os.path.exists(old_filepath):
+                        shutil.move(old_filepath, organized_filepath)
+                    elif not os.path.exists(organized_filepath):
+                        raise FileNotFoundError(f"File not found at either {old_filepath} or {organized_filepath}")
     
     # Collect all files from the organized directory structure
+    # Sort by temperature, scheme, and filename
     pump_trap_data_filelist = []
     for root, dirs, files in os.walk(test_data_dir):
+        # Sort directories to ensure consistent traversal order
+        dirs.sort()
+        files.sort()
         for name in files:
             if name.endswith('.fits') and name.startswith('cgi_'):
                 f = os.path.join(root, name)
                 pump_trap_data_filelist.append(f)
+    
+    # Final sort by full filepath to ensure absolute consistency
+    pump_trap_data_filelist.sort()
     
     pump_trap_dataset = Dataset(pump_trap_data_filelist)
 
@@ -199,19 +214,20 @@ def test_tpump_analysis():
     assert(noncontinuous_count >= 0)
     assert(pre_sub_el_count > 0)
 
-    #Convert the output back to a dictionary for more testing. 
+    #Convert the output back to a dictionary for more testing.
     trap_dict = rebuild_dict(tpump_calibration.data)
     trap_dict_keys = list(trap_dict.keys())
 
     #Truth values for the sim dataset from ut_tpump_final.py
-    test_trap_dict_keys = [((26, 28), 'CENel1', 0),
-            ((50, 50), 'RHSel1', 0), ((60, 80), 'LHSel2', 0),
-            ((68, 67), 'CENel2', 0), ((98, 33), 'LHSel3', 0),
-            ((98, 33), 'RHSel2', 0), ((41, 15), 'CENel3', 0),
-            ((89, 2), 'RHSel3', 0), ((89, 2), 'LHSel4', 0),
-            [((10, 10), 'LHSel4', 0), ((10, 10), 'LHSel4', 1)],
-            ((56, 56), 'CENel4', 0), ((77, 90), 'RHSel4', 0),
-            ((77, 90), 'CENel2', 0), ((13, 21), 'LHSel1', 0)]
+    # Note: coordinates are now floats (not ints) 
+    test_trap_dict_keys = [((26.0, 28.0), 'CENel1', 0),
+            ((50.0, 50.0), 'RHSel1', 0), ((60.0, 80.0), 'LHSel2', 0),
+            ((68.0, 67.0), 'CENel2', 0), ((98.0, 33.0), 'LHSel3', 0),
+            ((98.0, 33.0), 'RHSel2', 0), ((41.0, 15.0), 'CENel3', 0),
+            ((89.0, 2.0), 'RHSel3', 0), ((89.0, 2.0), 'LHSel4', 0),
+            [((10.0, 10.0), 'LHSel4', 0), ((10.0, 10.0), 'LHSel4', 1)],
+            ((56.0, 56.0), 'CENel4', 0), ((77.0, 90.0), 'RHSel4', 0),
+            ((77.0, 90.0), 'CENel2', 0), ((13.0, 21.0), 'LHSel1', 0)]
     trap_dict_E = [0.32, 0.32, 0.32, 0.32, 0.28, 0.32, 0.32, 0.32,
             0.28, [0.32, 0.28], 0.32, 0.28, 0.32, 0.32]
     trap_dict_cs = [2e-15, 2e-15, 2e-15, 2e-15, 12e-15, 2e-15, 2e-15,
@@ -229,7 +245,6 @@ def test_tpump_analysis():
             # non-normal noise from the detector, some of the tests below
             # occasionally fail if we only consider 1 std dev.  In light
             # of that, we use 2 standard deviations instead.
-            
             assert(np.isclose(trap_dict[t]['E'], trap_dict_E[i], atol = 0.05))
             assert(np.isclose(trap_dict[t]['cs'], trap_dict_cs[i], rtol = 0.1))
             # must multiply cs (in cm^2) by 1e15 to get the cs input to

@@ -691,7 +691,7 @@ class Dark(Image):
             if input_dataset is not None:
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
                 self.filename = "{0}_drk_cal.fits".format(orig_input_filename)
-                self.filename = re.sub('_l[0-9][a-z]?', '', self.filename)
+                self.filename = re.sub('_l[0-9].', '', self.filename)
                 # dnm_cal fed directly into drk_cal when doing build_synthesized_dark, so this will delete that string if it's there:
                 self.filename = self.filename.replace("_dnm_cal", "")
             else:

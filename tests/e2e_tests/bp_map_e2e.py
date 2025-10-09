@@ -47,16 +47,17 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Create main output directory and master dark subfolder
     main_output_dir = os.path.join(e2eoutput_path, "bp_map_cal_e2e")
     bp_map_outputdir = os.path.join(main_output_dir, "bp_map_master_dark")
-    if not os.path.exists(bp_map_outputdir):
-        os.makedirs(bp_map_outputdir)
+    
+    # Clean up existing directory to ensure fresh run
+    if os.path.exists(bp_map_outputdir):
+        shutil.rmtree(bp_map_outputdir)
+    os.makedirs(bp_map_outputdir)
 
     input_data_dir = os.path.join(bp_map_outputdir, 'input_l1')
-    if not os.path.exists(input_data_dir):
-        os.makedirs(input_data_dir)
+    os.makedirs(input_data_dir)
 
     calibrations_dir = os.path.join(bp_map_outputdir, "calibrations")
-    if not os.path.exists(calibrations_dir):
-        os.mkdir(calibrations_dir)
+    os.mkdir(calibrations_dir)
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
@@ -249,16 +250,17 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     # Create main output directory and simulated dark subfolder
     main_output_dir = os.path.join(e2eoutput_path, "bp_map_cal_e2e")
     bp_map_outputdir = os.path.join(main_output_dir, "bp_map_simulated_dark")
-    if not os.path.exists(bp_map_outputdir):
-        os.makedirs(bp_map_outputdir)
+    
+    # Clean up existing directory to ensure fresh test run
+    if os.path.exists(bp_map_outputdir):
+        shutil.rmtree(bp_map_outputdir)
+    os.makedirs(bp_map_outputdir)
 
     input_data_dir = os.path.join(bp_map_outputdir, 'input_l1')
-    if not os.path.exists(input_data_dir):
-        os.makedirs(input_data_dir)
+    os.makedirs(input_data_dir)
 
     calibrations_dir = os.path.join(bp_map_outputdir, "calibrations")
-    if not os.path.exists(calibrations_dir):
-        os.mkdir(calibrations_dir)
+    os.mkdir(calibrations_dir)
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
