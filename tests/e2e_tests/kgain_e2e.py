@@ -37,13 +37,13 @@ def set_vistype_for_tvac(
     Args:
     list_of_fits (list): list of FITS files that need to be updated.
     """
-    print("Adding VISTYPE='PUPILIMG' to TVAC data")
+    print("Adding VISTYPE='CGIVST_CAL_PUPIL_IMAGING' to TVAC data")
     for file in list_of_fits:
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
         # Adjust VISTYPE
-        if prihdr['VISTYPE'] == 'N/A':
-            prihdr['VISTYPE'] = 'PUPILIMG'
+        if prihdr['VISTYPE'] == 'N/A' or prihdr['VISTYPE'] == "PUPILIMG":
+            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
         exthdr = fits_file[1].header
         if exthdr['EMGAIN_A'] == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
