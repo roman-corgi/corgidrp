@@ -668,7 +668,6 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
         image_center_y=image_center_y,
         separation_diameter_arcsec=separation_diameter_arcsec,
         alignment_angle=alignment_angle,
-        flux_or_irr=flux_or_irr,
         phot_kwargs=phot_kwargs
     )
     
