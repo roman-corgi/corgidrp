@@ -1,6 +1,5 @@
 #A file to test the non-linearity correction, including a comparison with the II&T pipeline
 import os
-import glob
 import pickle
 import numpy as np
 import corgidrp.mocks as mocks
@@ -153,11 +152,8 @@ def test_non_linearity_correction():
         os.mkdir(datadir)
 
     emgain = 2000
-    mocks.create_nonlinear_dataset(test_non_linearity_path, filedir=datadir,em_gain=emgain)
-
-    ####### open up the files
-    sim_data_filenames = glob.glob(os.path.join(datadir, "simcal_nonlin*.fits"))
-    nonlinear_dataset = data.Dataset(sim_data_filenames)
+    nonlinear_dataset = mocks.create_nonlinear_dataset(test_non_linearity_path, filedir=datadir, em_gain=emgain)
+    
     assert len(nonlinear_dataset) == 2
 
     ######## perform non-linearity correction

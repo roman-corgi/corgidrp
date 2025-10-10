@@ -25,11 +25,9 @@ def test_create_flatfield_neptune():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir) 
-    mocks.create_simflat_dataset(filedir=datadir)
     
     # simulated images to be checked in flat division
-    simdata_filenames=glob.glob(os.path.join(datadir, "sim_flat*.fits"))
-    simflat_dataset=data.Dataset(simdata_filenames)
+    simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
     
     ###### create simulated raster scanned data
     # check that simulated raster scanned data folder exists, and create if not
@@ -108,11 +106,9 @@ def test_create_flatfield_uranus():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir) 
-    mocks.create_simflat_dataset(filedir=datadir)
     
     # simulated images to be checked in flat division
-    simdata_filenames=glob.glob(os.path.join(datadir, "sim_flat*.fits"))
-    simflat_dataset=data.Dataset(simdata_filenames)
+    simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
     
     ###### create simulated raster scanned data
     # check that simulated raster scanned data folder exists, and create if not

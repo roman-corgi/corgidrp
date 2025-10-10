@@ -685,7 +685,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     return processed_dataset 
 
 
-def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None):
+def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
     """ 
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -696,6 +696,11 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
                                                   path is taken
         xcent_guess (float): initial x guess for the centroid fit for all frames
         ycent_guess (float): initial y guess for the centroid fit for all frames
+        bb_nb_dx (float): horizontal image offset between the narrowband and broadband filters, in EXCAM pixels. 
+                          This will override the offset in the existing lookup table. 
+        bb_nb_dy (float): vertical image offset between the narrowband and broadband filters, in EXCAM pixels. 
+                          This will override the offset in the existing lookup table. 
+        return_all (boolean): if false (default) returns only the broad band science frames, if true it returns all (including narrow band) frames
     
     Returns:
         corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
@@ -735,12 +740,23 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
         initial_cent = None
     spot_centroids = compute_psf_centroid(dataset = sat_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
     
-    x0 = np.mean(spot_centroids.xfit)
+    nb_filter = sat_dataset[0].ext_hdr["CFAMNAME"]
+    bb_filter = nb_filter[0]
+    cen_wave, _, xoff_nb, yoff_nb = read_cent_wave(nb_filter)
+    _, _, xoff_bb, yoff_bb = read_cent_wave(bb_filter)
+    # Correct the centroid for the filter-to-filter image offset, so that
+    # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
+    if bb_nb_dx is not None and bb_nb_dy is not None:
+        x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
+        y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
+    else:
+        x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
+        y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
     x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
-    y0 = np.mean(spot_centroids.yfit)
     y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
-    filter = sat_dataset[0].ext_hdr["CFAMNAME"]
-    cen_wave = read_cent_wave(filter)[0]
+    if return_all:
+        sci_dataset = dataset
+
     for frame in sci_dataset:
         frame.ext_hdr["WAVLEN0"] = cen_wave
         frame.ext_hdr["WV0_X"] = x0
@@ -802,6 +818,61 @@ def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials
     dataset.update_after_processing_step(history_msg)
     return dataset
 
+def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
+    """
+    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
+    the wavelength zero point with units photoelectron/s/bin.
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): 
+        halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
+        halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
+        apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
+        
+    Returns:
+        corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
+    """
+    dataset = input_dataset.copy()
+    
+    for image in dataset:
+        xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
+        image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        err_cutout = image.err[:,ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        bad_ind = np.where(dq_cutout > 0)
+        image_cutout[bad_ind] = np.nan
+        err_cutout[bad_ind] = np.nan
+        wave = np.mean(wave_cal_map_cutout, axis=1)
+        wave_err = np.mean(wave_err_cutout, axis=1)
+        err = np.sqrt(np.nansum(np.square(err_cutout), axis=2))
+        # dq collpase: keep all flags on
+        dq_collapse = np.bitwise_or.reduce(dq_cutout, axis=1)
+ 
+        if apply_weights:
+            err_cutout[0][err_cutout[0] == 0] = np.nan
+            whts = 1./np.square(err_cutout[0])
+            spec = np.nansum(image_cutout * whts, axis = 1) / np.nansum (whts, axis = 1) * (2 * halfwidth + 1)
+            err[0] = 1./np.sqrt(np.nansum(whts, axis = 1))
+            weight_str = "weights applied"
+        else:
+            spec = np.nansum(image_cutout, axis=1)
+            weight_str = "no weights applied"
+        image.data = spec
+        image.err = err
+        image.dq = dq_collapse
+        image.hdu_list["WAVE"].data = wave
+        image.hdu_list["WAVE_ERR"].data = wave_err
+        del(image.hdu_list["POSLOOKUP"])
+    history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
+    dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
+    return dataset
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """

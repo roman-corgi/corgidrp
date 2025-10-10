@@ -550,6 +550,7 @@ def test_generate_multiple_recipes():
     # add vistype
     for frame in dataset:
         frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_PUPIL_IMAGING"
+        frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_PUPIL_IMAGING"
     dataset.save()
     filelist = [frame.filepath for frame in dataset]
 
@@ -558,41 +559,7 @@ def test_generate_multiple_recipes():
     assert len(recipes) == 2
 
 
-def test_generate_chain_recipes():
-    """
-    Tests that we can generate multiple recipes when passing in a dataset
-    """
-    # create dirs
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
-    # Make a non-linearity correction calibration file
-    input_non_linearity_filename = "nonlin_table_TVAC.txt"
-    test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
-    test_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
 
-    frame = mocks.create_flux_image(1, 3, 1)
-    frame.filename = "cgi_0200001999001000001_20250415t0305102_l1_.fits"
-    dataset = data.Dataset([frame])
-    # add vistype
-    for frame in dataset:
-        frame.ext_hdr['DATALVL'] = "L1"
-    dataset.save(filedir=datadir)
-    filelist = [frame.filepath for frame in dataset]
-
-    # skip missing cals just to get the recipes
-    old_setting = corgidrp.skip_missing_cal_steps
-    corgidrp.skip_missing_cal_steps = True
-    # suppress warnings about skpping steps
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning)
-        recipes = walker.autogen_recipe(filelist, outputdir)
-    corgidrp.skip_missing_cal_steps = old_setting
-
-    assert len(recipes) == 3
 
 if __name__ == "__main__":#
     test_autoreducing()

@@ -5,12 +5,14 @@ import re
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime, timedelta
 import corgidrp
 import corgidrp.data as data
 import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import shutil
 try:
     from proc_cgi_frame.gsw_process import Process, mean_combine
 except:
@@ -37,53 +39,6 @@ def fix_str_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def fix_headers_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        if 'BUILD' in prihdr:
-            prihdr.remove("BUILD")
-        if 'OBSTYPE' in prihdr:
-            prihdr["OBSNAME"] = prihdr['OBSTYPE']
-            prihdr.remove('OBSTYPE')
-        if 'OBSID' in prihdr:
-            prihdr['OBSNUM'] = prihdr['OBSID']
-            prihdr.remove('OBSID')
-        if 'CMDGAIN' in exthdr:
-            exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-            exthdr.remove('CMDGAIN')
-        exthdr['EMGAIN_A'] = -1
-        if 'DATA_LEVEL' in exthdr:
-            exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-            exthdr.remove('DATA_LEVEL')
-        # exthdr['KGAINPAR'] = exthdr['KGAIN']
-        if 'OBSTYPE' in prihdr:
-            prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        prihdr['PHTCNT'] = False
-        exthdr['ISPC'] = False
-        exthdr['BUNIT'] = 'DN'
-        prihdr1, exthdr1 = mocks.create_default_L1_headers()
-        for key in prihdr1:
-            if key not in prihdr:
-                prihdr[key] = prihdr1[key]
-        for key in exthdr1:
-            if key not in exthdr:
-                exthdr[key] = exthdr1[key]
-        prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-        # Update FITS file  
-        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_trad_dark(e2edata_path, e2eoutput_path):
@@ -107,13 +62,20 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
 
-    # make output directory if needed
-    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "build_trad_dark_output")
-    if not os.path.exists(build_trad_dark_outputdir):
-        os.mkdir(build_trad_dark_outputdir)
+    # Create main output directory and full-frame test subfolder
+    main_output_dir = os.path.join(e2eoutput_path, "trad_dark_e2e")
+    build_trad_dark_outputdir = os.path.join(main_output_dir, "trad_dark_full_frame")
+    if os.path.exists(build_trad_dark_outputdir):
+        shutil.rmtree(build_trad_dark_outputdir)
+    os.makedirs(build_trad_dark_outputdir)
 
-    for f in os.listdir(build_trad_dark_outputdir):
-        os.remove(os.path.join(build_trad_dark_outputdir, f))
+    # Create input_data and calibrations subfolders
+    input_data_dir = os.path.join(build_trad_dark_outputdir, 'input_l1')
+    calibrations_dir = os.path.join(build_trad_dark_outputdir, 'calibrations')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -139,6 +101,12 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
+    # Copy files to input_data directory and update file list
+    trad_dark_data_filelist = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in trad_dark_data_filelist
+    ]
+
     # modify headers from TVAC to in-flight headers
     #fix_headers_for_tvac(trad_dark_data_filelist)
     fix_str_for_tvac(trad_dark_data_filelist)
@@ -162,7 +130,10 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=build_trad_dark_outputdir, filename="mock_nonlinearcal.fits" )
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    base_time = datetime.now()
+    nonlinear_cal.ext_hdr['FILETIME'] = base_time.isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
 
 
     # Load and combine noise maps from various calibration files into a single array
@@ -193,7 +164,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    noise_maps.save(filedir=build_trad_dark_outputdir, filename="mock_detnoisemaps.fits")
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    noise_maps.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=1)).isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_maps], output_dir=calibrations_dir, level_suffix="dnm_cal")
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -202,7 +175,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
                                 input_dataset=mock_input_dataset)
-    kgain.save(filedir=build_trad_dark_outputdir, filename="mock_kgain.fits")
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    kgain.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=2)).isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
 
     # add calibration files to caldb
     this_caldb.create_entry(nonlinear_cal)
@@ -273,7 +248,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     TVAC_trad_dark = mean_frame #fits.getdata(TVAC_dark_path) 
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
-    pass
+    print('e2e test for trad_dark calibration passed')
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -301,13 +276,20 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
 
-    # make output directory if needed
-    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "build_trad_dark_output")
-    if not os.path.exists(build_trad_dark_outputdir):
-        os.mkdir(build_trad_dark_outputdir)
-    # remove any files in the output directory that may have been there previously
-    for f in os.listdir(build_trad_dark_outputdir):
-        os.remove(os.path.join(build_trad_dark_outputdir, f))
+    # Create main output directory and image-area test subfolder
+    main_output_dir = os.path.join(e2eoutput_path, "trad_dark_e2e")
+    build_trad_dark_outputdir = os.path.join(main_output_dir, "trad_dark_image_area")
+    if os.path.exists(build_trad_dark_outputdir):
+        shutil.rmtree(build_trad_dark_outputdir)
+    os.makedirs(build_trad_dark_outputdir)
+
+    # Create input_data and calibrations subfolders
+    input_data_dir = os.path.join(build_trad_dark_outputdir, 'input_l1')
+    calibrations_dir = os.path.join(build_trad_dark_outputdir, 'calibrations')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
     
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -332,6 +314,16 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
+    # Copy files to input_data directory with proper naming
+    for i, file_path in enumerate(trad_dark_data_filelist):
+        shutil.copy2(file_path, input_data_dir)
+    
+    # Update trad_dark_data_filelist to point to new files
+    trad_dark_data_filelist = []
+    for f in os.listdir(input_data_dir):
+        if f.endswith('.fits'):
+            trad_dark_data_filelist.append(os.path.join(input_data_dir, f))
+
     # modify headers from TVAC to in-flight headers
     #fix_headers_for_tvac(trad_dark_data_filelist)
 
@@ -354,7 +346,10 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=build_trad_dark_outputdir, filename="mock_nonlinearcal.fits" )
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    base_time = datetime.now()
+    nonlinear_cal.ext_hdr['FILETIME'] = base_time.isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
 
 
     # Load and combine noise maps from various calibration files into a single array
@@ -385,7 +380,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    noise_maps.save(filedir=build_trad_dark_outputdir, filename="mock_detnoisemaps.fits")
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    noise_maps.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=1)).isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_maps], output_dir=calibrations_dir, level_suffix="dnm_cal")
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -394,7 +391,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
                                 input_dataset=mock_input_dataset)
-    kgain.save(filedir=build_trad_dark_outputdir, filename="mock_kgain.fits")
+    # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
+    kgain.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=2)).isoformat()
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
 
     # add calibration files to caldb
     this_caldb.create_entry(nonlinear_cal)
@@ -472,7 +471,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     test_filename = os.path.basename(test_filepath)
     test_filename = re.sub('_l[0-9].', '', test_filename)
     assert(trad_dark.filename == test_filename)
-    pass
+    print('e2e test for trad_dark_im calibration passed')
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -485,7 +484,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2' #r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2' #r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
 
     outputdir = thisfile_dir
