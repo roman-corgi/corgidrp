@@ -873,6 +873,26 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         e2eoutput_path (str): Path to the output directory
     """
     
+    # Load L1 keyword definitions from CSV
+    l1_keywords_by_hdu = {'Primary': set(), 'Image': set()}
+    try:
+        import csv
+        csv_path = os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'data', 'header_formats', 'l1.csv')
+        if os.path.exists(csv_path):
+            with open(csv_path, 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    keyword = row.get('Keyword', '').strip()
+                    section = row.get('Section', '').strip()
+                    
+                    if keyword:
+                        if 'Primary Header' in section:
+                            l1_keywords_by_hdu['Primary'].add(keyword)
+                        elif 'Image Header' in section:
+                            l1_keywords_by_hdu['Image'].add(keyword)
+    except Exception as e:
+        print(f"Warning: Could not load L1 keywords from CSV: {e}")
+    
     # Define all data products and their file locations
     data_products = {
         'L2a': glob.glob(os.path.join(thisfile_dir, "l1_to_l2a_e2e", "*.fits")),
@@ -937,6 +957,14 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
                         all_headers[hdu_name][keyword] = {}
                     all_headers[hdu_name][keyword][product_name] = True
     
+    # Add L1 keywords to the all_headers structure
+    for hdu_name, keywords in l1_keywords_by_hdu.items():
+        if hdu_name not in all_headers:
+            all_headers[hdu_name] = {}
+        for keyword in keywords:
+            if keyword not in all_headers[hdu_name]:
+                all_headers[hdu_name][keyword] = {}
+    
     # Create Excel file with one sheet per HDU
     output_file = os.path.join(thisfile_dir, "header_crossreference.xlsx")
     
@@ -945,15 +973,45 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         for hdu_name in sorted(all_headers.keys()):
             # Get all keywords for this HDU
             keywords = sorted(all_headers[hdu_name].keys())
-            product_names = sorted(data_files.keys())
+            
+            ordered_products = ['L1']  # Start with L1
+            
+            # Add L2a
+            if 'L2a' in data_files:
+                ordered_products.append('L2a')
+            
+            # Add L2b variants (Analog before PC)
+            if 'L2b_Analog' in data_files:
+                ordered_products.append('L2b_Analog')
+            if 'L2b_PC' in data_files:
+                ordered_products.append('L2b_PC')
+            
+            # Add L3
+            if 'L3' in data_files:
+                ordered_products.append('L3')
+            
+            # Add L4
+            if 'L4_Coron' in data_files:
+                ordered_products.append('L4_Coron')
+            if 'L4_Noncoron' in data_files:
+                ordered_products.append('L4_Noncoron')
+            
+            # Add remaining products alphabetically
+            remaining_products = sorted([p for p in data_files.keys() if p not in ordered_products])
+            ordered_products.extend(remaining_products)
             
             # Create a DataFrame with keywords as rows and products as columns
             data = []
             for keyword in keywords:
                 row = {'Keyword': keyword}
-                for product in product_names:
-                    # Mark with 'X' if this header exists in this product's HDU
-                    row[product] = 'X' if all_headers[hdu_name][keyword].get(product, False) else ''
+                # Add columns in the specified order
+                for product in ordered_products:
+                    if product == 'L1':
+                        # L1 column from CSV
+                        row['L1'] = 'X' if keyword in l1_keywords_by_hdu.get(hdu_name, set()) else ''
+                    else:
+                        # Data product columns
+                        row[product] = 'X' if all_headers[hdu_name][keyword].get(product, False) else ''
                 data.append(row)
             
             df = pd.DataFrame(data)
