@@ -1259,8 +1259,8 @@ def test_star_pos():
 
         # Check if the satellite position has been properly recorded in all images
         for img in dataset_out:
-            assert ext_hdr['WV0_X'] + x_in == pytest.approx(img.ext_hdr['STARLOCX'], abs=1e-10), 'The X position of the star is incorrect.'
-            assert ext_hdr['WV0_Y'] + y_in == pytest.approx(img.ext_hdr['STARLOCY'], abs=1e-10), 'The Y position of the star is incorrect.'
+            assert ext_hdr['WV0_X'] - x_in == pytest.approx(img.ext_hdr['STARLOCX'], abs=1e-10), 'The X position of the star is incorrect.'
+            assert ext_hdr['WV0_Y'] - y_in == pytest.approx(img.ext_hdr['STARLOCY'], abs=1e-10), 'The Y position of the star is incorrect.'
        
 if __name__ == "__main__":
     #convert_tvac_to_dataset()

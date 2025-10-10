@@ -1236,11 +1236,18 @@ def star_pos_spec(
     phi_deg=0,
     ):
     """ Find the position of the star using the information from the satellite
-      spot. The position of a satellite spot from polar coordinates into (X,Y)
-      EXCAM pixel coordinates. The radial distance of the satellite spot is
-      measured in units lambda/D, with lambda the band reference wavelength,
-      either 730 nm (band 3) or 660 nm (band 2), and D=2.4 m, and the angle is
-      measured in degrees, with 0 degrees meaning +X and 90 degrees meaning +Y.
+      spot. The position of the satellite spot on EXCAM is given by the
+      zero-point solution. Using the information of the commanded position of
+      the satellite spot with respect the occulted star, one can infer the
+      location of the occulted star.
+      The relative of the satellite spot with respect the occulted star is given
+      in polar coordinates. The radial distance of the satellite spot is measured
+      in units lambda/D, with lambda the band reference wavelength, either 730 nm
+      (band 3) or 660 nm (band 2), and D=2.4 m. The polar angle is measured in
+      degrees, with 0 degrees meaning +X and 90 degrees meaning +Y. The polar
+      coordinates of the satellite spot are translated into (X,Y) EXCAM pixel
+      coordinates, which can then be subtracted from the zero-point solution to
+      infer the location of the occulted star.
 
       Args:
         dataset (Dataset): A Dataset with L3 spectroscopy frames.
@@ -1275,16 +1282,17 @@ def star_pos_spec(
 
         # Conversion from EXCAM pixels to milliarsec
         plate_scale_mas = img.ext_hdr['PLTSCALE']
-        # Conversion from radians to milliarsec
+        # Conversion from radians to milliarsec (mas/rad)
         rad2mas = 180/np.pi*3600*1e3
-        # lam/D to EXCAM pixels
+        # lam/D in radians
         lamDrad = 1e-9*lam_ref_nm/D_m
+        # lam/D to EXCAM pixels
         r_pix = r_lamD*lamDrad*rad2mas/plate_scale_mas
         # EXCAM (X,Y) coordinates
         X_pix = r_pix * np.cos(phi_deg*np.pi/180)
         Y_pix = r_pix * np.sin(phi_deg*np.pi/180)
-        # Add them to a keyword
-        img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_X'] + X_pix
-        img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y'] + Y_pix
+        # Update estimated location of the occulted star
+        img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_X'] - X_pix
+        img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y'] - Y_pix
 
     return dataset_cp
