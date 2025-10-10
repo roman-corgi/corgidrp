@@ -529,4 +529,5 @@ def initialize():
     initialized = True
 
 initialized = False
-initialize()
+if not os.environ.get('CORGIDRP_DO_NOT_AUTO_INIT_CALDB', False):
+    initialize()
