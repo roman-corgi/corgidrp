@@ -181,8 +181,13 @@ def test_mueller_matrix_cal():
         pol0.err = (np.ones_like(pol0.data) * 1)[None,:]
         pol45.err = (np.ones_like(pol45.data) * 1)[None,:]
 
+        #Add Random Roll - This should still work everywhere. 
+        random_roll = np.random.randint(0,360)
+        pol0.pri_hdr['ROLL'] = random_roll
+        pol45.pri_hdr['ROLL'] = random_roll
+
         #get the q and u values from the reference polarization degree and angle
-        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i])
+        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_roll)
         q_meas = q * q_efficiency + u * uq_cross_talk + q_instrumental_polarization/100.0
         u_meas = u * u_efficiency + q * qu_cross_talk + u_instrumental_polarization/100.0
         # generate four gaussians scaled appropriately for the target's polarization
