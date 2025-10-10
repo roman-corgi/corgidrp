@@ -569,4 +569,6 @@ if __name__ == "__main__":#
     test_skip_missing_optional_calib()
     test_jit_calibs()
     test_generate_multiple_recipes()
-    test_generate_chain_recipes()
+
+
+
