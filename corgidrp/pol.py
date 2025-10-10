@@ -19,8 +19,17 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
     Args: 
         input_dataset (list): A list of CorgiDRP data objects that will be used to generate the Mueller Matrix.
             This should be a list of either all ND datasets or all non-ND datasets.
+        image_center_x (int, optional): The x-coordinate of the image center. Defaults to 512.
+        image_center_y (int, optional): The y-coordinate of the image center. Defaults to 512.
+        separation_diameter_arcsec (float, optional): The separations in arcseconds between the center of the two FOVs. 
+            Defaults to 7.5 arcseconds.
+        alignment_angles (list, optional): A list of two angles in degrees that represent the alignment angles 
+            of the Wollaston prism for the two polarization states (e.g., [0, 45] for POL0 and POL45). Defaults to [0, 45].
+        phot_kwargs (dict, optional): A dictionary of keyword arguments to pass to the aperture photometry function.
+            See the documentation for the fluxcal.calibrate_fluxcal_aper function for more details.
         path_to_pol_ref_file (str): The path to the polarization reference file. 
             Default is "./data/stellar_polarization_database.csv".
+
     Returns:
         mueller_matrix (MuellerMatrix or NDMuellerMatrix): The generated Mueller Matrix calibration file.
     '''
@@ -156,15 +165,22 @@ def get_qu_from_p_theta(p, theta):
 def measure_normalized_difference_L3(input_pol_Image,
                                     image_center_x=512,image_center_y=512,
                                     separation_diameter_arcsec=7.5, alignment_angle=None,
-                                    flux_or_irr = 'flux',phot_kwargs=None):
+                                    phot_kwargs=None):
     '''
     Measure the normalized difference for a single CorgiDRP pol Image.
     The normalized difference is defined as (I0 - I90) / (I0 + I90) for Q,
     and (I45 - I135) / (I45 + I135) for U.
 
     Args:
-        pol_Image (CorgiDRP Image): A CorgiDRP Image object that has been processed through the pol pipeline.
+        input_pol_Image (CorgiDRP Image): A CorgiDRP Image object that has been processed through the pol pipeline.
             It should have the FPAMNAME keyword in the header to identify the polarization angle.
+        image_center_x (int, optional): The x-coordinate of the image center. Defaults to 512.
+        image_center_y (int, optional): The y-coordinate of the image center. Defaults to 512.
+        separation_diameter_arcsec (float, optional): The separation in arcseconds between the center of the two FOVs. 
+            Defaults to 7.5 arcseconds.
+        alignment_angle (float, optional): The alignment angle of the Wollaston prism in degrees.
+            This is used to determine which polarization state is being measured (e.g., 0 for POL0, 45 for POL45).
+            If None, the function will attempt to determine the angle from the DPAMNAME keyword in the header.
         phot_kwargs (dict): A dictionary of keyword arguments to pass to the aperture photometry function.
             See the documentation for the fluxcal.calibrate_fluxcal_aper function for more details.
 
@@ -180,7 +196,6 @@ def measure_normalized_difference_L3(input_pol_Image,
                                                         image_center_y = image_center_y,
                                                         separation_diameter_arcsec = separation_diameter_arcsec,
                                                         alignment_angle = alignment_angle,
-                                                        flux_or_irr = flux_or_irr,
                                                       phot_kwargs=phot_kwargs)   
     
     difference = aper_flux_1[0] - aper_flux_2[0]

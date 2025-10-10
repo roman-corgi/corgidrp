@@ -732,7 +732,6 @@ def measure_aper_flux_pol(image,
                           image_center_y=512,
                           separation_diameter_arcsec=7.5, 
                           alignment_angle=None,
-                          flux_or_irr = 'flux',
                           phot_kwargs=None):
     """
     Measure the individual flux from both polarized images in a polarimetric observation
