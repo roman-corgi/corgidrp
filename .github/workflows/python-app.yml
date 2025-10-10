@@ -38,4 +38,4 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82,DCO020,DCO021,DCO022,DCO023,DCO024,DCO030,DCO031,DCO032,DCO060,DCO061,DCO062,DCO063,DCO064,DCO065 --show-source --statistics
     - name: Test with pytest
       run: |
-        pytest error
+        pytest
