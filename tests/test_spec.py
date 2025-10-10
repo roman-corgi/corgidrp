@@ -1176,17 +1176,9 @@ def test_slit_trans():
         logger.info(f"Total input images validated with FSAM=OPEN: {n_images}")
         logger.info("")
 
-        # Combine slit and slitless Datasets into one Dataset
-        spec_ds_list = []
-        for image in spec_slit_ds:
-            spec_ds_list += [image]
-        for image in spec_open_ds:
-            spec_ds_list += [image]
-        spec_ds = Dataset(spec_ds_list)
-
         # Estimate slit transmission
         slit_trans_out, slit_pos_x, slit_pos_y = steps.slit_transmission(
-            spec_ds,
+            spec_slit_ds, spec_open_ds,
             x_range=[xrange0, xrange1],
             y_range=[yrange0, yrange1],
         )
