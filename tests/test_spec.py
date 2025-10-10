@@ -1225,6 +1225,8 @@ def test_star_pos():
     # Define some default L3 Dataset (data are not used)
     pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
     ext_hdr['CFAMNAME'] = '3F'
+    # Setup some wavelength zero-point values
+    ext_hdr['WV0_X'], ext_hdr['WV0_Y'] = 38, 42
     # Arbitrary number of images
     image_list = []
     for _ in range(12):
@@ -1257,8 +1259,8 @@ def test_star_pos():
 
         # Check if the satellite position has been properly recorded in all images
         for img in dataset_out:
-            assert x_in == pytest.approx(img.ext_hdr['SATPOSX'], abs=1e-10), 'The X position of the satellite spot is incorrect.'
-            assert y_in == pytest.approx(img.ext_hdr['SATPOSY'], abs=1e-10), 'The Y position of the satellite spot is incorrect.'
+            assert ext_hdr['WV0_X'] + x_in == pytest.approx(img.ext_hdr['STARLOCX'], abs=1e-10), 'The X position of the star is incorrect.'
+            assert ext_hdr['WV0_Y'] + y_in == pytest.approx(img.ext_hdr['STARLOCY'], abs=1e-10), 'The Y position of the star is incorrect.'
        
 if __name__ == "__main__":
     #convert_tvac_to_dataset()

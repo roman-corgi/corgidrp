@@ -1235,9 +1235,10 @@ def star_pos_spec(
     r_lamD=0,
     phi_deg=0,
     ):
-    """ Translate the position of a satellite spot from polar coordinates into
-      (X,Y) EXCAM pixel coordinates. The radial distance of the satellite spot
-      is measured in units lambda/D, with lambda the band reference wavelength,
+    """ Find the position of the star using the information from the satellite
+      spot. The position of a satellite spot from polar coordinates into (X,Y)
+      EXCAM pixel coordinates. The radial distance of the satellite spot is
+      measured in units lambda/D, with lambda the band reference wavelength,
       either 730 nm (band 3) or 660 nm (band 2), and D=2.4 m, and the angle is
       measured in degrees, with 0 degrees meaning +X and 90 degrees meaning +Y.
 
@@ -1283,7 +1284,7 @@ def star_pos_spec(
         X_pix = r_pix * np.cos(phi_deg*np.pi/180)
         Y_pix = r_pix * np.sin(phi_deg*np.pi/180)
         # Add them to a keyword
-        img.ext_hdr['SATPOSX'] = X_pix
-        img.ext_hdr['SATPOSY'] = Y_pix
+        img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_X'] + X_pix
+        img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y'] + Y_pix
 
     return dataset_cp
