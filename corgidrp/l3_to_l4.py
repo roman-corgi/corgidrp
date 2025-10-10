@@ -620,7 +620,9 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
         # look for WCS solutions
         if use_wcs is True:
-            astr_hdr = WCS(sci_hd)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+                astr_hdr = WCS(sci_hd)
             CD1_2 = sci_hd['CD1_2']
             CD2_2 = sci_hd['CD2_2']
             roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
