@@ -292,7 +292,7 @@ def guess_template(dataset):
                 recipe_filename = "l1_to_l2a_noisemap.json"
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "build_trad_dark_image.json"
-        elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         elif image.pri_hdr['VISTYPE'] in ("ABSFLXFT", "ABSFLXBT"):
             _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
