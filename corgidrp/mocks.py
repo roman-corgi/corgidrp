@@ -4399,18 +4399,21 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     # create initial blank frame
     image_data = np.zeros(shape=(1024, 1024))
 
+    pixel_scale = 0.0218 #arcsec/pixel
+    primary_d = 2.363114 #meters
+
     image_separation_arcsec = 7.5
 
     #determine radius of the images
     if observing_mode == 'NFOV':
         cfamname = '1F'
-        radius = int(round((9.7 * ((0.5738 * 1e-6) / 2.363114) * 206265) / 0.0218))
+        radius = int(round((9.7 * ((0.5738 * 1e-6) / primary_d) * 206265) / pixel_scale))
     elif observing_mode == 'WFOV':
         cfamname = '4F'
-        radius = int(round((20.1 * ((0.8255 * 1e-6) / 2.363114) * 206265) / 0.0218))
+        radius = int(round((20.1 * ((0.8255 * 1e-6) / primary_d) * 206265) / pixel_scale))
     else:
         cfamname = '1F'
-        radius = int(round(1.9 / 0.0218))
+        radius = int(round(1.9 / pixel_scale))
     
     #determine the center of the two images
     if alignment_angle is None:
@@ -4418,11 +4421,8 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
             alignment_angle = 0
         else:
             alignment_angle = 45
-    angle_rad = alignment_angle * (np.pi / 180)
-    displacement_x = int(round((7.5 * np.cos(angle_rad)) / (2 * 0.0218)))
-    displacement_y = int(round((7.5 * np.sin(angle_rad)) / (2 * 0.0218)))
-    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
-    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+   
+    center_left, center_right = get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale, image_center)
 
     #fill the location where the images are with 1s
     y, x = np.indices([1024, 1024])
@@ -4439,3 +4439,23 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
 
     return image
 
+def get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale = 0.0218, image_center=(512, 512)):
+    """
+    Calculate the centers of the two polarized images based on the separation and alignment angle.
+
+    Args:
+        image_separation_arcsec (float): Separation between the two polarized images in arcseconds.
+        alignment_angle (float): Angle in degrees of how the two polarized images are aligned with respect to the horizontal.
+        pixel_scale (float): Plate scale in arcseconds per pixel.
+        image_center (tuple(int, int), optional): Pixel location of where the two images are centered on the detector.
+
+    Returns:
+        tuple: Pixel locations of the centers of the two polarized images.
+    """
+    angle_rad = alignment_angle * (np.pi / 180)
+    displacement_x = int(round((image_separation_arcsec * np.cos(angle_rad)) / (2 * pixel_scale)))
+    displacement_y = int(round((image_separation_arcsec * np.sin(angle_rad)) / (2 * pixel_scale)))
+    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+
+    return center_left, center_right
