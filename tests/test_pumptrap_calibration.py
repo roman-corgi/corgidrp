@@ -2,7 +2,10 @@ import re
 import os
 import glob
 import pickle
+import random
 import numpy as np
+import astropy.io.fits as fits
+import shutil
 # from corgidrp.mocks import generate_mock_pump_trap_data
 import corgidrp.mocks as mocks
 from corgidrp.detector import imaging_area_geom
@@ -28,18 +31,99 @@ def test_tpump_analysis():
 
     # Set the seed - II&T ut tests don't work everytime, so let's fix it. 
     np.random.seed(39)
+    random.seed(39)
     #Generate the mock data:
     test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
     metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
     output_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data')
+    
+    # Clean up any existing files to ensure testing with latest data
+    if os.path.exists(test_data_dir):
+        shutil.rmtree(test_data_dir)
+    os.makedirs(test_data_dir, exist_ok=True)
+    
     print("Generating mock data")
     mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file)
     print("Done generating mock data")
 
-    #Read in all the data. 
-    # test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data")
-    data_filenames = sorted(glob.glob(os.path.join(test_data_dir, "*.fits")))
-    pump_trap_dataset = Dataset(data_filenames)
+    #Code to read in all the data and organize into temperature/scheme directories since files have
+    # been renamed to follow cgi naming convention
+    # (tpump_analysis expects this directory structure)
+    all_files = [f for f in os.listdir(test_data_dir) if f.endswith('.fits') and f.startswith('cgi_')]
+    
+    # Create a mapping of files to their temperature/scheme info by reading headers
+    file_info = {}
+    
+    for filename in all_files:
+        filepath = os.path.join(test_data_dir, filename)
+        with fits.open(filepath) as hdul:
+            # Read temperature and scheme from extension header
+            if len(hdul) > 1 and 'EXCAMT' in hdul[1].header:
+                temp = str(hdul[1].header['EXCAMT']) 
+                if temp not in file_info:
+                    file_info[temp] = []
+                file_info[temp].append(filename)
+    
+    # Organize files into temperature/scheme directories based on headers
+    for temp, temp_files in file_info.items():
+        temp_dir = os.path.join(test_data_dir, temp)
+        if not os.path.exists(temp_dir):
+            os.mkdir(temp_dir)
+        
+        # Sort files by filename first to ensure deterministic ordering
+        temp_files.sort()
+        
+        # Group files by scheme using header keywords, including phase time for sorting
+        scheme_files = {1: [], 2: [], 3: [], 4: []}
+        
+        for filename in temp_files:
+            filepath = os.path.join(test_data_dir, filename)
+            with fits.open(filepath) as hdul:
+                if len(hdul) > 1:
+                    # Determine scheme from TPSCHEM headers
+                    phase_time = hdul[1].header.get('TPTAU', 0)
+                    for i in range(1, 5):
+                        if hdul[1].header.get(f'TPSCHEM{i}', 0) > 0:
+                            scheme_files[i].append((phase_time, filename))
+                            break
+        
+        # Move files to scheme subdirectories
+        for sc, sc_files in scheme_files.items():
+            if sc_files:  # Only create directory if there are files for this scheme
+                sch_dir = os.path.join(temp_dir, f'Scheme_{sc}')
+                if not os.path.exists(sch_dir):
+                    os.mkdir(sch_dir)
+                
+                # Sort by phase time, then filename for deterministic ordering,
+                # otherwise tests will sometimes pass, sometimes fail on different systems
+                sc_files.sort(key=lambda x: (x[0], x[1]))
+                
+                for phase_time, filename in sc_files:
+                    old_filepath = os.path.join(test_data_dir, filename)
+                    organized_filepath = os.path.join(sch_dir, filename)
+                    
+                    # Move file to organized directory structure (only if it still exists in original location)
+                    if os.path.exists(old_filepath):
+                        shutil.move(old_filepath, organized_filepath)
+                    elif not os.path.exists(organized_filepath):
+                        raise FileNotFoundError(f"File not found at either {old_filepath} or {organized_filepath}")
+    
+    # Collect all files from the organized directory structure
+    # Sort by temperature, scheme, and filename
+    pump_trap_data_filelist = []
+    for root, dirs, files in os.walk(test_data_dir):
+        # Sort directories to ensure consistent traversal order
+        dirs.sort()
+        files.sort()
+        for name in files:
+            if name.endswith('.fits') and name.startswith('cgi_'):
+                f = os.path.join(root, name)
+                pump_trap_data_filelist.append(f)
+    
+    # Final sort by full filepath to ensure absolute consistency
+    pump_trap_data_filelist.sort()
+    
+    pump_trap_dataset = Dataset(pump_trap_data_filelist)
 
     #Parse the first three characters of each filename into a temperature
     # temps = [int(os.path.basename(f)[:3]) for f in data_filenames]
@@ -110,7 +194,7 @@ def test_tpump_analysis():
                         bins_E=bins_E, bins_cs=bins_cs)
     # filename check
     test_filename = emgain_divided_dataset.frames[-1].filename.split('.fits')[0] + '_tpu_cal.fits'
-    test_filename = re.sub('_L[0-9].', '', test_filename)
+    test_filename = re.sub('_l[0-9].', '', test_filename)
     assert tpump_calibration.filename == test_filename
 
     #Extract the extra info. 
@@ -130,19 +214,20 @@ def test_tpump_analysis():
     assert(noncontinuous_count >= 0)
     assert(pre_sub_el_count > 0)
 
-    #Convert the output back to a dictionary for more testing. 
+    #Convert the output back to a dictionary for more testing.
     trap_dict = rebuild_dict(tpump_calibration.data)
     trap_dict_keys = list(trap_dict.keys())
 
     #Truth values for the sim dataset from ut_tpump_final.py
-    test_trap_dict_keys = [((26, 28), 'CENel1', 0),
-            ((50, 50), 'RHSel1', 0), ((60, 80), 'LHSel2', 0),
-            ((68, 67), 'CENel2', 0), ((98, 33), 'LHSel3', 0),
-            ((98, 33), 'RHSel2', 0), ((41, 15), 'CENel3', 0),
-            ((89, 2), 'RHSel3', 0), ((89, 2), 'LHSel4', 0),
-            [((10, 10), 'LHSel4', 0), ((10, 10), 'LHSel4', 1)],
-            ((56, 56), 'CENel4', 0), ((77, 90), 'RHSel4', 0),
-            ((77, 90), 'CENel2', 0), ((13, 21), 'LHSel1', 0)]
+    # Note: coordinates are now floats (not ints) 
+    test_trap_dict_keys = [((26.0, 28.0), 'CENel1', 0),
+            ((50.0, 50.0), 'RHSel1', 0), ((60.0, 80.0), 'LHSel2', 0),
+            ((68.0, 67.0), 'CENel2', 0), ((98.0, 33.0), 'LHSel3', 0),
+            ((98.0, 33.0), 'RHSel2', 0), ((41.0, 15.0), 'CENel3', 0),
+            ((89.0, 2.0), 'RHSel3', 0), ((89.0, 2.0), 'LHSel4', 0),
+            [((10.0, 10.0), 'LHSel4', 0), ((10.0, 10.0), 'LHSel4', 1)],
+            ((56.0, 56.0), 'CENel4', 0), ((77.0, 90.0), 'RHSel4', 0),
+            ((77.0, 90.0), 'CENel2', 0), ((13.0, 21.0), 'LHSel1', 0)]
     trap_dict_E = [0.32, 0.32, 0.32, 0.32, 0.28, 0.32, 0.32, 0.32,
             0.28, [0.32, 0.28], 0.32, 0.28, 0.32, 0.32]
     trap_dict_cs = [2e-15, 2e-15, 2e-15, 2e-15, 12e-15, 2e-15, 2e-15,

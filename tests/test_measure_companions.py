@@ -142,6 +142,8 @@ def generate_test_data(out_dir):
         fpamname='HOLE',
         target_name=HOST_STAR
     )
+    # bunit needs to be photoelectron/s for later tests, so set that now
+    host_star_image.ext_hdr['BUNIT'] = 'photoelectron/s'
 
     # 2) Measure host star counts and determine zero point.
     host_star_counts, _, _, _ = gaussfit2d(host_star_image.data, host_star_image.data.shape[1]//2, host_star_image.data.shape[0]//2, searchrad=5, guessfwhm=3, 
