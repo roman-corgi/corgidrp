@@ -1025,7 +1025,8 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
     return line_spread
 
 def slit_transmission(
-    spec_ds,
+    dataset_slit,
+    dataset_open,
     target_pix=None,
     x_range=[40.,42],
     y_range=[32.,34],
@@ -1045,25 +1046,23 @@ def slit_transmission(
       transmission map.
 
     Args:
-      spec_ds (Dataset): Dataset containing data with the slit in and out.
-        First set: Images containing a set of extracted spectra for some set of
-        FSM positions with the FSAM slit in its position. There can be a different
-        number of frames for each FSM position.
-        Second set: Dataset containing a set of extracted spectra for some set of
-         FSM positions with the FSAM slit in OPEN position.
+      dataset_slit (Dataset): Dataset containing a set of extracted spectra for
+        some set of FSM positions with the FSAM slit in its position. There can
+        be a different number of frames for each FSM position.
+      dataset_open (Dataset): Dataset containing a set of extracted spectra for
+        some set of FSM positions with the FSAM slit in OPEN position. There can
+        be a different number of frames for each FSM position.
       target_pix (array) (optional): a user-defined Mx2 array containing the
         pixel positions for M target pixels where the slit transmission will be
         derived by interpolation. The target pixels are measured with respect
         the zero-point in (fractional) EXCAM pixels. Default is None. In this
-        case, a rectangular grid of pixel positions is used. Using
-        matplotlib.pyplot, target_pix[0] is the horizontal axis (x), and
-        target_pix[1] is the vertical axis (y).
+        case, a rectangular grid of pixel positions is used. 
       x_range (array): Two values [xmin, xmax] specifying the range of pixels to
         be considered. Units are EXCAM pixels measured with respect the zero-point
-        solution.
+        solution along EXCAM +X direction.
       y_range (array): Two values [ymin, ymax] specifying the range of pixels to
         be considered. Units are EXCAM pixels measured with respect the zero-point
-        solution.
+        solution along EXCAM +Y direction.
       n_gridx (int) (optional): Number of positions when pos_range is set.
       n_gridy (int) (optional): Number of positions when pos_range is set.
       kind (string): Specifies the kind of interpolation. See scipy documentation.
@@ -1075,15 +1074,17 @@ def slit_transmission(
 
     Returns:
       3-element tuple with:
-          1/ Slit transmission map derived at different locations by interpolation.
-          2/ Locations along the wider dimension of the slit with respect the
-          zero-point in (fractional) EXCAM pixels.
-          3/ Locations along the wider dimension of the slit with respect the
-          zero-point in (fractional) EXCAM pixels.
+        1/ Slit transmission map derived at different locations by interpolation.
+        2/ Corresponding locations along EXCAM +X direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+        3/ Corresponding locations along EXCAM +Y direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
     """
     # Confirm spectroscopy configuration for different PAMs
     # CFAM
-    cfam_name = spec_ds[0].ext_hdr['CFAMNAME'].upper()
+    cfam_name = dataset_slit[0].ext_hdr['CFAMNAME'].upper()
     if cfam_name.find('3') != -1:
         dpam_name = 'PRISM3'
         # fsam_name = []
@@ -1093,52 +1094,50 @@ def slit_transmission(
     else:
         raise ValueError(f'{cfam_name} is not a spectroscopy filter')
     # DPAM
-    if spec_ds[0].ext_hdr['DPAMNAME'] != dpam_name:
+    if dataset_slit[0].ext_hdr['DPAMNAME'] != dpam_name:
         raise ValueError(f'DPAMNAME should be {dpam_name}')
     # FPAM
-    fpam_name = spec_ds[0].ext_hdr['FPAMNAME'].upper()
+    fpam_name = dataset_slit[0].ext_hdr['FPAMNAME'].upper()
     if (fpam_name != 'OPEN' and fpam_name != 'ND225' and fpam_name != 'ND475'):
         raise ValueError('FPAMNAME should be either OPEN, ND225 or ND475')
     # SPAM
-    spam_name = spec_ds[0].ext_hdr['SPAMNAME'].upper()
+    spam_name = dataset_slit[0].ext_hdr['SPAMNAME'].upper()
     if spam_name[0:4] != 'SPEC':
         raise ValueError('SPAMNAME should be SPEC')
     # LSAM
-    lsam_name = spec_ds[0].ext_hdr['LSAMNAME'].upper()
+    lsam_name = dataset_slit[0].ext_hdr['LSAMNAME'].upper()
     if lsam_name[0:4] != 'SPEC':
         raise ValueError('LSAMNAME should be SPEC')
-    # FSAM: might be OPEN or not. Find the slit setup
-    fsam_name = 'OPEN'
-    idx_img = 0
-    while fsam_name == 'OPEN' and idx_img < len(spec_ds):
-        fsam_name = spec_ds[idx_img].ext_hdr['FSAMNAME'].upper()
-        idx_img += 1
-    # At this point fsam_name cannot be OPEN
-    if fsam_name == 'OPEN':
-       raise ValueError('Only frames with FSAM=OPEN were found. There must be',
-           'some frames with a slit.') 
-    if (fsam_name != 'OPEN' and fsam_name != 'R1C2' and fsam_name != 'R6C5' and
-        fsam_name != 'R3C1'):
-        raise ValueError('FSAMNAME should be either OPEN, R1C2, R6C5 or R3C1')
+    # FSAM: slit in
+    fsam_name = dataset_slit[0].ext_hdr['FSAMNAME'].upper()
+    if (fsam_name != 'R1C2' and fsam_name != 'R6C5' and fsam_name != 'R3C1'):
+        raise ValueError('FSAMNAME with the slit in must be either R1C2, R6C5 or R3C1')
+    # FSAM: slitless
+    if dataset_open[0].ext_hdr['FSAMNAME'] != 'OPEN':
+        raise ValueError('FSAMNAME must be OPEN for slitless observations.')
 
-    # All images must have the same setup
-    for image in spec_ds:
+    # All images with the slit in must have the same setup
+    for image in dataset_slit:
         exthdr = image.ext_hdr
         assert exthdr['CFAMNAME'].upper() == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
         assert exthdr['DPAMNAME'].upper() == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
         assert exthdr['FPAMNAME'].upper() == fpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
         assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
         assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
-        # It can only be OPEN or fsam_name (unique)
-        assert (exthdr['FSAMNAME'].upper() == fsam_name or exthdr['FSAMNAME'].upper() == 'OPEN'), f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name} or OPEN"
+        assert exthdr['FSAMNAME'].upper() == fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected value: {fsam_name}"
 
-    # Split first by FSAM: two sets
-    dataset_list, fsam_values = spec_ds.split_dataset(exthdr_keywords=['FSAMNAME'])
-    # Double check (FSAM=OPEN and one other value only)
-    if len(dataset_list) != 2 or len(fsam_values) != 2 or 'OPEN' not in fsam_values :
-        raise ValueError('There must be two FSAMNAME values only (including OPEN)')
-    dataset_slit = dataset_list[fsam_values != 'OPEN']
-    dataset_open = dataset_list[fsam_values == 'OPEN']
+    # All images without the slit must have the same setup as with the slit, but
+    # for FSAMNAME=OPEN
+    for image in dataset_open:
+        exthdr = image.ext_hdr
+        assert exthdr['CFAMNAME'].upper() == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
+        assert exthdr['DPAMNAME'].upper() == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
+        assert exthdr['FPAMNAME'].upper() == fpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
+        assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
+        assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
+        # It can only be OPEN
+        assert exthdr['FSAMNAME'].upper() == 'OPEN', f"FSAMNAME={exthdr['FSAMNAME']} differs from expected value: OPEN"
+
     # Split each subset with the slit in by FSMX/Y values (FSM values are not used)
     dataset_slit_subsets = []
     dataset_slit_y = dataset_slit.split_dataset(exthdr_keywords=['FSMY'])[0]
