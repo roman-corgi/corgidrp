@@ -172,13 +172,13 @@ def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
     return out
 
 
-def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS "):
+def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS"):
     """
     Creates default L1 headers by reading values from the l1.csv documentation file.
     
     Args:
         arrtype (str): Array type ("SCI" or "ENG"). Defaults to "SCI".
-        vistype (str): Visit type. Defaults to "CGIVST_TDD_OBS ".
+        vistype (str): Visit type. Defaults to "CGIVST_TDD_OBS".
     
     Returns:
         tuple: 
@@ -2746,7 +2746,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame.ext_hdr['KGAINPAR'] = kgain
         frame.pri_hdr['PHTCNT'] = True
         frame.ext_hdr['ISPC'] = True
-        frame.pri_hdr["VISTYPE"] = "CGIVST_TDD_OBS "
+        frame.pri_hdr["VISTYPE"] = "CGIVST_TDD_OBS"
         # Generate CGI filename with incrementing datetime
         visitid = frame.pri_hdr["VISITID"]
         base_time = datetime.datetime.now()
