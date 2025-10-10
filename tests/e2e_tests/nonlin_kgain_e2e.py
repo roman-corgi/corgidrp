@@ -13,6 +13,7 @@ from corgidrp import data
 from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
+import shutil
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
@@ -27,42 +28,19 @@ def set_vistype_for_tvac(
     Args:
     list_of_fits (list): list of FITS files that need to be updated.
     """
-    print("Adding VISTYPE='PUPILIMG' to TVAC data")
+    print("Adding VISTYPE='CGIVST_CAL_PUPIL_IMAGING' to TVAC data")
     for file in list_of_fits:
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
         # Adjust VISTYPE
         if prihdr['VISTYPE'] == 'N/A':
-            prihdr['VISTYPE'] = 'PUPILIMG'
+            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
         exthdr = fits_file[1].header
         if exthdr['EMGAIN_A'] == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def fix_headers_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-        exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_nonlin_and_kgain_e2e(
@@ -91,7 +69,7 @@ def test_nonlin_and_kgain_e2e(
     kgain_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
 
-    e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_and_kgain_output')
+    e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_kgain_cal_e2e')
 
     if not os.path.exists(nonlin_l1_datadir):
         raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
@@ -100,11 +78,14 @@ def test_nonlin_and_kgain_e2e(
         raise FileNotFoundError('Please store L1 data used to calibrate kgain',
             f'in {kgain_l1_datadir}')
 
-    if not os.path.exists(e2eoutput_path):
-        os.mkdir(e2eoutput_path)
-    # clean up output directory
-    for f in os.listdir(e2eoutput_path):
-        os.remove(os.path.join(e2eoutput_path, f))
+    if os.path.exists(e2eoutput_path):
+        shutil.rmtree(e2eoutput_path)
+    os.makedirs(e2eoutput_path)
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(e2eoutput_path, 'input_l1')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -125,8 +106,14 @@ def test_nonlin_and_kgain_e2e(
         if filepath.lower().endswith('.fits'):
             pupilimg_l1_list.append(filepath)
 
+    # Copy files to input_data directory and update file list
+    nonlin_l1_list = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in nonlin_l1_list
+    ]
 
-    # Set TVAC data to have VISTYPE=PUPILIMG (flight data should have these values)
+
+    # Set TVAC data to have VISTYPE=CGIVST_CAL_PUPIL_IMAGING (flight data should have these values)
     set_vistype_for_tvac(pupilimg_l1_list)
     #fix_headers_for_tvac(pupilimg_l1_list)
 
@@ -164,9 +151,8 @@ def test_nonlin_and_kgain_e2e(
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
-
-   # Print success message
-    print('e2e test for NL passed')
+    # Print success message
+    print('e2e test for nonlin_kgain calibration passed')
 
 if __name__ == "__main__":
 
@@ -176,7 +162,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     OUTPUT_DIR = thisfile_dir
 

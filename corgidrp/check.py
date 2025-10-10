@@ -9,6 +9,7 @@ import logging
 import os
 import glob
 import astropy.io.fits as fits
+import pandas as pd
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -574,3 +575,190 @@ def get_latest_cal_file(e2eoutput_path, pattern, logger=None):
     cal_files = sorted(glob.glob(os.path.join(e2eoutput_path, pattern)), key=os.path.getmtime, reverse=True)
     assert len(cal_files) > 0, f'No {pattern} files found in {e2eoutput_path}!'
     return cal_files[0]
+
+def generate_fits_excel_documentation(fits_filepath, output_excel_path):
+    """
+    Generate an Excel file documenting the structure and headers of a FITS file.
+    
+    Args:
+        fits_filepath (str): Path to the FITS file to document
+        output_excel_path (str): Path where the Excel file should be saved
+        
+    Returns:
+        str: Path to the generated Excel file
+        
+    Raises:
+        ImportError: If pandas is not available
+        FileNotFoundError: If the FITS file doesn't exist
+    """
+    
+    if not os.path.exists(fits_filepath):
+        raise FileNotFoundError(f"FITS file not found: {fits_filepath}")
+    
+    # Load keyword descriptions from RST documentation files if available
+    keyword_descriptions = {}
+    try:
+        import re
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        docs_dir = os.path.join(current_dir, '..', 'docs', 'source', 'data_formats')
+        
+        if os.path.exists(docs_dir):
+            # Read all RST files and extract keyword descriptions
+            for rst_file in os.listdir(docs_dir):
+                if rst_file.endswith('.rst') and rst_file != 'index.rst':
+                    rst_path = os.path.join(docs_dir, rst_file)
+                    with open(rst_path, 'r') as f:
+                        for line in f:
+                            # Match table rows: | KEYWORD | datatype | value | description |
+                            match = re.match(r'^\|\s+([A-Z0-9_]+)\s+\|\s+\S+\s+\|\s+.+?\s+\|\s+(.+?)\s+\|$', line)
+                            if match:
+                                keyword = match.group(1)
+                                description = match.group(2).strip()
+                                # Only store if we have a real description (not empty, not just structural info)
+                                if description and description not in ['0', '1', '2', '3', '4']:
+                                    # Prefer longer descriptions (keep the most complete one)
+                                    if keyword not in keyword_descriptions or len(description) > len(keyword_descriptions[keyword]):
+                                        keyword_descriptions[keyword] = description
+    except Exception as e:
+        # If we can't load RST files, just continue without reference descriptions
+        pass
+    
+    # Open the FITS file
+    with fits.open(fits_filepath) as hdulist:
+        
+        # Create Excel writer
+        with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
+            
+            # Sheet 1: Extensions Overview
+            extensions_data = []
+            for i, hdu in enumerate(hdulist):
+                # Determine extension name
+                if i == 0:
+                    ext_name = "Primary"
+                    description = "Primary header (no data)"
+                elif hasattr(hdu, 'name') and hdu.name:
+                    ext_name = hdu.name
+                else:
+                    ext_name = f"Extension {i}"
+                
+                # Determine description based on extension type
+                if i == 0:
+                    description = "Primary header (no data)"
+                elif hasattr(hdu, 'data') and hdu.data is not None:
+                    if len(hdu.data.shape) == 0:
+                        description = "Scalar data"
+                    elif len(hdu.data.shape) == 1:
+                        description = "1D array data"
+                    elif len(hdu.data.shape) == 2:
+                        description = "2D image data"
+                    elif len(hdu.data.shape) == 3:
+                        description = "3D data cube"
+                    else:
+                        description = f"{len(hdu.data.shape)}D data array"
+                else:
+                    description = "Header only"
+                
+                # Get data type
+                if hasattr(hdu, 'data') and hdu.data is not None:
+                    datatype = str(hdu.data.dtype)
+                else:
+                    datatype = "None"
+                
+                # Get array size
+                if hasattr(hdu, 'data') and hdu.data is not None:
+                    array_size = str(hdu.data.shape)
+                else:
+                    array_size = "0"
+                
+                extensions_data.append({
+                    'Index': i,
+                    'Extension Name': ext_name,
+                    'Description': description,
+                    'Data Type': datatype,
+                    'Array Size': array_size
+                })
+            
+            # Create DataFrame and save to first sheet
+            extensions_df = pd.DataFrame(extensions_data)
+            extensions_df.to_excel(writer, sheet_name='Extensions_Overview', index=False)
+            
+            # Sheets 2+: Header keywords for each extension
+            for i, hdu in enumerate(hdulist):
+                # Determine sheet name
+                if i == 0:
+                    sheet_name = "Primary_Header"
+                elif hasattr(hdu, 'name') and hdu.name:
+                    sheet_name = f"{hdu.name}_Header"
+                else:
+                    sheet_name = f"Extension_{i}_Header"
+                
+                # Ensure sheet name is valid (Excel limits)
+                sheet_name = sheet_name[:31]  # Excel sheet name limit
+                
+                # Extract header information
+                header_data = []
+                for keyword in hdu.header:
+                    value = hdu.header[keyword]
+                    fits_comment = hdu.header.comments[keyword]
+                    
+                    # Use RST description if available, otherwise use FITS comment
+                    if keyword in keyword_descriptions:
+                        description = keyword_descriptions[keyword]
+                    elif fits_comment and fits_comment.strip():
+                        description = fits_comment
+                    else:
+                        description = ''
+                    
+                    # Determine data type
+                    if isinstance(value, bool):
+                        dtype = "boolean"
+                    elif isinstance(value, int):
+                        dtype = "integer"
+                    elif isinstance(value, float):
+                        dtype = "float"
+                    elif isinstance(value, str):
+                        dtype = "string"
+                    else:
+                        dtype = "other"
+                    
+                    # Determine if auto-populated by FITS
+                    fits_auto_keywords = ['SIMPLE', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 
+                                        'EXTEND', 'PCOUNT', 'GCOUNT', 'TFIELDS', 'TTYPE1', 'TFORM1', 
+                                        'TTYPE2', 'TFORM2', 'TTYPE3', 'TFORM3', 'TTYPE4', 'TFORM4',
+                                        'TTYPE5', 'TFORM5', 'TTYPE6', 'TFORM6', 'TTYPE7', 'TFORM7',
+                                        'TTYPE8', 'TFORM8', 'TTYPE9', 'TFORM9', 'TTYPE10', 'TFORM10']
+                    is_fits_auto = keyword in fits_auto_keywords
+                    
+                    # Determine if optional based on data level and keyword
+                    # Get data level from Image HDU if available
+                    datalvl = None
+                    if len(hdulist) > 1 and 'DATALVL' in hdulist[1].header:
+                        datalvl = hdulist[1].header['DATALVL']
+                    
+                    # Trap pump keywords are optional for all levels
+                    trap_pump_keywords = ['TPINJCYC', 'TPOSCCYC', 'TPTAU', 'TPSCHEM1', 'TPSCHEM2', 'TPSCHEM3', 'TPSCHEM4']
+                    
+                    # L2b-specific optional keywords
+                    l2b_optional_keywords = ['PCTHRESH', 'NUM_FR']
+                    
+                    # Check if this keyword should be marked as optional
+                    is_optional = False
+                    if keyword in trap_pump_keywords:
+                        is_optional = True
+                    elif datalvl == 'L2b' and keyword in l2b_optional_keywords:
+                        is_optional = True
+                    
+                    header_data.append({
+                        'Keyword': keyword,
+                        'Value': str(value),
+                        'Data Type': dtype,
+                        'FITS Auto-populated': is_fits_auto,
+                        'Optional': is_optional,
+                        'Description': description
+                    })
+                
+                # Create DataFrame and save to sheet
+                header_df = pd.DataFrame(header_data)
+                header_df.to_excel(writer, sheet_name=sheet_name, index=False)
+    
+    return output_excel_path

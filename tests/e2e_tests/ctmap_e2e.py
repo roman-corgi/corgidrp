@@ -91,23 +91,23 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Create coronagraphic dataset
     corDataset = data.Dataset(corDataset_image_list)
 
-    # Define temporary directory to store the individual frames
-    output_dir = os.path.join(e2eoutput_path, 'ctmap_test_data')
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.mkdir(output_dir)
-    
-    # List of filenames
-    corDataset_filelist = ['ctmap_e2e_{0}_L2b.fits'.format(i)
-        for i in range(len(corDataset))]
-    # Save them
-    corDataset.save(output_dir, corDataset_filelist)
-
     # Make directory for the CT cal file
-    ctmap_outputdir = os.path.join(e2eoutput_path, 'l2a_to_ct_map')
+    ctmap_outputdir = os.path.join(e2eoutput_path, 'ctmap_cal_e2e')
     if os.path.exists(ctmap_outputdir):
         shutil.rmtree(ctmap_outputdir)
     os.mkdir(ctmap_outputdir)
+    
+    # Define directory to store the individual frames under the output directory
+    output_dir = os.path.join(ctmap_outputdir, 'input_l2b')
+    os.mkdir(output_dir)
+
+    calibrations_dir = os.path.join(ctmap_outputdir, 'calibrations')
+    os.mkdir(calibrations_dir)
+    
+    renamed_files = mocks.rename_files_to_cgi_format(list_of_fits=list(corDataset), output_dir=output_dir, level_suffix="l2b")
+    
+    # Update the dataset with the new filenames
+    corDataset_filelist = [os.path.basename(f) for f in renamed_files]
     
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
@@ -119,7 +119,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Create CT cal file from the mock data directly
     ct_cal_mock = corethroughput.generate_ct_cal(corethroughput_dataset)
     # Save it
-    ct_cal_mock.filedir = ctmap_outputdir
+    ct_cal_mock.filedir = calibrations_dir
     ct_cal_mock.save()
     # Add it to caldb
     this_caldb.create_entry(ct_cal_mock)
@@ -167,7 +167,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     outputdir = thisfile_dir
-    e2edata_path =  '.'
+    e2edata_path = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,
