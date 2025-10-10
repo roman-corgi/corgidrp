@@ -1,11 +1,11 @@
 import pandas as pd
-from fluxcal import measure_aper_flux_pol
+from corgidrp.fluxcal import measure_aper_flux_pol
 import numpy as np
+from corgidrp.data import NDMuellerMatrix, MuellerMatrix
 
-
-
-
-def generate_mueller_matrix_cal(input_dataset, path_to_pol_ref_file="./data/stellar_polarization_database.csv"):
+def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_y=512, separation_diameter_arcsec=7.5, 
+                                alignment_angles=[0,45], phot_kwargs=None,
+                                path_to_pol_ref_file="./data/stellar_polarization_database.csv"):
     '''
     A step function that generates a MuellerMatrix calibration file from a dataset.
     If the dataset is an ND dataset, then it generates an ND MuellerMatrix calibration file.
@@ -28,7 +28,7 @@ def generate_mueller_matrix_cal(input_dataset, path_to_pol_ref_file="./data/stel
     dataset = input_dataset.copy()
 
     # check that all the data in the dataset is either ND or non-ND, by looking for ND in the FPAMNAME keyword
-    nd_flags = [("ND" in data.header["FPAMNAME"]) for data in dataset]
+    nd_flags = [("ND" in data.ext_hdr["FPAMNAME"]) for data in dataset]
     if all(nd_flags):
         is_nd = True
     elif not any(nd_flags):
@@ -37,13 +37,14 @@ def generate_mueller_matrix_cal(input_dataset, path_to_pol_ref_file="./data/stel
         raise ValueError("All datasets in the input dataset must be either ND or non-ND.")
 
     # Read in the polarization reference file
-    pol_ref = pd.read_csv(path_to_pol_ref_file)
+    pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
     # extract the target names
     pol_ref_targets = pol_ref["TARGET"].tolist()
 
     # split the datasets into different targets
-    datasets, targets = dataset.split_by_target(prihdr_keywords="TARGET")
+    _, targets = dataset.split_dataset(prihdr_keywords=["TARGET"])
 
+    n_targets = np.unique(targets).shape[0]
     # check that all the targets from the dataset are in the pol reference file
     for target in targets:
         if target not in pol_ref_targets:
@@ -51,19 +52,106 @@ def generate_mueller_matrix_cal(input_dataset, path_to_pol_ref_file="./data/stel
     
     # measure the normalized difference for each dataset
     normalized_differences = []
+    roll_angles = []
     for image in dataset:
         
+        #check dpam for POL0 or POL45, pick angle accordingly, 
+        if "POL0" in image.ext_hdr["DPAMNAME"]:
+            alignment_angle = alignment_angles[0]
+            wollaston = 'POL0'
+        elif "POL45" in image.ext_hdr["DPAMNAME"]:
+            alignment_angle = alignment_angles[1]
+            wollaston = 'POL45' 
+        else:
+            raise ValueError("DPAMNAME keyword must contain either POL0 or POL45 to determine polarization angle.")
+        norm_diff, norm_diff_err = measure_normalized_difference_L3(
+            image,
+            image_center_x=image_center_x,
+            image_center_y=image_center_y,
+            separation_diameter_arcsec=separation_diameter_arcsec,
+            alignment_angle=alignment_angle,
+            phot_kwargs=phot_kwargs,
+        )
+        normalized_differences.append((norm_diff, norm_diff_err))
+        roll_angles.append(image.pri_hdr["ROLL"])
+
+    # generate the matrix of meausurements six columns [1 Q, U, 0,0,0] for POL0
+    # and [1,0,0, 1, Q, U] for POL45 #Where Q and U have been rotated by the roll angle: 
+    stokes_matrix = np.zeros((len(dataset), 6))
+    for i, (norm_diff, norm_diff_err) in enumerate(normalized_differences):
+        target = dataset[i].pri_hdr["TARGET"]
+        pol_row = pol_ref[pol_ref["TARGET"] == target]
+        P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
+        # P_err = pol_row["P_err"].values[0] / 100.0 # convert from percent to fraction
+        # PA_err = pol_row["PA_err"].values[0] # in degrees
+
+        PA = pol_row["PA"].values[0] + roll_angles[i] # in degrees
+
+        # calculate the Stokes parameters Q and U from P and PA
+        Q, U = get_qu_from_p_theta(P, PA)
+        # propagate errors to Q and U
+        # Q_err = np.sqrt((P_err * np.cos(2 * np.radians(PA)))**2 + (P * 2 * np.radians(np.sin(2 * np.radians(PA))) * PA_err)**2)
+        # U_err = np.sqrt((P_err * np.sin(2 * np.radians(PA)))**2 + (P * 2 * np.radians(np.cos(2 * np.radians(PA))) * PA_err)**2)
+
+        if "POL0" in dataset[i].ext_hdr["DPAMNAME"]:
+            stokes_matrix[i, :] = [1, Q, U, 0, 0, 0]
+        elif "POL45" in dataset[i].ext_hdr["DPAMNAME"]:
+            stokes_matrix[i, :] = [0, 0, 0, 1, Q, U]
 
 
-    # generate the mueller matrix from the stokes vectors and the known properties
+    # invert the stokes matrix using SVD and multiply the the normalized differences to get the mueller matrix elements
+    u,s,v=np.linalg.svd(stokes_matrix)
+    # limit the singular values to improve the conditioning of the inversion
+    s[s < 1e-5] = 1e-5
+    stokes_matrix_inv=np.dot(v.transpose(),np.dot(np.diag(s**-1),u.transpose()))
+    mueller_elements = np.dot(stokes_matrix_inv, np.array(normalized_differences)[:,0])
+    mueller_elements_covar = np.matmul(stokes_matrix_inv,stokes_matrix_inv.T)
+    mueller_elements_covar[mueller_elements_covar <0] = 0
+    mueller_elements_err = np.diag(np.matmul(stokes_matrix_inv,stokes_matrix_inv.T)*(np.array(normalized_differences)[:,1]**2))**0.5
 
-    # propagate errors
+    #Fill in the mueller matrix
+    mueller_matrix = np.zeros((4,4))
+    mueller_matrix[0,0] = 1
+    mueller_matrix[1,0] = mueller_elements[0]
+    mueller_matrix[1,1] = mueller_elements[1]
+    mueller_matrix[1,2] = mueller_elements[2]
+    mueller_matrix[2,0] = mueller_elements[3]
+    mueller_matrix[2,1] = mueller_elements[4]
+    mueller_matrix[2,2] = mueller_elements[5]
+    mueller_matrix[3,3] = 1
 
-    # create the mueller matrix object
+    mueller_matrix_err = np.zeros((4,4))*np.nan
+    mueller_matrix_err[1,0] = mueller_elements_err[0]
+    mueller_matrix_err[1,1] = mueller_elements_err[1]
+    mueller_matrix_err[1,2] = mueller_elements_err[2]
+    mueller_matrix_err[2,0] = mueller_elements_err[3]
+    mueller_matrix_err[2,1] = mueller_elements_err[4]
+    mueller_matrix_err[2,2] = mueller_elements_err[5]
 
-    # return the mueller matrix object (nd or non-nd)
-    pass
+    if is_nd:
+        mueller_matrix_obj = NDMuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
+                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset)
+    else:
+        mueller_matrix_obj = MuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
+                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset)
 
+    return mueller_matrix_obj
+
+
+def get_qu_from_p_theta(p, theta):
+    '''
+    Convert degree of polarization and polarization angle to Stokes Q and U.
+
+    Args:
+        p (float): Degree of polarization (0 to 1).
+        theta (float): Polarization angle in degrees.
+
+    Returns:
+        tuple: (Q, U) Stokes parameters.
+    '''
+    Q = p * np.cos(2 * np.radians(theta))
+    U = p * np.sin(2 * np.radians(theta))
+    return Q, U
 
 def measure_normalized_difference_L3(input_pol_Image,
                                     image_center_x=512,image_center_y=512,
@@ -87,10 +175,6 @@ def measure_normalized_difference_L3(input_pol_Image,
 
     pol_Image = input_pol_Image.copy()
 
-    # check that the image has the FPAMNAME keyword
-    if "FPAMNAME" not in pol_Image.header:
-        raise ValueError("The input image must have the FPAMNAME keyword in the header.")
-    
     aper_flux_1, aper_flux_2 =  measure_aper_flux_pol(pol_Image, 
                                                       image_center_x = image_center_x, 
                                                         image_center_y = image_center_y,
@@ -104,6 +188,6 @@ def measure_normalized_difference_L3(input_pol_Image,
     normalized_difference = difference / sum_
     sum_diff_err = (aper_flux_1[1]**2 + aper_flux_2[1]**2)**0.5
 
-    error = normalized_difference*np.sqrt(sum_diff_err**2/difference**2 + sum_diff_err**2/sum_**2)
+    error = np.abs(normalized_difference)*np.sqrt(sum_diff_err**2/difference**2 + sum_diff_err**2/sum_**2)
 
     return normalized_difference, error 
