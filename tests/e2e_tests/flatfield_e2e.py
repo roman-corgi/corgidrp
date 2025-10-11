@@ -112,7 +112,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Neptune"
         base_image.ext_hdr['CFAMNAME'] = "4F"
-        base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         # Generate unique timestamp by incrementing by 0.1 seconds each time
@@ -322,7 +322,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Uranus"
         base_image.ext_hdr['CFAMNAME'] = "1F"
-        base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         # Generate unique timestamp by incrementing by 0.1 seconds each time
