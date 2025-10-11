@@ -74,6 +74,7 @@ tests/e2e_tests/pc_sim_test_data/*.json
 .vscode/*
 .*.swp
 .exrc
+.idea/*
 
 #jupyter cruft
 .ipynb_checkpoints
