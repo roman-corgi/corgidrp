@@ -1272,19 +1272,18 @@ def star_pos_spec(
         if img.ext_hdr['DATALVL'] != 'L3':
             raise ValueError(f"The data level must be L3 and it is {img.ext_hdr['DATALVL']}")
         cfamname = img.ext_hdr['CFAMNAME']
-        if '3' in cfamname:
-            lam_ref_nm = 730
-        elif '2' in cfamname:
-            lam_ref_nm = 660
-        else:
-            raise ValueError(f'Band {cfamname} is not implemented in this function yet.')
+        # Extract satellite spot wavelength from L3 extended header (it must be present)
+        try:
+            lam_sat_nm = float(img.ext_hdr['WAVLEN0'])
+        except:
+            raise ValueError(f'WAVLEN0 keyword missing in L3 frame.')
 
         # Conversion from EXCAM pixels to milliarsec
         plate_scale_mas = img.ext_hdr['PLTSCALE']
         # Conversion from radians to milliarsec (mas/rad)
         rad2mas = 180/np.pi*3600*1e3
         # lam/D in radians
-        lamDrad = 1e-9*lam_ref_nm/D_m
+        lamDrad = 1e-9*lam_sat_nm/D_m
         # lam/D to EXCAM pixels
         r_pix = r_lamD*lamDrad*rad2mas/plate_scale_mas
         # EXCAM (X,Y) coordinates

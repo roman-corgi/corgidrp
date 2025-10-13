@@ -1219,6 +1219,8 @@ def test_star_pos():
     ext_hdr['CFAMNAME'] = '3F'
     # Setup some wavelength zero-point values
     ext_hdr['WV0_X'], ext_hdr['WV0_Y'] = 38, 42
+    # Add expected wavelength for a satellite spot (for UT, it could be any)
+    ext_hdr['WAVLEN0'] = 753.83
     # Arbitrary number of images
     image_list = []
     for _ in range(12):
@@ -1241,7 +1243,7 @@ def test_star_pos():
         [x_in, y_in] = np.random.randint(-300, 300, 2)
         # Get the radial distance in lamD for band 3 (730 nm), default plate scale
         # 21.8 mas/pix and D=2.4 m
-        mas2lamD = 1e-3/3600/180*np.pi*2.4/(730e-9)
+        mas2lamD = 1e-3/3600/180*np.pi*2.4/(ext_hdr['WAVLEN0']*1e-9)
         r_lamD_in = np.sqrt(x_in**2 + y_in**2) * 21.8 * mas2lamD
         phi_deg_in = np.arctan2(y_in, x_in)*180/np.pi
         dataset_out = steps.star_pos_spec(
