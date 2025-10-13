@@ -19,6 +19,7 @@ from astropy.io import fits
 from scipy.ndimage import generic_filter
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
 from corgidrp import pol
+from corgidrp import fluxcal
 
 
 def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
@@ -909,12 +910,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
     updated_frames = []
     for target_dataset in split_datasets:
         # split further based on if the observation is unocculted or not, and the wollaston used
-        reg_frames = []
+        coron_frames = []
         unocculted_pol0_frames = []
         unocculted_pol45_frames = []
         target_name = target_dataset.frames[0].pri_hdr['TARGET']
         for frame in target_dataset:
-            if frame.ext_hdr['LSAMNAME'] == 'OPEN':
+            if frame.ext_hdr['FPAMNAME'] == 'ND225':
                 # unocculted observations, separate by wollaston
                 if frame.ext_hdr['DPAMNAME'] == 'POL0':
                     unocculted_pol0_frames.append(frame)
@@ -922,7 +923,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
                     unocculted_pol45_frames.append(frame)
             else:
                 # coronagraphic observation
-                reg_frames.append(frame)
+                coron_frames.append(frame)
         
         # make sure input dataset contains unocculted frames taken with both wollastons
         if len(unocculted_pol0_frames) == 0:
@@ -932,55 +933,78 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         
         unocculted_pol0_img = unocculted_pol0_frames[0]
         unocculted_pol45_img = unocculted_pol45_frames[0]
+
+        # construct image for each polarization to pass into aper_phot function in order to obtain flux
+        I_0_img = data.Image(unocculted_pol0_img.data[0], 
+                             err=unocculted_pol0_img.err[:,0,:,:], 
+                             pri_hdr=unocculted_pol0_img.pri_hdr.copy(),
+                             ext_hdr=unocculted_pol0_img.ext_hdr.copy())
+        I_90_img = data.Image(unocculted_pol0_img.data[1], 
+                             err=unocculted_pol0_img.err[:,1,:,:], 
+                             pri_hdr=unocculted_pol0_img.pri_hdr.copy(),
+                             ext_hdr=unocculted_pol0_img.ext_hdr.copy())
+        I_45_img = data.Image(unocculted_pol45_img.data[0], 
+                             err=unocculted_pol45_img.err[:,0,:,:], 
+                             pri_hdr=unocculted_pol45_img.pri_hdr.copy(),
+                             ext_hdr=unocculted_pol45_img.ext_hdr.copy())
+        I_135_img = data.Image(unocculted_pol45_img.data[1], 
+                             err=unocculted_pol45_img.err[:,1,:,:], 
+                             pri_hdr=unocculted_pol45_img.pri_hdr.copy(),
+                             ext_hdr=unocculted_pol45_img.ext_hdr.copy())
+        # calculate flux
+        I_0_flux, I_0_flux_err = fluxcal.aper_phot(I_0_img, encircled_radius=5)
+        I_90_flux, I_90_flux_err = fluxcal.aper_phot(I_90_img, encircled_radius=5)
+        I_45_flux, I_45_flux_err = fluxcal.aper_phot(I_45_img, encircled_radius=5)
+        I_135_flux, I_135_flux_err = fluxcal.aper_phot(I_135_img, encircled_radius=5)
         
         ## construct I, Q, U components after instrument with ND filter
         # I = I_0 +I_90
-        I_nd = unocculted_pol0_img.data[0] + unocculted_pol0_img.data[1]
+        I_nd = I_0_flux + I_90_flux
         # Q = I_0 - I_90
-        Q_nd = unocculted_pol0_img.data[0] - unocculted_pol0_img.data[1]
+        Q_nd = I_0_flux - I_90_flux
         # U = I_45 - I_135
-        U_nd = unocculted_pol45_img.data[0] - unocculted_pol45_img.data[1]
+        U_nd = I_45_flux - I_135_flux
         # assume V is basically 0
-        V_nd = np.zeros(shape=unocculted_pol0_img.data[0].shape)
+        V_nd = 0
         # construct stokes vector after instrument with ND filter
-        S_nd = np.stack([I_nd, Q_nd, U_nd, V_nd], axis=0)
+        S_nd = [I_nd, Q_nd, U_nd, V_nd]
 
         # S_nd = M_nd * R(roll_angle) * S_in
         # invert M_nd * R(roll_angle) to recover S_in
         roll_angle = unocculted_pol0_img.pri_hdr['ROLL']
         total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
         system_nd_inv = np.linalg.pinv(total_system_mm_nd)
-        S_in = np.einsum('ij,jyx->iyx', system_nd_inv, S_nd)
+        S_in = system_nd_inv @ S_nd
 
         # propagate errors to find uncertainty of S_in
-        I_nd_err = np.sqrt(unocculted_pol0_img.err[0,0,:,:]**2 + unocculted_pol0_img.err[0,1,:,:]**2)
-        Q_nd_err = I_nd_err
-        U_nd_err = np.sqrt(unocculted_pol45_img.err[0,0,:,:]**2 + unocculted_pol45_img.err[0,1,:,:]**2)
-        v_nd_err = np.zeros(shape=unocculted_pol0_img.err[0,0].shape)
+        I_nd_var = I_0_flux_err**2 + I_90_flux_err**2
+        Q_nd_var = I_nd_var
+        U_nd_var = I_45_flux_err**2 + I_135_flux_err**2
+        v_nd_var = 0
         # construct covariance matrix for S_nd
-        shape = unocculted_pol0_img.data[0].shape
-        C_nd = np.array([[I_nd_err**2, np.zeros(shape=shape), np.zeros(shape=shape), np.zeros(shape=shape)],
-                         [np.zeros(shape=shape), Q_nd_err**2, np.zeros(shape=shape), np.zeros(shape=shape)],
-                         [np.zeros(shape=shape), np.zeros(shape=shape), U_nd_err**2, np.zeros(shape=shape)],
-                         [np.zeros(shape=shape), np.zeros(shape=shape), np.zeros(shape=shape), v_nd_err**2]])
+        C_nd = np.array([[I_nd_var, 0, 0, 0],
+                         [0, Q_nd_var, 0, 0],
+                         [0, 0, U_nd_var, 0],
+                         [0, 0, 0, v_nd_var]])
         # solve for covariance matrix of input stokes vector
         # C_in = pinv(M) * C_nd * pinv(M)^T
         #TODO: incoporate the error terms of the nd mueller matrix into this calculation if necessary 
-        C_in = np.einsum('ij,jkyx,kl->ilyx', system_nd_inv, C_nd, system_nd_inv.T)
+        C_in = system_nd_inv @ C_nd @ system_nd_inv.T
         # contract back to just the variance
         S_in_var = np.array([
-            C_in[0,0,:,:],
-            C_in[1,1,:,:],
-            C_in[2,2,:,:],
-            C_in[3,3,:,:]
+            C_in[0,0],
+            C_in[1,1],
+            C_in[2,2],
+            C_in[3,3]
         ])
+        S_in_err = np.sqrt(S_in_var)
 
         # subtract stellar polarization from the rest of the frames
-        for frame in reg_frames:
+        for frame in coron_frames:
             # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
             frame_roll_angle = frame.pri_hdr['ROLL']
             total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_roll_angle)
-            S_out = np.einsum('ij,jyx->iyx', total_system_mm, S_in)
+            S_out = total_system_mm @ S_in
             # construct I0, I45, I90, and I135 back from stokes vector
             I_0_star = (S_out[0] + S_out[1]) / 2
             I_90_star = (S_out[0] - S_out[1]) / 2
@@ -993,7 +1017,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             system_mm_var = (system_mueller_matrix_cal.err[0])**2
             system_mm_sq = (system_mueller_matrix_cal.data)**2
             S_in_sq = S_in**2
-            S_out_var = np.einsum('ij,jyx->iyx', system_mm_var, S_in_sq) + np.einsum('ij,jyx->iyx', system_mm_sq, S_in_var)
+            S_out_var = (system_mm_var @ S_in_sq) + (system_mm_sq @ S_in_var)
             I_0_star_err = np.sqrt(S_out_var[0] + S_out_var[1]) / 2
             I_90_star_err = I_0_star_err
             I_45_star_err = np.sqrt(S_out_var[0] + S_out_var[2]) / 2
@@ -1036,7 +1060,8 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             updated_frames.append(frame)
 
     updated_dataset = data.Dataset(updated_frames)
-    history_msg = "Subtracted Apparent Stellar Polarization"
+    history_msg = f"Subtracted Apparent Stellar Polarization, stellar Q value: {S_in[1]}, stellar Q err: {S_in_err[1]}, \
+    stellar U value: {S_in[2]}, stellar U err: {S_in_err[2]}."
     updated_dataset.update_after_processing_step(history_msg)
     return updated_dataset
 
