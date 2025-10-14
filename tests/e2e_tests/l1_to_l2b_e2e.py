@@ -24,29 +24,42 @@ def fix_str_for_tvac(
     list_of_fits,
     ):
     """ 
-    Gets around EMGAIN_A being set to 1 in TVAC data.
+    Gets around EMGAIN_A being set to 1 in TVAC data and fixes string header values.
     
     Args:
         list_of_fits (list): list of FITS files that need to be updated.
     """
     for file in list_of_fits:
-        fits_file = fits.open(file)
-        exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1:
-            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-        if type(exthdr['EMGAIN_C']) is str:
-            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
+        with fits.open(file, mode='update') as fits_file:
+            exthdr = fits_file[1].header
+            if float(exthdr['EMGAIN_A']) == 1:
+                exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+            if type(exthdr['EMGAIN_C']) is str:
+                exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+            if 'RN' in exthdr and type(exthdr['RN']) is str:
+                exthdr['RN'] = float(exthdr['RN'])
+            
+            # TEMPORARY FIX: Set ISPC=False to disable photon counting
+            # TODO: Fix ISPC in source L1 files instead of modifying copies here
+            if 'ISPC' in exthdr:
+                exthdr['ISPC'] = False
 
 
 @pytest.mark.e2e
-def test_l1_to_l2b(e2edata_path, e2eoutput_path):
+def test_l1_to_l2b(e2edata_path, e2eoutput_path, input_datadir, cals_dir):
     # figure out paths, assuming everything is located in the same relative location
-    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    # Use custom paths if provided, otherwise fall back to defaults from e2edata_path
+    if input_datadir is None:
+        l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    else:
+        l1_datadir = input_datadir
+    
     # l2a_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L2a")
     # l2b_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L2b")
-    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
+    if cals_dir is None:
+        processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
+    else:
+        processed_cal_path = cals_dir
 
     # make output directory if needed
     test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_e2e")
@@ -81,14 +94,59 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     for file in os.listdir(l2a_outputdir):
         os.remove(os.path.join(l2a_outputdir, file))
 
-    # assume all cals are in the same directory
-    nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
-    dark_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
-    flat_path = os.path.join(processed_cal_path, "flat.fits")
-    fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
-    cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
-    bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
-    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
+    # Build calibration file paths
+    if cals_dir is None:
+        # Use default paths with known filenames
+        nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
+        dark_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
+        flat_path = os.path.join(processed_cal_path, "flat.fits")
+        fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
+        cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
+        bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
+    else:
+        # Otherwise, find the calibration files in the cals directory
+        # Find nonlinearity file
+        nln_files = [f for f in os.listdir(processed_cal_path) if "nln" in f.lower()]
+        if not nln_files:
+            raise FileNotFoundError(f"No file containing 'nln' found in {processed_cal_path}")
+        nonlin_path = os.path.join(processed_cal_path, nln_files[0])
+        
+        # Find dark current file
+        drk_files = [f for f in os.listdir(processed_cal_path) if "drk" in f.lower()]
+        if not drk_files:
+            raise FileNotFoundError(f"No file containing 'drk' found in {processed_cal_path}")
+        dark_path = os.path.join(processed_cal_path, drk_files[0])
+        
+        # Find flat file
+        flat_files = [f for f in os.listdir(processed_cal_path) if "flat" in f.lower() or "flt" in f.lower()]
+        if not flat_files:
+            raise FileNotFoundError(f"No file containing 'flat' or 'flt' found in {processed_cal_path}")
+        flat_path = os.path.join(processed_cal_path, flat_files[0])
+        
+        # Find FPN file
+        fpn_files = [f for f in os.listdir(processed_cal_path) if "fpn" in f.lower()]
+        if not fpn_files:
+            raise FileNotFoundError(f"No file containing 'fpn' found in {processed_cal_path}")
+        fpn_path = os.path.join(processed_cal_path, fpn_files[0])
+        
+        # Find CIC file
+        cic_files = [f for f in os.listdir(processed_cal_path) if "cic" in f.lower()]
+        if not cic_files:
+            raise FileNotFoundError(f"No file containing 'cic' found in {processed_cal_path}")
+        cic_path = os.path.join(processed_cal_path, cic_files[0])
+        
+        # Find bad pixel map file
+        bp_files = [f for f in os.listdir(processed_cal_path) if "bad" in f.lower() or "bp" in f.lower() or "bpm" in f.lower()]
+        if not bp_files:
+            raise FileNotFoundError(f"No file containing 'bad', 'bp', or 'bpm' found in {processed_cal_path}")
+        bp_path = os.path.join(processed_cal_path, bp_files[0])
+    
+    # Filter to only include L1 files for mock calibration
+    all_files = os.listdir(l1_datadir)
+    l1_files_only = [f for f in all_files if f.endswith('l1_.fits')]
+    if not l1_files_only:
+        raise FileNotFoundError(f"No files ending in 'l1_.fits' found in {l1_datadir}")
+    mock_cal_filelist = [os.path.join(l1_datadir, l1_files_only[i]) for i in [-2,-1]] # grab the last two L1 files to mock the calibration 
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make calibration files using
@@ -114,7 +172,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(nonlinear_cal)
 
-    # KGain
+    # KGain (with read noise)
     kgain_val = 8.7 # 8.7 is what is in the TVAC headers
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
@@ -147,6 +205,22 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
+    # Dark calibration - use build_synthesized_dark to match the exposure time and emgain of the input data
+    sample_l1_file = os.path.join(l1_datadir, l1_files_only[0])
+    sample_hdr = fits.getheader(sample_l1_file, ext=1)
+    data_exptime = sample_hdr['EXPTIME']
+    data_emgain = float(sample_hdr['EMGAIN_C'])
+    
+    # Create a temporary dataset with the correct header values
+    temp_dataset = data.Dataset(mock_cal_filelist[:1])
+    temp_dataset.frames[0].ext_hdr['EXPTIME'] = data_exptime
+    temp_dataset.frames[0].ext_hdr['EMGAIN_C'] = data_emgain
+    
+    # Build a synthesized dark with the correct exposure time and EM gain
+    dark_cal = build_synthesized_dark(temp_dataset, noise_map)
+    mocks.rename_files_to_cgi_format(list_of_fits=[dark_cal], output_dir=calibrations_dir, level_suffix="drk_cal")
+    this_caldb.create_entry(dark_cal)
+
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
@@ -162,8 +236,13 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(bp_map)
 
     # define the raw science data to process
-
-    l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
+    # l1_files_only was already filtered above for mock_cal_filelist
+    if input_datadir is None:
+        # Default behavior: select just the first two files for testing
+        l1_data_filelist = [os.path.join(l1_datadir, l1_files_only[i]) for i in [0,1]] # grab the first two L1 files
+    else:
+        # Custom directory: process all L1 files
+        l1_data_filelist = [os.path.join(l1_datadir, f) for f in l1_files_only]
 
     # Copy files to input_data directory and update file list
     l1_data_filelist = [
@@ -224,6 +303,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
     # l2a -> l2b processing
     new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')] #[os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    # Fix L2a headers before processing to L2b
+    fix_str_for_tvac(new_l2a_filenames)
     walker.walk_corgidrp(new_l2a_filenames, "", test_outputdir)
 
     ##### Check against TVAC data
@@ -292,12 +373,18 @@ if __name__ == "__main__":
     e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
-    ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
+    ap = argparse.ArgumentParser(description="run the l1->l2b end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
+    ap.add_argument("--input_datadir", default=None,
+                    help="Optional: Override input data directory [%(default)s]")
+    ap.add_argument("--cals_dir", default=None,
+                    help="Optional: Override calibration directory [%(default)s]")
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_l1_to_l2b(e2edata_dir, outputdir)
+    input_datadir = args.input_datadir
+    cals_dir = args.cals_dir
+    test_l1_to_l2b(e2edata_dir, outputdir, input_datadir, cals_dir)

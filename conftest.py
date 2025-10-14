@@ -23,6 +23,10 @@ def pytest_addoption(parser):
     parser.addoption(
         "--which", action="store", default="unit", help="which tests to run: unit, e2e, all", choices=("unit", "e2e", "all")
     )
+    
+    # Optional paths for overriding input data and calibration directories
+    parser.addoption("--input_datadir", action="store", default=None, help="Optional: Override input data directory (e.g., L1, L2a, etc.)")
+    parser.addoption("--cals_dir", action="store", default=None, help="Optional: Override calibration files directory")
 
 @pytest.fixture
 def e2edata_path(request):
@@ -49,6 +53,32 @@ def e2eoutput_path(request):
         str: value from this command line argument
     """
     return request.config.getoption("--e2eoutput_path")
+
+@pytest.fixture
+def input_datadir(request):
+    """
+    Adds the hook to be able to grab the value passed in with the input_datadir argument
+
+    Args:
+        request (FixtureRequest): pytest request of a fixture
+    
+    Returns:
+        str or None: value from this command line argument
+    """
+    return request.config.getoption("--input_datadir")
+
+@pytest.fixture
+def cals_dir(request):
+    """
+    Adds the hook to be able to grab the value passed in with the cals_dir argument
+
+    Args:
+        request (FixtureRequest): pytest request of a fixture
+    
+    Returns:
+        str or None: value from this command line argument
+    """
+    return request.config.getoption("--cals_dir")
 
 def pytest_configure(config):
     """
