@@ -586,7 +586,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
   
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level) - now handles pol datasets shapes
         use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
 	    rot_center: 'im_center', 'starloc', or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header. 
 
@@ -594,18 +594,19 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         corgidrp.data.Dataset: North is up, East is left
     
     """
-
     # make a copy 
     processed_dataset = input_dataset.copy()
-
     new_all_data = []; new_all_err = []; new_all_dq = []
     for processed_data in processed_dataset:
-
         ## image extension ##
         sci_hd = processed_data.ext_hdr
         sci_data = processed_data.data
-        ylen, xlen = sci_data.shape
-
+        # See if it's pol data (each array is 3D since has two pol modes)
+        is_pol = sci_data.ndim == 3
+        if is_pol:
+            num_pols, ylen, xlen = sci_data.shape # set number of pol modes (nominally 2)
+        else:
+            ylen, xlen = sci_data.shape # for regular data
         # define the center for rotation
         if rot_center == 'im_center':
             xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
@@ -619,71 +620,111 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
             xcen = rot_center[0]
             ycen = rot_center[1]
 
-        # look for WCS solutions
+            # look for WCS solutions
         if use_wcs is True:
             astr_hdr = WCS(sci_hd)
             CD1_2 = sci_hd['CD1_2']
             CD2_2 = sci_hd['CD2_2']
-            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
-
+            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2))  # Compute North Position Angle from the WCS solutions
         else:
             warnings.warn('use "ROLL" instead of WCS to estimate the north position angle')
             astr_hdr = None
             # read the roll angle parameter, assuming this info is recorded in the primary header as requested
             roll_angle = processed_data.pri_hdr['ROLL']
 
-        # derotate
-        sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        # derotate - handle 2D or 3D
+        if is_pol:
+            # one header applies to all pols. Have to rotate both pol images, but header only gets updated once in loop
+            sci_derot = np.stack([rotate(sci_data[i], roll_angle, (xcen, ycen), astr_hdr=astr_hdr if i == 0 else None)
+                                  for i in range(num_pols)])
+        else:
+            sci_derot = rotate(sci_data, roll_angle, (xcen, ycen), astr_hdr=astr_hdr)  # astr_hdr is corrected at above lines
         new_all_data.append(sci_derot)
-
         log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
-        sci_hd['HISTORY'] = log 
+        sci_hd['HISTORY'] = log
 
         # update WCS solutions
         if use_wcs:
-            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0,0]
-            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0,1]
-            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1,0]
-            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1,1]
+            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0, 0]
+            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0, 1]
+            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1, 0]
+            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1, 1]
         #############
-
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = np.expand_dims(rotate(err_data[0],roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
+        if is_pol:
+            # err has shape (num_err_layers, num_pols, ylen, xlen)
+            err_derot = np.stack([rotate(err_data[0, i], roll_angle, (xcen, ycen))
+                                  for i in range(num_pols)])
+            err_derot = np.expand_dims(err_derot, axis=0)  # Add back error layer dimension
+        else:
+            err_derot = np.expand_dims(rotate(err_data[0], roll_angle, (xcen, ycen)), axis=0)
         new_all_err.append(err_derot)
-        #############
 
+        #############
         ## HDU DQ ##
-        # all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
         dq_data = processed_data.dq
-        if xcen != xlen/2 or ycen != ylen/2:
+
+        # pol version has to loop through both images
+        if is_pol:
+
+            dq_derot_planes = []
+            for plane_idx in range(num_pols):
+                dq_pol = dq_data[plane_idx]
+                if xcen != xlen / 2 or ycen != ylen / 2:
+                    # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
+                    xshift = xcen - xlen / 2;
+                    yshift = ycen - ylen / 2
+                    pad_x = int(np.ceil(abs(xshift)));
+                    pad_y = int(np.ceil(abs(yshift)))
+                    dq_pol_padded = np.pad(dq_pol, pad_width=((pad_y, pad_y), (pad_x, pad_x)), mode='constant',
+                                             constant_values=0)
+                    dq_pol_padded_shifted = shift(dq_pol_padded, (-yshift, -xshift), order=0, mode='constant',
+                                                    cval=0)
+                    crop_x = slice(pad_x, pad_x + xlen);
+                    crop_y = slice(pad_y, pad_y + ylen)
+                    dq_pol_derot = shift(
+                        rotate_scipy(dq_pol_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False,
+                                     cval=0), (yshift, xshift), order=0, mode='constant', cval=0)[crop_y, crop_x]
+                else:
+                    dq_pol_derot = rotate_scipy(dq_pol, -roll_angle, order=0, mode='constant', reshape=False,
+                                                  cval=0)
+                dq_derot_planes.append(dq_pol_derot)
+
+            dq_derot = np.stack(dq_derot_planes)
+
+        else: #non pol version
+            if xcen != xlen / 2 or ycen != ylen / 2:
                 # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
                 # calculate shift values
-                xshift = xcen-xlen/2; yshift = ycen-ylen/2
+                xshift = xcen - xlen / 2;
+                yshift = ycen - ylen / 2
 
                 # pad and shift
-                pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
-                dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=0)
-                dq_data_padded_shifted = shift(dq_data_padded,(-yshift,-xshift),order=0,mode='constant',cval=0)
-
+                pad_x = int(np.ceil(abs(xshift)));
+                pad_y = int(np.ceil(abs(yshift)))
+                dq_data_padded = np.pad(dq_data, pad_width=((pad_y, pad_y), (pad_x, pad_x)), mode='constant',
+                                        constant_values=0)
+                dq_data_padded_shifted = shift(dq_data_padded, (-yshift, -xshift), order=0, mode='constant', cval=0)
                 # define slices for cropping
                 crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
 
                 # rotate (invserse direction to pyklip.rotate), re-shift, and crop
-                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=0),\
-                 (yshift,xshift),order=0,mode='constant',cval=0)[crop_y,crop_x]
-        else:
-                # simply rotate 
+                dq_derot = shift(
+                    rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False,
+                                 cval=0), \
+                    (yshift, xshift), order=0, mode='constant', cval=0)[crop_y, crop_x]
+            else:
+                # simply rotate
                 dq_derot = rotate_scipy(dq_data, -roll_angle, order=0, mode='constant', reshape=False, cval=0)
 
         new_all_dq.append(dq_derot)
         ############
-
     history_msg = 'North is Up and East is Left'
-    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
-                                                   new_all_dq=np.array(new_all_dq))
+    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data),
+                                                   new_all_err=np.array(new_all_err), new_all_dq=np.array(new_all_dq))
 
-    return processed_dataset 
+    return processed_dataset
 
 
 def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
