@@ -7,7 +7,8 @@ from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
 import corgidrp.spec as steps
-from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
+from corgidrp.mocks import (create_default_L2b_headers,
+    create_default_L3_headers, get_formatted_filename)
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
 from datetime import datetime, timedelta
@@ -1209,7 +1210,52 @@ def test_slit_trans():
         # VAP requirement
         logger.info(f'The peak value of the slit transmission is {slit_trans_out.max()}')
         logger.info(f'The mean value of the slit transmission is {slit_trans_out.mean()}')
-        
+
+def test_star_pos():
+    """ Test translation of a position on EXCAM measured in polar coordinates
+      to rectangular ones. """
+    # Define some default L3 Dataset (data are not used)
+    pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
+    ext_hdr['CFAMNAME'] = '3F'
+    # Setup some wavelength zero-point values
+    ext_hdr['WV0_X'], ext_hdr['WV0_Y'] = 38, 42
+    # Add expected wavelength for a satellite spot (for UT, it could be any)
+    ext_hdr['WAVLEN0'] = 753.83
+    # Arbitrary number of images
+    image_list = []
+    for _ in range(12):
+        data_2d = np.zeros([ext_hdr['NAXIS1'], ext_hdr['NAXIS2']])
+        err = np.zeros_like(data_2d)
+        dq = np.zeros_like(data_2d, dtype=int)
+        image_list += [Image(
+            data_or_filepath=data_2d,
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
+            err=err,
+            dq=dq)]
+    dataset_in = Dataset(image_list)       
+
+    # Set the seed
+    np.random.seed(0)
+    # Test it a few times
+    for _ in range(10):
+        # Assign some random location on EXCAM to a satellite spot
+        [x_in, y_in] = np.random.randint(-300, 300, 2)
+        # Get the radial distance in lamD for band 3 (730 nm), default plate scale
+        # 21.8 mas/pix and D=2.4 m
+        mas2lamD = 1e-3/3600/180*np.pi*2.4/(ext_hdr['WAVLEN0']*1e-9)
+        r_lamD_in = np.sqrt(x_in**2 + y_in**2) * 21.8 * mas2lamD
+        phi_deg_in = np.arctan2(y_in, x_in)*180/np.pi
+        dataset_out = steps.star_pos_spec(
+            dataset_in,
+            r_lamD=r_lamD_in,
+            phi_deg=phi_deg_in)
+
+        # Check if the satellite position has been properly recorded in all images
+        for img in dataset_out:
+            assert ext_hdr['WV0_X'] - x_in == pytest.approx(img.ext_hdr['STARLOCX'], abs=1e-10), 'The X position of the star is incorrect.'
+            assert ext_hdr['WV0_Y'] - y_in == pytest.approx(img.ext_hdr['STARLOCY'], abs=1e-10), 'The Y position of the star is incorrect.'
+       
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
     test_psf_centroid()
@@ -1222,3 +1268,4 @@ if __name__ == "__main__":
     test_linespread_function()
     test_extract_spec()
     test_slit_trans()
+    test_star_pos()

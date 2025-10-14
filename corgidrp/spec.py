@@ -1228,3 +1228,69 @@ def slit_transmission(
     return (slit_trans_interp,
         target_pix[0],
         target_pix[1])
+
+def star_pos_spec(
+    dataset,
+    r_lamD=0,
+    phi_deg=0,
+    ):
+    """ Find the position of the star using the information from the satellite
+      spot. The position of the satellite spot on EXCAM is given by the
+      zero-point solution. Using the information of the commanded position of
+      the satellite spot with respect the occulted star, one can infer the
+      location of the occulted star.
+      The relative of the satellite spot with respect the occulted star is given
+      in polar coordinates. The radial distance of the satellite spot is measured
+      in units lambda/D, with lambda the band reference wavelength, either 730 nm
+      (band 3) or 660 nm (band 2), and D=2.4 m. The polar angle is measured in
+      degrees, with 0 degrees meaning +X and 90 degrees meaning +Y. The polar
+      coordinates of the satellite spot are translated into (X,Y) EXCAM pixel
+      coordinates, which can then be subtracted from the zero-point solution to
+      infer the location of the occulted star.
+
+      Args:
+        dataset (Dataset): A Dataset with L3 spectroscopy frames.
+        r_lamD (float): Radial distance of the satellite spot on EXCAM with respect
+        the occulted star in units of lambda/D.
+        phi_deg (float): Polar angle of the satellite spot on EXCAM with respect
+        the occulted star in degrees, with 0 degrees meaning +X and 90 degrees
+        meaning +Y.
+
+      Returns:
+          Input Dataset with updated keywords recording the satellite position
+          in EXCAM pixels.
+    """ 
+    # Primary diameter of Roman Space Telescope in meters
+    D_m=2.4
+    # Basic checks
+    if r_lamD <= 0:
+        raise ValueError('r_lamD must be positive. Usual range is 3-20.')
+
+    dataset_cp = dataset.copy()
+    for img in dataset_cp:
+        # Check it is L3
+        if img.ext_hdr['DATALVL'] != 'L3':
+            raise ValueError(f"The data level must be L3 and it is {img.ext_hdr['DATALVL']}")
+        cfamname = img.ext_hdr['CFAMNAME']
+        # Extract satellite spot wavelength from L3 extended header (it must be present)
+        try:
+            lam_sat_nm = float(img.ext_hdr['WAVLEN0'])
+        except:
+            raise ValueError(f'WAVLEN0 keyword missing in L3 frame.')
+
+        # Conversion from EXCAM pixels to milliarsec
+        plate_scale_mas = img.ext_hdr['PLTSCALE']
+        # Conversion from radians to milliarsec (mas/rad)
+        rad2mas = 180/np.pi*3600*1e3
+        # lam/D in radians
+        lamDrad = 1e-9*lam_sat_nm/D_m
+        # lam/D to EXCAM pixels
+        r_pix = r_lamD*lamDrad*rad2mas/plate_scale_mas
+        # EXCAM (X,Y) coordinates
+        X_pix = r_pix * np.cos(phi_deg*np.pi/180)
+        Y_pix = r_pix * np.sin(phi_deg*np.pi/180)
+        # Update estimated location of the occulted star
+        img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_X'] - X_pix
+        img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y'] - Y_pix
+
+    return dataset_cp
