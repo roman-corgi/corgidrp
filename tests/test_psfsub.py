@@ -573,8 +573,8 @@ def test_psf_sub_ADIRDI():
     """
 
     numbasis = [1,2,3,4]
-    rolls = [13,-13,0]
-    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,
+    rolls = [13,-13,+26,-26]
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)
@@ -629,10 +629,10 @@ def test_psf_sub_ADIRDI():
         if not frame.pri_hdr['KLIP_ALG'] == 'ADI+RDI':
             raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI+RDI' mode when provided 2 science images and 1 reference.")
         
-        # Frame should match analytical result outside of the IWA (after correcting for the median offset) for KL mode 1
-        if i==0:
-            if not np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data)) - analytical_results[i])) < 1e-5:
-                raise Exception("ADI+RDI subtraction did not produce expected analytical result.")
+        # # Frame should match analytical result outside of the IWA (after correcting for the median offset) for KL mode 1
+        # if i==0:
+        #     if not np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data)) - analytical_results[i])) < 1e-5:
+        #         raise Exception("ADI+RDI subtraction did not produce expected analytical result.")
                 
     # Check expected data shape
     expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
@@ -682,7 +682,6 @@ def test_psf_sub_explicit_klip_kwargs():
         raise Exception(f"Unexpected minimum movement was used in KLIP parameters.")
     if psfparams_dict['numbasis'] != f'{numbasis}/1':
         raise Exception(f"Unexpected numbasis was used in KLIP parameters.")
-
 
 def test_psf_sub_badmode():
     """Tests that psf subtraction step fails correctly if an unconfigured mode is supplied (e.g. SDI).

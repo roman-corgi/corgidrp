@@ -8,13 +8,11 @@ import scipy.ndimage
 from astropy.wcs import WCS
 
 from corgidrp import data
-from corgidrp.detector import flag_nans,nan_flags
+from corgidrp.detector import flag_nans,nan_flags, derotate_dq
 from corgidrp import star_center
 import corgidrp
 from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
-from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
-from scipy.ndimage import shift
 from astropy.io import fits
 from scipy.ndimage import generic_filter
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
@@ -475,24 +473,34 @@ def do_psf_subtraction(input_dataset,
                             skip_derot=True
                             )
     
+    # pyklip_dataset.output shape: (len numbasis, n_rolls, n_wls, y, x)
+
 
     # Assign master output dq & error (before derotation)
     # TODO: handle 3D data!
-    sci_output_dqs = sci_dataset.all_dq.copy()
+    # dq shape = (n_rolls, n_wls(optional), y, x)
+    sci_input_dqs = sci_dataset.all_dq.copy()
 
-    # If using references, only flag pixels that are bad in all the ref frames
+    # If doing ADI, flag pixels that are bad in all science frames
+    if 'ADI' in klip_kwargs['mode']:
+        sci_input_dqs[:] = np.all(sci_input_dqs,axis=0)
+
+    # If using references, flag pixels that are bad in all the ref frames
     if 'RDI' in klip_kwargs['mode']:
-        sci_output_dqs = np.logical_or(sci_output_dqs,np.all(ref_dataset.all_dq>=dq_thresh,axis=0))
+        ref_output_dqs_flat = np.all(ref_dataset.all_dq>=dq_thresh,axis=0)
+        sci_input_dqs = np.logical_or(sci_input_dqs,ref_output_dqs_flat) 
 
     # Set errors to np.nan for now
-    sci_output_errs = np.full_like(sci_dataset.all_err,np.nan)
+    sci_input_errs = np.full_like(sci_dataset.all_err,np.nan)
 
-    # Derotate & align all frames & dq & error
+    # Derotate & align dq & error
     sci_dataset_temp = sci_dataset.copy()
-    sci_dataset_temp.all_dq[:] = sci_output_dqs
-    sci_dataset_temp.all_err[:] = sci_output_errs
+    sci_dataset_temp.all_dq[:] = sci_input_dqs
+    sci_dataset_temp.all_err[:] = sci_input_errs
 
-    northup(sci_dataset_temp)
+    sci_dataset_temp_derotated = northup(sci_dataset_temp,use_wcs=False,rot_center='starloc')
+
+    
 
     # align all frames & dq & error
 
@@ -704,25 +712,8 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         ## HDU DQ ##
         # all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
         dq_data = processed_data.dq
-        if xcen != xlen/2 or ycen != ylen/2:
-                # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
-                # calculate shift values
-                xshift = xcen-xlen/2; yshift = ycen-ylen/2
 
-                # pad and shift
-                pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
-                dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=0)
-                dq_data_padded_shifted = shift(dq_data_padded,(-yshift,-xshift),order=0,mode='constant',cval=0)
-
-                # define slices for cropping
-                crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
-
-                # rotate (invserse direction to pyklip.rotate), re-shift, and crop
-                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=0),\
-                 (yshift,xshift),order=0,mode='constant',cval=0)[crop_y,crop_x]
-        else:
-                # simply rotate 
-                dq_derot = rotate_scipy(dq_data, -roll_angle, order=0, mode='constant', reshape=False, cval=0)
+        dq_derot = derotate_dq(dq_data,roll_angle,xcen,ycen)
 
         new_all_dq.append(dq_derot)
         ############
