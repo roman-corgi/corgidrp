@@ -49,17 +49,14 @@ def fix_str_for_tvac(
                 exthdr['ISPC'] = False
 
 
-def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, input_datadir, logger):
+def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, use_custom_data, logger):
     """Run the complete L1 to L2b end-to-end test.
-    
-    This function consolidates all the test steps into a single linear flow
-    for easier reading and understanding.
     
     Args:
         l1_datadir (str): Path to L1 input data directory
         test_outputdir (str): Path to output directory
         cals_dir (str): Path to calibrations directory
-        input_datadir (str or None): Original input_datadir parameter (to determine if we process all files)
+        use_custom_data (bool): True if using custom input_datadir (process all files, skip TVAC comparison)
         logger (logging.Logger): Logger instance for output
         
     Returns:
@@ -108,15 +105,9 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, input_datadir, 
     logger.info('')
 
     # Build calibration file paths
-    if cals_dir is None:
-        # For default, cals_dir needs to be derived from e2edata_path
-        # But we don't have e2edata_path here, so we'll raise an error
-        raise ValueError("cals_dir cannot be None in run_l1_to_l2b_e2e_test helper function")
-    
     processed_cal_path = cals_dir
     
-    # Use default paths with known filenames or search for them
-    # (This logic assumes cals_dir is always provided to this function)
+    # Try default filenames first, otherwise search by pattern
     if os.path.exists(os.path.join(processed_cal_path, "nonlin_table_240322.txt")):
         # Use default filenames
         nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -274,8 +265,7 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, input_datadir, 
     logger.info('='*80)
 
     # define the raw science data to process
-    # l1_files_only was already filtered above for mock_cal_filelist
-    if input_datadir is None:
+    if not use_custom_data:
         # Default behavior: select just the first two files for testing
         l1_data_filelist = [os.path.join(l1_datadir, l1_files_only[i]) for i in [0,1]] # grab the first two L1 files
     else:
@@ -352,7 +342,7 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, input_datadir, 
             hdul_copy.writeto(os.path.join(l2b_tvac_outputdir, l2b_tvac_filename), overwrite=True)
         tvac_l2b_filelist.append(os.path.join(l2b_tvac_outputdir, l2b_tvac_filename))
 
-    # modify TVAC headers for production
+    # modify TVAC headers
     #fix_headers_for_tvac(l1_data_filelist)
     fix_str_for_tvac(l1_data_filelist)
 
@@ -404,8 +394,6 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, input_datadir, 
     logger.info('Running L2a -> L2b processing pipeline')
     logger.info('='*80)
     
-    # Fix L2a headers before processing to L2b
-    fix_str_for_tvac(new_l2a_filenames)
     logger.info('Running L2a to L2b recipe...')
     walker.walk_corgidrp(new_l2a_filenames, "", test_outputdir)
     logger.info('')
@@ -452,9 +440,9 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, input_datadir, 
     logger.info('')
     
     # ================================================================================
-    # (7) Compare Against TVAC Reference Data (only for default data)
+    # (7) Compare Against TVAC Reference Data (only for default data where TVAC reference exists)
     # ================================================================================
-    if input_datadir is None and len(tvac_l2a_filelist) > 0:
+    if not use_custom_data and len(tvac_l2a_filelist) > 0:
         logger.info('='*80)
         logger.info('Test Case 4: TVAC Reference Data Comparison')
         logger.info('='*80)
@@ -485,7 +473,7 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, input_datadir, 
             else:
                 logger.info(f"L2b TVAC NaN comparison: {os.path.basename(new_filename)} NaN positions differ. FAIL")
             
-            # now compare the rest of the data
+            # compare the rest of the data
             img.data[e2e_nans] = 0.0
             tvac_dat[tvac_nans] = 0.0
             diff = img.data - tvac_dat
@@ -495,7 +483,7 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, input_datadir, 
                 logger.info(f"L2b TVAC data comparison: {os.path.basename(new_filename)} differs from reference. FAIL")
         
         logger.info('')
-    elif input_datadir is not None:
+    elif use_custom_data:
         logger.info('='*80)
         logger.info('Test Case 4: TVAC Reference Data Comparison - SKIPPED')
         logger.info('='*80)
@@ -593,7 +581,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path, input_datadir, cals_dir):
     
     # Run the complete end-to-end test
     try:
-        new_l2a_filenames, new_l2b_filenames = run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, processed_cal_path, input_datadir, logger)
+        use_custom_data = input_datadir is not None
+        new_l2a_filenames, new_l2b_filenames = run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, processed_cal_path, use_custom_data, logger)
         
         logger.info('='*80)
         logger.info('END-TO-END TEST COMPLETE - ALL TESTS PASSED')
