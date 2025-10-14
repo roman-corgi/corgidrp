@@ -504,7 +504,7 @@ def test_psf_sub_RDI():
     for i,frame in enumerate(result):
 
         mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
-        masked_frame = np.where(mask,np.nan,frame.data)
+        masked_frame = np.where(mask,np.nan,frame.data[0])
 
         # import matplotlib.pyplot as plt
 
@@ -525,9 +525,11 @@ def test_psf_sub_RDI():
         # axes[2].set_title('Difference')
 
         # fig.suptitle('Inputs')
+        # plt.show()
+        # plt.close()
 
         # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-        # im0 = axes[0].imshow(frame.data - np.nanmedian(frame.data),origin='lower')
+        # im0 = axes[0].imshow(frame.data[0] - np.nanmedian(frame.data[0]),origin='lower')
         # plt.colorbar(im0,ax=axes[0],shrink=0.8)
         # axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[0].set_title(f'PSF Sub Result ({numbasis[i]} KL Modes, Median Subtracted)')
@@ -537,8 +539,8 @@ def test_psf_sub_RDI():
         # axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[1].set_title('Analytical result')
 
-        # norm = LogNorm(vmin=1e-8, vmax=1, clip=False)
-        # im2 = axes[2].imshow(frame.data - np.nanmedian(frame.data) - analytical_result,
+        # #norm = LogNorm(vmin=1e-8, vmax=1, clip=False)
+        # im2 = axes[2].imshow(frame.data[0] - np.nanmedian(frame.data[0]) - analytical_result,
         #                      origin='lower',norm=None)
         # plt.colorbar(im2,ax=axes[2],shrink=0.8)
         # axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
@@ -550,7 +552,7 @@ def test_psf_sub_RDI():
         # plt.close()
         
         # Overall counts should decrease        
-        if not np.nansum(mock_sci[0].data) > np.nansum(frame.data):
+        if not np.nansum(mock_sci[0].data) > np.nansum(frame.data[0]):
             raise Exception(f"RDI subtraction resulted in increased counts for frame {i}.")
         
         # The step should choose mode RDI based on having 1 roll and 1 reference.
@@ -558,7 +560,7 @@ def test_psf_sub_RDI():
             raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'RDI' mode when provided 1 science image and 1 reference.")
         
         # Frame should match analytical result outside of the IWA (after correcting for the median offset)
-        if not np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data)) - analytical_result)) < 1e-5:
+        if not np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data[0])) - analytical_result)) < 1e-5:
             raise Exception("RDI subtraction did not produce expected analytical result.")
     
     # Check expected data shape
@@ -724,8 +726,8 @@ if __name__ == '__main__':
     # test_psf_sub_split_dataset()
     # test_psf_sub_explicit_klip_kwargs()
 
-    # test_psf_sub_ADI()
-    # test_psf_sub_RDI()
+    test_psf_sub_ADI()
+    test_psf_sub_RDI()
     test_psf_sub_ADIRDI()
     # test_psf_sub_badmode()
 

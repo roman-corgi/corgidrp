@@ -3,12 +3,12 @@ import warnings
 import numpy as np
 import os
 import pyklip.rdi
-from pyklip.klip import rotate
+from pyklip.klip import rotate, collapse_data
 import scipy.ndimage
 from astropy.wcs import WCS
 
 from corgidrp import data
-from corgidrp.detector import flag_nans,nan_flags, derotate_dq
+from corgidrp.detector import derotate_arr
 from corgidrp import star_center
 import corgidrp
 from corgidrp.klip_fm import meas_klip_thrupt
@@ -383,7 +383,8 @@ def do_psf_subtraction(input_dataset,
         dq_thresh (int): DQ threshold for considering a pixel bad. Defaults to 1.
         klip_kwargs: Additional keyword arguments to be passed to pyKLIP fm.klip_dataset, as defined `here <https://pyklip.readthedocs.io/en/latest/pyklip.html#pyklip.fm.klip_dataset>`. 
             'mode', e.g. ADI/RDI/ADI+RDI, is chosen autonomously if not specified. 'annuli' defaults to 1. 'annuli_spacing' 
-            defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. 'numbasis' defaults to [1,4,8,16].
+            defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. 'numbasis' defaults to [1,4,8,16],
+            'time_collapse' defaults to 'mean'.
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
@@ -444,13 +445,16 @@ def do_psf_subtraction(input_dataset,
     if 'movement' not in klip_kwargs.keys():
         klip_kwargs['movement'] = 1
     
+    if 'time_collapse' not in klip_kwargs.keys():
+        klip_kwargs['time_collapse'] = 'mean'
+    
     # Set up outdir
     if outdir is None: 
         outdir = os.path.join(corgidrp.config_folder, 'KLIP_SUB')
     
-    outdir = os.path.join(outdir,klip_kwargs['mode'])
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+    outdir_mode = os.path.join(outdir,klip_kwargs['mode'])
+    if not os.path.exists(outdir_mode):
+        os.makedirs(outdir_mode)
 
     # Assume replace_bad_pixels has been run on data already
     # Mask data where DQ > 0, let pyklip deal with the nans
@@ -458,24 +462,22 @@ def do_psf_subtraction(input_dataset,
     # ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
     if np.any(np.isnan(sci_dataset.all_data)):
         raise ValueError('nans present in science data, please run replace_bad_pixels()')
-    if np.any(np.isnan(ref_dataset.all_data)):
-        raise ValueError('nans present in reference data, please run replace_bad_pixels()')
+    if not reference_star_dataset is None:
+        if np.any(np.isnan(ref_dataset.all_data)):
+            raise ValueError('nans present in reference data, please run replace_bad_pixels()')
 
 
     # Initialize pyklip dataset class
     pyklip_dataset = data.PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)
     
     # Run pyklip
-    pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
+    pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir_mode,
                             **klip_kwargs,
                             calibrate_flux=False,psf_library=pyklip_dataset._psflib,
                             fileprefix=fileprefix, numthreads=num_processes,
                             skip_derot=True
                             )
     
-    # pyklip_dataset.output shape: (len numbasis, n_rolls, n_wls, y, x)
-
-
     # Assign master output dq & error (before derotation)
     # TODO: handle 3D data!
     # dq shape = (n_rolls, n_wls(optional), y, x)
@@ -493,61 +495,126 @@ def do_psf_subtraction(input_dataset,
     # Set errors to np.nan for now
     sci_input_errs = np.full_like(sci_dataset.all_err,np.nan)
 
-    # Derotate & align dq & error
+    # Derotate & collapse dq & error
     sci_dataset_temp = sci_dataset.copy()
     sci_dataset_temp.all_dq[:] = sci_input_dqs
     sci_dataset_temp.all_err[:] = sci_input_errs
 
     sci_dataset_temp_derotated = northup(sci_dataset_temp,use_wcs=False,rot_center='starloc')
-
+    dq_out = np.where(sci_dataset_temp_derotated.all_dq>0,1,0)
+    err_out = sci_dataset_temp_derotated.all_err
+    dq_out_collapsed = np.where(np.all(dq_out,axis=0),1,0)
+    err_out_collapsed = np.sqrt(np.sum(err_out**2,axis=0))
     
+    # Derotate & align PSF subtracted frames
+    # pyklip_dataset.output shape: (len numbasis, n_rolls, n_wls, y, x)
 
-    # align all frames & dq & error
+    output = pyklip_dataset.output
+    collapsed_frames = []
+    for nn,numbasis in enumerate(klip_kwargs['numbasis']):
+        frames = []
 
-    # Do time collapse of data, dq, & error
+        # Make a dataset for derotation
+        for rr in range(output.shape[1]):
+            psfsub_frame_data = output[nn,rr]
 
-    # Construct corgiDRP dataset from pyKLIP result
-    result_fpath = os.path.join(outdir,f'{fileprefix}-KLmodes-all.fits')   
-    #pyklip_data = fits.getdata(result_fpath)
-    pyklip_hdr = fits.getheader(result_fpath)
+            # Add relevant info from the pyklip headers:
+            pri_hdr = sci_dataset[rr].pri_hdr.copy()
+            ext_hdr = sci_dataset[rr].ext_hdr.copy()    
 
-    # err = np.zeros([1,*pyklip_data.shape])
-    # dq = np.zeros_like(pyklip_data) # This will get filled out later
+            result_fpath = os.path.join(outdir_mode,f'{fileprefix}-KLmodes-all.fits')   
+            pyklip_hdr = fits.getheader(result_fpath)
+            skip_kws = ['PSFCENTX','PSFCENTY','CREATOR','CTYPE3']
+            for kw, val, comment in pyklip_hdr._cards:
+                if not kw in skip_kws:
+                    ext_hdr.set(kw,val,comment)
 
-    # Collapse sci_dataset headers
-    pri_hdr = sci_dataset[0].pri_hdr.copy()
-    ext_hdr = sci_dataset[0].ext_hdr.copy()    
-    
-    # Add relevant info from the pyklip headers:
-    skip_kws = ['PSFCENTX','PSFCENTY','CREATOR','CTYPE3']
-    for kw, val, comment in pyklip_hdr._cards:
-        if not kw in skip_kws:
-            ext_hdr.set(kw,val,comment)
+            # Record KLIP algorithm explicitly
+            pri_hdr.set('KLIP_ALG',klip_kwargs['mode'])
+            
+            # Add info from pyklip to ext_hdr
+            ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
+            ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
 
-    # Record KLIP algorithm explicitly
-    pri_hdr.set('KLIP_ALG',klip_kwargs['mode'])
-    
-    # Add info from pyklip to ext_hdr
-    ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
-    ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
-
-    if "HISTORY" in sci_dataset[0].ext_hdr.keys():
-        history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
-        ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
-    
-    # Construct Image and Dataset object
-    frame = data.Image(pyklip_data,
+            if "HISTORY" in sci_dataset[rr].ext_hdr.keys():
+                history_str = str(sci_dataset[rr].ext_hdr['HISTORY'])
+                ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
+            
+            frame = data.Image(psfsub_frame_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
-                        err=err, dq=dq)
+                        )
+            frames.append(frame)
+
+        dataset_for_derotation = data.Dataset(frames)
+
+        # Derotate and time collapse
+        derotated_output_dataset = northup(dataset_for_derotation,use_wcs=False,
+                                           rot_center='starloc')
+        
+        # # Plots
+        # if output.shape[1] > 1:
+        #     import matplotlib.pyplot as plt
+        #     r1 = derotated_output_dataset.all_data[0,0]
+        #     fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+        #     im0 = axes[0].imshow(r1,origin='lower')
+        #     plt.colorbar(im0,ax=axes[0],shrink=0.8)
+        #     axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        #     axes[0].set_title(f'PSF Sub Result R1: {dataset_for_derotation[0].pri_hdr["ROLL"]} deg')
+
+        #     r2 = derotated_output_dataset.all_data[1,0]
+        #     im1 = axes[1].imshow(r2,origin='lower')
+        #     plt.colorbar(im1,ax=axes[1],shrink=0.8)
+        #     axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        #     axes[1].set_title(f'PSF Sub Result R2: {dataset_for_derotation[1].pri_hdr["ROLL"]} deg')
+
+        #     diff = r1 - r2
+        #     im2 = axes[2].imshow(diff,origin='lower')
+        #     plt.colorbar(im2,ax=axes[2],shrink=0.8)
+        #     axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        #     axes[2].set_title('Difference')
+
+        #     fig.suptitle(f'{klip_kwargs["mode"]}, (kl modes: {numbasis})')
+
+        #     plt.show()
+        #     plt.close()
+
+        collapsed_psfsub_data = collapse_data(derotated_output_dataset.all_data, 
+                                              pixel_weights=None, axis=0, 
+                                              collapse_method=klip_kwargs['time_collapse'])
+
+        # Remove wavelength axis if nwls == 1
+        if collapsed_psfsub_data.shape[0] == 1:
+            collapsed_psfsub_data = collapsed_psfsub_data[0]
+
+        collapsed_frame = data.Image(collapsed_psfsub_data,
+                        pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                        err=err_out_collapsed,
+                        dq=dq_out_collapsed
+                        )
+        
+        collapsed_frame.filename = sci_dataset.frames[-1].filename
+    
+        collapsed_frames.append(collapsed_frame)
+
+    # Make a dataset containing the result from each KLmode
     # NOTE: product of psfsubtraction should take: CGI_<Last science target VisitID>_<Last science target TimeUTC>_L<>.fits
     # upgrade to L4 should be done by a serpate receipe
-    frame.filename = sci_dataset.frames[-1].filename
-    
-    dataset_out = data.Dataset([frame])
+    collapsed_dataset = data.Dataset(collapsed_frames)
 
-    # Flag nans in the dq array and then add nans to the error array
-    dataset_out = flag_nans(dataset_out,flag_val=1)
-    dataset_out = nan_flags(dataset_out,threshold=1)
+    frame = data.Image(
+            collapsed_dataset.all_data,
+            pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+            err=collapsed_dataset.all_err[:,0],
+            dq=collapsed_dataset.all_dq
+        )
+    
+    dataset_out = data.Dataset(
+        [frame]
+    )
+
+    # # Flag nans in the dq array and then add nans to the error array
+    # dataset_out = flag_nans(dataset_out,flag_val=1)
+    # dataset_out = nan_flags(dataset_out,threshold=1)
     
     history_msg = f'PSF subtracted via pyKLIP {klip_kwargs["mode"]}.'
     dataset_out.update_after_processing_step(history_msg)
@@ -624,7 +691,8 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
     The northup function looks for 'STARLOCX' and 'STARLOCY' for the star location. If not, it uses the center of the FoV as the star location.
     With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
-  
+    TODO: Update pixel locations that are saved in the header!
+    
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
         use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
@@ -644,7 +712,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         ## image extension ##
         sci_hd = processed_data.ext_hdr
         sci_data = processed_data.data
-        ylen, xlen = sci_data.shape
+        ylen, xlen = sci_data.shape[-2:]
 
         # define the center for rotation
         if rot_center == 'im_center':
@@ -687,7 +755,19 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
             roll_angle = processed_data.pri_hdr['ROLL']
 
         # derotate
-        sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        if sci_data.ndim == 2:
+            sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        
+        elif sci_data.ndim == 3:
+            sci_derot = []
+            for img in sci_data:
+                im_derot = rotate(img,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+                sci_derot.append(im_derot)
+            sci_derot = np.array(sci_derot)
+
+        else:
+            raise ValueError('northup not configured for frame data with >3 dimensions')
+        
         new_all_data.append(sci_derot)
 
         log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
@@ -705,7 +785,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = np.expand_dims(rotate(err_data[0],roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
+        err_derot = derotate_arr(err_data,roll_angle, xcen,ycen) # err data shape is 1x1024x1024
         new_all_err.append(err_derot)
         #############
 
@@ -713,7 +793,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         # all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
         dq_data = processed_data.dq
 
-        dq_derot = derotate_dq(dq_data,roll_angle,xcen,ycen)
+        dq_derot = derotate_arr(dq_data,roll_angle,xcen,ycen)
 
         new_all_dq.append(dq_derot)
         ############
