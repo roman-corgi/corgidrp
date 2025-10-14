@@ -573,8 +573,8 @@ def test_psf_sub_ADIRDI():
     """
 
     numbasis = [1,2,3,4]
-    rolls = [13,-13,0]
-    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,
+    rolls = [13,-13,+26,-26]
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)
@@ -685,7 +685,6 @@ def test_psf_sub_explicit_klip_kwargs():
         raise Exception(f"Unexpected minimum movement was used in KLIP parameters.")
     if psfparams_dict['numbasis'] != f'{numbasis}/1':
         raise Exception(f"Unexpected numbasis was used in KLIP parameters.")
-
 
 def test_psf_sub_badmode():
     """Tests that psf subtraction step fails correctly if an unconfigured mode is supplied (e.g. SDI).

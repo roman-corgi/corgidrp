@@ -2,8 +2,10 @@
 
 import numpy as np
 from scipy import interpolate
-from scipy.ndimage import median_filter
+from scipy.ndimage import median_filter, shift
 from scipy.ndimage import gaussian_filter as gauss
+from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
+
 from scipy import ndimage
 from scipy.signal import convolve2d
 import astropy.io.fits as fits
@@ -623,3 +625,27 @@ def ENF(g, Nem):
         float : ENF, extra-noise function
     """
     return np.sqrt(2*(g-1)*g**(-(Nem+1)/Nem) + 1/g) 
+
+def derotate_dq (dq_data,roll_angle, xcen,ycen):
+    ylen, xlen = dq_data.shape[-2:]
+    
+    if xcen != xlen/2 or ycen != ylen/2:
+            # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
+            # calculate shift values
+            xshift = xcen-xlen/2; yshift = ycen-ylen/2
+
+            # pad and shift
+            pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
+            dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=0)
+            dq_data_padded_shifted = shift(dq_data_padded,(-yshift,-xshift),order=0,mode='constant',cval=0)
+
+            # define slices for cropping
+            crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
+
+            # rotate (invserse direction to pyklip.rotate), re-shift, and crop
+            dq_derot = shift(rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=0),\
+            (yshift,xshift),order=0,mode='constant',cval=0)[crop_y,crop_x]
+    else:
+            # simply rotate 
+            dq_derot = rotate_scipy(dq_data, -roll_angle, order=0, mode='constant', reshape=False, cval=0)
+    return dq_derot
