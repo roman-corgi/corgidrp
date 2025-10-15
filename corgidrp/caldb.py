@@ -56,7 +56,9 @@ labels = {data.Dark: "Dark",
           data.CoreThroughputCalibration: "CoreThroughputCalibration",
           data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
           data.SpectroscopyCentroidPSF: "SpectroscopyCentroidPSF",
-          data.DispersionModel: "DispersionModel"
+          data.DispersionModel: "DispersionModel",
+          data.MuellerMatrix: "MuellerMatrix",
+          data.NDMuellerMatrix: "NDMuellerMatrix"
           }
 
 class CalDB:
@@ -529,4 +531,5 @@ def initialize():
     initialized = True
 
 initialized = False
-initialize()
+if not os.environ.get('CORGIDRP_DO_NOT_AUTO_INIT_CALDB', False):
+    initialize()
