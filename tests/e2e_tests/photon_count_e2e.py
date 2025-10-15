@@ -16,12 +16,18 @@ import corgidrp.detector as detector
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
+    '''Checks that a photon-counted master dark works fine in the pipeline, for both cases of master dark (PC master dark or synthesized master dark).'''
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     flat_path = os.path.join(processed_cal_path, "flat.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
+    # for noisemaps later in the script
+    dark_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
+    fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
+    cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
 
     np.random.seed(1234)
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5)
+    # using CIC and dark current average values which come from the corresponding values from cic_path and dark_path above; FPN mean is already 0 in fpn_path and simulated set below
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=3, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158)
     output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
@@ -75,7 +81,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     kgain.save(filedir=output_dir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
 
-    # NoiseMap
+    # NoiseMap (meaningless data; won't be used in dark subtraction for this first test which instead uses PC master dark)
     noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
@@ -185,9 +191,72 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         assert pc_frame_err.min() >= 0
         assert pc_dark_frame_err.min() >= 0
 
+    # remove PC master dark
+    for f in os.listdir(output_dir):
+        if f.endswith('_drk_cal.fits'):
+            os.remove(os.path.join(output_dir, f))
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
+    # now test that the pipeline works fine if we start with a synthesized master dark instead
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB() # connection to cal DB
+    # NoiseMap
+    with fits.open(fpn_path) as hdulist:
+        fpn_dat = hdulist[0].data
+    with fits.open(cic_path) as hdulist:
+        cic_dat = hdulist[0].data
+    with fits.open(dark_path) as hdulist:
+        dark_dat = hdulist[0].data
+    noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_dat])
+    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
+    rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
+    noise_map_dat[:, r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = noise_map_dat_img
+    noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
+    noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected electron'
+    ext_hdr['B_O'] = 0
+    ext_hdr['B_O_ERR'] = 0
+    noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                                    input_dataset=mock_input_dataset, err=noise_map_noise,
+                                    dq = noise_map_dq, err_hdr=err_hdr)
+    noise_map.save(filedir=output_dir, filename="mock_detnoisemap_dnm_cal.fits")
+    this_caldb.create_entry(noise_map)
+
+    this_caldb.create_entry(flat)
+    this_caldb.create_entry(bp_map)
+    this_caldb.create_entry(kgain)
+    this_caldb.create_entry(new_nonlinearity)
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    # go from L2a, where now dark subtraction should be performed using the noisemaps made above
+    walker.walk_corgidrp(l2a_files, '', output_dir)
+
+    # get photon-counted frame
+    master_ill_filename_list = []
+    master_ill_filepath_list = []
+    pc_processed_filepath = get_last_modified_file(output_dir)
+    pc_processed_filename = os.path.split(pc_processed_filepath)[-1]
+    for f in os.listdir(output_dir):
+        if f == pc_processed_filename: 
+            master_ill_filename_list.append(f)
+            master_ill_filepath_list.append(os.path.join(output_dir, f))
+    for i in range(len(master_ill_filepath_list)):
+        pc_frame = fits.getdata(master_ill_filepath_list[i])
+        pc_frame_err = fits.getdata(master_ill_filepath_list[i], 'ERR')
+
+        # more frames gets a better agreement; agreement to 1% for ~160 darks and illuminated
+        assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02) 
+        assert pc_frame_err.min() >= 0
 
 
 if __name__ == "__main__":

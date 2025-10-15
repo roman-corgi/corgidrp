@@ -2601,7 +2601,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     hdul.writeto(filename, overwrite = True)
 
 
-def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0):
+def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0, cic=0.01, dark_current=8.33e-4, read_noise=100., bias=20000, qe=0.9):
     '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
     Used for unit tests for photon counting.  
     
@@ -2616,6 +2616,11 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         smear: (bool) If True, smear is simulated.  Defaults to True.
         flux: (float) Number of photons/s per pixel desired.  Defaults to 1.
         bad_frames (int): Number of simulated bad frames (with primary header keyword 'OVEREXP' set to True) to include in output datasets that frame_select would catch by default. Defaults to 0.
+        cic (float): simulated clock-induced charge (CIC) in e-/pix/frame.  Defaults to 0.01.
+        dark_current (float): simulated dark current in e-/pix/s.  Defaults to 8.33e-4.
+        read_noise (float): simulated read noise in e-/pix/frame.  Defaults to 100.
+        bias (float): simulated bias in e-.  Defaults to 20000.
+        qe (float): quantum efficiency, e-/photon.  Defaults to 0.9.
     
     Returns:
         ill_dataset (corgidrp.data.Dataset): Dataset containing the illuminated frames
@@ -2630,11 +2635,11 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         em_gain=EMgain,
         full_well_image=60000.,  # e-
         full_well_serial=100000.,  # e-
-        dark_current=8.33e-4,  # e-/pix/s
-        cic=0.01,  # e-/pix/frame
-        read_noise=100.,  # e-/pix/frame
-        bias=20000,  # e-
-        qe=0.9,  # quantum efficiency, e-/photon
+        dark_current=dark_current,  # e-/pix/s
+        cic=cic,  # e-/pix/frame
+        read_noise=read_noise,  # e-/pix/frame
+        bias=bias,  # e-
+        qe=qe,  # quantum efficiency, e-/photon
         cr_rate=cosmic_rate,  # cosmic rays incidence, hits/cm^2/s
         pixel_pitch=13e-6,  # m
         eperdn=kgain,  
@@ -2689,7 +2694,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame.ext_hdr['EXPTIME'] = exptime
         frame.ext_hdr['RN'] = 100
         frame.ext_hdr['KGAINPAR'] = kgain
-        frame.pri_hdr['PHTCNT'] = True
+        frame.pri_hdr['PHTCNT'] = 0
         frame.ext_hdr['ISPC'] = True
         frame.pri_hdr["VISTYPE"] = "TDEMO"
         frame.filename = '_L1_for_pc_ill_{0}.fits'.format(i)

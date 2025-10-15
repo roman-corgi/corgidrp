@@ -150,7 +150,14 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         raise ValueError('bin_size must be less than the number of frames in input_dataset.')
         
     num_bins = len(input_dataset)//bin_size 
-    
+
+    lines = []
+    for line in input_dataset[0].ext_hdr['HISTORY']:
+        lines += [line]
+    msg = 'Dark subtracted using dark'
+    if msg in lines:
+        pc_master_dark = None # dark subtraction was already done, so override any input pc_master_dark
+
     list_new_image = []
     list_err = [] # only used for dark processing case
     list_dq = [] # only used for dark processing case
@@ -160,9 +167,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         subset_frames = input_dataset.frames[bin_size*i:bin_size*(i+1)]
         sub_dataset = data.Dataset(subset_frames)
         if dataset_copy:
-            test_dataset, _ = sub_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
+            test_dataset, unique_vals = sub_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
         else:
-            test_dataset, _ = sub_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
+            test_dataset, unique_vals = sub_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
         if len(test_dataset) > 1:
             raise PhotonCountException('All frames must have the same exposure time, '
                                     'commanded EM gain, and k gain.')
@@ -284,17 +291,18 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if pc_master_dark is not None:
             if type(pc_master_dark) is not data.Dark:
                 raise Exception('Input type for pc_master_dark must be a Dataset of corgidrp.data.Dark instances.')
+            if (pc_master_dark.ext_hdr['EXPTIME'], pc_master_dark.ext_hdr['EMGAIN_C']) != unique_vals[0][:2]:
+                raise PhotonCountException('Dark should have the same EXPTIME and EMGAIN_C as input_dataset.')
             if 'PC_STAT' not in pc_master_dark.ext_hdr:
                 raise PhotonCountException('\'PC_STAT\' must be a key in the extension header of each frame of pc_master_dark.')
-            if pc_master_dark.ext_hdr['PC_STAT'] != 'photon-counted master dark':
-                raise PhotonCountException('Each frame of pc_master_dark must be a photon-counted master dark (i.e., '
-                                        'the extension header key \'PC_STAT\' must be \'photon-counted master dark\').')
-            if 'PCTHRESH' not in pc_master_dark.ext_hdr:
-                raise PhotonCountException('Threshold should be stored under the header \'PCTHRESH\'.')
-            if pc_master_dark.ext_hdr['PCTHRESH'] != thresh:
-                raise PhotonCountException('Threshold used for photon-counted master dark should match the threshold to be used for the illuminated frames.')
-            if pc_master_dark.ext_hdr['NUM_FR'] < len(sub_dataset):
-                raise PhotonCountException('Number of frames that created the photon-counted master dark must be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
+            if pc_master_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark':
+                if 'PCTHRESH' not in pc_master_dark.ext_hdr:
+                    raise PhotonCountException('Threshold should be stored under the header \'PCTHRESH\'.')
+                if pc_master_dark.ext_hdr['PCTHRESH'] != thresh:
+                    raise PhotonCountException('Threshold used for photon-counted master dark should match the threshold to be used for the illuminated frames.')
+                if pc_master_dark.ext_hdr['NUM_FR'] < len(sub_dataset):
+                    raise PhotonCountException('Number of frames that created the photon-counted master dark must be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
+    
             # in case the number of subsets of darks < number of subsets of brights, which can happen since the number of darks within a subset can be bigger than the number in a bright subset
             j = np.mod(i, pc_master_dark.data.shape[0])
             pc_means.append(pc_master_dark.data[j])

@@ -61,14 +61,17 @@ def add_shot_noise_to_err(input_dataset, kgain, detector_params):
     return phot_noise_dataset
 
 
-def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None):
+def dark_subtraction(input_dataset, noisemaps=None, dark=None, detector_regions=None, outputdir=None): #XXX
     """
 
     Perform dark subtraction of a dataset using the corresponding dark frame.  The dark frame can be either a synthesized master dark (made for any given EM gain and exposure time)
-    or for a traditional master dark (average of darks taken at the EM gain and exposure time of the corresponding observation).  The master dark is also saved if it is of the synthesized type after it is built.
+    or for a traditional master dark (average of darks taken at the EM gain and exposure time of the corresponding observation).  The function gives preference for the traditional master dark if provided.
+    If the frames are photon-counted (PC) and a PC dark is provided, the subtraction will not happen here but instead in the PC function pc_mean(), later in the pipeline.  If the provided dark does not match 
+    input_dataset's EM gain, exposure time, and k gain, the dark is not used, and a synthesized master dark is used if noisemaps is not None.  The master dark is also saved if it is of the synthesized type after it is built.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need dark subtraction (L2a-level)
+        noisemaps (corgidrp.data.DetectorNoiseMaps): If not None, a synthesized master dark will be built using this DetectorNoiseMaps object.
         dark (corgidrp.data.Dark or corgidrp.data.DetectorNoiseMaps): If dark is of the corgidrp.data.Dark type, dark subtraction will be done immediately.
             If dark is of the corgidrp.data.DetectorNoiseMaps type, a synthesized master is created using calibrated noise maps for the EM gain and exposure time used in the frames in input_dataset.
         detector_regions: (dict):  A dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
@@ -77,8 +80,11 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     Returns:
         corgidrp.data.Dataset: a dark-subtracted version of the input dataset including error propagation
     """
+    if noisemaps is None and dark is None:
+        raise Exception('Either noisemaps or dark must be provided.')
     if input_dataset[0].ext_hdr['BUNIT'] != "detected electron":
-        raise ValueError ("input dataset must have unit 'detected electron' for dark subtraction, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
+        if input_dataset[0].ext_hdr['ISPC'] == 0: #i.e., analog
+            raise ValueError ("input dataset must have unit 'detected electron' for dark subtraction, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
@@ -99,14 +105,23 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
             full_frame = False
         else:
             raise Exception('Frames in input_dataset do not have valid SCI full-frame or image dimensions.')
+        if dark.ext_hdr['DRPNFILE'] < len(input_dataset):
+            raise Warning('Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset.')
         dark = build_synthesized_dark(input_dataset, dark, detector_regions=detector_regions, full_frame=full_frame)
         if outputdir is None:
             outputdir = '.' #current directory
         dark.save(filedir=outputdir)
     elif type(dark) is data.Dark:
         if 'PC_STAT' in dark.ext_hdr:
-            if dark.ext_hdr['PC_STAT'] != 'analog master dark':
-                raise Exception('The input \'dark\' is a photon-counted dark and cannot be used in the dark_subtraction step function, which is intended for analog frames.')
+            if dark.ext_hdr['PC_STAT'] == 'photon-counted master dark':
+                if input_dataset[0].ext_hdr['ISPC'] == 0: #i.e., analog
+                    raise Exception('The input \'dark\' is a photon-counted dark and cannot be used in the dark_subtraction step function with analog frames.')
+                else: #i.e., photon-counted
+                    msg = 'The input \'dark\' is a photon-counted dark and will be used for subtraction in the pc_mean function.'
+                    darksub_dataset.update_after_processing_step(history_msg=msg)
+                    return darksub_dataset
+        if dark.ext_hdr['DRPNFILE'] < len(input_dataset):
+            raise Warning('Number of frames which made the Dark product is less than the number of frames in input_dataset.')
         # In this case, the Dark loaded in should already match the arry dimensions
         # of input_dataset, specified by full_frame argument of build_trad_dark
         # when this Dark was built
