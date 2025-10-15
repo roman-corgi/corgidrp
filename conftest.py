@@ -57,7 +57,7 @@ def e2eoutput_path(request):
 @pytest.fixture
 def input_datadir(request):
     """
-    Adds the hook to be able to grab the value passed in with the input_datadir argument
+    Gets the value passed in with the input_datadir argument
 
     Args:
         request (FixtureRequest): pytest request of a fixture
@@ -70,7 +70,7 @@ def input_datadir(request):
 @pytest.fixture
 def cals_dir(request):
     """
-    Adds the hook to be able to grab the value passed in with the cals_dir argument
+    Gets the value passed in with the cals_dir argument
 
     Args:
         request (FixtureRequest): pytest request of a fixture

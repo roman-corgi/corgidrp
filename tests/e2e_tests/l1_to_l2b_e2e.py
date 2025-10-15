@@ -24,6 +24,26 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+def find_calibration_file(cal_dir, patterns, cal_type):
+    """Find a calibration file by searching for patterns in filenames.
+    
+    Args:
+        cal_dir (str): Directory to search in
+        patterns (str or list): Pattern(s) to search for (e.g., 'nln' or ['flat', 'flt'])
+        cal_type (str): Type of calibration for error messages (e.g., 'nonlinearity')
+        
+    Returns:
+        str: Full path to the found calibration file
+    """
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    
+    matching_files = [f for f in os.listdir(cal_dir) if any(p in f.lower() for p in patterns)]
+    if not matching_files:
+        patterns_str = "' or '".join(patterns)
+        raise FileNotFoundError(f"No file containing '{patterns_str}' found in {cal_dir}")
+    return os.path.join(cal_dir, matching_files[0])
+
 def fix_str_for_tvac(
     list_of_fits,
     ):
@@ -47,7 +67,6 @@ def fix_str_for_tvac(
             # TODO: Fix ISPC in source L1 files instead of modifying copies here
             if 'ISPC' in exthdr:
                 exthdr['ISPC'] = False
-
 
 def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, use_custom_data, logger):
     """Run the complete L1 to L2b end-to-end test.
@@ -118,41 +137,12 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, use_custom_data
         bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
     else:
         # Search for calibration files by pattern
-        # Find nonlinearity file
-        nln_files = [f for f in os.listdir(processed_cal_path) if "nln" in f.lower()]
-        if not nln_files:
-            raise FileNotFoundError(f"No file containing 'nln' found in {processed_cal_path}")
-        nonlin_path = os.path.join(processed_cal_path, nln_files[0])
-        
-        # Find dark current file
-        drk_files = [f for f in os.listdir(processed_cal_path) if "drk" in f.lower()]
-        if not drk_files:
-            raise FileNotFoundError(f"No file containing 'drk' found in {processed_cal_path}")
-        dark_path = os.path.join(processed_cal_path, drk_files[0])
-        
-        # Find flat file
-        flat_files = [f for f in os.listdir(processed_cal_path) if "flat" in f.lower() or "flt" in f.lower()]
-        if not flat_files:
-            raise FileNotFoundError(f"No file containing 'flat' or 'flt' found in {processed_cal_path}")
-        flat_path = os.path.join(processed_cal_path, flat_files[0])
-        
-        # Find FPN file
-        fpn_files = [f for f in os.listdir(processed_cal_path) if "fpn" in f.lower()]
-        if not fpn_files:
-            raise FileNotFoundError(f"No file containing 'fpn' found in {processed_cal_path}")
-        fpn_path = os.path.join(processed_cal_path, fpn_files[0])
-        
-        # Find CIC file
-        cic_files = [f for f in os.listdir(processed_cal_path) if "cic" in f.lower()]
-        if not cic_files:
-            raise FileNotFoundError(f"No file containing 'cic' found in {processed_cal_path}")
-        cic_path = os.path.join(processed_cal_path, cic_files[0])
-        
-        # Find bad pixel map file
-        bp_files = [f for f in os.listdir(processed_cal_path) if "bad" in f.lower() or "bp" in f.lower() or "bpm" in f.lower()]
-        if not bp_files:
-            raise FileNotFoundError(f"No file containing 'bad', 'bp', or 'bpm' found in {processed_cal_path}")
-        bp_path = os.path.join(processed_cal_path, bp_files[0])
+        nonlin_path = find_calibration_file(processed_cal_path, 'nln', 'nonlinearity')
+        dark_path = find_calibration_file(processed_cal_path, 'drk', 'dark current')
+        flat_path = find_calibration_file(processed_cal_path, ['flat', 'flt'], 'flat field')
+        fpn_path = find_calibration_file(processed_cal_path, 'fpn', 'FPN')
+        cic_path = find_calibration_file(processed_cal_path, 'cic', 'CIC')
+        bp_path = find_calibration_file(processed_cal_path, ['bad', 'bp', 'bpm'], 'bad pixel map')
     
     # Filter to only include L1 files for mock calibration
     all_files = os.listdir(l1_datadir)

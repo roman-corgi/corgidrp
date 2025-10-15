@@ -96,7 +96,7 @@ def run_l2b_to_l3_e2e_test(l2b_datadir, l3_outputdir, cals_dir, logger):
         logger.info(f"Mock astrometric calibration created: {astrom_cal.filename}")
     else:
         logger.info(f"Loading astrometric calibration from {cals_dir}...")
-        # Search for files with ast_cal filename pattern
+        # Search for astrometric calibration file (containing 'ast_cal')
         astrom_files = [f for f in os.listdir(cals_dir) if "ast_cal" in f.lower()]
         if not astrom_files:
             raise FileNotFoundError(f"No file containing 'ast_cal' found in {cals_dir}")
