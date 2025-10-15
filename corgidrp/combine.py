@@ -4,6 +4,8 @@ Module to support frame combination
 import warnings
 import numpy as np
 import corgidrp.data as data
+from scipy.ndimage import shift
+from scipy.ndimage import rotate as rotate_scipy # to avoid confusion with pyklip rotate
 
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling):
@@ -54,7 +56,6 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
     dq_collapse[np.where((dq_collapse > 0) & (~np.isnan(data_collapse)))] = 0
 
     return data_collapse, err_collapse, dq_collapse
-
 
 
 def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mean", num_frames_scaling=True):
@@ -114,3 +115,109 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     new_dataset.update_after_processing_step("Combine_subexposures: combined every {0} frames by {1}".format(num_frames_per_group, collapse))
 
     return new_dataset
+
+
+def derotate_arr_2d(data_arr,roll_angle, xcen,ycen,
+                 order=0,
+                 mode='constant'):
+    
+    ylen, xlen = data_arr.shape[-2:]
+    
+    if xcen != xlen/2 or ycen != ylen/2:
+            # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
+            # calculate shift values
+            xshift = xcen-xlen/2; yshift = ycen-ylen/2
+
+            # pad and shift
+            pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
+            data_padded = np.pad(data_arr,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=0)
+            data_padded_shifted = shift(data_padded,(-yshift,-xshift),order=0,mode='constant',cval=0)
+
+            # define slices for cropping
+            crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
+
+            # rotate (invserse direction to pyklip.rotate), re-shift, and crop
+            derot = shift(rotate_scipy(data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=0),\
+            (yshift,xshift),order=order,mode=mode,cval=0)[crop_y,crop_x]
+    else:
+            # simply rotate 
+            derot = rotate_scipy(data_arr, -roll_angle, order=order, mode=mode, reshape=False, cval=0)
+    return derot
+
+
+def derotate_arr(data_arr,roll_angle, xcen,ycen,
+                 order=0,
+                 mode='constant'):
+    
+    if data_arr.ndim == 2:
+        return derotate_arr_2d(data_arr,roll_angle, xcen,ycen,
+                 order,
+                 mode)
+    
+    elif data_arr.ndim == 3:
+        derotated_arr = []
+        for im in data_arr:
+            derotated_im = derotate_arr_2d(im,roll_angle, xcen,ycen,
+                 order,
+                 mode)
+            derotated_arr.append(derotated_im)
+
+        return np.array(derotated_arr)
+    
+    elif data_arr.ndim == 4:
+        derotated_arr = []
+        for set in data_arr:
+            derotated_set = []
+            for im in set:
+                derotated_im = derotate_arr_2d(im,roll_angle, xcen,ycen,
+                    order,
+                    mode)
+                derotated_set.append(derotated_im)
+            derotated_arr.append(derotated_set)
+
+        return np.array(derotated_arr)
+    
+    else:
+        raise ValueError('derotate_arr() not configured for data with >4 dimensions')
+
+
+def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh):
+
+    # Assign master output dq & error (before derotation)
+    # TODO: handle 3D data!
+    # dq shape = (n_rolls, n_wls(optional), y, x)
+    sci_input_dqs = sci_dataset.all_dq.copy()
+
+    # If doing ADI, flag pixels that are bad in all science frames
+    if 'ADI' in mode:
+        sci_input_dqs[:] = np.all(sci_input_dqs,axis=0)
+
+    # If using references, flag pixels that are bad in all the ref frames
+    if 'RDI' in mode:
+        ref_output_dqs_flat = np.all(ref_dataset.all_dq>=dq_thresh,axis=0)
+        sci_input_dqs = np.logical_or(sci_input_dqs,ref_output_dqs_flat) 
+
+    # Set errors to np.nan for now
+    sci_input_errs = np.full_like(sci_dataset.all_err,np.nan)
+
+    # Derotate dq & error
+    derotated_dq_arr = []
+    derotated_err_arr = []
+    for i,frame in enumerate(sci_dataset):
+        
+        roll = frame.pri_hdr['ROLL']
+        xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
+        
+        derotated_dq = derotate_arr(sci_input_dqs[i],roll, xcen,ycen)
+        derotated_err = derotate_arr(sci_input_errs[i],roll, xcen,ycen)
+        
+        derotated_dq_arr.append(derotated_dq)
+        derotated_err_arr.append(derotated_err)
+
+    derotated_dq_arr = np.where(np.array(derotated_dq_arr)>0,1,0)
+
+    # Collapse dq & error
+    dq_out_collapsed = np.where(np.all(derotated_dq_arr,axis=0),1,0)
+    err_out_collapsed = np.sqrt(np.sum(np.array(derotated_err_arr)**2,axis=0))
+
+    return dq_out_collapsed, err_out_collapsed

@@ -8,7 +8,7 @@ import scipy.ndimage
 from astropy.wcs import WCS
 
 from corgidrp import data
-from corgidrp.detector import derotate_arr
+from corgidrp.combine import derotate_arr, prop_err_dq
 from corgidrp import star_center
 import corgidrp
 from corgidrp.klip_fm import meas_klip_thrupt
@@ -351,11 +351,9 @@ def do_psf_subtraction(input_dataset,
     """
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
-        Handle/propagate DQ array
         Propagate error correctly
         What info is missing from output dataset headers?
         Add comments to new ext header cards
-        Require pyklip output to be centered on 1 pixel. can use the aligned_center kw to do this.
         Make sure psfsub test output data gets saved in a reasonable place
         Update output filename to: CGI_<Last science target VisitID>_<Last science target TimeUTC>_L<>.fits
         
@@ -480,34 +478,11 @@ def do_psf_subtraction(input_dataset,
                             skip_derot=True
                             )
     
-    # Assign master output dq & error (before derotation)
-    # TODO: handle 3D data!
-    # dq shape = (n_rolls, n_wls(optional), y, x)
-    sci_input_dqs = sci_dataset.all_dq.copy()
+    dq_out_collapsed, err_out_collapsed = prop_err_dq(sci_dataset,
+                                                      ref_dataset,
+                                                      klip_kwargs['mode'],
+                                                      dq_thresh)
 
-    # If doing ADI, flag pixels that are bad in all science frames
-    if 'ADI' in klip_kwargs['mode']:
-        sci_input_dqs[:] = np.all(sci_input_dqs,axis=0)
-
-    # If using references, flag pixels that are bad in all the ref frames
-    if 'RDI' in klip_kwargs['mode']:
-        ref_output_dqs_flat = np.all(ref_dataset.all_dq>=dq_thresh,axis=0)
-        sci_input_dqs = np.logical_or(sci_input_dqs,ref_output_dqs_flat) 
-
-    # Set errors to np.nan for now
-    sci_input_errs = np.full_like(sci_dataset.all_err,np.nan)
-
-    # Derotate & collapse dq & error
-    sci_dataset_temp = sci_dataset.copy()
-    sci_dataset_temp.all_dq[:] = sci_input_dqs
-    sci_dataset_temp.all_err[:] = sci_input_errs
-
-    sci_dataset_temp_derotated = northup(sci_dataset_temp,use_wcs=False,rot_center='starloc')
-    dq_out = np.where(sci_dataset_temp_derotated.all_dq>0,1,0)
-    err_out = sci_dataset_temp_derotated.all_err
-    dq_out_collapsed = np.where(np.all(dq_out,axis=0),1,0)
-    err_out_collapsed = np.sqrt(np.sum(err_out**2,axis=0))
-    
     # Derotate & align PSF subtracted frames
     # pyklip_dataset.output shape: (len numbasis, n_rolls, n_wls, y, x)
 
