@@ -2,10 +2,8 @@
 
 import numpy as np
 from scipy import interpolate
-from scipy.ndimage import median_filter, shift
 from scipy.ndimage import gaussian_filter as gauss
-from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
-from pyklip.klip import rotate
+from scipy.ndimage import median_filter
 
 from scipy import ndimage
 from scipy.signal import convolve2d
@@ -626,65 +624,3 @@ def ENF(g, Nem):
         float : ENF, extra-noise function
     """
     return np.sqrt(2*(g-1)*g**(-(Nem+1)/Nem) + 1/g) 
-
-def derotate_arr_2d(data_arr,roll_angle, xcen,ycen,
-                 order=0,
-                 mode='constant'):
-    
-    ylen, xlen = data_arr.shape[-2:]
-    
-    if xcen != xlen/2 or ycen != ylen/2:
-            # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
-            # calculate shift values
-            xshift = xcen-xlen/2; yshift = ycen-ylen/2
-
-            # pad and shift
-            pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
-            data_padded = np.pad(data_arr,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=0)
-            data_padded_shifted = shift(data_padded,(-yshift,-xshift),order=0,mode='constant',cval=0)
-
-            # define slices for cropping
-            crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
-
-            # rotate (invserse direction to pyklip.rotate), re-shift, and crop
-            derot = shift(rotate_scipy(data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=0),\
-            (yshift,xshift),order=order,mode=mode,cval=0)[crop_y,crop_x]
-    else:
-            # simply rotate 
-            derot = rotate_scipy(data_arr, -roll_angle, order=order, mode=mode, reshape=False, cval=0)
-    return derot
-
-def derotate_arr(data_arr,roll_angle, xcen,ycen,
-                 order=0,
-                 mode='constant'):
-    
-    if data_arr.ndim == 2:
-        return derotate_arr_2d(data_arr,roll_angle, xcen,ycen,
-                 order,
-                 mode)
-    
-    elif data_arr.ndim == 3:
-        derotated_arr = []
-        for im in data_arr:
-            derotated_im = derotate_arr_2d(im,roll_angle, xcen,ycen,
-                 order,
-                 mode)
-            derotated_arr.append(derotated_im)
-
-        return np.array(derotated_arr)
-    
-    elif data_arr.ndim == 4:
-        derotated_arr = []
-        for set in data_arr:
-            derotated_set = []
-            for im in set:
-                derotated_im = derotate_arr_2d(im,roll_angle, xcen,ycen,
-                    order,
-                    mode)
-                derotated_set.append(derotated_im)
-            derotated_arr.append(derotated_set)
-
-        return np.array(derotated_arr)
-    
-    else:
-        raise ValueError('derotate_arr() not configured for data with >4 dimensions')
