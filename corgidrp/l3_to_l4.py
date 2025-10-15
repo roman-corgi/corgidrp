@@ -19,6 +19,8 @@ from astropy.io import fits
 from scipy.ndimage import generic_filter
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
 from corgidrp import pol
+from astropy.io.fits.verify import VerifyWarning
+from astropy.wcs import FITSFixedWarning
 
 
 def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
@@ -1152,27 +1154,48 @@ def combine_polarization_states(input_dataset,
         total_intensity_frames.append(total_intensity_img)
     total_intensity_dataset = data.Dataset(total_intensity_frames)
 
+    # ensure only one KL basis is used for PSF subtraction, so that only one image is returned
+    if 'numbasis' in klip_kwargs:
+        if isinstance(klip_kwargs['numbasis'], list) and len(klip_kwargs['numbasis']) > 1:
+            # raise error if multiple KL basis is passed in
+            raise ValueError('Only one KL basis should be used for PSF subtraction')
+    else:
+        # set default values is numbasis is not passed into klip_kwargs
+        if reference_star_dataset is None:
+            # default to one if no reference star dataset is provided
+            klip_kwargs['numbasis'] = 1
+        else:
+            # set to the length of the reference star dataset if one is provided
+            klip_kwargs['numbasis'] = len(reference_star_dataset)
+    
     # perform PSF subtraction on total intensity
-    psf_subtracted_dataset = do_psf_subtraction(total_intensity_dataset,
-                                                ct_calibration=ct_calibration,
-                                                reference_star_dataset=reference_star_dataset,
-                                                measure_klip_thrupt=measure_klip_thrupt,
-                                                measure_1d_core_thrupt=measure_1d_core_thrupt,
-                                                cand_locs=cand_locs,
-                                                kt_seps=kt_seps,
-                                                kt_pas=kt_pas,
-                                                kt_snr=kt_snr,
-                                                num_processes=num_processes,
-                                                klip_kwargs=klip_kwargs)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=VerifyWarning)
+        warnings.filterwarnings('ignore', category=FITSFixedWarning)
+        psf_subtracted_dataset = do_psf_subtraction(total_intensity_dataset,
+                                                    ct_calibration=ct_calibration,
+                                                    reference_star_dataset=reference_star_dataset,
+                                                    measure_klip_thrupt=measure_klip_thrupt,
+                                                    measure_1d_core_thrupt=measure_1d_core_thrupt,
+                                                    cand_locs=cand_locs,
+                                                    kt_seps=kt_seps,
+                                                    kt_pas=kt_pas,
+                                                    kt_snr=kt_snr,
+                                                    num_processes=num_processes,
+                                                    **klip_kwargs)
     psf_subtracted_intensity = psf_subtracted_dataset.frames[0]
-
     # derotate input polarimetric data to North-up East-left
-    derotated_dataset = northup(dataset)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=VerifyWarning)
+        warnings.filterwarnings('ignore', category=FITSFixedWarning)
+        derotated_dataset = northup(dataset)
 
     # construct polarimetric measurement matrix and output intensity vector
     dataset_size = len(derotated_dataset)
-    image_size_y = psf_subtracted_intensity.shape()[0]
-    image_size_x = psf_subtracted_intensity.shape()[1]
+    image_size_y = psf_subtracted_intensity.data.shape[1]
+    image_size_x = psf_subtracted_intensity.data.shape[2]
     measurement_matrix = np.zeros(shape=(2 * dataset_size, 4))
     output_intensities = np.zeros(shape = (2 * dataset_size, image_size_y, image_size_x))
     # system mueller matrix calibration
@@ -1185,7 +1208,7 @@ def combine_polarization_states(input_dataset,
         ## fill in measurement matrix
         # roll angle rotation matrix
         roll = derotated_dataset.frames[i].pri_hdr['ROLL']
-        rotation_mm = pol.lin_polarizer_mueller_matrix(roll)
+        rotation_mm = pol.rotation_mueller_matrix(roll)
         if derotated_dataset.frames[i].ext_hdr['DPAMNAME'] == 'POL0':
             # use correct polarizer mueller matrix depending on wollaston used
             # o and e denotes ordinary and extraordinary axis of the wollaston
@@ -1203,12 +1226,19 @@ def combine_polarization_states(input_dataset,
     
     # invert measurement matrix to obtain on-sky Stokes datacube
     # if S is the on-sky Stokes vector, M is the measurement matrix, and I is the output intensity vector
-    # S can be calculated as pinv(M.T*M)*M.T*I
-    measurement_matrix_inv = np.pinv(measurement_matrix.T @ measurement_matrix) @ measurement_matrix.T
+    # compute the measurement matrix pseudoinverse using SVD
+    u,s,v=np.linalg.svd(measurement_matrix, full_matrices=False)
+    # limit the singular values to improve the conditioning of the inversion
+    s[s < 1e-5] = 1e-5
+    measurement_matrix_inv = np.dot(v.transpose(), np.dot(np.diag(s**-1), u.transpose()))
+    # measurement matrix inverse is of size (i, j) where i is 4 and j is the number of output intensities gathered from the input dataset
+    # output intensity vector is of size (j, y, x), where y and x are spatial coordinates
+    # calling einsum with the input 'ij,jyx->iyx' computes the matrix multiplication of the measurement matrix invese and
+    # the output intensity vector at each point (y,x) for all points in space in order to recover the Stokes datacube of size (4, y, x)
     stokes_datacube = np.einsum('ij,jyx->iyx', measurement_matrix_inv, output_intensities)
 
     # replace I component of the Stokes datacube with the PSF subtracted intensity
-    stokes_datacube[0] = psf_subtracted_intensity.data
+    stokes_datacube[0] = psf_subtracted_intensity.data[0]
 
     # construct output
     output_frame = data.Image(stokes_datacube,
