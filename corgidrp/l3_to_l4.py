@@ -730,18 +730,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
             roll_angle = processed_data.pri_hdr['ROLL']
 
         # derotate
-        if sci_data.ndim == 2:
-            sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
-        
-        elif sci_data.ndim == 3:
-            sci_derot = []
-            for img in sci_data:
-                im_derot = rotate(img,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
-                sci_derot.append(im_derot)
-            sci_derot = np.array(sci_derot)
-
-        else:
-            raise ValueError('northup not configured for frame data with >3 dimensions')
+        sci_derot = derotate_arr(sci_data,roll_angle, xcen,ycen,astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
         
         new_all_data.append(sci_derot)
 
@@ -765,10 +754,11 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         #############
 
         ## HDU DQ ##
-        # all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
+        # all DQ pixels must have integers
         dq_data = processed_data.dq
 
-        dq_derot = derotate_arr(dq_data,roll_angle,xcen,ycen)
+        dq_derot = derotate_arr(dq_data,roll_angle,xcen,ycen,
+                                is_dq=True)
 
         new_all_dq.append(dq_derot)
         ############

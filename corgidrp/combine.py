@@ -5,8 +5,8 @@ import warnings
 import numpy as np
 import corgidrp.data as data
 from scipy.ndimage import shift
-from scipy.ndimage import rotate as rotate_scipy # to avoid confusion with pyklip rotate
-
+# from scipy.ndimage import rotate as rotate_scipy # to avoid confusion with pyklip rotate
+from pyklip.klip import rotate
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling):
     """
@@ -117,68 +117,64 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     return new_dataset
 
 
-def derotate_arr_2d(data_arr,roll_angle, xcen,ycen,
-                 order=0,
-                 mode='constant'):
+def derotate_arr_2d(data_arr,roll_angle,xcen,ycen,astr_hdr=None):
     
-    ylen, xlen = data_arr.shape[-2:]
-    
-    if xcen != xlen/2 or ycen != ylen/2:
-            # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
-            # calculate shift values
-            xshift = xcen-xlen/2; yshift = ycen-ylen/2
-
-            # pad and shift
-            pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
-            data_padded = np.pad(data_arr,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=0)
-            data_padded_shifted = shift(data_padded,(-yshift,-xshift),order=0,mode='constant',cval=0)
-
-            # define slices for cropping
-            crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
-
-            # rotate (invserse direction to pyklip.rotate), re-shift, and crop
-            derot = shift(rotate_scipy(data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=0),\
-            (yshift,xshift),order=order,mode=mode,cval=0)[crop_y,crop_x]
-    else:
-            # simply rotate 
-            derot = rotate_scipy(data_arr, -roll_angle, order=order, mode=mode, reshape=False, cval=0)
+    derot = rotate(data_arr,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        
     return derot
 
 
-def derotate_arr(data_arr,roll_angle, xcen,ycen,
-                 order=0,
-                 mode='constant'):
-    
+def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,is_dq=False):
+    """_summary_
+    Args:
+        data_arr (_type_): _description_
+        roll_angle (_type_): _description_
+        xcen (_type_): _description_
+        ycen (_type_): _description_
+        astr_hdr (_type_, optional): _description_. Defaults to None.
+        is_dq (bool, optional): _description_. Defaults to False.
+
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        _type_: _description_
+    """
+    # Temporarily convert dq to floats
+    if is_dq:
+        data_arr = data_arr.astype(np.float32)
+
     if data_arr.ndim == 2:
-        return derotate_arr_2d(data_arr,roll_angle, xcen,ycen,
-                 order,
-                 mode)
+        derotated_arr = derotate_arr_2d(data_arr,roll_angle,xcen,ycen,astr_hdr)
     
     elif data_arr.ndim == 3:
         derotated_arr = []
         for im in data_arr:
-            derotated_im = derotate_arr_2d(im,roll_angle, xcen,ycen,
-                 order,
-                 mode)
+            derotated_im = derotate_arr_2d(im,roll_angle,xcen,ycen,astr_hdr)
             derotated_arr.append(derotated_im)
 
-        return np.array(derotated_arr)
+        derotated_arr = np.array(derotated_arr)
     
     elif data_arr.ndim == 4:
         derotated_arr = []
         for set in data_arr:
             derotated_set = []
             for im in set:
-                derotated_im = derotate_arr_2d(im,roll_angle, xcen,ycen,
-                    order,
-                    mode)
+                derotated_im = derotate_arr_2d(im,roll_angle,xcen,ycen,astr_hdr)
                 derotated_set.append(derotated_im)
             derotated_arr.append(derotated_set)
 
-        return np.array(derotated_arr)
+        derotated_arr = np.array(derotated_arr)
     
     else:
         raise ValueError('derotate_arr() not configured for data with >4 dimensions')
+
+    # convert dq_array back to ints
+    if is_dq:
+        derotated_arr[np.isnan(derotated_arr)] = 1
+        derotated_arr = np.round(derotated_arr).astype(np.int64) # Update DQ propagation to surrounding pixels
+
+    return derotated_arr
 
 
 def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh):
@@ -186,7 +182,7 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh):
     # Assign master output dq & error (before derotation)
     # TODO: handle 3D data!
     # dq shape = (n_rolls, n_wls(optional), y, x)
-    sci_input_dqs = sci_dataset.all_dq.copy()
+    sci_input_dqs = sci_dataset.all_dq >= dq_thresh
 
     # If doing ADI, flag pixels that are bad in all science frames
     if 'ADI' in mode:
@@ -194,7 +190,7 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh):
 
     # If using references, flag pixels that are bad in all the ref frames
     if 'RDI' in mode:
-        ref_output_dqs_flat = np.all(ref_dataset.all_dq>=dq_thresh,axis=0)
+        ref_output_dqs_flat = np.all(ref_dataset.all_dq>=dq_thresh,axis=0,keepdims=True)
         sci_input_dqs = np.logical_or(sci_input_dqs,ref_output_dqs_flat) 
 
     # Set errors to np.nan for now
@@ -208,7 +204,7 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh):
         roll = frame.pri_hdr['ROLL']
         xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
         
-        derotated_dq = derotate_arr(sci_input_dqs[i],roll, xcen,ycen)
+        derotated_dq = derotate_arr(sci_input_dqs[i],roll, xcen,ycen,is_dq=True)
         derotated_err = derotate_arr(sci_input_errs[i],roll, xcen,ycen)
         
         derotated_dq_arr.append(derotated_dq)
