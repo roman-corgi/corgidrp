@@ -318,10 +318,19 @@ def guess_template(dataset):
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "l2a_build_trad_dark_image.json"
         else:
-            if image.ext_hdr['ISPC']:
-                recipe_filename = "l2a_to_l2b_pc.json"
+            # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
+            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
+            
+            if is_spectroscopy:
+                if image.ext_hdr['ISPC']:
+                    recipe_filename = "l2a_to_l2b_pc_spec.json"
+                else:
+                    recipe_filename = "l2a_to_l2b_spec.json"
             else:
-                recipe_filename = "l2a_to_l2b.json"  # science data and all else
+                if image.ext_hdr['ISPC']:
+                    recipe_filename = "l2a_to_l2b_pc.json"
+                else:
+                    recipe_filename = "l2a_to_l2b.json"  # science data and all else
     # L2b -> L3 data processing
     elif image.ext_hdr['DATALVL'] == "L2b":
         if image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
