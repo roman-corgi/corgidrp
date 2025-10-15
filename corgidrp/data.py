@@ -1744,7 +1744,7 @@ class FluxcalFactor(Image):
             self.filedir = "."
             # slight hack for old mocks not in the stardard filename format
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_L[0-9].', '', self.filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
 class FpamFsamCal(Image):
@@ -2368,11 +2368,12 @@ class CoreThroughputMap(Image):
                 self.ext_hdr['HISTORY'] = ('CoreThroughputMap derived '
                     f'from a set of frames on {self.ext_hdr["DATETIME"]}')
 
-            # The corethroughput map is not a calibration product as of writing
-            # this class. The filename does not follow the convention for
-            # calibration files
+            # Generate filename following the calibration file convention
             self.filedir = '.'
-            self.filename = 'corethroughput_map.fits'
+            if input_dataset is not None:
+                self.filename = re.sub('_l[0-9].', '_ctm_cal', input_dataset[-1].filename)
+            else:
+                self.filename = 'corethroughput_map.fits'  # fallback
             self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = L3
@@ -2612,7 +2613,9 @@ class PyKLIPDataset(pyKLIP_Data):
             wvs_all += [CWAVEL] * NINTS
 
             # pyklip will look for wcs.cd, so make sure that attribute exists
-            wcs_obj = wcs.WCS(header=shead)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+                wcs_obj = wcs.WCS(header=shead)
 
             if not hasattr(wcs_obj.wcs,'cd'):
                 wcs_obj.wcs.cd = wcs_obj.wcs.pc * wcs_obj.wcs.cdelt

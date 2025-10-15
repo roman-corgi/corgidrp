@@ -14,7 +14,7 @@ from corgidrp.data import Dataset, DispersionModel
 from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model
 from astropy.table import Table
 from corgidrp.data import Image
-from corgidrp.mocks import create_default_L2b_headers
+from corgidrp.mocks import create_default_L2b_headers, rename_files_to_cgi_format
 from corgidrp.walker import walk_corgidrp
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
@@ -88,26 +88,18 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
                 err=np.zeros_like(noisy_data_array[i]),
                 dq=np.zeros_like(noisy_data_array[i], dtype=int)
             )
-            image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
+            image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i].upper().strip()
             psf_images.append(image)
-
-        # Save images to disk with timestamped filenames
-        def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
-            visitid = pri_hdr.get('VISITID', '0000000000000000000')
-            now = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-            return f"cgi_{visitid}_{now}_{suffix}.fits"
 
         basetime = datetime.now()
         for i, img in enumerate(psf_images):
-            fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l2b")
-            fpath = os.path.join(e2edata_path, fname)
-            
-            # Save as FITS
-            primary_hdu = fits.PrimaryHDU(header=img.pri_hdr)
-            image_hdu = fits.ImageHDU(data=img.data, header=img.ext_hdr)
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', category=VerifyWarning)
-                fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
+            # Set unique FILETIME for each frame to ensure unique filenames
+            time_offset = timedelta(milliseconds=i)
+            unique_time = basetime + time_offset
+            img.ext_hdr['FILETIME'] = unique_time.isoformat()
+        
+        # Rename Image objects directly to CGI format
+        renamed_files = rename_files_to_cgi_format(list_of_fits=psf_images, output_dir=e2edata_path, level_suffix="l2b", pattern=None)
 
         # Load saved files back into dataset
         saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))
@@ -229,21 +221,27 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     # Set up output directory and logging
     global logger
     
-    # Create the spec_prism_disp_e2e subfolder regardless
-    input_top_level = os.path.join(e2edata_path, 'spec_prism_disp_e2e')
-    output_top_level = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e')
+    spec_prism_outputdir = os.path.join(e2eoutput_path, "spec_prism_disp_e2e")
+    if not os.path.exists(spec_prism_outputdir):
+        os.makedirs(spec_prism_outputdir)
+    # clean out any files from a previous run
+    for f in os.listdir(spec_prism_outputdir):
+        file_path = os.path.join(spec_prism_outputdir, f)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
     
-    os.makedirs(input_top_level, exist_ok=True)
-    os.makedirs(output_top_level, exist_ok=True)
+    # Create input_l2b subfolder for input data
+    input_l2b_dir = os.path.join(spec_prism_outputdir, 'input_l2b')
+    os.makedirs(input_l2b_dir, exist_ok=True)
     
-    # Update paths to use the subfolder structure
-    e2edata_path = input_top_level
-    e2eoutput_path = output_top_level
+    # Use proper paths for input generation and output
+    input_data_dir = input_l2b_dir
+    output_dir = spec_prism_outputdir
     
-    log_file = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e.log')
+    log_file = os.path.join(output_dir, 'spec_prism_disp_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
-    logger = logging.getLogger('spec_prism_disp_e2e')
+    logger = logging.getLogger('spec_prism_disp_cal_e2e')
     logger.setLevel(logging.INFO)
     
     # Clear any existing handlers to avoid duplicates
@@ -272,21 +270,22 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.info("")
     
     # Run the complete end-to-end test
-    disp_model, coeffs, angle = run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path)
+    disp_model, coeffs, angle = run_spec_prism_disp_e2e_test(input_data_dir, output_dir)
     
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
+    
+    print('e2e test for spectroscopy prism dispersion calibration passed')
     
 
 
 # Run the test if this script is executed directly
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
-    # Create top-level spec_prism_disp_e2e folder
-    top_level_dir = os.path.join(thisfile_dir, 'spec_prism_disp_e2e')
-    outputdir = os.path.join(top_level_dir, 'output')
-    e2edata_dir = os.path.join(top_level_dir, 'input_data')
+    # Default output directory name
+    outputdir = thisfile_dir
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'  # Default input data path
 
     ap = argparse.ArgumentParser(description="run the spectroscopy prism dispersion end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

@@ -1,4 +1,6 @@
 import os,math
+import warnings
+import astropy.io.fits as fits
 from corgidrp import data, mocks, astrom
 from corgidrp.data import Image
 from corgidrp.l3_to_l4 import northup

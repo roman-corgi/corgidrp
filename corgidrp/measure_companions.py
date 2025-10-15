@@ -56,7 +56,7 @@ def measure_companions(
             Defaults to the last KL mode.
         cand_locs (list of tuples, optional): Locations of known off-axis sources to measure flux. 
             Each tuple should be of the format (sep_pix, pa_degrees). If not, the function
-            will look in the header for detectios from l4_to_tda.find_source 
+            will look in the header for detections from l4_to_tda.find_source 
     
     Returns:
         result_table (astropy.table.Table): Table containing companion measurements.

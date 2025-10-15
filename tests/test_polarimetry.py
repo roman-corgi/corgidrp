@@ -231,7 +231,7 @@ def test_subtract_stellar_polarization():
             input_list[i].ext_hdr['DPAMNAME'] = 'POL45'
         # first four images are unocculted with roll angle of 30
         if i < 4:
-            input_list[i].ext_hdr['LSAMNAME'] = 'OPEN'
+            input_list[i].ext_hdr['FPAMNAME'] = 'ND225'
             input_list[i].pri_hdr['ROLL'] = roll_unocculted
         else:
             input_list[i].pri_hdr['ROLL'] = roll
@@ -261,6 +261,7 @@ def test_subtract_stellar_polarization():
     zero_image = np.zeros(shape=(50, 50))
     for output_frame in output_dataset:
         assert np.allclose(output_frame.data[0] - output_frame.data[1], zero_image)
+
     
     # check that total intensity stayed the same before and after
     assert np.allclose(star_1_fpm_wp1_data[0] + star_1_fpm_wp1_data[1], output_dataset.frames[0].data[0] + output_dataset.frames[0].data[1])

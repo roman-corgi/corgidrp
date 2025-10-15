@@ -7,12 +7,14 @@ from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
 import corgidrp.spec as steps
-from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
+from corgidrp.mocks import (create_default_L2b_headers,
+    create_default_L3_headers, get_formatted_filename)
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
 from datetime import datetime, timedelta
 # VAP testing
-from corgidrp.check import check_filename_convention, verify_header_keywords
+from corgidrp.check import (check_filename_convention, verify_header_keywords,
+    check_dimensions)
 
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy")) 
 test_datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
@@ -580,6 +582,9 @@ def test_star_spec_registration():
     os.makedirs(dir_test, exist_ok=True)
 
     log_file = os.path.join(dir_test, 'star_spec_registration.log')
+    # If file exists, remove it
+    if os.path.exists(os.path.join(dir_test, log_file)):
+        os.remove(os.path.join(dir_test, log_file))
 
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('star_spec_registration')
@@ -744,8 +749,8 @@ def test_star_spec_registration():
                     frame_info, logger)
                 check_filename_convention(getattr(frame, 'filename', None),
                     f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger)
-                verify_header_keywords(frame.ext_hdr, ['CFAMNAME'], frame_info,
-                    logger)
+                verify_header_keywords(frame.ext_hdr, {'CFAMNAME': cfam_name},
+                    frame_info, logger)
                 logger.info("")
 
             logger.info(f"Total input images validated: {len(dataset_fsm)}")
@@ -934,6 +939,323 @@ def test_extract_spec():
     assert np.max(err_expect) == np.max(out_im.err)
     assert "extraction" and "half width" and "weights" in str(out_im.ext_hdr["HISTORY"])
 
+def test_slit_trans():
+    """ Test the step function that derives the slit transmission. """
+
+    # The tests are of two types:
+    # 1/ UTs with mock data showing that the step function derives the expected
+    # slit transmission map
+    # 2/ VAP tests are performed along this test function too (https://github.com/roman-corgi/corgidrp/issues/543)
+
+    # Directory to temporarily store the I/O of the test
+    dir_test = os.path.join(os.path.dirname(__file__), 'simdata')
+    os.makedirs(dir_test, exist_ok=True)
+
+    log_file = os.path.join(dir_test, 'slit_transmission.log')
+    # If file exists, remove it
+    if os.path.exists(os.path.join(dir_test, log_file)):
+        os.remove(os.path.join(dir_test, log_file))
+
+    # Create a new logger specifically for this test, otherwise things have issues
+    logger = logging.getLogger('slit_transmission')
+    logger.setLevel(logging.INFO)
+
+    # Clear any existing handlers to avoid duplicates
+    logger.handlers.clear()
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    logger.info('='*80)
+    logger.info('CGI-REQT-5475: SLIT TRANSMISSION TEST')
+    logger.info('='*80)
+    logger.info("")
+    logger.info('='*80)
+    logger.info('Test Case 1: Input Image Data Format and Content')
+    logger.info('='*80)
+
+    # Data level of input data
+    dt_lvl = 'L4'
+
+    # =================================================================
+    # VAP Testing: Validate Input Images
+    # =================================================================
+    # Validate all input images
+    logger.info('='*80)
+    logger.info('Test Case 1: Input Image Data Format and Content')
+    logger.info('='*80)
+    logger.info('Template data')
+
+    # Simulated input data: Set of extracted spectra at different FSM positions
+    # Get one extracted spectrum with FSAM as an Image object
+    spec_slit = l3_to_l4.extract_spec(output_dataset)[0]
+    # Set current data level
+    spec_slit.ext_hdr['DATALVL'] = dt_lvl
+    # Make sure it is consistent with a spectroscopy observation
+    pam_list = np.array(['CFAM', 'DPAM', 'FPAM', 'SPAM', 'LSAM', 'FSAM'])
+    pam_values = np.array(['3F', 'PRISM3', 'ND225', 'SPEC', 'SPEC', 'R1C2'])
+    # For VAP testing
+    cfam_expected = pam_values[pam_list == 'CFAM']
+    fsam_expected = pam_values[pam_list == 'FSAM']
+    for idx_pam, pam in enumerate(pam_list):
+        spec_slit.ext_hdr[pam+'NAME'] = pam_values[idx_pam]
+    # Build some set of extracted spectra (the different FSM datasets)
+    # We need different values for the zero-point for each FSM position 
+    # Some arbitrary number of FSM positions
+    n_fsm = 5
+    # Mock error and data quality
+    err = np.zeros_like(spec_slit.data)
+    dq = np.zeros_like(spec_slit.data, dtype=int)
+    # Define NFRAMES for each FSM position (can be different number of frames)
+    np.random.seed(0)
+    # Arbitrarily choosing between 1 and 10 frames for each FSM position
+    n_frames_fsm = np.random.randint(1, 11, size=n_fsm*n_fsm)
+    # Test when the FSM moves along both directions (x,y) or only along one of them
+    fsm_motion = [[1,1], [1,0], [0,1]]
+    # Some range within the simulated positions (avoid falling exactly on edges
+    # that would trigger known errors in the interpolation functions)
+    xrange0 = spec_slit.ext_hdr['WV0_X'] + 1e-8
+    xrange1 = xrange0 + n_fsm - 1 - 1e-8
+    yrange0 = spec_slit.ext_hdr['WV0_Y'] + 1e-8
+    yrange1 = yrange0 + n_fsm - 1 - 1e-8
+    for idx_fsm, fsm in enumerate(fsm_motion):
+        # Each FSM configuration is an independent test
+        # Counter used to generate unique filenames
+        n_frames = 0.
+        spec_slit_list = []
+        basetime = datetime.now()
+        for idx_x in range(n_fsm):
+            for idx_y in range(n_fsm):
+                # Each different FSM position is a new set of data
+                spec_slit_cp = spec_slit.copy()
+                # Associate different FSM positions to each distinct FSM case
+                spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0]
+                spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1]
+                spec_slit_cp.ext_hdr['WV0_X'] = (spec_slit.ext_hdr['WV0_X']
+                + idx_x * fsm[0])
+                spec_slit_cp.ext_hdr['WV0_Y'] = (spec_slit.ext_hdr['WV0_Y']
+                    + idx_y * fsm[1])
+                # Create NFRAMES
+                n_frames_fsm_now = n_frames_fsm[idx_x + n_fsm*idx_y]
+                for idx_frame in range(n_frames_fsm_now):
+                    # Change the spectrum by a known factor so that the slit transmission
+                    # interpolation can be tested later.
+                    spec_slit_cp.data = (spec_slit.data * (1 + idx_x*fsm[0])
+                        * (1 + idx_y*fsm[1]))
+                    # Set conventional filename for each frame
+                    # Remove microseconds, keep milliseconds
+                    dt = basetime + timedelta(seconds=n_frames)
+                    timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+                    spec_slit_cp.filename = \
+                        f'cgi_0000000000000000000_{timestamp}_{dt_lvl.lower()}.fits'
+                    spec_slit_list += [spec_slit_cp]
+                    n_frames += 1
+
+        # Create Dataset
+        spec_slit_ds = Dataset(spec_slit_list)
+
+        # VAP testing
+        logger.info(f'FSM scan pattern ({idx_fsm+1}/{len(fsm_motion)}): ')
+        logger.info('Images with slit in')
+        n_images = 0
+        for i, frame in enumerate(spec_slit_ds):
+            frame_info = f"Frame {i}"
+            # Check dimensions
+            check_dimensions(frame.data, spec_slit.data.shape, frame_info,
+                logger)
+            # Check data level is L4
+            verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
+                frame_info, logger)
+            # Verify filename convention: cgi_<visitid>_<yyyymmddthhmmsss>_l4_.fits
+            check_filename_convention(getattr(frame, 'filename', None),
+                f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger,
+                data_level=dt_lvl.lower())
+            # Verify all images have identical CFAMNAME values
+            verify_header_keywords(frame.ext_hdr, {'CFAMNAME': cfam_expected},
+                frame_info, logger)
+            # Verify all images have FSAMNAME = SLIT
+            verify_header_keywords(frame.ext_hdr, {'FSAMNAME': fsam_expected},
+                frame_info, logger)
+            # Verify all images have (FSMX, FSMY) values
+            verify_header_keywords(frame.ext_hdr, ['FSMX'],
+                frame_info, logger)
+            verify_header_keywords(frame.ext_hdr, ['FSMY'],
+                frame_info, logger)
+            logger.info("")
+            n_images += 1
+
+        logger.info(f"Total input images with validated with FSAM={fsam_expected}: {n_images}")
+        logger.info("")
+
+        # Build the Dataset with the slit off
+        # Get one spectrum with FSAM=OPEN as an Image
+        spec_open = l3_to_l4.extract_spec(output_dataset)[0]
+        # Set current data level
+        spec_open.ext_hdr['DATALVL'] = dt_lvl
+        # Make sure it is consistent with the spectroscopy observation
+        for idx_pam, pam in enumerate(pam_list):
+            spec_open.ext_hdr[pam+'NAME'] = pam_values[idx_pam]
+        # This set has FSAM=OPEN
+        spec_open.ext_hdr['FSAMNAME'] = 'OPEN'
+        # Choose an new arbitrary number of frames to test the average value
+        n_frames_fsm = np.random.randint(1, 11, size=n_fsm*n_fsm)
+        spec_open_list = []
+        # Keep track of the overall multiplicative factor to compare the output
+        # of the step function with the dataset below
+        fact_open = 0
+        for idx_x in range(n_fsm):
+            for idx_y in range(n_fsm):
+                # Each different FSM position is a new set of data
+                spec_open_cp = spec_open.copy()
+                # Associate different FSM positions to each distinct FSM case
+                # They can be different to the frames with the slit in
+                spec_open_cp.ext_hdr['FSMX'] = idx_x * fsm[0] + n_fsm**2
+                spec_open_cp.ext_hdr['FSMY'] = idx_y * fsm[1] + n_fsm**2
+                # Create NFRAMES
+                n_frames_fsm_now = n_frames_fsm[idx_x + n_fsm*idx_y]
+                # Change the spectrum by a known factor so that the slit
+                # transmission interpolation can be tested later. Slitless
+                # spectra are averaged
+                fact_tmp = ((1 + (idx_x - n_fsm/2 + 0.5)*fsm[0]) *
+                    (1 + (idx_y - n_fsm/2 + 0.5)*fsm[1]))
+                fact_open += (fact_tmp*n_frames_fsm_now/n_frames_fsm.sum())
+                for idx_frame in range(n_frames_fsm_now):
+                    spec_open_cp.data = spec_open.data * fact_tmp
+                    # Set conventional filename for each frame
+                    # Remove microseconds, keep milliseconds
+                    dt = basetime + timedelta(seconds=n_frames)
+                    timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+                    spec_open_cp.filename = \
+                        f'cgi_0000000000000000000_{timestamp}_{dt_lvl.lower()}.fits'
+                    spec_open_list += [spec_open_cp]
+                    n_frames += 1
+        spec_open_ds = Dataset(spec_open_list)
+
+        # VAP testing
+        logger.info('Images with slit out')
+        n_images = 0
+        for i, frame in enumerate(spec_open_ds):
+            frame_info = f"Frame {i}"
+            # Check dimensions (same as with slit in)
+            check_dimensions(frame.data, spec_slit.data.shape, frame_info,
+                logger)
+            # Check data level is L4 (same as eith slit in)
+            verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
+                frame_info, logger)
+            # Verify filename convention: cgi_<visitid>_<yyyymmddthhmmsss>_l4_.fits
+            check_filename_convention(getattr(frame, 'filename', None),
+                f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger,
+                data_level=dt_lvl.lower())
+            # Verify all images have identical CFAMNAME values (same as with slit in)
+            verify_header_keywords(frame.ext_hdr, {'CFAMNAME': cfam_expected},
+                frame_info, logger)
+            # Verify all images have FSAMNAME = OPEN
+            verify_header_keywords(frame.ext_hdr, {'FSAMNAME': 'OPEN'},
+                frame_info, logger)
+            # Verify all images have (FSMX, FSMY) values
+            verify_header_keywords(frame.ext_hdr, ['FSMX'],
+                frame_info, logger)
+            verify_header_keywords(frame.ext_hdr, ['FSMY'],
+                frame_info, logger)
+            logger.info("")
+            n_images += 1
+
+        logger.info(f"Total input images validated with FSAM=OPEN: {n_images}")
+        logger.info("")
+
+        # Estimate slit transmission
+        slit_trans_out, slit_pos_x, slit_pos_y = steps.slit_transmission(
+            spec_slit_ds, spec_open_ds,
+            x_range=[xrange0, xrange1],
+            y_range=[yrange0, yrange1],
+        )
+        # Check interpolation values are as expected or close to them
+        slit_trans_design = np.ones_like(slit_trans_out)
+        for idx in range(slit_trans_out.shape[0]):
+               slit_trans_design[idx,:] *= ((1+slit_pos_x[idx]-xrange0) *
+                   (1+slit_pos_y[idx]-yrange0) / fact_open)
+        # Notice that LinearNDInterpolator uses triangulation and barycentric
+        # linear interpolation. Besides the own scipy validation, we can compare
+        # the output with a rough bilinear approximation and allow for ~10% tolerance
+        if fsm == [1,1]: 
+            assert slit_trans_out == pytest.approx(slit_trans_design, rel=0.10)
+        else:
+            # In this case, the interpolation is linear. 
+            assert slit_trans_out == pytest.approx(slit_trans_design, rel=1e-7)
+
+        # VAP testing: Confirm data structure of the slit transmission
+        logger.info(f'Output slit transmission')
+        # Same wavelength bins as input data
+        assert slit_trans_out.shape[1] == spec_slit.data.shape[0], logger.info(f'Slit transmission does not have the same wavelength steps as input data ({spec_slit[0].data.shape[0]}). FAIL')
+        logger.info(f'Slit transmission has the same wavelength steps as input data ({spec_slit.data.shape[0]}). PASS')
+        # Same locations as slit transmission values
+        assert slit_pos_x.shape[0] == slit_trans_out.shape[0], logger.info(f'Slit transmission locations and wavelength steps are inconsistent (X). FAIL')
+        logger.info(f'Slit transmission locations and wavelength steps are consistent (X). PASS')
+        assert slit_pos_y.shape[0] == slit_trans_out.shape[0], logger.info(f'Slit transmission locations and wavelength steps are inconsistent (Y). FAIL')
+        logger.info(f'Slit transmission locations and wavelength steps are consistent (Y). PASS')
+        # VAP requirement
+        logger.info(f'The peak value of the slit transmission is {slit_trans_out.max()}')
+        logger.info(f'The mean value of the slit transmission is {slit_trans_out.mean()}')
+
+def test_star_pos():
+    """ Test translation of a position on EXCAM measured in polar coordinates
+      to rectangular ones. """
+    # Define some default L3 Dataset (data are not used)
+    pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
+    ext_hdr['CFAMNAME'] = '3F'
+    # Setup some wavelength zero-point values
+    ext_hdr['WV0_X'], ext_hdr['WV0_Y'] = 38, 42
+    # Add expected wavelength for a satellite spot (for UT, it could be any)
+    ext_hdr['WAVLEN0'] = 753.83
+    # Arbitrary number of images
+    image_list = []
+    for _ in range(12):
+        data_2d = np.zeros([ext_hdr['NAXIS1'], ext_hdr['NAXIS2']])
+        err = np.zeros_like(data_2d)
+        dq = np.zeros_like(data_2d, dtype=int)
+        image_list += [Image(
+            data_or_filepath=data_2d,
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
+            err=err,
+            dq=dq)]
+    dataset_in = Dataset(image_list)       
+
+    # Set the seed
+    np.random.seed(0)
+    # Test it a few times
+    for _ in range(10):
+        # Assign some random location on EXCAM to a satellite spot
+        [x_in, y_in] = np.random.randint(-300, 300, 2)
+        # Get the radial distance in lamD for band 3 (730 nm), default plate scale
+        # 21.8 mas/pix and D=2.4 m
+        mas2lamD = 1e-3/3600/180*np.pi*2.4/(ext_hdr['WAVLEN0']*1e-9)
+        r_lamD_in = np.sqrt(x_in**2 + y_in**2) * 21.8 * mas2lamD
+        phi_deg_in = np.arctan2(y_in, x_in)*180/np.pi
+        dataset_out = steps.star_pos_spec(
+            dataset_in,
+            r_lamD=r_lamD_in,
+            phi_deg=phi_deg_in)
+
+        # Check if the satellite position has been properly recorded in all images
+        for img in dataset_out:
+            assert ext_hdr['WV0_X'] - x_in == pytest.approx(img.ext_hdr['STARLOCX'], abs=1e-10), 'The X position of the star is incorrect.'
+            assert ext_hdr['WV0_Y'] - y_in == pytest.approx(img.ext_hdr['STARLOCY'], abs=1e-10), 'The Y position of the star is incorrect.'
+       
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
     test_psf_centroid()
@@ -945,3 +1267,5 @@ if __name__ == "__main__":
     test_star_spec_registration()
     test_linespread_function()
     test_extract_spec()
+    test_slit_trans()
+    test_star_pos()

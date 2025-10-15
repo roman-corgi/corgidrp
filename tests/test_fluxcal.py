@@ -22,8 +22,8 @@ exthd["FPAMNAME"] = 'ND475'
 prhd["TARGET"] = 'VEGA'
 image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err)
 image2 = image1.copy()
-image1.filename = "test1_L4_.fits"
-image2.filename = "test2_L4_.fits"
+image1.filename = "cgi_0000000000000090526_20240101t1200000_l4_.fits"
+image2.filename = "cgi_0000000000000090527_20240101t1201000_l4_.fits"
 dataset=Dataset([image1, image2])
 calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
 
@@ -170,7 +170,7 @@ def test_fluxcal_file():
     assert fluxcal_fac.filter == '3C'
     assert fluxcal_fac.fluxcal_fac == fluxcal_factor
     assert fluxcal_fac.fluxcal_err == fluxcal_factor_error
-    assert(fluxcal_fac.filename.split(".")[0] == "test2_abf_cal")
+    assert(fluxcal_fac.filename.endswith("_abf_cal.fits"))
     
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     filename = fluxcal_fac.filename
@@ -216,6 +216,8 @@ def test_abs_fluxcal():
         band_flux, fwhm, cal_factor, filter='3C', target_name='Vega',
         fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8,
         background=0, add_gauss_noise=True, noise_scale=1., file_save=True)
+    # bunit needs to be photoelectron/s for later tests, so set that now
+    flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
     assert isinstance(flux_image, Image)
     sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
     radius = 3.* sigma
@@ -302,6 +304,8 @@ def test_abs_fluxcal():
     flux_image_back = create_flux_image(band_flux, fwhm, cal_factor, filter='3C', target_name='Vega', fsm_x=0.0, 
                       fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8, background=3,
                       add_gauss_noise=True, noise_scale=1., file_save=True)
+    # bunit needs to be photoelectron/s for later tests, so set that now
+    flux_image_back.ext_hdr['BUNIT'] = 'photoelectron/s'
     
     [flux_back, flux_err_back, back] = fluxcal.aper_phot(flux_image_back, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
               background_sub=True, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5)
@@ -439,6 +443,9 @@ def test_pol_abs_fluxcal():
         band_flux_left, band_flux_right, fwhm, cal_factor, filter='3C', dpamname='POL45', target_name='Vega',
         fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8,
         background=0, add_gauss_noise=True, noise_scale=1., file_save=True)
+    # bunit needs to be photoelectron/s for later tests, so set that now
+    flux_image_WP1.ext_hdr['BUNIT'] = 'photoelectron/s'
+    flux_image_WP2.ext_hdr['BUNIT'] = 'photoelectron/s'
     assert isinstance(flux_image_WP1, Image)
     assert isinstance(flux_image_WP2, Image)
     sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
@@ -500,6 +507,9 @@ def test_pol_abs_fluxcal():
                       band_flux_left, band_flux_right, fwhm, cal_factor, filter='3C', dpamname='POL45', target_name='Vega', fsm_x=0.0, 
                       fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8, background=3,
                       add_gauss_noise=True, noise_scale=1., file_save=True)
+    # bunit needs to be photoelectron/s for later tests, so set that now
+    flux_image_back_WP1.ext_hdr['BUNIT'] = 'photoelectron/s'
+    flux_image_back_WP2.ext_hdr['BUNIT'] = 'photoelectron/s'
     [flux_back_pol0, flux_err_back_pol0, back_pol0] = fluxcal.aper_phot(flux_image_back_WP1, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
               background_sub=True, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(340, 512))
     [flux_back_pol90, flux_err_back_pol90, back_pol90] = fluxcal.aper_phot(flux_image_back_WP1, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
