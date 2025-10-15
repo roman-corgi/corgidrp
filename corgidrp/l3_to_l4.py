@@ -369,7 +369,7 @@ def do_psf_subtraction(input_dataset,
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
         measure_klip_thrupt (bool, optional): Whether to measure KLIP throughput via injection-recovery. Separations 
-            and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU']. 
+            and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU'].
             Defaults to True.
         measure_1d_core_thrupt (bool, optional): Whether to measure the core throughput as a function of separation. 
             Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
@@ -538,9 +538,18 @@ def do_psf_subtraction(input_dataset,
         thrupt_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
         # wrt FPM's center 
-        thrupt_hdr['COMMENT'] = ('KLIP Throughput and retrieved FWHM as a function of separation for each KLMode '
-                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2]). The last axis contains the'
-                                'KL throughput in the 0th index and the FWHM in the 1st index')
+        # thrupt_hdr['COMMENT'] = ('KLIP Throughput and retrieved FWHM as a function of separation for each KLMode '
+        #                         '(r, KL1, KL2, ...) = (data[0], data[1], data[2]). The last axis contains the'
+        #                         'KL throughput in the 0th index and the FWHM in the 1st index')
+        thrupt_hdr['COMMENT'] = ('array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps '
+            'is the number of separations (in pixels from the star center) sampled. Index 0 contains the separations sampled (twice, to fill up the last axis of dimension 2), and each following index '
+            'contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode '
+            'truncation choice. An example for 4 KL mode truncation choices, using r1 and r2 for separations and n_seps=2: '
+            '[ [[r1,r1],[r2,r2]], '
+            '[[KL_thpt_r1_KL1, FWHM_r1_KL1],[KL_thpt_r2_KL1, FWHM_r2_KL1]], '
+            '[[KL_thpt_r1_KL2, FWHM_r1_KL2],[KL_thpt_r2_KL2, FWHM_r2_KL2]], '
+            '[[KL_thpt_r1_KL3, FWHM_r1_KL3],[KL_thpt_r2_KL3, FWHM_r2_KL3]], '
+            '[[KL_thpt_r1_KL4, FWHM_r1_KL4],[KL_thpt_r2_KL4, FWHM_r2_KL4]] ]')
         thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. KLIP throughput: values between 0 and 1. FWHM: EXCAM pixels'
         thrupt_hdu_list = [fits.ImageHDU(data=klip_thpt, header=thrupt_hdr, name='KL_THRU')]
         
