@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pytest
+import logging
 from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
@@ -589,12 +590,26 @@ def test_linespread_function():
     assert line_spread_bad.fwhm == pytest.approx(line_spread.fwhm, rel = 0.1)
     assert line_spread_bad.amplitude == pytest.approx(line_spread.amplitude, rel = 0.1)
 
+def test_spec_psf_subtraction():
+    """
+    test the spec PSF subtraction 
+    """
+    # first testing helper function 
+    r=np.array([[0,0,1,2,3,0,0,0],[0,0,0,0,0,0,0,0]])
+    s = np.roll(r,1)
+    shift = steps.get_shift_correlation(r,s)
+    shifted_s = np.roll(s, shift, axis=(0,1))
+    assert np.array_equal(shifted_s, r)
+
+    # now the PSF subtraction
+
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
+    test_determine_zeropoint()
+    test_spec_psf_subtraction()
     test_psf_centroid()
     test_dispersion_model()
     test_read_cent_wave()
     test_calibrate_dispersion_model()
-    test_determine_zeropoint()
     test_add_wavelength_map()
     test_linespread_function()
