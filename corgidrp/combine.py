@@ -119,7 +119,8 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
                  is_dq=False,dq_round_threshold=0.05):
     """Derotates an array based on the provided roll angle, about the provided
     center. Treats DQ arrays specially, converting to float to do the rotation, 
-    and converting back to np.int64 afterwards.
+    and converting back to np.int64 afterwards. DQ output becomes only zeros and
+    ones, so detailed DQ flag information is not preserved.
 
     Args:
         data_arr (np.array): an array with 2-4 dimensions
