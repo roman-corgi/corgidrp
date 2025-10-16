@@ -1329,8 +1329,10 @@ def spec_psf_subtraction(input_dataset):
     RDI PSF subtraction for spectroscopy mode.
     Assumes the reference images are marked with PSFREF=True in the extension header
     and that they all have the same alignment.
+
     Args:
         input_dataset (corgidrp.data.Dataset): L3 dataset containing the science and reference images
+    
     Returns:
         corgidrp.data.Dataset: dataset containing the PSF-subtracted science images and the mean reference image as the last image
     
