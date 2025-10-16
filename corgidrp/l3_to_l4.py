@@ -245,7 +245,7 @@ def find_star(input_dataset,
         corgidrp.data.Dataset:
             The original dataset, augmented with the star's (x, y) location stored in 
             the extension header (``ext_hdr``) of each frame under the keys 
-            ``STARLOCX`` and ``STARLOCY``.
+            ``FSM_PROFILE_UNKNOWN`` and ``STARLOCY``.
 
     Raises:
         AssertionError:
@@ -293,9 +293,30 @@ def find_star(input_dataset,
     sci_dataset = data.Dataset(sci_frames)
     sat_spot_dataset = data.Dataset(sat_spot_frames)
 
-    # Compute median images
-    img_ref = np.median(sci_dataset.all_data, axis=0)
-    img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
+    # If the input data is polarimetric
+    if sat_spot_dataset.frames[0].data.shape[0] == 2:
+        sat_spot_split_datasets, sat_spot_unique_vals = sat_spot_dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+        sci_split_datasets, sci_unique_vals = sci_dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+
+        for i in [0,len(sat_spot_unique_vals)-1]:
+            if unique_vals[i] == 'POL0' : 
+                sat_spot_dataset_pol_0 = sat_spot_split_datasets[i]
+            if unique_vals[i] == 'POL45' : 
+                sat_spot_dataset_pol_45 = sat_spot_split_datasets[i]
+
+        for i in [0,len(sci_unique_vals)-1]:
+            if unique_vals[i] == 'POL0' : 
+                sci_split_datasets_pol_0 = sci_split_datasets[i]
+            if unique_vals[i] == 'POL45' : 
+                sci_split_datasets_pol_45 = sci_split_datasets[i]
+
+        # Compute median images and take first slice
+        img_ref = np.median(sci_split_datasets_pol_0.all_data, axis=0)[0]
+        img_sat_spot = np.median(sat_spot_dataset_pol_0.all_data, axis=0)[0]
+    else :
+        # Compute median images
+        img_ref = np.median(sci_dataset.all_data, axis=0)
+        img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
 
     # Default star_coordinate_guess to center of img_sat_spot if None
     if star_coordinate_guess is None:
@@ -873,6 +894,33 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
     dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
     return dataset
+
+def align_polarimetry_frames(input_dataset):  
+    """
+    Aligns the frames by centering them on STARLOC
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): the L3-level dataset of polarimetry images with STARLOCX and STARLOCY 
+
+    Returns:
+        corgidrp.data.Dataset: L3 dataset where all the images are registered to the same pixel
+
+
+    """
+    processed_dataset = input_dataset.copy()
+
+    new_center = (processed_dataset.frames[0].ext_hdr['STARLOCX'],processed_dataset.frames[0].ext_hdr['STARLOCY']) 
+
+    for frame in processed_dataset:
+        frame.data[0]= pyklip.klip.align_and_scale(frame.data[0], new_center=new_center, old_center=(frame.data[0].shape[0] // 2, frame.data[0].shape[1] // 2))
+        frame.data[1] = pyklip.klip.align_and_scale(frame.data[1], new_center=new_center, old_center=(frame.data[1].shape[0] // 2, frame.data[1].shape[1] // 2))
+
+    history_msg = "Image centered on star location."
+    processed_dataset.update_after_processing_step(history_msg)
+    
+    return processed_dataset
+
+
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
