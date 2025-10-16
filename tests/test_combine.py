@@ -307,6 +307,9 @@ def test_invalid_collapse():
         combined_dataset = combine.combine_subexposures(dataset, collapse="invalid_option")
 
 def test_prop_err_dq():
+    """
+    Test that the expected dq and err arrays are produced in RDI, ADI, and ADI+RDI cases.
+    """
 
     # RDI
     rolls = [0,0,0]
@@ -401,6 +404,10 @@ def test_prop_err_dq():
 
 
 def test_derotate_arr_2d():
+    """Tests that 2d arrays can be rotated, 
+    tests that the array remains unchanged when rotating by 0 degrees,
+    tests that the array can be rotated around positions other than the center.
+    """
     test_arr = np.full((10,10),1.)
     test_arr[1,1] = 10.
     test_arr[5,5] = 10.
@@ -437,7 +444,8 @@ def test_derotate_arr_2d():
 
 
 def test_derotate_arr():
-    
+    """Tests that 3D arrays can be derotated, and that dq arrays are treated correctly.
+    """
     test_arr = np.full((2,10,10),1.)
     test_arr[:,1,1] = 10.
     test_arr[1,5,5] = 10.

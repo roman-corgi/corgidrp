@@ -350,6 +350,7 @@ def do_psf_subtraction(input_dataset,
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
         Propagate error correctly
+        Use corgidrp.combine.combine_images() to do time collapse?
         What info is missing from output dataset headers?
         Add comments to new ext header cards
         Make sure psfsub test output data gets saved in a reasonable place
@@ -416,6 +417,13 @@ def do_psf_subtraction(input_dataset,
 
     assert len(sci_dataset) > 0, "Science dataset has no data."
 
+    # Require nan pixels to be replaced
+    if np.any(np.isnan(sci_dataset.all_data)):
+        raise ValueError('nans present in science data, please run replace_bad_pixels()')
+    if not reference_star_dataset is None:
+        if np.any(np.isnan(ref_dataset.all_data)):
+            raise ValueError('nans present in reference data, please run replace_bad_pixels()')
+
     if 'mode' not in klip_kwargs.keys():
         # Choose PSF subtraction mode if unspecified
         if not ref_dataset is None and len(sci_dataset)==1:
@@ -454,17 +462,6 @@ def do_psf_subtraction(input_dataset,
     if not os.path.exists(outdir_mode):
         os.makedirs(outdir_mode)
 
-    # Assume replace_bad_pixels has been run on data already
-    # Mask data where DQ > 0, let pyklip deal with the nans
-    # sci_dataset_masked = nan_flags(sci_dataset)
-    # ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
-    if np.any(np.isnan(sci_dataset.all_data)):
-        raise ValueError('nans present in science data, please run replace_bad_pixels()')
-    if not reference_star_dataset is None:
-        if np.any(np.isnan(ref_dataset.all_data)):
-            raise ValueError('nans present in reference data, please run replace_bad_pixels()')
-
-
     # Initialize pyklip dataset class
     pyklip_dataset = data.PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)
     
@@ -492,6 +489,10 @@ def do_psf_subtraction(input_dataset,
         # Make a dataset for derotation
         for rr in range(output.shape[1]):
             psfsub_frame_data = output[nn,rr]
+
+            # Remove wavelength axis if only one is present
+            if len(psfsub_frame_data) == 1:
+                psfsub_frame_data = psfsub_frame_data[0]
 
             # Add relevant info from the pyklip headers:
             pri_hdr = sci_dataset[rr].pri_hdr.copy()
@@ -526,6 +527,10 @@ def do_psf_subtraction(input_dataset,
         derotated_output_dataset = northup(dataset_for_derotation,use_wcs=False,
                                            rot_center='starloc')
         
+        # Assign derotated dq and err maps
+        derotated_output_dataset.all_dq[:] = dq_out_collapsed
+        derotated_output_dataset.all_err[:] = err_out_collapsed
+                
         # # Plots
         # if output.shape[1] > 1:
         #     import matplotlib.pyplot as plt
@@ -557,9 +562,6 @@ def do_psf_subtraction(input_dataset,
                                               pixel_weights=None, axis=0, 
                                               collapse_method=klip_kwargs['time_collapse'])
 
-        # Remove wavelength axis if nwls == 1
-        if collapsed_psfsub_data.shape[0] == 1:
-            collapsed_psfsub_data = collapsed_psfsub_data[0]
 
         collapsed_frame = data.Image(collapsed_psfsub_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
