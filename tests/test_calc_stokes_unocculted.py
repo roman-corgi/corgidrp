@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from corgidrp import data
-from l3_to_l4 import calc_stokes_unocculted
+from corgidrp.l3_to_l4 import calc_stokes_unocculted
 
 def create_mock_polimage(image_size=256, fwhm=100.0, I0=1e3, p=0.1, theta_deg=10.0,
                          roll_angles=[-15, 15, -15, 15], prisms=['POL0', 'POL0', 'POL45', 'POL45'],
