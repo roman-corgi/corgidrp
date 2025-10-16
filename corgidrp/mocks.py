@@ -4449,6 +4449,7 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     right_image_value=1, 
     alignment_angle=None,
     image_shape =(1024,1024),
+    star_center = None, 
     bg_sigma = 1e-4,  #Default values from test_l2b_to_l3
     bg_offset = 0,  #Default values from test_l2b_to_l3
     gaussian_fwhm = 2,  #Default values from test_l2b_to_l3
@@ -4529,6 +4530,7 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     
     # Add satellite spots in each image
     # Adapted from create_synthetic_satellite_spot_image
+
     # Define the default position angles (in degrees) and add any additional angle offset.
     default_angles_deg = np.array([0, 90, 180, 270])
     angles_rad = np.deg2rad(default_angles_deg + angle_offset)
@@ -4539,8 +4541,14 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     stddev = gaussian_fwhm / (2 * np.sqrt(2 * np.log(2)))
     y_indices, x_indices = np.indices(image_shape)
 
-    for center in [center_left, center_right]:
-        center_x, center_y = center
+    for idx, center in enumerate([center_left, center_right]):
+        if star_center is None:
+            center_x, center_y = center
+            print(center_x, center_y )
+        else:
+            center_x, center_y = star_center[idx]
+            print(center_x, center_y )
+
         for angle in angles_rad:
             dx = separation * np.cos(angle)
             dy = separation * np.sin(angle)

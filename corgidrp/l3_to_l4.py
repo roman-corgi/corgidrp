@@ -299,15 +299,15 @@ def find_star(input_dataset,
         sci_split_datasets, sci_unique_vals = sci_dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
 
         for i in [0,len(sat_spot_unique_vals)-1]:
-            if unique_vals[i] == 'POL0' : 
+            if sat_spot_unique_vals[i] == 'POL0' : 
                 sat_spot_dataset_pol_0 = sat_spot_split_datasets[i]
-            if unique_vals[i] == 'POL45' : 
+            if sat_spot_unique_vals[i] == 'POL45' : 
                 sat_spot_dataset_pol_45 = sat_spot_split_datasets[i]
 
         for i in [0,len(sci_unique_vals)-1]:
-            if unique_vals[i] == 'POL0' : 
+            if sat_spot_unique_vals[i] == 'POL0' : 
                 sci_split_datasets_pol_0 = sci_split_datasets[i]
-            if unique_vals[i] == 'POL45' : 
+            if sci_unique_vals[i] == 'POL45' : 
                 sci_split_datasets_pol_45 = sci_split_datasets[i]
 
         # Compute median images and take first slice
