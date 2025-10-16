@@ -1018,7 +1018,9 @@ def spec_psf_subtraction(input_dataset):
         # shift mean_ref to be on top of frame data
         shifted_ref = np.roll(mean_ref.data, (shift[0], shift[1]), axis=(0,1))
         # rescale wavelengh bands to match
-        scale = np.mean(frame.data,axis=0)/np.mean(shifted_ref,axis=0)
+        ref_col_mean = np.mean(shifted_ref,axis=0)
+        ref_col_mean[ref_col_mean==0] = 1 # prevent div by 0
+        scale = np.mean(frame.data,axis=0)/ref_col_mean
         shifted_scaled_ref = shifted_ref*scale
 
         shifted_refdq = np.roll(mean_ref.dq, (shift[0], shift[1]), axis=(0,1))

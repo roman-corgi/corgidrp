@@ -626,7 +626,23 @@ def test_spec_psf_subtraction():
     # way outside the image region, no additional error added
     assert np.array_equal(output[0].err[0,0:100,0:100], input_dset[0].err[0,0:100,0:100])
     # example where we know the exact solution
-    
+    for img in input_dset:
+        img.data = np.zeros_like(img.data, dtype=float)
+        img.dq = np.zeros_like(img.data, dtype=int)
+        # roughly the center of the imaged area
+        img.ext_hdr['WV0_X'] = 1600
+        img.ext_hdr['WV0_Y'] = 547
+        img.err = np.zeros((1,img.data.shape[0],img.data.shape[1])).astype(float)
+    input_dset[0].data[547-20:547+20, 1600-30:1600+30] = 1000.
+    input_dset[0].data[547-20:547+20, 1100-30:1100+30] = 2000.
+    # ref shifted by 400 columns and scaled differently in each band
+    input_dset[1].data[547-20:547+20, 1200-30:1200+30] = 3000.
+    input_dset[1].data[547-20:547+20, 700-30:700+30] = 10000.
+    input_dset[1].dq[547, 1200] = 1 # this shouldn't mess it up
+    output = l3_to_l4.spec_psf_subtraction(input_dset)
+    # should be perfect subtraction in both bands
+    assert(output[0].data.all()==0)
+
 
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
