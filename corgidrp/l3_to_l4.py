@@ -1377,7 +1377,7 @@ def spec_psf_subtraction(input_dataset):
         # subtract the shifted, scaled ref from the frame
         frame.data -= shifted_scaled_ref
         # update the dq and err arrays
-        frame.dq = np.bitwise_or.reduce(frame.dq, shifted_refdq)
+        frame.dq = np.bitwise_or.reduce([frame.dq, shifted_refdq], axis=0)
         frame.add_error_term(shifted_scaled_referr, 'spec ref image err after alignment and matching spec image waveband scale')
         all_data.append(frame.data)
         all_dq.append(frame.dq)
