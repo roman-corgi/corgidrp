@@ -1,5 +1,4 @@
 import os
-import glob
 import numpy as np
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -37,9 +36,7 @@ def generate_badpixel_map(datadir=None, dthresh=6):
     os.makedirs(datadir, exist_ok=True)
     
     # --- Create and load dark data ---
-    mocks.create_dark_calib_files(filedir=datadir)
-    dark_filenames = glob.glob(os.path.join(datadir, "simcal_dark*.fits"))
-    dark_dataset = data.Dataset(dark_filenames)
+    dark_dataset = mocks.create_dark_calib_files(filedir=datadir)
     
     # Create the dark frame using default detector parameters.
     detector_params = data.DetectorParams({})
@@ -53,14 +50,10 @@ def generate_badpixel_map(datadir=None, dthresh=6):
             dark_frame.data[i_col, i_row] = 300
 
     # --- Create and load flat data ---
-    mocks.create_simflat_dataset(filedir=datadir)
-    simflat_filenames = glob.glob(os.path.join(datadir, "sim_flat*.fits"))
-    simflat_dataset = data.Dataset(simflat_filenames)
+    simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
     
     # Create a dummy flat field (flat division) image.
-    mocks.create_flatfield_dummy(filedir=datadir)
-    flat_filenames = glob.glob(os.path.join(datadir, "flat_field*.fits"))
-    flat_dataset = data.Dataset(flat_filenames)
+    flat_dataset = mocks.create_flatfield_dummy(filedir=datadir)
     flat_frame = flat.create_flatfield(flat_dataset)
     
     # Inject "dead" pixels into the flat field image.

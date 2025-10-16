@@ -5,6 +5,7 @@ from corgidrp.data import Image, Dataset, NDFilterSweetSpotDataset
 import corgidrp.mocks as mocks
 import corgidrp.l4_to_tda as l4_to_tda
 import corgidrp.l3_to_l4 as l3_to_l4
+from corgidrp.l2b_to_l3 import crop
 import corgidrp.measure_companions as measure_companions
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 from corgidrp.astrom import seppa2dxdy
@@ -24,7 +25,7 @@ ROLL_ANGLES = np.zeros(NUM_IMAGES)
 ROLL_ANGLES[NUM_IMAGES//2:] = 45
 NUMBASIS = [1, 4, 8]
 FULL_SIZE_IMAGE = (1024, 1024)
-CROPPED_IMAGE_SIZE = (200, 200)
+CROPPED_IMAGE_SIZE = (200, 200) # Practically this will be an odd shape so we should test that
 PLOT_RESULTS = False
 LOAD_FROM_DISK = False  # Flag to control whether to load mocks from disk (if available)
 KL_MODE = -1            # Use the last KL_MODE
@@ -141,6 +142,8 @@ def generate_test_data(out_dir):
         fpamname='HOLE',
         target_name=HOST_STAR
     )
+    # bunit needs to be photoelectron/s for later tests, so set that now
+    host_star_image.ext_hdr['BUNIT'] = 'photoelectron/s'
 
     # 2) Measure host star counts and determine zero point.
     host_star_counts, _, _, _ = gaussfit2d(host_star_image.data, host_star_image.data.shape[1]//2, host_star_image.data.shape[0]//2, searchrad=5, guessfwhm=3, 
@@ -178,8 +181,8 @@ def generate_test_data(out_dir):
 
     # 5) Generate core throughput calibration dataset.
     # assume 50 mas PSF
-    ct_cal = mocks.create_ct_cal(50, cfam_name='1F', cenx=CROPPED_IMAGE_SIZE[0]//2, ceny=CROPPED_IMAGE_SIZE[1]//2, nx=41, ny=41)
-    ct_cal_full_frame = mocks.create_ct_cal(50, cfam_name='1F', cenx=FULL_SIZE_IMAGE[0]//2, ceny=FULL_SIZE_IMAGE[1]//2, nx=41, ny=41)
+    ct_cal = mocks.create_ct_cal(50, cfam_name='1F', cenx=CROPPED_IMAGE_SIZE[0]/2, ceny=CROPPED_IMAGE_SIZE[1]/2, nx=41, ny=41)
+    ct_cal_full_frame = mocks.create_ct_cal(50, cfam_name='1F', cenx=FULL_SIZE_IMAGE[0]/2, ceny=FULL_SIZE_IMAGE[1]/2, nx=41, ny=41)
     FpamFsamCal = mocks.create_mock_fpamfsam_cal(save_file=False)
 
     # get the index/ image of the PSF with maximum core throughput for reference
@@ -236,11 +239,15 @@ def generate_test_data(out_dir):
     klip_kwargs={'numbasis' : NUMBASIS,
                      'mode' : 'RDI'}
         
+    cropped_dataset = crop(coron_data,sizexy=CROPPED_IMAGE_SIZE)
+    cropped_ref_data = crop(ref_data,sizexy=CROPPED_IMAGE_SIZE)
+    
     # RDI
     psf_sub_dataset = l3_to_l4.do_psf_subtraction(
-        coron_data, reference_star_dataset=ref_data,
+        cropped_dataset, 
+        reference_star_dataset=cropped_ref_data,
         ct_calibration=ct_cal,
-        do_crop=True, crop_sizexy=CROPPED_IMAGE_SIZE,
+        #do_crop=True, crop_sizexy=CROPPED_IMAGE_SIZE,
         cand_locs=cand_locs,
         num_processes=1,
         kt_seps=[9,17],
