@@ -346,7 +346,13 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
         else:
-            recipe_filename = "l2b_to_l3.json"
+            # Check if this is polarimetry data (POL0 or POL45 - not sure of VISTYPE yet)
+            is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45')
+            
+            if is_polarimetry:
+                recipe_filename = "l2b_to_l3_pol.json"
+            else:
+                recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
     elif image.ext_hdr['DATALVL'] == "L3":
         if image.ext_hdr['FSMLOS'] == 1:

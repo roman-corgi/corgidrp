@@ -138,6 +138,7 @@ def run_l2b_to_l3_e2e_test(l2b_datadir, l3_outputdir, cals_dir, logger):
     
     # Validate all input images
     l2b_dataset = data.Dataset(l2b_data_filelist)
+    
     for i, (frame, filepath) in enumerate(zip(l2b_dataset, l2b_data_filelist)):
         frame_info = f"L2b Input Frame {i}"
         
@@ -190,6 +191,9 @@ def run_l2b_to_l3_e2e_test(l2b_datadir, l3_outputdir, cals_dir, logger):
     for fname in new_l3_filenames:
         logger.info(f"  - {os.path.basename(fname)}")
     logger.info('')
+
+    # Detect if this is polarimetry data
+    is_polarimetry = l2b_dataset[0].ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45')
     
     # Check that each L3 file has proper headers and data
     for i, l3_filename in enumerate(new_l3_filenames):
@@ -208,8 +212,16 @@ def run_l2b_to_l3_e2e_test(l2b_datadir, l3_outputdir, cals_dir, logger):
             # Verify data level
             verify_header_keywords(img.ext_hdr, {'DATALVL': 'L3'}, frame_info, logger)
             
-            # Check data dimensions (will just report dimensions)
-            check_dimensions(img.data, (125,125), frame_info, logger)
+            # Check data dimensions
+            if is_polarimetry:
+                # Polarimetry data should be a datacube (2, image_size, image_size)
+                if len(img.data.shape) == 3 and img.data.shape[0] == 2:
+                    logger.info(f"{frame_info}: Polarimetry datacube shape {img.data.shape}. PASS")
+                else:
+                    logger.info(f"{frame_info}: Expected polarimetry datacube (2, N, N), got {img.data.shape}. FAIL")
+            else:
+                # Standard imaging data should be 2D
+                check_dimensions(img.data, (125,125), frame_info, logger)
             
             # Verify WCS headers exist (from create_wcs step)
             wcs_keys = ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2', 'CTYPE1', 'CTYPE2']
@@ -217,7 +229,7 @@ def run_l2b_to_l3_e2e_test(l2b_datadir, l3_outputdir, cals_dir, logger):
             if not missing_wcs:
                 logger.info(f"{frame_info}: WCS headers present ({', '.join(wcs_keys)}). PASS")
             else:
-                logger.info(f"{frame_info}: WCS headers incomplete. Missing: {', '.join(missing_wcs)}. FAIL")
+                logger.info(f"{frame_info}: WCS headers incomplete. Missing: {', '.join(missing_wcs)}). FAIL")
             
             # Verify data has been divided by exposure time (should be in photoelectrons/s)
             if img.ext_hdr['BUNIT'] == 'photoelectron/s':
