@@ -602,11 +602,36 @@ def test_spec_psf_subtraction():
     assert np.array_equal(shifted_s, r)
 
     # now the PSF subtraction
+    ref_filepath = os.path.join("tests", "test_data", "spectroscopy", "sim_rdi_L1", "spec_sim_rdi_reference_L1.fits")
+    sci_filepath = os.path.join("tests", "test_data", "spectroscopy", "sim_rdi_L1", "spec_sim_rdi_target_L1.fits")
+    input_dset = Dataset([sci_filepath, ref_filepath]) 
+    input_dset[0].ext_hdr['PSFREF'] = False
+    input_dset[1].ext_hdr['PSFREF'] = True
+    for img in input_dset:
+        img.data = img.data.astype(float)
+        img.dq = np.zeros_like(img.data, dtype=int)
+        # roughly the center of the imaged area
+        img.ext_hdr['WV0_X'] = 1600
+        img.ext_hdr['WV0_Y'] = 547
+        np.random.seed(1039)
+        img.err = np.random.randint(0,100, (1, img.data.shape[0],img.data.shape[1])).astype(float)
+    input_dset[1].dq[533, 1600] = 1
+    output = l3_to_l4.spec_psf_subtraction(input_dset)
+    shift = steps.get_shift_correlation(input_dset[1].data, input_dset[0].data)
+    # check that the subtraction actually decreased the residual because of the rescaling in each band
+    #nanmean b/c mean-combining frames for ref frame exposed the DQ pixels as NaNs in the image
+    assert np.mean(input_dset[0].data - input_dset[1].data) > np.nanmean(output[0].data) 
+    assert output[1].dq[533,1600] == 1
+    assert output[0].dq[533-shift[0], 1600-shift[1]] == 1
+    # way outside the image region, no additional error added
+    assert np.array_equal(output[0].err[0,0:100,0:100], input_dset[0].err[0,0:100,0:100])
+    # example where we know the exact solution
+    
 
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
-    test_determine_zeropoint()
     test_spec_psf_subtraction()
+    test_determine_zeropoint()
     test_psf_centroid()
     test_dispersion_model()
     test_read_cent_wave()

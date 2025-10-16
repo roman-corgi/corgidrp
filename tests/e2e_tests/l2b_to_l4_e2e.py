@@ -388,12 +388,6 @@ def test_l3_to_l4(e2eoutput_path):
     #Assumes that only the correct sources were detected. 
     for i,source_distance in enumerate(expected_separations_pixels):
         assert np.isclose(source_distance, source_distances[i], atol=1)
-    # check other HDU for the same info, using same KL mode truncation choice
-    source_dist1 = psf_subtracted_image.hdu_list['KL_THRUS'].data[-1][0,0]
-    source_dist2 = psf_subtracted_image.hdu_list['KL_THRUS'].data[-1][1,0]
-    hdu_source_distances = np.sort([source_dist1, source_dist2])
-    for i,source_distance in enumerate(expected_separations_pixels):
-        assert np.isclose(source_distance, hdu_source_distances[i], atol=1)
     print("Found all the sources!")
 
     #Check that the calibration filenames are appropriately associated

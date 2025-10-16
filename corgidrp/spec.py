@@ -866,50 +866,6 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
     line_spread = LineSpread(ls_data, pri_hdr = prihdr, ext_hdr = exthdr, gauss_par = gauss_profile, input_dataset = nar_dataset)
     return line_spread
 
-
-def spec_psf_subtraction(input_dataset):
-    '''
-    RDI PSF subtraction for spectroscopy mode.
-    Assumes the reference images are marked with PSFREF=True in the extension header
-    and that they all have the same alignment.
-
-    
-    '''
-    dataset = input_dataset.copy()
-    input_datasets, values = dataset.split_dataset(exthdr_keywords=["PSFREF"])
-    if values != [True, False] and values != [False, True]:
-        raise ValueError("PSFREF keyword must be present in the extension header and be either True or False for all images")
-    ref_index = values.index(True)
-    mean_ref_dset = combine_subexposures(input_datasets[ref_index], num_frames_per_group=None, collapse="mean", num_frames_scaling=False)
-    mean_ref = mean_ref_dset[0]
-    all_data = []
-    all_dq = []
-    all_err = []
-    for frame in input_datasets[1-ref_index]:    
-        # compute shift between frame and mean_ref 
-        shift = get_shift_correlation(frame.data, mean_ref.data)
-        # shift mean_ref to be on top of frame data
-        shifted_ref = np.roll(mean_ref.data, (shift[0], shift[1]), axis=(0,1))
-        shifted_refdq = np.roll(mean_ref.dq, (shift[0], shift[1]), axis=(0,1))
-        shifted_referr = np.roll(mean_ref.err, (shift[0], shift[1]), axis=(0,1))
-        # rescale wavelengh bands to match
-        scale = np.mean(frame.data,axis=0)/np.mean(shifted_ref,axis=0)
-        shifted_scaled_ref = shifted_ref*scale
-        frame.data -= shifted_scaled_ref
-        frame.dq = np.bitwise_or(frame.dq, shifted_refdq)
-        frame.err = np.sqrt(frame.err**2 + shifted_referr**2)
-        all_data.append(frame.data)
-        all_dq.append(frame.dq)
-        all_err.append(frame.err)
-    input_datasets[1-ref_index].all_data = np.stack(all_data)
-    input_datasets[1-ref_index].all_err = np.stack(all_err)
-    input_datasets[1-ref_index].all_dq = np.stack(all_dq)
-    # include the shifted, scaled ref image in the output dataset for future reference in case it's needed
-    out_dataset = input_datasets[1-ref_index]
-
-    # XXX all_data, all_err, all_dq 
-    history_msg = f'RDI PSF subtraction applied using averaged reference image.  {ref_index} of input dataset'
-    return input_datasets[1-ref_index]
         
 if __name__ == "__main__":
     pass
@@ -921,5 +877,7 @@ if __name__ == "__main__":
     for img in input_dset:
         img.data = img.data.astype(float)
         img.dq = np.zeros_like(img.data, dtype=int)
+        img.ext_hdr['WV0_X'] = 1600
+        img.ext_hdr['WV0_Y'] = 547
         img.err = np.zeros((1, img.data.shape[0],img.data.shape[1])).astype(float)
     output = spec_psf_subtraction(input_dset)

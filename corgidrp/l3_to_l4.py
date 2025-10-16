@@ -17,8 +17,8 @@ from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 from astropy.io import fits
 from scipy.ndimage import generic_filter
-from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
-from corgidrp.l4_to_tda import find_source
+from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation
+from corgidrp.combine import combine_subexposures
 
 
 def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
@@ -510,10 +510,6 @@ def do_psf_subtraction(input_dataset,
                        kt_pas=None,
                        kt_snr=20.,
                        num_processes=None,
-                       source_psf=None,
-                       source_fwhm=2.8,
-                       source_nsigma_threshold=5.0,
-                       image_without_planet=None,
                        **klip_kwargs
                        ):
     
@@ -540,8 +536,7 @@ def do_psf_subtraction(input_dataset,
         crop_sizexy (list of int, optional): Desired size to crop the images to before PSF subtraction. Defaults to 
             None, which results in the step choosing a crop size based on the imaging mode. 
         measure_klip_thrupt (bool, optional): Whether to measure KLIP throughput via injection-recovery. Separations 
-            and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU'], and the KL 
-            throughput for any sources found are stored in Dataset[0].hdu_list['KL_THRUS']. 
+            and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU'].
             Defaults to True.
         measure_1d_core_thrupt (bool, optional): Whether to measure the core throughput as a function of separation. 
             Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
@@ -555,10 +550,6 @@ def do_psf_subtraction(input_dataset,
             PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
         kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
         num_processes (int): number of processes for parallelizing the PSF subtraction
-        source_psf (ndarray, optional): The PSF used for source detection. If None, a Gaussian approximation is created.
-        source_fwhm (float, optional): Full-width at half-maximum of the source PSF in pixels.
-        source_nsigma_threshold (float, optional): The SNR threshold for source detection.
-        image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
         klip_kwargs: Additional keyword arguments to be passed to pyKLIP fm.klip_dataset, as defined `here <https://pyklip.readthedocs.io/en/latest/pyklip.html#pyklip.fm.klip_dataset>`. 
             'mode', e.g. ADI/RDI/ADI+RDI, is chosen autonomously if not specified. 'annuli' defaults to 1. 'annuli_spacing' 
             defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. 'numbasis' defaults to [1,4,8,16].
@@ -706,74 +697,6 @@ def do_psf_subtraction(input_dataset,
         if cand_locs is None:
             cand_locs = []
 
-        #Find the sources and get their positions
-        klip_src_thpt_list = []
-        source_distances_list = []
-        angles_list = []
-        max_num_sources = 0
-        for i in range(len(frame.data)):
-            frame_copy = frame.copy()
-            frame_copy.data = frame_copy.data[i]
-            psf_subtracted_image_with_source = find_source(frame_copy, psf=source_psf, fwhm=source_fwhm, nsigma_threshold=source_nsigma_threshold,
-                image_without_planet=image_without_planet)
-            source_header = psf_subtracted_image_with_source.ext_hdr
-            snyx = np.array([list(map(float, source_header[key].split(','))) for key in source_header if key.startswith("SNYX")])
-            if len(snyx) == 0:
-                continue
-            xcen = psf_subtracted_image_with_source.ext_hdr['CRPIX1']
-            ycen = psf_subtracted_image_with_source.ext_hdr['CRPIX2']
-            source_distances =np.sqrt((snyx[:,1] - xcen)**2 + (snyx[:,2] - ycen)**2)
-            angles = np.arctan2((snyx[:,2] - ycen),(snyx[:,1] - xcen))*180/np.pi
-            angles[angles<0] = 360 - angles[angles<0] # to get angles in [0,360] range instead of [-pi,pi]
-            klip_src_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
-                        dataset_out,
-                        ct_calibration,
-                        klip_params,
-                        kt_snr,
-                        cand_locs = [], # don't exclude any source locations for finding klip throughput at source location
-                        seps=source_distances,
-                        pas=angles,
-                        num_processes=num_processes
-                        )
-            if len(source_distances) > max_num_sources:
-                max_num_sources = len(source_distances)
-            klip_src_thpt_list.append(klip_src_thpt[1+i]) # just need the thpt at the sources for that particular KL mode truncation choice
-            source_distances_list.append(source_distances)
-            angles_list.append(angles)
-            del frame_copy
-        if len(klip_src_thpt_list) > 0:
-            source_thrupt_hdr = fits.Header()
-            source_thrupt_hdr['COMMENT'] = ('array of shape (KL_n,n_sources,4), where KL_n is the number of KL mode truncation choices and n_sources '
-                'is the maximum number of sources found out of all the KL mode truncation choices, and None is used to fill in the axis for number of sources '
-                'for KL modes that do have sources less than the maximum number of sources.  Here is an example for 4 KL mode truncation choices for which the '
-                'first one had the most found sources (2), where r is for separation (in pixels from the star center), '
-                'theta is for angle in degrees counterclockwise from north/up, thpt is for dimensionless KLIP throughput, and FWHM is the FWHM in pixels: '
-                '[ [[r_source1_KL1, theta_source1_KL1, thpt_source1_KL1, FWHM_source1_KL1], [r_source2_KL1, theta_source2_KL1, thpt_source2_KL1, FWHM_source2_KL1]], '
-                '  [[r_source1_KL2, theta_source1_KL2, thpt_source1_KL2, FWHM_source1_KL2], [None, None, None, None]], '
-                '  [[r_source1_KL3, theta_source1_KL3, thpt_source1_KL3, FWHM_source1_KL3], [None, None, None, None]], '
-                '  [[r_source1_KL4, theta_source1_KL4, thpt_source1_KL4, FWHM_source1_KL4], [None, None, None, None]] ]')
-            source_thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. Angle counterclockwise from north/up: degrees. KLIP throughput: values between 0 and 1. FWHM: EXCAM pixels'
-            source_klip_thpt = np.zeros((len(klip_src_thpt_list), max_num_sources, 4))
-            for kl in range(len(klip_src_thpt_list)): 
-                num_sources_kl = len(klip_src_thpt_list[kl])
-                for s in range(num_sources_kl):
-                    source_klip_thpt[kl, s, 0] = source_distances_list[kl][s]
-                    source_klip_thpt[kl, s, 1] = angles_list[kl][s]
-                    source_klip_thpt[kl, s, 2] = klip_src_thpt_list[kl][s][0]
-                    source_klip_thpt[kl, s, 3] = klip_src_thpt_list[kl][s][1]
-                for ss in range(num_sources_kl, max_num_sources):
-                    source_klip_thpt[kl, ss, 0] = None
-                    source_klip_thpt[kl, ss, 1] = None
-                    source_klip_thpt[kl, ss, 2] = None
-                    source_klip_thpt[kl, ss, 3] = None
-            source_thrupt_hdu_list = [fits.ImageHDU(data=source_klip_thpt, header=source_thrupt_hdr, name='KL_THRUS')]
-            dataset_out[0].hdu_list.extend(source_thrupt_hdu_list)
-            # Save throughput as an extension on the psf-subtracted Image
-            # Add history msg
-            source_history_msg = f'KLIP throughput measured at sources and saved to Image class HDU List extension "KL_THRUS".'
-        else:
-            source_history_msg = '' # no sources found
-        # now for KLIP throughput for general (or specified) separations and angles
         klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
                             dataset_out,
                             ct_calibration,
@@ -808,7 +731,7 @@ def do_psf_subtraction(input_dataset,
 
         # Add history msg
         history_msg = f'KLIP throughput measured and saved to Image class HDU List extension "KL_THRU".'
-        dataset_out.update_after_processing_step(source_history_msg+history_msg)
+        dataset_out.update_after_processing_step(history_msg)
 
     if measure_1d_core_thrupt:
         
@@ -1061,6 +984,68 @@ def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials
     history_msg = "wavelength map and position lookup table extension added"
     dataset.update_after_processing_step(history_msg)
     return dataset
+
+
+def spec_psf_subtraction(input_dataset):
+    '''
+    RDI PSF subtraction for spectroscopy mode.
+    Assumes the reference images are marked with PSFREF=True in the extension header
+    and that they all have the same alignment.
+    Args:
+        input_dataset (corgidrp.data.Dataset): L3 dataset containing the science and reference images
+    Returns:
+        corgidrp.data.Dataset: dataset containing the PSF-subtracted science images and the mean reference image as the last image
+    
+    '''
+    dataset = input_dataset.copy()
+    input_datasets, values = dataset.split_dataset(exthdr_keywords=["PSFREF"])
+    if values != [True, False] and values != [False, True]:
+        raise ValueError("PSFREF keyword must be present in the extension header and be either True or False for all images")
+    ref_index = values.index(True)
+    mean_ref_dset = combine_subexposures(input_datasets[ref_index], num_frames_per_group=None, collapse="mean", num_frames_scaling=False)
+    # undo any NaN assignments in the image since we FFT below
+    nan_inds = np.where(np.isnan(mean_ref_dset[0].data))
+    if len(nan_inds[0]) > 0:
+        mean_ref_dset[0].data[nan_inds] = np.mean(input_datasets[ref_index].all_data[:,nan_inds[0],nan_inds[1]], axis=0)
+    mean_ref = mean_ref_dset[0].copy()
+    all_data = []
+    all_dq = []
+    all_err = []
+    image_list = []
+    for frame in input_datasets[1-ref_index]:    
+        # compute shift between frame and mean_ref 
+        shift = get_shift_correlation(frame.data, mean_ref.data)
+        # shift mean_ref to be on top of frame data
+        shifted_ref = np.roll(mean_ref.data, (shift[0], shift[1]), axis=(0,1))
+        # rescale wavelengh bands to match
+        scale = np.mean(frame.data,axis=0)/np.mean(shifted_ref,axis=0)
+        shifted_scaled_ref = shifted_ref*scale
+
+        shifted_refdq = np.roll(mean_ref.dq, (shift[0], shift[1]), axis=(0,1))
+        # at this point in the pipeline, the err is mainly shot noise, so multiplying the err is appropriate
+        # shifting may throw off err at the edges of the frame, but those pixels aren't used anyways
+        shifted_scaled_referr = np.roll(mean_ref.err[0], (shift[0], shift[1]), axis=(0,1))*scale
+        # to prevent affecting future steps with error propagated forward from pixels here we don't use: 
+        # crop to the relevant region only
+        x0 = frame.ext_hdr['WV0_X']
+        y0 = frame.ext_hdr['WV0_Y']
+        crop_shift_scale_referr = np.zeros_like(shifted_scaled_referr)
+        crop_shift_scale_referr[y0-35:y0+36, x0-25:x0+26] = shifted_scaled_referr[y0-35:y0+36, x0-25:x0+26]
+        shifted_scaled_referr = crop_shift_scale_referr
+        # subtract the shifted, scaled ref from the frame
+        frame.data -= shifted_scaled_ref
+        # update the dq and err arrays
+        frame.dq = np.bitwise_or(frame.dq, shifted_refdq)
+        frame.add_error_term(shifted_scaled_referr, 'spec ref image err after alignment and matching spec image waveband scale')
+        all_data.append(frame.data)
+        all_dq.append(frame.dq)
+        all_err.append(frame.err)
+        image_list.append(frame)
+
+    out_dataset = data.Dataset(image_list+[mean_ref])
+    history_msg = f'RDI PSF subtraction applied using averaged reference image.  Last Image is shifted, scaled mean ref frame.'
+    out_dataset.update_after_processing_step(history_msg)
+    return out_dataset
 
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
