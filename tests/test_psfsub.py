@@ -419,6 +419,19 @@ def test_psf_sub_ADI():
     # expected_dqs[:,:,94,5] = 1
     expected_errs = np.full(expected_err_shape,np.nan)
 
+    mock_sci.all_dq[:,55,55] = 1  # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[:,55,45] = 1  # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[:,18,30] = 1  # This should not become flagged
+    mock_sci.all_dq[0,60,60] = 1  # This should not become flagged 
+    mock_sci.all_dq[1,75,75] = 1  # This should not become flagged
+    
+    expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
+    expected_err_shape = (1,1,len(numbasis),*mock_sci[0].data.shape)
+    expected_dqs = np.zeros(expected_data_shape)
+    expected_dqs[:,:,57,49:51] = 1
+    # expected_dqs[:,:,94,5] = 1
+    expected_errs = np.full(expected_err_shape,np.nan)
+
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 fileprefix='test_ADI',
                                 measure_klip_thrupt=False,
