@@ -399,19 +399,33 @@ def test_psf_sub_ADI():
     """
 
     numbasis = [1]
-    rolls = [270+13,270-13]
+    rolls = [45,-45]
     mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)
 
     klip_kwargs={"numbasis":numbasis}
+    mock_sci.all_dq[:,55,55] = 1  # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[:,55,45] = 1  # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[:,18,30] = 1  # This should not become flagged
+    mock_sci.all_dq[0,60,60] = 1  # This should not become flagged 
+    mock_sci.all_dq[1,75,75] = 1  # This should not become flagged
+    
+    expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
+    expected_err_shape = (1,1,len(numbasis),*mock_sci[0].data.shape)
+    expected_dqs = np.zeros(expected_data_shape)
+    expected_dqs[:,:,57,49:51] = 1
+    # expected_dqs[:,:,94,5] = 1
+    expected_errs = np.full(expected_err_shape,np.nan)
+
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 fileprefix='test_ADI',
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
 
+    # TODO: Do derotation with pyklip to make sure that's not the reason for the difference
     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
                               [0.5,0.5],
                               cval=np.nan)
@@ -451,8 +465,11 @@ def test_psf_sub_ADI():
         if np.nanmax(np.abs(frame.data[0] - analytical_result)) > np.nanmax(analytical_result) * rel_tolerance:
             raise Exception(f"Relative difference between ADI result and analytical result is greater then 5%.")
         
+        # Check shape of output dq & err arrays
+        assert result.all_dq[0,0,57,50] == 1
+        assert result.all_err == pytest.approx(expected_errs)
+
     # Check expected data shape
-    expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
 
@@ -708,6 +725,43 @@ def test_psf_sub_badmode():
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
     
+def test_psf_sub_nandata():
+    """Tests that psf subtraction step fails correctly if nans are present in the data.
+    """
+
+    numbasis = [1,2,3,4]
+    rolls = [13,-13,0]
+    klip_kwargs={"numbasis":numbasis,
+                 "mode" : 'ADI+RDI'}
+    
+    # Test nan in science data
+    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
+    mock_sci.all_data[0,1,:] = np.nan
+    
+    with pytest.raises(Exception):
+        _ = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
+                                fileprefix='test_nandata',
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
+
+    # Test nan in ref data
+    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
+    mock_ref.all_data[0,1,:] = np.nan
+    with pytest.raises(Exception):
+        _ = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
+                                fileprefix='test_nandata',
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
+
+    
 if __name__ == '__main__':  
     # test_pyklipdata_ADI()
     # test_pyklipdata_RDI()
@@ -730,11 +784,9 @@ if __name__ == '__main__':
     # test_psf_sub_explicit_klip_kwargs()
 
     test_psf_sub_ADI()
-    test_psf_sub_RDI()
-    test_psf_sub_ADIRDI()
+    # test_psf_sub_RDI()
+    # test_psf_sub_ADIRDI()
+    # test_psf_sub_nandata()
     # test_psf_sub_badmode()
 
-    # TODO: Test that errors are raised correctly when 
-    #       nans are present in sci/ref data
-    # TODO: Test dq threshold kwarg
     

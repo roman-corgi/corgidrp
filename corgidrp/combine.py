@@ -4,8 +4,6 @@ Module to support frame combination
 import warnings
 import numpy as np
 import corgidrp.data as data
-from scipy.ndimage import shift
-# from scipy.ndimage import rotate as rotate_scipy # to avoid confusion with pyklip rotate
 from pyklip.klip import rotate
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling):
@@ -14,7 +12,7 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
 
     Args:
         data_subset (np.array): 3-D array of N 2-D images
-        err_subset (np.array): 4-D array of N 2-D error maps
+        err_subset (np.array): 4-D array of N 3-D error maps
         dq_subset (np.array): 3-D array of N 2-D DQ maps
         collapse (str): "mean" or "median". 
         num_frames_scaling (bool): Multiply by number of frames in sequence in order to ~conserve photons
@@ -124,21 +122,23 @@ def derotate_arr_2d(data_arr,roll_angle,xcen,ycen,astr_hdr=None):
     return derot
 
 
-def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,is_dq=False):
-    """_summary_
+def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
+                 is_dq=False,dq_round_threshold=0.05):
+    """Derotates an array based on the provided roll angle, about the provided
+    center. Treats DQ arrays specially, converting to float to do the rotation, 
+    and converting back to np.int64 afterwards.
     Args:
-        data_arr (_type_): _description_
-        roll_angle (_type_): _description_
-        xcen (_type_): _description_
-        ycen (_type_): _description_
-        astr_hdr (_type_, optional): _description_. Defaults to None.
-        is_dq (bool, optional): _description_. Defaults to False.
-
-    Raises:
-        ValueError: _description_
+        data_arr (np.array): an array with 2-4 dimensions
+        roll_angle (float): telescope roll angle in degrees
+        xcen (float): x-coordinate of center about which to rotate
+        ycen (float): y-coordinate of center about which to rotate
+        astr_hdr (astropy.fits.Header, optional): WCS header which will be updated. Defaults to None.
+        is_dq (bool, optional): Flag to determine if this is a DQ array. Defaults to False.
+        dq_round_threshold (float, optional): value between 0-1 which determines the 
+            threshold for spreading dq values to neighboring pixels after derotation.
 
     Returns:
-        _type_: _description_
+        np.array: The derotated array.
     """
     # Temporarily convert dq to floats
     if is_dq:
@@ -171,13 +171,31 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,is_dq=False):
 
     # convert dq_array back to ints
     if is_dq:
-        derotated_arr[np.isnan(derotated_arr)] = 1
-        derotated_arr = np.round(derotated_arr).astype(np.int64) # Update DQ propagation to surrounding pixels
-
+        derotated_arr[np.isnan(derotated_arr)] = 1 # assign nans to 1
+        derotated_arr_int = (derotated_arr>dq_round_threshold).astype(np.int64)
+        # import matplotlib.pyplot as plt
+        # plt.imshow(derotated_arr_int,origin='lower')
+        # plt.colorbar()
+        # plt.title(f'round_threshold: {round_threshold}')
+        # plt.show()
+        return derotated_arr_int
+    
     return derotated_arr
 
 
-def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh):
+def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1):
+    """Applies logic to propagate the dq arrays and error arrays 
+    in a dataset through PSF subtraction.
+
+    Args:
+        sci_dataset (corgidrp.data.Dataset): The input science dataset.
+        ref_dataset (corgidrp.data.Dataset): The input reference dataset (or None if ADI only).
+        mode (str): The PSF subtraction mode, e.g. "ADI", "RDI", "ADI+RDI".
+        dq_thresh (int): Minimum dq flag value to be considered a bad pixel. Defaults to 1.
+
+    Returns:
+        tuple of np.array: the dq array and err array which should apply to the PSF subtraction output dataset.
+    """
 
     # Assign master output dq & error (before derotation)
     # TODO: handle 3D data!
@@ -209,8 +227,6 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh):
         
         derotated_dq_arr.append(derotated_dq)
         derotated_err_arr.append(derotated_err)
-
-    derotated_dq_arr = np.where(np.array(derotated_dq_arr)>0,1,0)
 
     # Collapse dq & error
     dq_out_collapsed = np.where(np.all(derotated_dq_arr,axis=0),1,0)
