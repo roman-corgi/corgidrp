@@ -767,7 +767,7 @@ def compute_QphiUphi(image, x_center=None, y_center=None):
         try:
             ext_hdr['HISTORY'] = msg
         except Exception:
-        pass
+            pass
 
     return out
 
