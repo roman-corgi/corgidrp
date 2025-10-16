@@ -85,9 +85,9 @@ tests/e2e_tests/pc_sim_test_data/*.json
 # data files
 *.FITS
 *.fits
-!nonlin_table_TVAC.fits
-!tests/test_data/spectroscopy/sim_rdi_L1/spec_sim_rdi_target_L1.fits
+!nonlin_table_TVAC.fits 
 !tests/test_data/spectroscopy/sim_rdi_L1/spec_sim_rdi_reference_L1.fits
+!tests/test_data/spectroscopy/sim_rdi_L1/spec_sim_rdi_target_L1.fits
 
 # Output figures
 figures/

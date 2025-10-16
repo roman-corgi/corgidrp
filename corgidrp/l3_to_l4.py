@@ -1327,7 +1327,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 def spec_psf_subtraction(input_dataset):
     '''
     RDI PSF subtraction for spectroscopy mode.
-    Assumes the reference images are marked with PSFREF=True in the extension header
+    Assumes the reference images are marked with PSFREF=True in the primary header
     and that they all have the same alignment.
 
     Args:
@@ -1338,9 +1338,9 @@ def spec_psf_subtraction(input_dataset):
     
     '''
     dataset = input_dataset.copy()
-    input_datasets, values = dataset.split_dataset(exthdr_keywords=["PSFREF"])
-    if values != [True, False] and values != [False, True]:
-        raise ValueError("PSFREF keyword must be present in the extension header and be either True or False for all images")
+    input_datasets, values = dataset.split_dataset(prihdr_keywords=["PSFREF"])
+    if values != [0,1] and values != [1,0]:
+        raise ValueError("PSFREF keyword must be present in the primary header and be either 0 or 1 for all images")
     ref_index = values.index(True)
     mean_ref_dset = combine_subexposures(input_datasets[ref_index], num_frames_per_group=None, collapse="mean", num_frames_scaling=False)
     # undo any NaN assignments in the image since we FFT below

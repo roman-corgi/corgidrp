@@ -910,8 +910,8 @@ def test_spec_psf_subtraction():
     ref_filepath = os.path.join("tests", "test_data", "spectroscopy", "sim_rdi_L1", "spec_sim_rdi_reference_L1.fits")
     sci_filepath = os.path.join("tests", "test_data", "spectroscopy", "sim_rdi_L1", "spec_sim_rdi_target_L1.fits")
     input_dset = Dataset([sci_filepath, ref_filepath]) 
-    input_dset[0].ext_hdr['PSFREF'] = False
-    input_dset[1].ext_hdr['PSFREF'] = True
+    input_dset[0].pri_hdr['PSFREF'] = 0
+    input_dset[1].pri_hdr['PSFREF'] = 1
     for img in input_dset:
         img.data = img.data.astype(float)
         img.dq = np.zeros_like(img.data, dtype=int)
