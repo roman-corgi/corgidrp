@@ -1180,7 +1180,6 @@ def combine_polarization_states(input_dataset,
         # sum orthogonal polarization axis to obtain total intensity
         total_intensity_data = frame.data[0] + frame.data[1]
         # error propagation
-        #TODO: continue err propagation for the rest of the steps, figure out how to propagate DQ
         total_intensity_err = np.sqrt(frame.err[:,0,:,:]**2 + frame.err[:,1,:,:]**2)
         # construct image
         total_intensity_img = data.Image(total_intensity_data,
@@ -1234,13 +1233,17 @@ def combine_polarization_states(input_dataset,
     image_size_x = psf_subtracted_intensity.data.shape[2]
     measurement_matrix = np.zeros(shape=(2 * dataset_size, 4))
     output_intensities = np.zeros(shape = (2 * dataset_size, image_size_y, image_size_x))
+    # err propagation
+    output_intensities_cov = np.zeros(shape = (2 * dataset_size, 2 * dataset_size, image_size_y, image_size_x))
     # system mueller matrix calibration
     system_mm = system_mueller_matrix_cal.data
     for i in range(dataset_size):
         # fill in output intensity vector
         output_intensities[2*i] = derotated_dataset.frames[i].data[0]
         output_intensities[(2*i)+1] = derotated_dataset.frames[i].data[1]
-
+        # fill in diagonal terms of the cov matrix
+        output_intensities_cov[2*i,2*i,:,:] = derotated_dataset.frames[i].err[0,0,:,:]**2
+        output_intensities_cov[(2*i)+1,(2*i)+1,:,:] = derotated_dataset.frames[i].err[0,1,:,:]**2
         ## fill in measurement matrix
         # roll angle rotation matrix
         roll = derotated_dataset.frames[i].pri_hdr['ROLL']
@@ -1276,10 +1279,19 @@ def combine_polarization_states(input_dataset,
     # replace I component of the Stokes datacube with the PSF subtracted intensity
     stokes_datacube[0] = psf_subtracted_intensity.data[0]
 
+    # construct final error terms for output Stokes datacube
+    stokes_cov = np.einsum('ij,jkyx,kl->ilyx', measurement_matrix_inv, output_intensities_cov, measurement_matrix_inv.T)
+    output_err = np.zeros(shape=(1,4,image_size_y,image_size_x))
+    output_err[0,0] = psf_subtracted_intensity.err[0]
+    output_err[0,1] = np.sqrt(stokes_cov[1, 1])
+    output_err[0,2] = np.sqrt(stokes_cov[2, 2])
+    output_err[0,3] = np.sqrt(stokes_cov[3, 3])
+
     # construct output
     output_frame = data.Image(stokes_datacube,
                               pri_hdr=psf_subtracted_intensity.pri_hdr.copy(),
-                              ext_hdr=psf_subtracted_intensity.ext_hdr.copy())
+                              ext_hdr=psf_subtracted_intensity.ext_hdr.copy(),
+                              err=output_err)
     updated_dataset = data.Dataset([output_frame])
     history_msg = "Combined Polarization States"
     updated_dataset.update_after_processing_step(history_msg)
