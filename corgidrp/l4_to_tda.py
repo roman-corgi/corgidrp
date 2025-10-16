@@ -737,53 +737,36 @@ def compute_QphiUphi(image, x_center=None, y_center=None):
 
     # --- dq alignment & inheritance ---
     if getattr(out, "dq", None) is None:
-        # dq is missing → initialize with zeros
-        print("dq is None → creating new zero array")
+        # dq is nothing -> create zeros with correct shape
         out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
-
+    elif out.dq.ndim != 3 or out.dq.shape[1:] != (n, m):
+        # shape mismatch -> reset
+        out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
     else:
+        # if we still have only I,Q,U,V planes, append two new planes
         if out.dq.shape[0] == nplanes - 2 and out.dq.shape[0] >= 4:
-            dq_I = out.dq[0]
-            dq_Q = out.dq[1]
-            dq_U = out.dq[2]
-            dq_V = out.dq[3]
-
-            # Check if I, Q, U, V dq are all identical
-            all_same = (np.array_equal(dq_I, dq_Q) and
-                        np.array_equal(dq_I, dq_U) and
-                        np.array_equal(dq_I, dq_V))
-
-            if all_same:
-                print("dq for I, Q, U, V are identical → copying common dq to Q_phi and U_phi")
-                dq_Qphi = dq_I[None, ...].copy()
-                dq_Uphi = dq_I[None, ...].copy()
-            else:
-                print("dq differ → copying Q dq to Q_phi and U dq to U_phi")
-                dq_Qphi = dq_Q[None, ...].copy()
-                dq_Uphi = dq_U[None, ...].copy()
-
-            out.dq = np.concatenate([out.dq, dq_Qphi, dq_Uphi], axis=0)
-
-        elif out.dq.shape[0] != nplanes:
-            print(f"[dq] dq.shape[0]={out.dq.shape[0]} does not match expected {nplanes} → resetting to zeros")
-            out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
-
+            dq_Q = out.dq[1].astype(np.uint16, copy=False)
+            dq_U = out.dq[2].astype(np.uint16, copy=False)
+            dq_or = (dq_Q | dq_U).astype(np.uint16)
+            out.dq = np.concatenate([out.dq, dq_or[None, ...], dq_or[None, ...]], axis=0)
+    
+        # if already 6 planes, (re)compute Q_phi/U_phi dq for correctness
+        elif out.dq.shape[0] == nplanes:
+            out.dq[4] = (out.dq[1].astype(np.uint16) | out.dq[2].astype(np.uint16))
+            out.dq[5] = (out.dq[1].astype(np.uint16) | out.dq[2].astype(np.uint16))
+    
         else:
-            print("[dq] dq already has the correct number of planes → no changes made")
+            # anything else -> reset
+            out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
 
     # Add HISTORY record
     msg = f"Computed Q_phi/U_phi with center=({cx:.6f},{cy:.6f}); output data shape {out.data.shape}."
     print(msg)
-    try:
-        if ext_hdr is not None and hasattr(ext_hdr, "add_history"):
-            ext_hdr.add_history(msg)
-        elif ext_hdr is not None:
-            prev = ext_hdr.get("HISTORY")
-            if prev is None:
-                ext_hdr["HISTORY"] = msg
-            else:
-                ext_hdr["HISTORY"] = f"{prev}\n{msg}"
-    except Exception:
+
+    if ext_hdr is not None:
+        try:
+            ext_hdr['HISTORY'] = msg
+        except Exception:
         pass
 
     return out
