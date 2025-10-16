@@ -115,18 +115,12 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     return new_dataset
 
 
-def derotate_arr_2d(data_arr,roll_angle,xcen,ycen,astr_hdr=None):
-    
-    derot = rotate(data_arr,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
-        
-    return derot
-
-
 def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
                  is_dq=False,dq_round_threshold=0.05):
     """Derotates an array based on the provided roll angle, about the provided
     center. Treats DQ arrays specially, converting to float to do the rotation, 
     and converting back to np.int64 afterwards.
+
     Args:
         data_arr (np.array): an array with 2-4 dimensions
         roll_angle (float): telescope roll angle in degrees
@@ -145,12 +139,13 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
         data_arr = data_arr.astype(np.float32)
 
     if data_arr.ndim == 2:
-        derotated_arr = derotate_arr_2d(data_arr,roll_angle,xcen,ycen,astr_hdr)
+        derotated_arr = rotate(data_arr,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
     
     elif data_arr.ndim == 3:
         derotated_arr = []
         for im in data_arr:
-            derotated_im = derotate_arr_2d(im,roll_angle,xcen,ycen,astr_hdr)
+            derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        
             derotated_arr.append(derotated_im)
 
         derotated_arr = np.array(derotated_arr)
@@ -160,7 +155,8 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
         for set in data_arr:
             derotated_set = []
             for im in set:
-                derotated_im = derotate_arr_2d(im,roll_angle,xcen,ycen,astr_hdr)
+                derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        
                 derotated_set.append(derotated_im)
             derotated_arr.append(derotated_set)
 

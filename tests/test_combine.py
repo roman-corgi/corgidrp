@@ -417,12 +417,12 @@ def test_derotate_arr_2d():
 
     # Check that the array stays the same if roll angle is 0
     roll_angle = 0
-    derotated_arr = combine.derotate_arr_2d(test_arr,roll_angle, xcen,ycen)
+    derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     
     assert derotated_arr[~np.isnan(derotated_arr)] == pytest.approx(test_arr[~np.isnan(test_arr)])
 
     roll_angle = 90
-    derotated_arr = combine.derotate_arr_2d(test_arr,roll_angle, xcen,ycen)
+    derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     expected_arr = np.ones_like(test_arr)
     expected_arr[1,8] = 10.
     expected_arr[5,4] = 10.
@@ -433,7 +433,7 @@ def test_derotate_arr_2d():
     xcen, ycen = 3.5, 3.5
 
     roll_angle = 90
-    derotated_arr = combine.derotate_arr_2d(test_arr,roll_angle, xcen,ycen)
+    derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     expected_arr = np.ones_like(test_arr)
     expected_arr[1,6] = 10.
     expected_arr[5,2] = 10.
@@ -443,7 +443,7 @@ def test_derotate_arr_2d():
     pass
 
 
-def test_derotate_arr():
+def test_derotate_arr_nd():
     """Tests that 3D arrays can be derotated, and that dq arrays are treated correctly.
     """
     test_arr = np.full((2,10,10),1.)
@@ -464,21 +464,21 @@ def test_derotate_arr():
     assert derotated_arr[~np.isnan(derotated_arr)] == pytest.approx(expected_arr[~np.isnan(expected_arr)])
 
     # Test dq array
-    test_dq = np.full((2,10,10),1.)
-    test_dq[:,1,1] = 10.
-    test_dq[1,5,5] = 10.
+    test_dq = np.full((2,10,10),0.)
+    test_dq[:,1,1] = 1.
+    test_dq[1,5,5] = 1.
     test_dq = test_dq.astype(np.int64)
     
     # Check usual usage
     xcen, ycen = 4.5, 4.5
     roll_angle = 90
     
-    expected_dq = np.ones_like(test_arr)
-    expected_dq[:,1,8] = 10.
-    expected_dq[1,5,4] = 10.
+    expected_dq = np.zeros_like(test_arr)
+    expected_dq[:,1,8] = 1.
+    expected_dq[1,5,4] = 1.
     expected_dq = expected_dq.astype(int)
     
-    derotated_dq = combine.derotate_arr(test_arr,roll_angle, xcen,ycen,
+    derotated_dq = combine.derotate_arr(test_dq,roll_angle, xcen,ycen,
                                         is_dq=True)
     assert derotated_dq == pytest.approx(expected_dq)
     assert derotated_dq.dtype == np.int64
@@ -487,6 +487,6 @@ def test_derotate_arr():
 
 
 if __name__ == "__main__":
-    # test_derotate_arr_2d()
-    # test_derotate_arr()
+    test_derotate_arr_2d()
+    test_derotate_arr_nd()
     test_prop_err_dq()
