@@ -4,7 +4,7 @@ Module to support frame combination
 import warnings
 import numpy as np
 import corgidrp.data as data
-
+from pyklip.klip import rotate
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling):
     """
@@ -12,7 +12,7 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
 
     Args:
         data_subset (np.array): 3-D array of N 2-D images
-        err_subset (np.array): 4-D array of N 2-D error maps
+        err_subset (np.array): 4-D array of N 3-D error maps
         dq_subset (np.array): 3-D array of N 2-D DQ maps
         collapse (str): "mean" or "median". 
         num_frames_scaling (bool): Multiply by number of frames in sequence in order to ~conserve photons
@@ -54,7 +54,6 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
     dq_collapse[np.where((dq_collapse > 0) & (~np.isnan(data_collapse)))] = 0
 
     return data_collapse, err_collapse, dq_collapse
-
 
 
 def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mean", num_frames_scaling=True):
@@ -114,3 +113,120 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     new_dataset.update_after_processing_step("Combine_subexposures: combined every {0} frames by {1}".format(num_frames_per_group, collapse))
 
     return new_dataset
+
+
+def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
+                 is_dq=False,dq_round_threshold=0.05):
+    """Derotates an array based on the provided roll angle, about the provided
+    center. Treats DQ arrays specially, converting to float to do the rotation, 
+    and converting back to np.int64 afterwards. DQ output becomes only zeros and
+    ones, so detailed DQ flag information is not preserved.
+
+    Args:
+        data_arr (np.array): an array with 2-4 dimensions
+        roll_angle (float): telescope roll angle in degrees
+        xcen (float): x-coordinate of center about which to rotate
+        ycen (float): y-coordinate of center about which to rotate
+        astr_hdr (astropy.fits.Header, optional): WCS header which will be updated. Defaults to None.
+        is_dq (bool, optional): Flag to determine if this is a DQ array. Defaults to False.
+        dq_round_threshold (float, optional): value between 0-1 which determines the 
+            threshold for spreading dq values to neighboring pixels after derotation.
+
+    Returns:
+        np.array: The derotated array.
+    """
+    # Temporarily convert dq to floats
+    if is_dq:
+        data_arr = data_arr.astype(np.float32)
+
+    if data_arr.ndim == 2:
+        derotated_arr = rotate(data_arr,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+    
+    elif data_arr.ndim == 3:
+        derotated_arr = []
+        for im in data_arr:
+            derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        
+            derotated_arr.append(derotated_im)
+
+        derotated_arr = np.array(derotated_arr)
+    
+    elif data_arr.ndim == 4:
+        derotated_arr = []
+        for set in data_arr:
+            derotated_set = []
+            for im in set:
+                derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        
+                derotated_set.append(derotated_im)
+            derotated_arr.append(derotated_set)
+
+        derotated_arr = np.array(derotated_arr)
+    
+    else:
+        raise ValueError('derotate_arr() not configured for data with >4 dimensions')
+
+    # convert dq_array back to ints
+    if is_dq:
+        derotated_arr[np.isnan(derotated_arr)] = 1 # assign nans to 1
+        derotated_arr_int = (derotated_arr>dq_round_threshold).astype(np.int64)
+        # import matplotlib.pyplot as plt
+        # plt.imshow(derotated_arr_int,origin='lower')
+        # plt.colorbar()
+        # plt.title(f'round_threshold: {round_threshold}')
+        # plt.show()
+        return derotated_arr_int
+    
+    return derotated_arr
+
+
+def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1):
+    """Applies logic to propagate the dq arrays and error arrays 
+    in a dataset through PSF subtraction.
+
+    Args:
+        sci_dataset (corgidrp.data.Dataset): The input science dataset.
+        ref_dataset (corgidrp.data.Dataset): The input reference dataset (or None if ADI only).
+        mode (str): The PSF subtraction mode, e.g. "ADI", "RDI", "ADI+RDI".
+        dq_thresh (int): Minimum dq flag value to be considered a bad pixel. Defaults to 1.
+
+    Returns:
+        tuple of np.array: the dq array and err array which should apply to the PSF subtraction output dataset.
+    """
+
+    # Assign master output dq & error (before derotation)
+    # TODO: handle 3D data!
+    # dq shape = (n_rolls, n_wls(optional), y, x)
+    sci_input_dqs = sci_dataset.all_dq >= dq_thresh
+
+    # If doing ADI, flag pixels that are bad in all science frames
+    if 'ADI' in mode:
+        sci_input_dqs[:] = np.all(sci_input_dqs,axis=0)
+
+    # If using references, flag pixels that are bad in all the ref frames
+    if 'RDI' in mode:
+        ref_output_dqs_flat = np.all(ref_dataset.all_dq>=dq_thresh,axis=0,keepdims=True)
+        sci_input_dqs = np.logical_or(sci_input_dqs,ref_output_dqs_flat) 
+
+    # Set errors to np.nan for now
+    sci_input_errs = np.full_like(sci_dataset.all_err,np.nan)
+
+    # Derotate dq & error
+    derotated_dq_arr = []
+    derotated_err_arr = []
+    for i,frame in enumerate(sci_dataset):
+        
+        roll = frame.pri_hdr['ROLL']
+        xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
+        
+        derotated_dq = derotate_arr(sci_input_dqs[i],roll, xcen,ycen,is_dq=True)
+        derotated_err = derotate_arr(sci_input_errs[i],roll, xcen,ycen)
+        
+        derotated_dq_arr.append(derotated_dq)
+        derotated_err_arr.append(derotated_err)
+
+    # Collapse dq & error
+    dq_out_collapsed = np.where(np.all(derotated_dq_arr,axis=0),1,0)
+    err_out_collapsed = np.sqrt(np.sum(np.array(derotated_err_arr)**2,axis=0))
+
+    return dq_out_collapsed, err_out_collapsed
