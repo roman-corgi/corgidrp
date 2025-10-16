@@ -541,3 +541,232 @@ def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
     zp = app_mag + 2.5 * np.log10(ap_sum)
 
     return zp
+
+
+# def compute_QphiUphi(input_dataset):
+#     """
+#     Convert linear polarization components Q and U into azimuthal Stokes parameters Q_phi and U_phi.
+# 
+#     This step computes Q_phi and U_phi by rotating the Stokes Q and U frames according to the azimuthal 
+#     angle around the stellar position. The stellar position is read from the dataset header keywords 
+#     'STARLOCX' and 'STARLOCY', if present. If these keywords are not available, the image center is used 
+#     as the reference position. The resulting Q_phi and U_phi frames are appended to the dataset.
+# 
+#     Args:
+#         input_dataset (corgidrp.data.Dataset): 
+#             A dataset whose `all_data` attribute has shape [4, n, m], representing 
+#             the Stokes parameters [I, Q, U, V].
+# 
+#     Returns:
+#         processed_dataset (corgidrp.data.Dataset): 
+#             A copy of the input dataset with two additional frames appended: Q_phi and U_phi. 
+#     """
+#     # Copy input
+#     ds_in = input_dataset.copy(copy_data=True)
+# 
+#     # Convert dataset to array of the 4 Stokes frames [I,Q,U,V]
+#     all_data = ds_in.all_data
+#     if all_data.shape[0] != 4:
+#         raise ValueError(f"Expected [4,n,m], got {all_data.shape}")
+#     I_im, Q_im, U_im, V_im = all_data[0], all_data[1], all_data[2], all_data[3]
+#     n, m = I_im.shape
+#     y, x = np.mgrid[0:n, 0:m]
+# 
+#     # Build (x,y,value) cubes for consistency with compute functions
+#     I_cube = np.stack([x, y, I_im], axis=-1)
+#     Q_cube = np.stack([x, y, Q_im], axis=-1)
+#     U_cube = np.stack([x, y, U_im], axis=-1)
+#     V_cube = np.stack([x, y, V_im], axis=-1)
+# 
+#     # Get host star position from header if available, otherwise use image center
+#     header = getattr(ds_in.frames[0], "ext_hdr", {})
+#     x_I = I_cube[..., 0]
+#     y_I = I_cube[..., 1]
+#     if header is not None and "STARLOCX" in header and "STARLOCY" in header:
+#         x_star = header["STARLOCX"]
+#         y_star = header["STARLOCY"]
+#     else:
+#         x_star = 0.5 * (x_I.min() + x_I.max())
+#         y_star = 0.5 * (y_I.min() + y_I.max())
+#     # or
+#     # else:
+#     #     ValueError(f'STARLOCX or/and STARLOCY do not exist in the header.')
+# 
+#     # Polar angle relative to star position
+#     phi = np.arctan2(y_I - y_star, x_I - x_star)
+# 
+#     # Compute: Q_phi, U_phi
+#     q = Q_cube[..., 2]
+#     u = U_cube[..., 2]
+#     qphi = -q * np.cos(2*phi) - u * np.sin(2*phi)
+#     uphi =  q * np.sin(2*phi) - u * np.cos(2*phi)
+# 
+#     Qphi_im = qphi
+#     Uphi_im = uphi
+# 
+#     def _new_frame_from(arr, in_frames):
+#         """
+#         Helper to create a new frame:
+#           * Copy headers (pri_hdr, ext_hdr, err_hdr).
+#           * Assign data, error, dq arrays.
+#           * No new header entries are added.
+#         """
+#         try:
+#             FrameType = type(in_frames)
+#             f = FrameType()
+#         except Exception:
+#             from types import SimpleNamespace as _SN
+#             f = _SN()
+# 
+#         f.data = arr.copy()
+#         f.err  = np.zeros_like(arr, dtype=float)
+#         f.dq   = np.zeros_like(arr, dtype=np.uint16)
+# 
+#         f.pri_hdr = dict(getattr(in_frames, "pri_hdr", {}) or {})
+#         f.ext_hdr = dict(getattr(in_frames, "ext_hdr", {}) or {})
+#         f.err_hdr = dict(getattr(in_frames, "err_hdr", {}) or {})
+# 
+#         return f
+# 
+#     # Create new Qphi, Uphi frames
+#     qphi_frame = _new_frame_from(Qphi_im, ds_in.frames[1])
+#     uphi_frame = _new_frame_from(Uphi_im, ds_in.frames[2])
+# 
+#     # Build new Dataset with original + new frames ([I, Q, U, V] + [Qphi, Uphi])
+#     processed_dataset = Dataset(list(ds_in.frames) + [qphi_frame, uphi_frame])
+# 
+#     # Record history for reproducibility
+#     processed_dataset.update_after_processing_step(
+#         history_entry="Appended Q_phi and U_phi."
+#     )
+#     return processed_dataset
+
+
+def compute_QphiUphi(image, x_center=None, y_center=None):
+    """
+    Compute Q_phi and U_phi from Stokes Q and U, returning an Image with shape [6, n, m]:
+    [I, Q, U, V, Q_phi, U_phi].
+
+    Args:
+        image: Image
+            Input image whose `data` is shaped [4, n, m] as [I, Q, U, V]. If the extension
+            header contains 'STARLOCX' and 'STARLOCY', these are used as the stellar center.
+        x_center: float or None
+            Optional override for the x-coordinate of the center. Used only when the header
+            does not provide 'STARLOCX'. If both header and this argument are missing, the
+            image center ( (m-1)/2 ) is used.
+        y_center: float or None
+            Optional override for the y-coordinate of the center. Used only when the header
+            does not provide 'STARLOCY'. If both header and this argument are missing, the
+            image center ( (n-1)/2 ) is used.
+
+    Returns:
+        Image: A copy of the input image with data expanded to [6, n, m] as
+            [I, Q, U, V, Q_phi, U_phi]. The `err` array is expanded to match and the
+            uncertainties for Q_phi/U_phi are propagated from Q and U (assuming no covariance).
+            The `dq` planes are expanded to match; if I/Q/U/V have identical dq, that mask is
+            copied to both Q_phi and U_phi, otherwise Q_phi inherits Q’s dq and U_phi inherits
+            U’s dq.
+    """
+
+    # copy of the input image
+    out = image.copy(copy_data=True)
+
+    data = out.data
+    I, Q, U, V = data
+    n, m = I.shape
+
+    ext_hdr = getattr(out, "ext_hdr", None)
+
+    # Determine center coordinates: header > input args > image center (print which is used)
+    if ext_hdr is not None and ("STARLOCX" in ext_hdr) and ("STARLOCY" in ext_hdr):
+        cx = float(ext_hdr["STARLOCX"])
+        cy = float(ext_hdr["STARLOCY"])
+        print(f"Using header STARLOCX={cx}, STARLOCY={cy} as center.")
+    elif (x_center is not None) and (y_center is not None):
+        cx = float(x_center)
+        cy = float(y_center)
+        print(f"Header missing, using provided x_center={cx}, y_center={cy} as center.")
+    else:
+        cx = (m - 1) * 0.5
+        cy = (n - 1) * 0.5
+        print(f"Header and input center missing, falling back to image center ({cx}, {cy}).")
+
+    # Polar angle φ and rotation (use float64 to reduce numerical errors)
+    y_idx, x_idx = np.mgrid[0:n, 0:m]
+    phi = np.arctan2(y_idx - cy, x_idx - cx)
+
+    c2 = np.cos(2.0 * phi, dtype=np.float64)
+    s2 = np.sin(2.0 * phi, dtype=np.float64)
+
+    Qf = Q.astype(np.float64, copy=False)
+    Uf = U.astype(np.float64, copy=False)
+
+    Q_phi = -Qf * c2 - Uf * s2
+    U_phi =  Qf * s2 - Uf * c2
+
+    # Cast back to the same dtype as input data
+    Q_phi = Q_phi.astype(data.dtype, copy=False)
+    U_phi = U_phi.astype(data.dtype, copy=False)
+
+    # Expand data to [6,n,m]
+    out.data = np.concatenate([data, Q_phi[None, ...], U_phi[None, ...]], axis=0)
+
+    # Ensure err / dq match the data (create if missing, or add 2 new planes)
+    nplanes = out.data.shape[0]
+
+    # --- err propagation ---
+    if out.err is None:
+        out.err = np.zeros((nplanes, n, m), dtype=out.data.dtype)
+    else:
+        if out.err.shape[0] >= 3 and out.err.shape[1:] == (n, m):
+            sigma_Q = out.err[1].astype(np.float64)
+            sigma_U = out.err[2].astype(np.float64)
+            var_Qphi = (c2**2) * sigma_Q**2 + (s2**2) * sigma_U**2
+            var_Uphi = (s2**2) * sigma_Q**2 + (c2**2) * sigma_U**2
+
+            err_Qphi = np.sqrt(var_Qphi).astype(out.data.dtype)
+            err_Uphi = np.sqrt(var_Uphi).astype(out.data.dtype)
+
+            out.err = np.concatenate([out.err,
+                                    err_Qphi[None, ...],
+                                    err_Uphi[None, ...]], axis=0)
+        else:
+            out.err = np.zeros((nplanes, n, m), dtype=out.data.dtype)
+
+    # --- dq alignment & inheritance ---
+    if getattr(out, "dq", None) is None:
+        # dq is nothing -> create zeros with correct shape
+        out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
+    elif out.dq.ndim != 3 or out.dq.shape[1:] != (n, m):
+        # shape mismatch -> reset
+        out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
+    else:
+        # if we still have only I,Q,U,V planes, append two new planes
+        if out.dq.shape[0] == nplanes - 2 and out.dq.shape[0] >= 4:
+            dq_Q = out.dq[1].astype(np.uint16, copy=False)
+            dq_U = out.dq[2].astype(np.uint16, copy=False)
+            dq_or = (dq_Q | dq_U).astype(np.uint16)
+            out.dq = np.concatenate([out.dq, dq_or[None, ...], dq_or[None, ...]], axis=0)
+    
+        # if already 6 planes, (re)compute Q_phi/U_phi dq for correctness
+        elif out.dq.shape[0] == nplanes:
+            out.dq[4] = (out.dq[1].astype(np.uint16) | out.dq[2].astype(np.uint16))
+            out.dq[5] = (out.dq[1].astype(np.uint16) | out.dq[2].astype(np.uint16))
+    
+        else:
+            # anything else -> reset
+            out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
+
+    # Add HISTORY record
+    msg = f"Computed Q_phi/U_phi with center=({cx:.6f},{cy:.6f}); output data shape {out.data.shape}."
+    print(msg)
+
+    if ext_hdr is not None:
+        try:
+            ext_hdr['HISTORY'] = msg
+        except Exception:
+            pass
+
+    return out
+
