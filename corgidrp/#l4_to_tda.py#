@@ -545,35 +545,28 @@ def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
 
 def calc_polarimetry_product(Image):
     """
-    Calculate polarization quantities (fractional polarization, SNR, EVPA)
-    and their uncertainties from Stokes I, Q, U maps.
+    Calculate polarization quantities (p, psnr, evpa) and their uncertainties
+    from Stokes I, Q, U maps.
 
     Parameters
     ----------
     Image : object
         Object with attributes:
-            data[0][0] : ndarray
-                Stokes I
-            data[0][1] : ndarray
-                Stokes Q
-            data[0][2] : ndarray
-                Stokes U
-            err[0][0] : ndarray
-                I error
-            err[0][1] : ndarray
-                Q error
-            err[0][2] : ndarray
-                U error
+            data[0][0] = I
+            data[0][1] = Q
+            data[0][2] = U
+            err[0][0] = Ierr
+            err[0][1] = Qerr
+            err[0][2] = Uerr
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray, np.ndarray]
-        p_map : ndarray
-            2 x H x W array [p, perr]
-        psnr : ndarray
-            H x W array of polarization SNR
-        evpa_map : ndarray
-            2 x H x W array [evpa, evpa_err] in degrees
+    p_map : ndarray
+        2 x H x W array [p, perr]
+    psnr : ndarray
+        H x W array of polarization SNR
+    evpa_map : ndarray
+        2 x H x W array [evpa, evpa_err] in degrees
     """
 
     # Extract Stokes parameters
