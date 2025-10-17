@@ -210,15 +210,14 @@ def test_mueller_matrix_cal():
         pol45.data[center_right45[1]-gauss_array_shape[1]//2:center_right45[1]+gauss_array_shape[1]//2,
                    center_right45[0]-gauss_array_shape[0]//2:center_right45[0]+gauss_array_shape[0]//2] += gauss4
         
-        pol0.err = (np.sqrt(pol0.data)+read_noise)[None,:]
-        pol45.err = (np.sqrt(pol45.data)+read_noise)[None,:]
+        pol0.err = (np.sqrt(pol0.data+read_noise**2))[None,:]
+        pol45.err = (np.sqrt(pol45.data+read_noise**2))[None,:]
 
         image_list.append(pol0)
         image_list.append(pol45)
     mock_dataset = data.Dataset(image_list)
     mock_dataset = l2b_to_l3.divide_by_exptime(mock_dataset)
-    # mock_dataset = l2b_to_l3.split_image_by_polarization_state(mock_dataset)
-    # mock_dataset = l2b_to_l3.update_to_l3(mock_dataset)
+
     #Run the Mueller matrix calibration function
     mueller_matrix = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
