@@ -1,5 +1,4 @@
 import os
-import glob
 import pickle
 import pytest
 import numpy as np
@@ -138,12 +137,8 @@ def test_pickling():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    create_dark_calib_files(filedir=datadir)
-
     ####### test data architecture
-    dark_filenames = glob.glob(os.path.join(datadir, "simcal_dark*.fits"))
-
-    dark_dataset = Dataset(dark_filenames)
+    dark_dataset = create_dark_calib_files(filedir=datadir)
 
     pickle_filename = os.path.join(datadir, "simcal_dataset.pkl")
     pickled = pickle.dumps(dark_dataset)
