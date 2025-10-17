@@ -232,13 +232,12 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
         if os.path.isfile(file_path):
             os.remove(file_path)
     
-    # Initialize a connection to the calibration database
+
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
-    # remove any existing caldb file so that CalDB() creates a new one
+
     if os.path.exists(corgidrp.caldb_filepath):
         os.remove(tmp_caldb_csv)
-    this_caldb = caldb.CalDB() # connection to cal DB
     
     # Create input_l2b subfolder for input data
     input_l2b_dir = os.path.join(spec_prism_outputdir, 'input_l2b')
