@@ -544,63 +544,59 @@ def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
 
 
 def calc_polarimetry_product(Image):
+    """Compute fractional polarization, SNR, and EVPA from Stokes maps.
+
+    Args:
+        Image (object): Object containing Stokes maps and uncertainties.
+
+    Returns:
+        tuple:
+            - p_map (ndarray): 2 x H x W array [p, perr]
+            - psnr (ndarray): H x W polarization SNR
+            - evpa_map (ndarray): 2 x H x W array [EVPA, EVPA_err] in degrees
+
+    Raises:
+        AttributeError: If required attributes are missing.
+        ValueError: If Stokes maps have inconsistent shapes.
     """
-    Calculate polarization quantities (fractional polarization, SNR, EVPA)
-    and their uncertainties from Stokes I, Q, U maps.
-
-    Parameters
-    ----------
-    Image : object
-        Object with attributes:
-            data[0][0] : ndarray
-                Stokes I
-            data[0][1] : ndarray
-                Stokes Q
-            data[0][2] : ndarray
-                Stokes U
-            err[0][0] : ndarray
-                I error
-            err[0][1] : ndarray
-                Q error
-            err[0][2] : ndarray
-                U error
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray, np.ndarray]
-        p_map : ndarray
-            2 x H x W array [p, perr]
-        psnr : ndarray
-            H x W array of polarization SNR
-        evpa_map : ndarray
-            2 x H x W array [evpa, evpa_err] in degrees
-    """
-
     # Extract Stokes parameters
-    I = Image.data[0][0]
-    Q = Image.data[0][1]
-    U = Image.data[0][2]
-    
-    Ierr = Image.err[0][0]
-    Qerr = Image.err[0][1]
-    Uerr = Image.err[0][2]
-    
-    # Polarized intensity and its error
+    try:
+        I = Image.data[0][0]
+        Q = Image.data[0][1]
+        U = Image.data[0][2]
+
+        Ierr = Image.err[0][0]
+        Qerr = Image.err[0][1]
+        Uerr = Image.err[0][2]
+    except AttributeError as e:
+        raise AttributeError("Image object must have 'data' and 'err' attributes.") from e
+    except IndexError as e:
+        raise ValueError("Image.data and Image.err must have shape [0][0..2].") from e
+
+    # Check shapes
+    if I.shape != Q.shape or I.shape != U.shape:
+        raise ValueError("Stokes I, Q, U maps must have the same shape.")
+
+    # Polarized intensity and its absolute error
     P = np.sqrt(Q**2 + U**2)
     Perr = np.sqrt((Q * Qerr)**2 + (U * Uerr)**2) / np.maximum(P, 1e-10)
-    Perr*= P  # scale back to absolute error
-    
+    Perr *= P  # scale back to absolute error
+
     # Fractional polarization and its error
     p = P / np.maximum(I, 1e-10)
     perr = np.sqrt((Perr / np.maximum(I, 1e-10))**2 + (P * Ierr / np.maximum(I, 1e-10)**2)**2)
-    
+
     # Polarization angle (EVPA) and its uncertainty
     evpa = 0.5 * np.arctan2(U, Q)  # radians
     evpa_err = 0.5 * np.sqrt((Q * Uerr)**2 + (U * Qerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
     evpa = np.degrees(evpa)
     evpa_err = np.degrees(evpa_err)
-    
+
     # Polarization SNR
     psnr = p / np.maximum(perr, 1e-10)
-    
-    return np.stack([p, perr]), psnr, np.stack([evpa, evpa_err])
+
+    # Stack results
+    p_map = np.stack([p, perr])
+    evpa_map = np.stack([evpa, evpa_err])
+
+    return p_map, psnr, evpa_map
