@@ -70,6 +70,7 @@ all_steps = {
     "compute_psf_centroid": corgidrp.spec.compute_psf_centroid,
     "calibrate_dispersion_model": corgidrp.spec.calibrate_dispersion_model,
     "fit_line_spread_function": corgidrp.spec.fit_line_spread_function,
+    "split_image_by_polarization_state": corgidrp.l2b_to_l3.split_image_by_polarization_state,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
