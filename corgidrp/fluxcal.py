@@ -671,6 +671,7 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
         phot_kwargs=phot_kwargs
     )
     
+    #Optionally subtract a local background 
     if phot_kwargs.get('background_sub', False):
         ap_sum_beam_1, ap_sum_err_beam_1, back_beam_1 = result_beam_1
         ap_sum_beam_2, ap_sum_err_beam_2, back_beam_2 = result_beam_2
@@ -713,7 +714,7 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
         input_dataset=dataset
     )
 
-    # If background subtraction was performed, set the LOCBACK keyword.
+    # If local background subtraction was performed, set the LOCBACK keyword.
     if phot_kwargs.get('background_sub', False):
         #average medium background photoelectrons from both beams
         back = 0.5 * (back_beam_1 + back_beam_2)
@@ -731,22 +732,23 @@ def measure_aper_flux_pol(image,
                           image_center_y=512,
                           separation_diameter_arcsec=7.5, 
                           alignment_angle=None,
-                          phot_kwargs=None):
+                          phot_kwargs=None,
+                          pixel_scale = 0.0218):
     """
     Measure the individual flux from both polarized images in a polarimetric observation
     using aperture photometry.
 
     Parameters:
         image (corgidrp.data.Image): the source image.
-        image_center_x (int): X pixel coordinate of where the two wollaston spots are
-        image_center_y (int): Y pixel coordinate of where the two wollaston spots are 
-            centered around
+        image_center_x (int): X pixel coordinate of where the two wollaston spots are centered around
+        image_center_y (int): Y pixel coordinate of where the two wollaston spots are centered around
         separation_diameter_arcsec (optional, float): Distance between the centers of the two polarized images on the detector in arcsec,
             default for Roman CGI is 7.5"
         alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
             defaults to 0 for WP1 and 45 for WP2
         phot_kwargs (dict, optional): A dictionary of keyword arguments controlling the aperture
             photometry function. See calibrate_pol_fluxcal_aper for accepted keywords.
+        pixel_scale (float): pixel scale in arcsec/pixel, default for Roman CGI is 0.0218"/pix
 
     Returns:
         tuple: (result_beam_1, result_beam_2) where each result is either (flux, flux_err) or (flux, flux_err, back)
@@ -768,8 +770,9 @@ def measure_aper_flux_pol(image,
         else:
             alignment_angle = 45
     angle_rad = alignment_angle * (np.pi / 180)
-    displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
-    displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
+
+    displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * pixel_scale)))
+    displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * pixel_scale)))
     #estimate where the centers are based on alignment angle and separation
     centering_initial_guess_beam_1 = (image_center[0] - displacement_x, image_center[1] + displacement_y)
     centering_initial_guess_beam_2 = (image_center[0] + displacement_x, image_center[1] - displacement_y)
