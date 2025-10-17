@@ -123,7 +123,7 @@ def test_find_star_polarimetry():
     # Set the star center position for injection of satellite spots
 
     # Add small offset and rotation in the injected data
-    injected_position = [(1024 // 4  + 2, 1024 // 2  - 1), (3*1024 // 4  + 2, 1024 // 2  - 1)]
+    injected_position = [(2, - 1), (2, - 1)]
 
     satellite_spot_angle_offset = 3
     guess_angle_offset = 0
@@ -141,10 +141,13 @@ def test_find_star_polarimetry():
             left_image_value=1, 
             right_image_value=2,
             image_shape=(1024,1024),
+            bg_sigma=1.0,
+            bg_offset=10.0,
+            gaussian_fwhm=5.0,
             separation=separation,
             star_center=injected_position,
             angle_offset=satellite_spot_angle_offset,
-            amplitude_multiplier=1000)
+            amplitude_multiplier=100)
 
         image_WP1= mocks.create_mock_l2b_polarimetric_image(
             dpamname='POL0', 
@@ -158,10 +161,13 @@ def test_find_star_polarimetry():
             left_image_value=1, 
             right_image_value=2,
             image_shape=(1024,1024),
+            bg_sigma=1.0,
+            bg_offset=10.0,
+            gaussian_fwhm=5.0,
             separation=separation,
             star_center=injected_position,
             angle_offset=satellite_spot_angle_offset,
-            amplitude_multiplier=1000)
+            amplitude_multiplier=100)
 
         image_WP2 = mocks.create_mock_l2b_polarimetric_image(
             dpamname='POL45', 
@@ -172,7 +178,6 @@ def test_find_star_polarimetry():
         input_dataset = data.Dataset([image_WP1_sp, image_WP1, image_WP2_sp, image_WP2])
         input_dataset_autocrop = l2b_to_l3.split_image_by_polarization_state(input_dataset)
 
-        # Set initial guesses for angle offset
         thetaOffsetGuess = guess_angle_offset
 
         dataset_with_center = find_star(
@@ -182,9 +187,9 @@ def test_find_star_polarimetry():
         measured_x, measured_y = (dataset_with_center.frames[0].ext_hdr['STARLOCX'],
                                 dataset_with_center.frames[0].ext_hdr['STARLOCY'])
 
-        assert np.isclose(injected_position[0], measured_x, atol=0.1), \
+        assert np.isclose(dataset_with_center.frames[0].data[0].shape[0]//2 + injected_position[0][0], measured_x, atol=0.1), \
             f"{mode}. Expected {injected_position[0]}, got {measured_x}"
-        assert np.isclose(injected_position[1], measured_y, atol=0.1), \
+        assert np.isclose(dataset_with_center.frames[0].data[0].shape[1]//2 + injected_position[0][1], measured_y, atol=0.1), \
             f"{mode}. Expected {injected_position[1]}, got {measured_y}"
 
     corgidrp.track_individual_errors = old_err_tracking

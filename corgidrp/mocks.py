@@ -4477,8 +4477,8 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
             are aligned with respect to the horizontal. Defaults to 0 for POL0 and 45 for POL45.
         image_shape (tuple of int, optional): The (ny, nx) shape of the detector array.
         star_center (list of tuple of float, optional):  
-            Absolute (x, y) position in the image at which the four Gaussians will be centered for each slice.
-            If None, defaults to the image center (nx//2, ny//2).
+            displacement (dx, dy) from the center of each channel at which the four Gaussians will be centered for each slice.
+            If None, defaults to the center of each channel.
         bg_sigma (float, optional): Standard deviation of the background Gaussian noise applied 
             to the entire image.
         bg_offset (float, optional): Constant background level added to the entire image.
@@ -4545,10 +4545,11 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     y_indices, x_indices = np.indices(image_shape)
 
     for idx, center in enumerate([center_left, center_right]):
-        if star_center is None:
-            center_x, center_y = center
-        else:
-            center_x, center_y = star_center[idx]
+        center_x, center_y = center
+        if star_center is not None:
+            center_x  = center_x + star_center [idx][0]
+            center_y = center_y + star_center[idx][1]
+
         for angle in angles_rad:
             dx = separation * np.cos(angle)
             dy = separation * np.sin(angle)
