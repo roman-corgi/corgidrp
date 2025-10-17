@@ -31,6 +31,9 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
         path_to_pol_ref_file (str): The path to the polarization reference file. 
             Default is "./data/stellar_polarization_database.csv".
         svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
+    
+    Returns:
+        mueller_matrix_obj (MuellerMatrix or NDMuellerMatrix): The generated Mueller Matrix object.
     '''
 
     dataset = input_dataset.copy()
