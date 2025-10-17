@@ -4735,10 +4735,14 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     #determine radius of the images
     if observing_mode == 'NFOV':
         cfamname = '1F'
-        radius = int(round((9.7 * ((0.5738 * 1e-6) / primary_d) * 206265) / pixel_scale))
+        outer_radius_lambda_over_d = 9.7
+        central_wavelength = 0.5738e-6 #meters
+        radius = int(round((outer_radius_lambda_over_d * ((central_wavelength) / primary_d) * 206265) / pixel_scale))
     elif observing_mode == 'WFOV':
         cfamname = '4F'
-        radius = int(round((20.1 * ((0.8255 * 1e-6) / primary_d) * 206265) / pixel_scale))
+        outer_radius_lambda_over_d = 20.1
+        central_wavelength = 0.8255e-6 #meters
+        radius = int(round((outer_radius_lambda_over_d * ((central_wavelength) / primary_d) * 206265) / pixel_scale))
     else:
         cfamname = '1F'
         radius = int(round(1.9 / pixel_scale))
