@@ -9,7 +9,7 @@ import argparse
 import warnings
 from astropy.io.fits.verify import VerifyWarning
 
-from corgidrp.data import Dataset, LineSpread
+from corgidrp.data import Dataset, LineSpread, DispersionModel
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
