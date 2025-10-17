@@ -1,4 +1,5 @@
 import numpy as np
+from astropy.io import fits
 from corgidrp import data
 from corgidrp.l4_to_tda import calc_polarimetry_product
 
