@@ -18,6 +18,8 @@ from scipy.ndimage import shift
 from astropy.io import fits
 from scipy.ndimage import generic_filter
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
+from corgidrp import pol
+from corgidrp import fluxcal
 
 
 def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
@@ -367,7 +369,7 @@ def do_psf_subtraction(input_dataset,
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
         measure_klip_thrupt (bool, optional): Whether to measure KLIP throughput via injection-recovery. Separations 
-            and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU']. 
+            and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU'].
             Defaults to True.
         measure_1d_core_thrupt (bool, optional): Whether to measure the core throughput as a function of separation. 
             Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
@@ -536,9 +538,18 @@ def do_psf_subtraction(input_dataset,
         thrupt_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
         # wrt FPM's center 
-        thrupt_hdr['COMMENT'] = ('KLIP Throughput and retrieved FWHM as a function of separation for each KLMode '
-                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2]). The last axis contains the'
-                                'KL throughput in the 0th index and the FWHM in the 1st index')
+        # thrupt_hdr['COMMENT'] = ('KLIP Throughput and retrieved FWHM as a function of separation for each KLMode '
+        #                         '(r, KL1, KL2, ...) = (data[0], data[1], data[2]). The last axis contains the'
+        #                         'KL throughput in the 0th index and the FWHM in the 1st index')
+        thrupt_hdr['COMMENT'] = ('array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps '
+            'is the number of separations (in pixels from the star center) sampled. Index 0 contains the separations sampled (twice, to fill up the last axis of dimension 2), and each following index '
+            'contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode '
+            'truncation choice. An example for 4 KL mode truncation choices, using r1 and r2 for separations and n_seps=2: '
+            '[ [[r1,r1],[r2,r2]], '
+            '[[KL_thpt_r1_KL1, FWHM_r1_KL1],[KL_thpt_r2_KL1, FWHM_r2_KL1]], '
+            '[[KL_thpt_r1_KL2, FWHM_r1_KL2],[KL_thpt_r2_KL2, FWHM_r2_KL2]], '
+            '[[KL_thpt_r1_KL3, FWHM_r1_KL3],[KL_thpt_r2_KL3, FWHM_r2_KL3]], '
+            '[[KL_thpt_r1_KL4, FWHM_r1_KL4],[KL_thpt_r2_KL4, FWHM_r2_KL4]] ]')
         thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. KLIP throughput: values between 0 and 1. FWHM: EXCAM pixels'
         thrupt_hdu_list = [fits.ImageHDU(data=klip_thpt, header=thrupt_hdr, name='KL_THRU')]
         
@@ -585,7 +596,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
   
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level) - now handles pol datasets shapes
         use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
 	    rot_center: 'im_center', 'starloc', or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header. 
 
@@ -593,18 +604,19 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         corgidrp.data.Dataset: North is up, East is left
     
     """
-
     # make a copy 
     processed_dataset = input_dataset.copy()
-
     new_all_data = []; new_all_err = []; new_all_dq = []
     for processed_data in processed_dataset:
-
         ## image extension ##
         sci_hd = processed_data.ext_hdr
         sci_data = processed_data.data
-        ylen, xlen = sci_data.shape
-
+        # See if it's pol data (each array is 3D since has two pol modes)
+        is_pol = sci_data.ndim == 3
+        if is_pol:
+            num_pols, ylen, xlen = sci_data.shape # set number of pol modes (nominally 2)
+        else:
+            ylen, xlen = sci_data.shape # for regular data
         # define the center for rotation
         if rot_center == 'im_center':
             xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
@@ -618,71 +630,113 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
             xcen = rot_center[0]
             ycen = rot_center[1]
 
-        # look for WCS solutions
+            # look for WCS solutions
         if use_wcs is True:
-            astr_hdr = WCS(sci_hd)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+                astr_hdr = WCS(sci_hd)
             CD1_2 = sci_hd['CD1_2']
             CD2_2 = sci_hd['CD2_2']
-            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
-
+            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2))  # Compute North Position Angle from the WCS solutions
         else:
             warnings.warn('use "ROLL" instead of WCS to estimate the north position angle')
             astr_hdr = None
             # read the roll angle parameter, assuming this info is recorded in the primary header as requested
             roll_angle = processed_data.pri_hdr['ROLL']
 
-        # derotate
-        sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        # derotate - handle 2D or 3D
+        if is_pol:
+            # one header applies to all pols. Have to rotate both pol images, but header only gets updated once in loop
+            sci_derot = np.stack([rotate(sci_data[i], roll_angle, (xcen, ycen), astr_hdr=astr_hdr if i == 0 else None)
+                                  for i in range(num_pols)])
+        else:
+            sci_derot = rotate(sci_data, roll_angle, (xcen, ycen), astr_hdr=astr_hdr)  # astr_hdr is corrected at above lines
         new_all_data.append(sci_derot)
-
         log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
-        sci_hd['HISTORY'] = log 
+        sci_hd['HISTORY'] = log
 
         # update WCS solutions
         if use_wcs:
-            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0,0]
-            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0,1]
-            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1,0]
-            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1,1]
+            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0, 0]
+            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0, 1]
+            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1, 0]
+            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1, 1]
         #############
-
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = np.expand_dims(rotate(err_data[0],roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
+        if is_pol:
+            # err has shape (num_err_layers, num_pols, ylen, xlen)
+            err_derot = np.stack([rotate(err_data[0, i], roll_angle, (xcen, ycen))
+                                  for i in range(num_pols)])
+            err_derot = np.expand_dims(err_derot, axis=0)  # Add back error layer dimension
+        else:
+            err_derot = np.expand_dims(rotate(err_data[0], roll_angle, (xcen, ycen)), axis=0)
         new_all_err.append(err_derot)
-        #############
 
+        #############
         ## HDU DQ ##
-        # all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
         dq_data = processed_data.dq
-        if xcen != xlen/2 or ycen != ylen/2:
+
+        # pol version has to loop through both images
+        if is_pol:
+
+            dq_derot_planes = []
+            for plane_idx in range(num_pols):
+                dq_pol = dq_data[plane_idx]
+                if xcen != xlen / 2 or ycen != ylen / 2:
+                    # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
+                    xshift = xcen - xlen / 2;
+                    yshift = ycen - ylen / 2
+                    pad_x = int(np.ceil(abs(xshift)));
+                    pad_y = int(np.ceil(abs(yshift)))
+                    dq_pol_padded = np.pad(dq_pol, pad_width=((pad_y, pad_y), (pad_x, pad_x)), mode='constant',
+                                             constant_values=0)
+                    dq_pol_padded_shifted = shift(dq_pol_padded, (-yshift, -xshift), order=0, mode='constant',
+                                                    cval=0)
+                    crop_x = slice(pad_x, pad_x + xlen);
+                    crop_y = slice(pad_y, pad_y + ylen)
+                    dq_pol_derot = shift(
+                        rotate_scipy(dq_pol_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False,
+                                     cval=0), (yshift, xshift), order=0, mode='constant', cval=0)[crop_y, crop_x]
+                else:
+                    dq_pol_derot = rotate_scipy(dq_pol, -roll_angle, order=0, mode='constant', reshape=False,
+                                                  cval=0)
+                dq_derot_planes.append(dq_pol_derot)
+
+            dq_derot = np.stack(dq_derot_planes)
+
+        else: #non pol version
+            if xcen != xlen / 2 or ycen != ylen / 2:
                 # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
                 # calculate shift values
-                xshift = xcen-xlen/2; yshift = ycen-ylen/2
+                xshift = xcen - xlen / 2;
+                yshift = ycen - ylen / 2
 
                 # pad and shift
-                pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
-                dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=0)
-                dq_data_padded_shifted = shift(dq_data_padded,(-yshift,-xshift),order=0,mode='constant',cval=0)
-
+                pad_x = int(np.ceil(abs(xshift)));
+                pad_y = int(np.ceil(abs(yshift)))
+                dq_data_padded = np.pad(dq_data, pad_width=((pad_y, pad_y), (pad_x, pad_x)), mode='constant',
+                                        constant_values=0)
+                dq_data_padded_shifted = shift(dq_data_padded, (-yshift, -xshift), order=0, mode='constant', cval=0)
                 # define slices for cropping
                 crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
 
                 # rotate (invserse direction to pyklip.rotate), re-shift, and crop
-                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=0),\
-                 (yshift,xshift),order=0,mode='constant',cval=0)[crop_y,crop_x]
-        else:
-                # simply rotate 
+                dq_derot = shift(
+                    rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False,
+                                 cval=0), \
+                    (yshift, xshift), order=0, mode='constant', cval=0)[crop_y, crop_x]
+            else:
+                # simply rotate
                 dq_derot = rotate_scipy(dq_data, -roll_angle, order=0, mode='constant', reshape=False, cval=0)
 
         new_all_dq.append(dq_derot)
         ############
-
     history_msg = 'North is Up and East is Left'
-    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
-                                                   new_all_dq=np.array(new_all_dq))
+    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data),
+                                                   new_all_err=np.array(new_all_err), new_all_dq=np.array(new_all_dq))
 
-    return processed_dataset 
+    return processed_dataset
 
 
 def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
@@ -874,6 +928,198 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
     return dataset
 
+def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_mueller_matrix_cal):
+    """
+    Takes in polarimetric L3 images and their unocculted polarimetric observations,
+    computes and subtracts off the stellar polarization component from each image
+    TODO: make issue about error propagation, need to check that it is done correctly
+          and make changes if necessary to ensure the errors are accurate
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
+                                               taken with both wollastons at the same roll angle. All frames for the
+                                               same target star must have the same x and y dimensions
+        system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
+        nd_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
+
+    Returns:
+        corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
+    """
+    
+    # check that the data is at the L3 level, and only polarimetric observations are inputted
+    dataset = input_dataset.copy()
+    for frame in dataset:
+        if frame.ext_hdr['DATALVL'] != "L3":
+            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(frame.filename, frame.ext_hdr['DATALVL'])
+            raise ValueError(err_msg)
+        if frame.ext_hdr['DPAMNAME'] not in ['POL0', 'POL45']:
+            raise ValueError("{0} must be a polarimetric observation".format(frame.filename))
+        
+    # split the dataset by the target star
+    split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=['TARGET'])
+
+    # process each target star
+    updated_frames = []
+    for target_dataset in split_datasets:
+        # split further based on if the observation is unocculted or not, and the wollaston used
+        coron_frames = []
+        unocculted_pol0_frames = []
+        unocculted_pol45_frames = []
+        target_name = target_dataset.frames[0].pri_hdr['TARGET']
+        for frame in target_dataset:
+            if frame.ext_hdr['FPAMNAME'] == 'ND225':
+                # unocculted observations, separate by wollaston
+                if frame.ext_hdr['DPAMNAME'] == 'POL0':
+                    unocculted_pol0_frames.append(frame)
+                else:
+                    unocculted_pol45_frames.append(frame)
+            else:
+                # coronagraphic observation
+                coron_frames.append(frame)
+        
+        # make sure input dataset contains unocculted frames taken with both wollastons
+        if len(unocculted_pol0_frames) == 0:
+            raise ValueError(f"Input dataset must contain unocculted POL0 frame(s) for target {target_name}")
+        if len(unocculted_pol45_frames) == 0:
+            raise ValueError(f"Input dataset must contain unocculted POL45 frame(s) for target {target_name}")
+        
+        unocculted_pol0_img = unocculted_pol0_frames[0]
+        unocculted_pol45_img = unocculted_pol45_frames[0]
+
+        # construct image for each polarization to pass into aper_phot function in order to obtain flux
+        I_0_img = data.Image(unocculted_pol0_img.data[0], 
+                             err=unocculted_pol0_img.err[:,0,:,:], 
+                             pri_hdr=unocculted_pol0_img.pri_hdr.copy(),
+                             ext_hdr=unocculted_pol0_img.ext_hdr.copy())
+        I_90_img = data.Image(unocculted_pol0_img.data[1], 
+                             err=unocculted_pol0_img.err[:,1,:,:], 
+                             pri_hdr=unocculted_pol0_img.pri_hdr.copy(),
+                             ext_hdr=unocculted_pol0_img.ext_hdr.copy())
+        I_45_img = data.Image(unocculted_pol45_img.data[0], 
+                             err=unocculted_pol45_img.err[:,0,:,:], 
+                             pri_hdr=unocculted_pol45_img.pri_hdr.copy(),
+                             ext_hdr=unocculted_pol45_img.ext_hdr.copy())
+        I_135_img = data.Image(unocculted_pol45_img.data[1], 
+                             err=unocculted_pol45_img.err[:,1,:,:], 
+                             pri_hdr=unocculted_pol45_img.pri_hdr.copy(),
+                             ext_hdr=unocculted_pol45_img.ext_hdr.copy())
+        # calculate flux
+        I_0_flux, I_0_flux_err = fluxcal.aper_phot(I_0_img, encircled_radius=5)
+        I_90_flux, I_90_flux_err = fluxcal.aper_phot(I_90_img, encircled_radius=5)
+        I_45_flux, I_45_flux_err = fluxcal.aper_phot(I_45_img, encircled_radius=5)
+        I_135_flux, I_135_flux_err = fluxcal.aper_phot(I_135_img, encircled_radius=5)
+        
+        ## construct I, Q, U components after instrument with ND filter
+        # I = I_0 +I_90
+        I_nd = I_0_flux + I_90_flux
+        # Q = I_0 - I_90
+        Q_nd = I_0_flux - I_90_flux
+        # U = I_45 - I_135
+        U_nd = I_45_flux - I_135_flux
+        # assume V is basically 0
+        V_nd = 0
+        # construct stokes vector after instrument with ND filter
+        S_nd = [I_nd, Q_nd, U_nd, V_nd]
+
+        # S_nd = M_nd * R(roll_angle) * S_in
+        # invert M_nd * R(roll_angle) to recover S_in
+        roll_angle = unocculted_pol0_img.pri_hdr['ROLL']
+        total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
+        system_nd_inv = np.linalg.pinv(total_system_mm_nd)
+        S_in = system_nd_inv @ S_nd
+
+        # propagate errors to find uncertainty of S_in
+        I_nd_var = I_0_flux_err**2 + I_90_flux_err**2
+        Q_nd_var = I_nd_var
+        U_nd_var = I_45_flux_err**2 + I_135_flux_err**2
+        v_nd_var = 0
+        # construct covariance matrix for S_nd
+        C_nd = np.array([[I_nd_var, 0, 0, 0],
+                         [0, Q_nd_var, 0, 0],
+                         [0, 0, U_nd_var, 0],
+                         [0, 0, 0, v_nd_var]])
+        # solve for covariance matrix of input stokes vector
+        # C_in = pinv(M) * C_nd * pinv(M)^T
+        #TODO: incoporate the error terms of the nd mueller matrix into this calculation if necessary 
+        C_in = system_nd_inv @ C_nd @ system_nd_inv.T
+        # contract back to just the variance
+        S_in_var = np.array([
+            C_in[0,0],
+            C_in[1,1],
+            C_in[2,2],
+            C_in[3,3]
+        ])
+        S_in_err = np.sqrt(S_in_var)
+
+        # subtract stellar polarization from the rest of the frames
+        for frame in coron_frames:
+            # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
+            frame_roll_angle = frame.pri_hdr['ROLL']
+            total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_roll_angle)
+            S_out = total_system_mm @ S_in
+            # construct I0, I45, I90, and I135 back from stokes vector
+            I_0_star = (S_out[0] + S_out[1]) / 2
+            I_90_star = (S_out[0] - S_out[1]) / 2
+            I_45_star = (S_out[0] + S_out[2]) / 2
+            I_135_star = (S_out[0] - S_out[2]) / 2
+
+            # propagate errors back to the new intensity terms for the unocculted star, assuming independence
+            # σS_out^2 = (σM^2)(I_in^2) + (M^2)(σI_in^2)
+            #TODO: double check if this is valid/invalid, change if necessary
+            system_mm_var = (system_mueller_matrix_cal.err[0])**2
+            system_mm_sq = (system_mueller_matrix_cal.data)**2
+            S_in_sq = S_in**2
+            S_out_var = (system_mm_var @ S_in_sq) + (system_mm_sq @ S_in_var)
+            I_0_star_err = np.sqrt(S_out_var[0] + S_out_var[1]) / 2
+            I_90_star_err = I_0_star_err
+            I_45_star_err = np.sqrt(S_out_var[0] + S_out_var[2]) / 2
+            I_135_star_err = I_45_star_err
+
+            with warnings.catch_warnings():
+                # catch divide by zero warnings
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                # calculate normalized difference for the specific wollaston
+                if frame.ext_hdr['DPAMNAME'] == 'POL0':
+                    normalized_diff = (I_0_star - I_90_star) / (I_0_star + I_90_star)
+                    # error
+                    normalized_diff_err = normalized_diff * np.sqrt(
+                        (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star - I_90_star))**2 +
+                        (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star + I_90_star))**2
+                    )
+                else:
+                    normalized_diff = (I_45_star - I_135_star) / (I_45_star + I_135_star)
+                    # error
+                    normalized_diff_err = normalized_diff * np.sqrt(
+                        (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star - I_135_star))**2 +
+                        (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star + I_135_star))**2
+                    )
+            # subtract
+            sum = frame.data[0] + frame.data[1]
+            diff = frame.data[0] - frame.data[1]
+            diff -= sum * normalized_diff
+            frame.data[0] = (sum + diff) / 2
+            frame.data[1] = (sum - diff) / 2
+
+            # propagate errors for the subtraction
+            sum_err = np.sqrt(frame.err[0,0,:,:]**2 + frame.err[0,1,:,:]**2)
+            diff_err = sum_err
+            diff_err = np.sqrt(diff_err**2 + 
+                               (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
+                        )
+            frame.err[0,0,:,:] = np.sqrt(sum_err**2 + diff_err**2) / 2
+            frame.err[0,1,:,:] = frame.err[0,0,:,:]
+            
+            updated_frames.append(frame)
+
+    updated_dataset = data.Dataset(updated_frames)
+    history_msg = f"Subtracted Apparent Stellar Polarization, stellar Q value: {S_in[1]}, stellar Q err: {S_in_err[1]}, \
+    stellar U value: {S_in[2]}, stellar U err: {S_in_err[2]}."
+    updated_dataset.update_after_processing_step(history_msg)
+    return updated_dataset
+
+
+
+        
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
     Updates the data level to L4. Only works on L3 data.

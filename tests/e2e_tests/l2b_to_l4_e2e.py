@@ -450,5 +450,5 @@ if __name__ == "__main__":
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
 
-    test_l2b_to_l3(e2edata_dir, outputdir)
     test_l3_to_l4(outputdir)
+    test_l2b_to_l3(e2edata_dir, outputdir)

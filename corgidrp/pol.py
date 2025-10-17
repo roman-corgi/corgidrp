@@ -8,9 +8,6 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
                                 path_to_pol_ref_file="./data/stellar_polarization_database.csv",
                                 svd_threshold=1e-5):
     '''
-    A step function that generates a MuellerMatrix calibration file from a dataset.
-    If the dataset is an ND dataset, then it generates an ND MuellerMatrix calibration file.
-
     The pol reference file should contain the known polarization properties of the targets in the dataset.
     It should be a csv file with the following columns:
     TARGET, P, P_err, PA_err
@@ -34,9 +31,6 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
         path_to_pol_ref_file (str): The path to the polarization reference file. 
             Default is "./data/stellar_polarization_database.csv".
         svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
-
-    Returns:
-        mueller_matrix (MuellerMatrix or NDMuellerMatrix): The generated Mueller Matrix calibration file.
     '''
 
     dataset = input_dataset.copy()
@@ -145,7 +139,6 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
 
     return mueller_matrix_obj
 
-
 def get_qu_from_p_theta(p, theta):
     '''
 
@@ -208,3 +201,45 @@ def measure_normalized_difference_L3(input_pol_Image,
     error = np.abs(normalized_difference)*np.sqrt(sum_diff_err**2/difference**2 + sum_diff_err**2/sum_**2)
 
     return normalized_difference, error 
+
+def rotation_mueller_matrix(angle):
+    '''
+
+    constructs a rotation matrix from a given angle
+
+    Args:
+        angle (float): the angle of rotation in degrees
+        
+    Returns:
+        rotation_matrix (np.array) The 4x4 mueller matrix for rotation at the given angle
+    '''
+    theta = angle * (np.pi / 180)
+    rotation_matrix = np.array([
+        [1, 0, 0, 0],
+        [0, np.cos(2*theta), np.sin(2*theta), 0],
+        [0,-np.sin(2*theta), np.cos(2*theta), 0],
+        [0, 0, 0, 1]
+    ])
+    return rotation_matrix
+
+def lin_polarizer_mueller_matrix(angle):
+    '''
+    constructs a linear polarizer matrix from a given angle
+
+    Args:
+        angle (float): the polarization angle of the polarizer
+        
+    Returns:
+        pol_matrix (np.array) The 4x4 mueller matrix for a linear polarizer at the given angle
+    '''
+    # convert degree to rad
+    theta = angle * (np.pi / 180)
+    cos = np.cos(2 * theta)
+    sin = np.sin(2 * theta)
+    pol_matrix = 0.5 * np.array([
+        [1, cos, sin, 0],
+        [cos, cos**2, cos * sin, 0],
+        [sin, cos * sin, sin**2, 0],
+        [0, 0, 0, 0]
+    ])
+    return pol_matrix

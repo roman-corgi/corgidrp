@@ -106,7 +106,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
                 continue
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
-            hdulist[0].header['VISTYPE'] = "BORESITE"
+            hdulist[0].header['VISTYPE'] = "CGIVST_CAL_BORESIGHT"
             # setting SNR to ~250 (arbitrary SNR)
             scaled_image = ((250 * noise_rms) / np.max(image_sources[0].data)) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))

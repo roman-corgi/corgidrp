@@ -550,6 +550,7 @@ def test_generate_multiple_recipes():
     # add vistype
     for frame in dataset:
         frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_PUPIL_IMAGING"
+        frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_PUPIL_IMAGING"
     dataset.save()
     filelist = [frame.filepath for frame in dataset]
 

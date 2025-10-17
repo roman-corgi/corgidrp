@@ -29,11 +29,13 @@ def set_vistype_for_tvac(
     list_of_fits (list): list of FITS files that need to be updated.
     """
     print("Adding VISTYPE='CGIVST_CAL_PUPIL_IMAGING' to TVAC data")
+    print("Adding VISTYPE='CGIVST_CAL_PUPIL_IMAGING' to TVAC data")
     for file in list_of_fits:
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
         # Adjust VISTYPE
         if prihdr['VISTYPE'] == 'N/A':
+            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
             prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
         exthdr = fits_file[1].header
         if exthdr['EMGAIN_A'] == 1:
