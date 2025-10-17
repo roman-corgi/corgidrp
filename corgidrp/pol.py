@@ -5,7 +5,8 @@ from corgidrp.data import NDMuellerMatrix, MuellerMatrix
 
 def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_y=512, separation_diameter_arcsec=7.5, 
                                 alignment_angles=[0,45], phot_kwargs=None,
-                                path_to_pol_ref_file="./data/stellar_polarization_database.csv"):
+                                path_to_pol_ref_file="./data/stellar_polarization_database.csv",
+                                svd_threshold=1e-5):
     '''
     A step function that generates a MuellerMatrix calibration file from a dataset.
     If the dataset is an ND dataset, then it generates an ND MuellerMatrix calibration file.
@@ -15,6 +16,9 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
     TARGET, P, P_err, PA_err
     where TARGET is the name of the target, P is the degree of polarization in percent, P_err is the error 
     in the degree of polarization in percent, and PA_err is the error in the polarization angle in degrees
+
+    The current error calculation takes into consideration the errors on the normalized differences only, 
+    and does not propagate the errors from the reference polarization values. This could be improved in future versions.
 
     Args: 
         input_dataset (list): A list of CorgiDRP data objects that will be used to generate the Mueller Matrix.
@@ -29,6 +33,7 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
             See the documentation for the fluxcal.calibrate_fluxcal_aper function for more details.
         path_to_pol_ref_file (str): The path to the polarization reference file. 
             Default is "./data/stellar_polarization_database.csv".
+        svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
 
     Returns:
         mueller_matrix (MuellerMatrix or NDMuellerMatrix): The generated Mueller Matrix calibration file.
@@ -91,16 +96,10 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
         target = dataset[i].pri_hdr["TARGET"]
         pol_row = pol_ref[pol_ref["TARGET"] == target]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
-        # P_err = pol_row["P_err"].values[0] / 100.0 # convert from percent to fraction
-        # PA_err = pol_row["PA_err"].values[0] # in degrees
-
         PA = pol_row["PA"].values[0] + roll_angles[i] # in degrees
 
         # calculate the Stokes parameters Q and U from P and PA
         Q, U = get_qu_from_p_theta(P, PA)
-        # propagate errors to Q and U
-        # Q_err = np.sqrt((P_err * np.cos(2 * np.radians(PA)))**2 + (P * 2 * np.radians(np.sin(2 * np.radians(PA))) * PA_err)**2)
-        # U_err = np.sqrt((P_err * np.sin(2 * np.radians(PA)))**2 + (P * 2 * np.radians(np.cos(2 * np.radians(PA))) * PA_err)**2)
 
         if "POL0" in dataset[i].ext_hdr["DPAMNAME"]:
             stokes_matrix[i, :] = [1, Q, U, 0, 0, 0]
@@ -111,7 +110,7 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
     # invert the stokes matrix using SVD and multiply the the normalized differences to get the mueller matrix elements
     u,s,v=np.linalg.svd(stokes_matrix)
     # limit the singular values to improve the conditioning of the inversion
-    s[s < 1e-5] = 1e-5
+    s[s < svd_threshold] = svd_threshold
     stokes_matrix_inv=np.dot(v.transpose(),np.dot(np.diag(s**-1),u.transpose()))
     mueller_elements = np.dot(stokes_matrix_inv, np.array(normalized_differences)[:,0])
     mueller_elements_covar = np.matmul(stokes_matrix_inv,stokes_matrix_inv.T)
@@ -149,10 +148,12 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
 
 def get_qu_from_p_theta(p, theta):
     '''
-    Convert degree of polarization and polarization angle to Stokes Q and U.
+
+    Convert either the degree of polarization and polarization angle to normalized Stokes q (Q/I) and u (U/I), 
+    or the polarized intensity (P) and angle (PA) into Stokes Q and U intensities. 
 
     Args:
-        p (float): Degree of polarization (0 to 1).
+        p (float): Degree of polarization (0 to 1), or polarized intensity.
         theta (float): Polarization angle in degrees.
 
     Returns:
@@ -203,6 +204,7 @@ def measure_normalized_difference_L3(input_pol_Image,
     normalized_difference = difference / sum_
     sum_diff_err = (aper_flux_1[1]**2 + aper_flux_2[1]**2)**0.5
 
+    #if F=A/B, then dF = F*sqrt((dA/A)^2 + (dB/B)^2)
     error = np.abs(normalized_difference)*np.sqrt(sum_diff_err**2/difference**2 + sum_diff_err**2/sum_**2)
 
     return normalized_difference, error 
