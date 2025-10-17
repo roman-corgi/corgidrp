@@ -662,7 +662,23 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
         'centering_initial_guess': centering_initial_guess_beam_2
     })
     
-    filter_name = image.ext_hdr["CFAMNAME"]
+    result_beam_1, result_beam_2 = measure_aper_flux_pol(
+        image,
+        image_center_x=image_center_x,
+        image_center_y=image_center_y,
+        separation_diameter_arcsec=separation_diameter_arcsec,
+        alignment_angle=alignment_angle,
+        phot_kwargs=phot_kwargs
+    )
+    
+    #Optionally subtract a local background 
+    if phot_kwargs.get('background_sub', False):
+        ap_sum_beam_1, ap_sum_err_beam_1, back_beam_1 = result_beam_1
+        ap_sum_beam_2, ap_sum_err_beam_2, back_beam_2 = result_beam_2
+    else:
+        ap_sum_beam_1, ap_sum_err_beam_1 = result_beam_1
+        ap_sum_beam_2, ap_sum_err_beam_2 = result_beam_2
+
     filter_file = get_filter_name(image)
     
     # Read filter and CALSPEC data.
@@ -675,7 +691,7 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
         star_name = image.pri_hdr["TARGET"]
         calspec_filepath, calspec_filename = get_calspec_file(star_name)
     flux_ref = read_cal_spec(calspec_filepath, wave)
-    
+
     if flux_or_irr == 'flux':
         flux = calculate_band_flux(filter_trans, flux_ref, wave)
         image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
@@ -686,16 +702,6 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
         image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
-    
-    #calculate flux from both apertures
-    result_beam_1 = aper_phot(image, **phot_kwargs_beam_1)
-    result_beam_2 = aper_phot(image, **phot_kwargs_beam_2)
-    if phot_kwargs.get('background_sub', False):
-        ap_sum_beam_1, ap_sum_err_beam_1, back_beam_1 = result_beam_1
-        ap_sum_beam_2, ap_sum_err_beam_2, back_beam_2 = result_beam_2
-    else:
-        ap_sum_beam_1, ap_sum_err_beam_1 = result_beam_1
-        ap_sum_beam_2, ap_sum_err_beam_2 = result_beam_2
 
     fluxcal_fac = flux / (ap_sum_beam_1 + ap_sum_beam_2)
     fluxcal_fac_err = flux / (ap_sum_beam_1 + ap_sum_beam_2)**2 * np.sqrt((ap_sum_err_beam_1**2) + (ap_sum_err_beam_2**2))
@@ -708,7 +714,7 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
         input_dataset=dataset
     )
 
-    # If background subtraction was performed, set the LOCBACK keyword.
+    # If local background subtraction was performed, set the LOCBACK keyword.
     if phot_kwargs.get('background_sub', False):
         #average medium background photoelectrons from both beams
         back = 0.5 * (back_beam_1 + back_beam_2)
@@ -720,6 +726,87 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
     fluxcal_obj.ext_hdr.add_history(history_entry)
 
     return fluxcal_obj
+
+def measure_aper_flux_pol(image,
+                          image_center_x=512,
+                          image_center_y=512,
+                          separation_diameter_arcsec=7.5, 
+                          alignment_angle=None,
+                          phot_kwargs=None,
+                          pixel_scale = 0.0218):
+    """
+    Measure the individual flux from both polarized images in a polarimetric observation
+    using aperture photometry.
+
+    Parameters:
+        image (corgidrp.data.Image): the source image.
+        image_center_x (int): X pixel coordinate of where the two wollaston spots are centered around
+        image_center_y (int): Y pixel coordinate of where the two wollaston spots are centered around
+        separation_diameter_arcsec (optional, float): Distance between the centers of the two polarized images on the detector in arcsec,
+            default for Roman CGI is 7.5"
+        alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
+            defaults to 0 for WP1 and 45 for WP2
+        phot_kwargs (dict, optional): A dictionary of keyword arguments controlling the aperture
+            photometry function. See calibrate_pol_fluxcal_aper for accepted keywords.
+        pixel_scale (float): pixel scale in arcsec/pixel, default for Roman CGI is 0.0218"/pix
+
+    Returns:
+        tuple: (result_beam_1, result_beam_2) where each result is either (flux, flux_err) or (flux, flux_err, back)
+    """
+
+    if image.ext_hdr['BUNIT'] != "photoelectron/s":
+        raise ValueError("input dataset must have unit photoelectron/s, not {0}".format(image.ext_hdr['BUNIT']))
+    #estimate the centers of the wollaston spots based on relative position from image center
+    #polarized images separated 7.5" or 344 pix on the detector by default (1"=0.0218 pix)
+    #WP1 output is aligned horizontally across the image center by default
+    #WP2 output is algined diagonally across the image center by default
+    image_center = (image_center_x, image_center_y)
+    dpamname = image.ext_hdr['DPAMNAME']
+    if dpamname not in ['POL0', 'POL45']:
+        raise ValueError('input dataset must be a polarimetric observation')
+    if alignment_angle is None:
+        if dpamname == 'POL0':
+            alignment_angle = 0
+        else:
+            alignment_angle = 45
+    angle_rad = alignment_angle * (np.pi / 180)
+
+    displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * pixel_scale)))
+    displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * pixel_scale)))
+    #estimate where the centers are based on alignment angle and separation
+    centering_initial_guess_beam_1 = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    centering_initial_guess_beam_2 = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+
+    #ensure xy centering method is used with estimated centers for aperture photometry
+    if phot_kwargs is None:
+        phot_kwargs = {
+            'encircled_radius': 5,
+            'frac_enc_energy': 1.0,
+            'method': 'subpixel',
+            'subpixels': 5,
+            'background_sub': False,
+            'r_in': 5,
+            'r_out': 10,
+            'centroid_roi_radius': 5,
+        }
+    #update parameters to ensure centering is performed correctly
+    phot_kwargs_beam_1 = phot_kwargs.copy()
+    phot_kwargs_beam_2 = phot_kwargs.copy()
+    phot_kwargs_beam_1.update({
+        'centering_method': 'xy',
+        'centering_initial_guess': centering_initial_guess_beam_1
+    })
+    phot_kwargs_beam_2.update({
+        'centering_method': 'xy',
+        'centering_initial_guess': centering_initial_guess_beam_2
+    })
+    
+    #calculate flux from both apertures
+    result_beam_1 = aper_phot(image, **phot_kwargs_beam_1)
+    result_beam_2 = aper_phot(image, **phot_kwargs_beam_2)
+    
+    return result_beam_1, result_beam_2
+
 
 
 def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
