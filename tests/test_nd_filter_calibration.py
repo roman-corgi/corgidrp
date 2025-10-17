@@ -10,7 +10,6 @@ import copy
 from termcolor import cprint
 
 import corgidrp
-from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 import corgidrp.l2b_to_l3 as l2b_tol3
@@ -278,11 +277,14 @@ def test_nd_filter_calibration_object_with_calspec(bright_files_cached):
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None, calspec_files = [calspec_filepath])
     
-    results.save(filedir=default_cal_dir)
+    test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
+    os.makedirs(test_output_dir, exist_ok=True)
+    
+    results.save(filedir=test_output_dir)
 
-    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_ndf_cal.fits')]
+    nd_files = [fn for fn in os.listdir(test_output_dir) if fn.endswith('_ndf_cal.fits')]
     assert nd_files, "No NDFilterOD files were generated."
-    with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
+    with fits.open(os.path.join(test_output_dir, nd_files[0])) as hdul:
         primary_hdr = hdul[0].header
         ext_hdr = hdul[1].header
         assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE not True."
@@ -299,11 +301,14 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
     
-    results.save(filedir=default_cal_dir)
+    test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
+    os.makedirs(test_output_dir, exist_ok=True)
+    
+    results.save(filedir=test_output_dir)
 
-    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_ndf_cal.fits')]
+    nd_files = [fn for fn in os.listdir(test_output_dir) if fn.endswith('_ndf_cal.fits')]
     assert nd_files, "No NDFilterOD files were generated."
-    with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
+    with fits.open(os.path.join(test_output_dir, nd_files[0])) as hdul:
         primary_hdr = hdul[0].header
         ext_hdr = hdul[1].header
         assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE not True."
@@ -319,19 +324,23 @@ def test_output_filename_convention(stars_dataset_cached):
     # Make a copy of the dataset and retrieve expected values.
     ds_copy = copy.deepcopy(stars_dataset_cached)
 
+    # Create test output directory
+    test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
+    os.makedirs(test_output_dir, exist_ok=True)
+
     # Construct the expected filename from the last input dataset filename.
     expected_filename = re.sub('_l[0-9].', '_ndf_cal', stars_dataset_cached[-1].filename)
-    full_expected_path = os.path.join(default_cal_dir, expected_filename)
+    full_expected_path = os.path.join(test_output_dir, expected_filename)
 
     # Create the calibration product
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
         fluxcal_factor=None
     )
-    results.save(filedir=default_cal_dir)
+    results.save(filedir=test_output_dir)
     
     assert os.path.exists(full_expected_path), (
-        f"Expected file {expected_filename} not found in {default_cal_dir}."
+        f"Expected file {expected_filename} not found in {test_output_dir}."
     )
     print("The nd_filter_calibration product file exists and meets the expected naming convention.")
 

@@ -2,12 +2,13 @@ import os,math
 import warnings
 import astropy.io.fits as fits
 from corgidrp import data, mocks, astrom
-from corgidrp.data import Image
 from corgidrp.l3_to_l4 import northup
 from corgidrp.l2b_to_l3 import create_wcs
 from astropy.wcs import WCS
 from matplotlib import pyplot as plt
 import numpy as np
+import pytest
+
 
 def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figure=False,pol_data = False,test_offset=False):
     """
@@ -305,6 +306,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
 
     return
 
+def test_northup_pol():
+    test_northup(pol_data=True)
+
 def test_wcs_and_offset(save_mock_dataset=False):
    """
    unit test of the create_wcs function and offset keyword 
@@ -345,7 +349,7 @@ def test_wcs_and_offset(save_mock_dataset=False):
       updated_dataset[0].save(filedir='./',filename=f'mock_offset{ang+north_angle}deg_testoffset.fits')
 
 if __name__ == '__main__':
-   test_northup(pol_data=True)
    test_northup()
+   test_northup_pol()
    test_wcs_and_offset()
 

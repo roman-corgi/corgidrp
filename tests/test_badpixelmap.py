@@ -6,7 +6,6 @@ import corgidrp.detector as detector
 import corgidrp.flat as flat
 from corgidrp.bad_pixel_calibration import create_bad_pixel_map
 from corgidrp.darks import build_trad_dark
-from corgidrp import default_cal_dir
 import re
 
 np.random.seed(456)
@@ -158,15 +157,19 @@ def test_output_filename_convention():
 
     bpcal_prihdr, bpcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     
+    # Create test output directory
+    test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
+    os.makedirs(test_output_dir, exist_ok=True)
+    
     badpixelmap = data.BadPixelMap(bp_fake_data, pri_hdr=bpcal_prihdr, ext_hdr=bpcal_exthdr, input_dataset=fake_input_dataset)
-    badpixelmap.save(filedir=default_cal_dir)
+    badpixelmap.save(filedir=test_output_dir)
 
      # Construct the expected filename from the last input dataset filename.
     expected_filename = re.sub('_l[0-9].', '_bpm_cal', fake_input_dataset[-1].filename)
-    full_expected_path = os.path.join(default_cal_dir, expected_filename)
+    full_expected_path = os.path.join(test_output_dir, expected_filename)
     
     assert os.path.exists(full_expected_path), (
-        f"Expected file {expected_filename} not found in {default_cal_dir}."
+        f"Expected file {expected_filename} not found in {test_output_dir}."
     )
     print("The bad pixel map calibration product file exists and meets the expected naming convention.")
 
