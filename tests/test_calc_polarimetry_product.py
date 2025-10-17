@@ -7,33 +7,35 @@ def create_mock_polimage(image_size=256, fwhm=100.0, I0=1e3, p=0.1, theta_deg=10
                          roll_angles=[-15, 15, -15, 15], prisms=['POL0', 'POL0', 'POL45', 'POL45'],
                          return_stokes=False, savefile=None):
     """
-    Generate mock polarimetric images for testing with angle control.
+    Generate mock polarimetric images for testing with controlled polarization angles.
 
     Parameters
     ----------
     image_size : int
-        Size of the square image (pixels)
+        Size of the square image in pixels (H x W).
     fwhm : float
-        Full width at half maximum of Gaussian source (pixels)
+        Full width at half maximum of the Gaussian source in pixels.
     I0 : float
-        Peak intensity
+        Peak intensity of the Gaussian source.
     p : float
-        Fractional polarization
+        Fractional polarization.
     theta_deg : float
-        Polarization angle in degrees
-    roll_angles : list of float
-        Telescope roll angles for each prism
-    prisms : list of str
-        Prism orientations ('POL0' or 'POL45') for each image
+        Polarization angle in degrees.
+    roll_angles : list[float]
+        Telescope roll angles applied to each prism.
+    prisms : list[str]
+        Prism orientations for each image ('POL0' or 'POL45').
     return_stokes : bool
-        If True, return full Stokes cubes [I,Q,U], else return prism pairs
+        If True, return full Stokes cubes [I, Q, U]; else return prism pairs [I+Q/I+U, I-Q/I-U].
     savefile : str or None
-        Path to save FITS file (optional)
+        Path to save the simulated FITS file (optional).
 
     Returns
     -------
-    list of ndarray
-        Mock polarimetric datacubes
+    list[np.ndarray]
+        Mock polarimetric datacubes.
+        - If return_stokes=True: each ndarray is a Stokes cube [I, Q, U] of shape (3, H, W).
+        - If return_stokes=False: each ndarray is a prism pair [I+Q/I+U, I-Q/I-U] of shape (2, H, W).
     """
 
     if len(roll_angles) != len(prisms):
