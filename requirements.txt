@@ -10,4 +10,4 @@ pyklip
 emccd-detect
 tqdm
 termcolor
-skimage
+scikit-image
