@@ -478,9 +478,9 @@ def test_psf_sub_ADI():
         if np.nanmax(np.abs(frame.data[0] - analytical_result)) > np.nanmax(analytical_result) * rel_tolerance:
             raise Exception(f"Relative difference between ADI result and analytical result is greater then 5%.")
         
-        # Check shape of output dq & err arrays
+        # Check output dq & err arrays
         assert result.all_dq[0,0,57,50] == 1
-        assert result.all_err == pytest.approx(expected_errs)
+        assert np.all(np.isnan(result.all_err))
 
     # Check expected data shape
     if not result.all_data.shape == expected_data_shape:
@@ -612,9 +612,7 @@ def test_psf_sub_ADIRDI():
                                               pl_contrast=pl_contrast)
     
 
-    analytical_result1 = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
-    analytical_result2 = (rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2                         
-    analytical_results = [analytical_result1,analytical_result2]
+    analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-rolls[1],reshape=False,cval=0)) / 2
     
     klip_kwargs={"numbasis":numbasis}
                                 
@@ -628,30 +626,31 @@ def test_psf_sub_ADIRDI():
 
         
         mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
-        masked_frame = np.where(mask,np.nan,frame.data)
+        masked_frame = np.where(mask,np.nan,frame.data[0])
 
-        # import matplotlib.pyplot as plt
 
-        # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-        # im0 = axes[0].imshow(frame.data - np.nanmedian(frame.data),origin='lower')
-        # plt.colorbar(im0,ax=axes[0],shrink=0.8)
-        # axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-        # axes[0].set_title(f'PSF Sub Result ({numbasis[i]} KL Modes, Median Subtracted)')
+        import matplotlib.pyplot as plt
 
-        # im1 = axes[1].imshow(analytical_results[0],origin='lower')
-        # plt.colorbar(im1,ax=axes[1],shrink=0.8)
-        # axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-        # axes[1].set_title('Analytical result')
+        fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+        im0 = axes[0].imshow(frame.data[0] - np.nanmedian(frame.data[0]),origin='lower')
+        plt.colorbar(im0,ax=axes[0],shrink=0.8)
+        axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        axes[0].set_title(f'PSF Sub Result ({numbasis[i]} KL Modes, Median Subtracted)')
 
-        # im2 = axes[2].imshow(masked_frame - np.nanmedian(frame.data) - analytical_results[0],origin='lower')
-        # plt.colorbar(im2,ax=axes[2],shrink=0.8)
-        # axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-        # axes[2].set_title('Difference')
+        im1 = axes[1].imshow(analytical_result,origin='lower')
+        plt.colorbar(im1,ax=axes[1],shrink=0.8)
+        axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        axes[1].set_title('Analytical result')
 
-        # fig.suptitle('ADI+RDI')
+        im2 = axes[2].imshow(masked_frame - np.nanmedian(frame.data[0]) - analytical_result,origin='lower')
+        plt.colorbar(im2,ax=axes[2],shrink=0.8)
+        axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        axes[2].set_title('Difference')
 
-        # plt.show()
-        # plt.close()
+        fig.suptitle('ADI+RDI')
+
+        plt.show()
+        plt.close()
 
         # Overall counts should decrease        
         if not np.nansum(mock_sci[0].data) > np.nansum(frame.data):
@@ -664,10 +663,9 @@ def test_psf_sub_ADIRDI():
         # Frame should match analytical result outside of the IWA (after correcting for the median offset) for KL mode 1
         # This fails with a tolerance of 1e-5, but passes with 2e-5 after some minor changes to the mock data generation
         # that cause a small numerical difference.
-        if i==0:
-            diff = np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data)) - analytical_results[i]))
-            if not diff < 2e-5:
-                raise Exception(f"ADI+RDI subtraction did not produce expected analytical result. Max difference: {diff}")
+        diff = np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data[0])) - analytical_result))
+        if not diff < 1e-5:
+            raise Exception(f"ADI+RDI subtraction did not produce expected analytical result. Max difference: {diff}")
                 
     # Check expected data shape
     expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
@@ -798,7 +796,7 @@ if __name__ == '__main__':
 
     test_psf_sub_ADI()
     # test_psf_sub_RDI()
-    # test_psf_sub_ADIRDI()
+    test_psf_sub_ADIRDI()
     # test_psf_sub_nandata()
     # test_psf_sub_badmode()
 
