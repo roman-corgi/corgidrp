@@ -3,6 +3,10 @@ These functions below are pytest hooks for setting up the pytest environment
 """
 
 import pytest
+import multiprocessing as mp
+
+# supress os.fork() related deprecation warnings
+mp.set_start_method("spawn")
 
 def pytest_addoption(parser):
     """

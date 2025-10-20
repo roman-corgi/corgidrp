@@ -1171,10 +1171,11 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
                 cr_tail = [fwc/(j+1) for j in range(tail_len)]
                 dataset.all_data[i,loc[0],tail_start:] += cr_tail
 
-        # Save frame if desired
-        if filedir is not None:
-            filepattern = "simcal_cosmics_{0:04d}.fits"
-            dataset[i].save(filedir=filedir, filename=filepattern.format(i))
+        dataset[i].filename = "simcal_cosmics_{0:04d}.fits"
+
+    # Save frame if desired
+    if filedir is not None:
+        dataset.save(filedir=filedir)
 
     return dataset
 
@@ -2880,6 +2881,170 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
 
     return frame
 
+def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, filter='3C', dpamname = 'POL0', fpamname = 'HOLE', 
+                      target_name='Vega', fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=None, platescale=21.8, 
+                      background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
+    """
+    Create simulated data for polarimetric absolute flux calibration. Two point sources to
+    simulate images split by polarization, with a 2D-Gaussian PSF and Gaussian noise.
+
+    Args:
+        star_flux_left (float): Flux of the point source on the left size of the image in erg/(s*cm^2*AA)
+        star_flux_right (float): Flux of the point source on the right size of the image in erg/(s*cm^2*AA)
+        fwhm (float): Full width at half max (FWHM) of the centroid
+        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electron/s
+        filter (str): (Optional) The CFAM filter used.
+        dpamname (str): (Optional) The wollaston prism being used
+        fpamname (str): (Optional) Position of the FPAM
+        target_name (str): (Optional) Name of the calspec star
+        fsm_x (float): (Optional) X position shift in milliarcseconds (mas)
+        fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
+        exptime (float): (Optional) Exposure time (s)
+        filedir (str): (Optional) Directory path to save the output file
+        platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
+        background (float): optional additive background value
+        add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
+        noise_scale (float): Spread of the Gaussian noise
+        file_save (bool): Whether to save the image (default: False)
+
+    Returns:
+        corgidrp.data.Image: The simulated image
+    """
+
+    # Create directory if needed
+    if filedir is not None and not os.path.exists(filedir):
+        os.mkdir(filedir)
+
+    # Image properties
+    size = (1024, 1024)
+    sim_data = np.zeros(size)
+    ny, nx = size
+    center = [nx // 2, ny // 2]  # Default image center
+    target_location = (80.553428801, -69.514096821)
+
+    # Convert FSM shifts from mas to pixels
+    fsm_x_shift = fsm_x * 0.001 / (platescale * 0.001)  # Convert mas to degrees, then to pixels
+    fsm_y_shift = fsm_y * 0.001 / (platescale * 0.001)
+
+    # New star position
+    xpos = center[0] + fsm_x_shift
+    ypos = center[1] + fsm_y_shift
+
+    # Find nearest pixel
+    x_int = int(round(xpos))
+    y_int = int(round(ypos))
+
+
+    # Convert flux from calspec units to photo-electrons/s
+    flux_left = star_flux_left / cal_factor
+    flux_right = star_flux_right / cal_factor
+
+    if dpamname == 'POL0':
+        x_int_left = x_int - 172
+        x_int_right = x_int + 172
+        y_int_left = y_int
+        y_int_right = y_int
+        dpam_h = 8991.3
+        dpam_v = 1261.3
+    elif dpamname == 'POL45':
+        x_int_left = x_int - 122
+        x_int_right = x_int + 122
+        y_int_left = y_int + 122
+        y_int_right = y_int - 122
+        dpam_h = 44660.1
+        dpam_v = 1261.3
+    else:
+        raise ValueError('dpamname have to be "POL0" or "POL45"')
+
+
+    # Inject Gaussian PSF star
+    stampsize = int(np.ceil(3 * fwhm))
+    sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
+
+    # coordinate system
+    y, x = np.indices([stampsize, stampsize])
+    y -= stampsize // 2
+    x -= stampsize // 2
+
+    x_left = x + x_int_left
+    x_right = x + x_int_right
+    y_left = y + y_int_left
+    y_right = y + y_int_right
+    
+    xmin_left = x_left[0][0]
+    xmax_left = x_left[-1][-1]
+    xmin_right = x_right[0][0]
+    xmax_right = x_right[-1][-1]
+    ymin_left = y_left[0][0]
+    ymax_left = y_left[-1][-1]
+    ymin_right = y_right[0][0]
+    ymax_right = y_right[-1][-1]
+
+    psf_left = gaussian_array((stampsize,stampsize),sigma,flux_left) / (2.0 * np.pi * sigma**2)
+    psf_right = gaussian_array((stampsize,stampsize),sigma,flux_right) / (2.0 * np.pi * sigma**2)
+
+    # Inject the star into the image
+    sim_data[ymin_left:ymax_left + 1, xmin_left:xmax_left + 1] += psf_left
+    sim_data[ymin_right:ymax_right + 1, xmin_right:xmax_right + 1] += psf_right
+
+    # Add background
+    sim_data += background
+
+    # Add Gaussian noise
+    if add_gauss_noise:
+        # add Gaussian random noise
+        noise_rng = np.random.default_rng(10)
+        noise = noise_rng.normal(scale=noise_scale, size=size)
+        sim_data += noise
+
+    # Error map
+    err = np.full(size, noise_scale)
+
+    # Get FPAM positions, not strictly necessary but
+    if fpamname == 'HOLE':
+        fpam_h = 40504.4
+        fpam_v = 9616.8
+    elif fpamname == 'ND225':
+        fpam_h = 61507.8
+        fpam_v = 25612.4
+    elif fpamname == 'ND475':
+        fpam_h = 2503.7
+        fpam_v = 6124.9
+
+    # Create image object
+    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    prihdr['VISTYPE'] = 'ABSFLXBT'
+    prihdr['TARGET'] = target_name
+
+    exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
+    exthdr['FPAMNAME'] = fpamname
+    exthdr['DPAMNAME'] = dpamname
+    exthdr['DPAM_H'] = dpam_h
+    exthdr['DPAM_V'] = dpam_v
+    exthdr['FPAM_H']   = 2503.7
+    exthdr['FPAM_V']   = 6124.9
+    exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
+    exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
+    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
+    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
+    exthdr['CTYPE1']   = 'RA---TAN'
+    exthdr['CTYPE2']   = 'DEC--TAN'
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
+    exthdr['CRVAL2']   = target_location[1]
+    exthdr['BUNIT'] = 'photoelectron/s'
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
+   
+    # Save file
+    if filedir is not None and file_save:
+        ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
+        filename = f'cgi_{prihdr["VISITID"]}_{ftimeutc}_l2b.fits'
+        frame.save(filedir=filedir, filename=filename)
+
+    return frame
+
 def generate_reference_star_dataset_with_flux(
     n_frames=3,
     roll_angles=None,
@@ -3030,7 +3195,7 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
     y, x = np.indices(imshape)
 
     # Following astropy documentation:
-    # Generate random source model list. Random amplitues and centers within a pixel
+    # Generate random source model list. Random amplitudes and centers within a pixel
     # PSF's final location on SCI frame is moved by more than one pixel below. This
     # is the fractional part that only needs a smaller array of non-zero values
     # Set seed for reproducibility of mock data
@@ -3434,8 +3599,8 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
         wcs_header (astropy.fits.Header, optional): Fits header object containing WCS 
             information. If not provided, a mock header will be created. Defaults to None.
-        data_shape (list of int): desired shape of data array. Must have length 2. Defaults to 
-            [100,100].
+        data_shape (list of int): desired shape of data array, with the last two axes in xy order. 
+            Must have length 2 or 3. Defaults to [100,100].
         centerxy (list of float): Desired PSF center in xy order. Must have length 2. Defaults 
             to image center.
         outdir (str, optional): Desired output directory. If not provided, data will not be 
@@ -3454,7 +3619,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         tuple: corgiDRP science Dataset object and reference Dataset object.
     """
 
-    assert len(data_shape) == 2
+    assert len(data_shape) == 2 or len(data_shape) == 3
     
     if roll_angles is None:
         roll_angles = [0.] * (n_sci+n_ref)
@@ -3478,7 +3643,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             darkhole = fits.getdata(fpath)
             
             fill_value = np.nanmin(darkhole)
-            img_data = np.full(data_shape,fill_value)
+            img_data = np.full(data_shape[-2:],fill_value)
 
             # Overwrite center of array with the darkhole data
             cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
@@ -3495,7 +3660,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             _,fname = os.path.split(fpath)
             darkhole = fits.getdata(fpath)
             fill_value = np.nanmin(darkhole)
-            img_data = np.full(data_shape,fill_value)
+            img_data = np.full(data_shape[-2:],fill_value)
 
             # Overwrite center of array with the darkhole data
             cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
@@ -3517,14 +3682,14 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             fwhm = ref_fwhm if i>= n_sci else sci_fwhm
             sigma = fwhm / (2 * np.sqrt(2. * np.log(2.)))
             fname = f'MOCK_{label}_roll{roll_angles[i]}.fits'
-            arr_center = np.array(data_shape) / 2 - 0.5
+            arr_center = np.array(data_shape[-2:]) / 2 - 0.5
             if centerxy is None:
                 psfcenty,psfcentx = arr_center
             else:
                 psfcentx,psfcenty = centerxy
             
             psf_off_xy = (psfcentx-arr_center[1],psfcenty-arr_center[0])
-            img_data = gaussian_array(array_shape=data_shape,
+            img_data = gaussian_array(array_shape=data_shape[-2:],
                                       xoffset=psf_off_xy[0],
                                       yoffset=psf_off_xy[1],
                                       sigma=sigma,
@@ -3539,7 +3704,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             if i<n_sci:
                 pa_deg = -roll_angles[i]
                 xoff,yoff = pl_sep * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
-                planet_psf = gaussian_array(array_shape=data_shape,
+                planet_psf = gaussian_array(array_shape=data_shape[-2:],
                                             amp=pl_amp,
                                             sigma=sigma,
                                             xoffset=xoff+psf_off_xy[0],
@@ -3561,6 +3726,8 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr['BUNIT'] = 'photoelectron/s'
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
+        exthdr['EACQ_COL'] = psfcentx
+        exthdr['EACQ_ROW'] = psfcentx
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
         
@@ -3574,7 +3741,13 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr.extend(wcs_header)
 
         # Make a corgiDRP Image frame
-        frame = data.Image(img_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        if len(data_shape)==3:
+            frame_data = np.zeros([data_shape[0],data_shape[2],data_shape[1]])
+            frame_data[:] = img_data
+        else:
+            frame_data = img_data
+
+        frame = data.Image(frame_data, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.filename = fname
 
         # Add it to the correct dataset
@@ -4190,7 +4363,7 @@ def create_satellite_spot_observing_sequence(
 
 def get_formatted_filename(dt, visitid):
     """
-    Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b_.fits
+    Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b.fits
     
     Args:
         dt (datetime): Datetime object
@@ -4200,7 +4373,8 @@ def get_formatted_filename(dt, visitid):
         str: Formatted filename
     """
     timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
-    return f"cgi_{visitid}_{timestamp}_l2b_.fits"
+    
+    return f"cgi_{visitid}_{timestamp}_l2b.fits"
 
 def create_spatial_pol(dataset,nr=60,pfov_size=174,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet=None,band=None,prism='POL0'):
     """Turns a dataset of neptune or uranus images with single planet images into the images observed through the wollaston prisms also incorporates the spatial variation of polarization on the 
@@ -4309,4 +4483,68 @@ def create_spatial_pol(dataset,nr=60,pfov_size=174,image_center_x=512,image_cent
     frame.pri_hdr.set('FILTER',band)
     polmap = data.Dataset([frame])
         
-    return (polmap)  
+    return (polmap) 
+
+def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
+                                       left_image_value=1, right_image_value=1, alignment_angle=None):
+    """
+    Creates mock L2b polarimetric data with two polarized images placed on the larger
+    detector frame. Image size and placement depends on the wollaston used and the observing mode.
+
+    Args:
+        image_center (optional, tuple(int, int)): pixel location of where the two images are centered on the detector
+        dpamname (optional, string): name of the wollaston prism used, accepted values are 'POL0' and 'POL45'
+        observing_mode (optional, string): observing mode of the coronagraph
+        left_image_value (optional, int): value to fill inside the radius of the left image, corresponding to 0 or 45 degree polarization
+        right_image_value (optional, int): value to fill inside the radius of the right image, corresponding to 90 or 135 degree polarization
+        alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
+            defaults to 0 for WP1 and 45 for WP2
+    
+    Returns:
+        corgidrp.data.Image: The simulated L2b polarimetric image
+    """
+    assert dpamname in ['POL0', 'POL45'], \
+        "Invalid prism selected, must be 'POL0' or 'POL45'"
+    
+    # create initial blank frame
+    image_data = np.zeros(shape=(1024, 1024))
+
+    image_separation_arcsec = 7.5
+
+    #determine radius of the images
+    if observing_mode == 'NFOV':
+        cfamname = '1F'
+        radius = int(round((9.7 * ((0.5738 * 1e-6) / 2.363114) * 206265) / 0.0218))
+    elif observing_mode == 'WFOV':
+        cfamname = '4F'
+        radius = int(round((20.1 * ((0.8255 * 1e-6) / 2.363114) * 206265) / 0.0218))
+    else:
+        cfamname = '1F'
+        radius = int(round(1.9 / 0.0218))
+    
+    #determine the center of the two images
+    if alignment_angle is None:
+        if dpamname == 'POL0':
+            alignment_angle = 0
+        else:
+            alignment_angle = 45
+    angle_rad = alignment_angle * (np.pi / 180)
+    displacement_x = int(round((7.5 * np.cos(angle_rad)) / (2 * 0.0218)))
+    displacement_y = int(round((7.5 * np.sin(angle_rad)) / (2 * 0.0218)))
+    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+
+    #fill the location where the images are with 1s
+    y, x = np.indices([1024, 1024])
+    image_data[((x - center_left[0])**2) + ((y - center_left[1])**2) <= radius**2] = left_image_value
+    image_data[((x - center_right[0])**2) + ((y - center_right[1])**2) <= radius**2] = right_image_value
+    
+    #create L2b headers
+    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    #define necessary header keywords
+    exthdr['CFAMNAME'] = cfamname
+    exthdr['DPAMNAME'] = dpamname
+    exthdr['LSAMNAME'] = observing_mode
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+    return image

@@ -25,7 +25,7 @@ def determine_app_mag(input_data, source_star, scale_factor = 1.):
         source_star (str): either the fits file path of the flux model of the observed source in 
                            CALSPEC units erg/(s * cm^2 * AA) and format or the (SIMBAD) name of a CALSPEC star
         scale_factor (float): factor applied to the flux of the calspec standard source, so that you can apply it 
-                              if you have a different source with similiar spectral type, but no calspec standard.
+                              if you have a different source with similar spectral type, but no calspec standard.
                               Defaults to 1.
     
     Returns:
@@ -168,8 +168,7 @@ def convert_to_flux(input_dataset, fluxcal_factor):
     
     #scale also the old error with the flux_factor and propagate the error 
     # err = sqrt(err_flux^2 * flux_fac^2 + fluxfac_err^2 * flux^2)
-    factor_2d = np.ones(np.shape(flux_dataset[0].data)) * factor #TODO 2D should not be necessary anymore after improve_err is merged
-    flux_dataset.rescale_error(factor_2d, "fluxcal_factor")
+    flux_dataset.rescale_error(factor, "fluxcal_factor")
     flux_dataset.add_error_term(error_frame, "fluxcal_error")
 
     history_msg = "data converted to flux unit erg/(s * cm^2 * AA) by fluxcal_factor {0} plus color correction".format(fluxcal_factor.fluxcal_fac)

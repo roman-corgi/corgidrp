@@ -62,6 +62,7 @@ target/
 tests/simdata/*
 tests/walker_output/*
 tests/testcalib/*
+tests/e2e_tests/**/*.json
 tests/e2e_tests/*/*.json
 tests/ops_output/*.json
 tests/test_data/L4_to_TDA_Inputs/*
@@ -73,6 +74,7 @@ tests/e2e_tests/pc_sim_test_data/*.json
 .vscode/*
 .*.swp
 .exrc
+.idea/*
 
 #jupyter cruft
 .ipynb_checkpoints
@@ -83,11 +85,12 @@ tests/e2e_tests/pc_sim_test_data/*.json
 # data files
 *.FITS
 *.fits
-!nonlin_table_TVAC.fits 
+!nonlin_table_TVAC.fits
 
 # Output figures
 figures/
 tests/figures/
+tests/e2e_tests/**/*.png
 tests/e2e_tests/*/*.png
 tests/e2e_tests/*_output
 tests/test_data/simastrom/guesses.csv

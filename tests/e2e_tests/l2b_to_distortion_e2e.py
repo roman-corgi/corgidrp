@@ -3,6 +3,8 @@ import os
 import numpy as np
 from corgidrp.data import AstrometricCalibration
 
+import corgidrp
+import corgidrp.caldb as caldb
 import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
 import corgidrp.walker as walker
@@ -67,11 +69,18 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_mockdata_path, "*.fits")))
     template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),"corgidrp","recipe_templates","l2b_to_distortion.json")
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+
     # template_path = '/Users/macuser/Roman/corgidrp/corgidrp/recipe_templates/l2b_to_distortion.json'
     walker.walk_corgidrp(l2b_data_filelist, "", distortion_outputdir, template=template_path)
 
     #Read in th Astrometric Calibration file
-    ast_cal_filename = glob.glob(os.path.join(distortion_outputdir, "*AST_CAL.fits"))[0]
+    ast_cal_filename = glob.glob(os.path.join(distortion_outputdir, "*ast_cal.fits"))[0]
     ast_cal = AstrometricCalibration(ast_cal_filename)
 
     #Check that distortion map error within the central 1" x 1" region of the detector is <4 [mas] (~0.1835 [pixel])
@@ -96,7 +105,8 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     assert np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < 0.1835)
     assert np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < 0.1835)
 
-
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts

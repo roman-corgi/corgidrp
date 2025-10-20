@@ -1,5 +1,8 @@
 # A file that holds the functions that transmogrify l3 data to l4 data 
-
+import warnings
+import numpy as np
+import os
+import pyklip.rdi
 from pyklip.klip import rotate
 import scipy.ndimage
 from astropy.wcs import WCS
@@ -10,23 +13,67 @@ from corgidrp import star_center
 import corgidrp
 from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
-from corgidrp.spec import create_wave_cal
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
-import warnings
-import numpy as np
-import pyklip.rdi
-import os
 from astropy.io import fits
-from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
+from scipy.ndimage import generic_filter
+from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
+
+
+def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
+    """Interpolate over bad pixels in image and error arrays using a median filter.
+    TODO: Add additional options for bad pixel replacement (e.g. 2d interpolation that
+    can handle nans, constant value, etc.)
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): input L3 dataset with bad pixels
+        kernelsize (int, optional): Size of median filter window in pixels. Defaults to 3.
+        dq_thresh (int, optional): Minimum DQ value for a pixel to be replaced. Defaults to 1.
+
+    Returns:
+        corgidrp.data.Dataset: A copy of the dataset with the bad pixels and error values interpolated over. 
+        The bad pixel map is unchanged.
+    """
+
+    # Copy input dataset
+    dataset = input_dataset.copy()
+    im_data = dataset.all_data
+    im_err = dataset.all_err
+
+    # Get the pixels where the dq array is above the threshold
+    im_dq_bool = dataset.all_dq >= dq_thresh
+    
+    # Set the bad pixels to np.nan
+    im_data[im_dq_bool] = np.nan
+    
+    # Apply the correct dq frame to each error frame
+    for f,frame in enumerate(im_err):
+        for e,_ in enumerate(frame):
+            im_err[f][e] = np.where(im_dq_bool[f], np.nan,im_err[f][e])
+
+    # Interpolate over the bad pixels using nanmedian
+    im_filtered = generic_filter(im_data,np.nanmedian,size=kernelsize,axes=[-1,-2])
+    err_filtered = generic_filter(im_err,np.nanmedian,size=kernelsize,axes=[-1,-2])
+    
+    # Replace the bad pixels with the interpolated pixels
+    im_replaced = np.where(np.isnan(im_data),im_filtered,im_data)
+    err_replaced = np.where(np.isnan(im_err),err_filtered,im_err)
+    
+    # Update dataset
+    bp_count = np.sum(np.isnan(im_data))
+    history_msg = f"Interpolated over {bp_count} bad pixels with median filter size {kernelsize}."
+    dataset.update_after_processing_step(history_msg,
+                                         new_all_data=im_replaced, 
+                                         new_all_err=err_replaced)
+
+    return dataset
+
 
 def distortion_correction(input_dataset, astrom_calibration):
-    """
-    
-    Applies the distortion correction to the dataset. The function interpolates the bad pixels 
-    before applying the distortion correction to avoid creating more bad pixels. It then adds 
-    the bad pixels back in after the correction is applied, keeping the bad pixel maps the same. 
-    Furthermore it also applies the distortion correction to the error maps.
+    """ 
+    Applies the distortion correction to the dataset. The function assumes bad 
+    pixels have been corrected beforehand. Furthermore it also applies the distortion 
+    correction to the error maps.
     
 
     Args:
@@ -48,12 +95,10 @@ def distortion_correction(input_dataset, astrom_calibration):
 
         im_data = undistorted_data.data
         im_err = undistorted_data.err
-        im_dq = undistorted_data.dq
         imgsizeX, imgsizeY = im_data.shape
 
         # set image size to the largest axis if not square imagea
-        if (imgsizeX >= imgsizeY): imgsize = imgsizeX
-        else: imgsize = imgsizeY
+        imgsize = np.max([imgsizeX,imgsizeY])
 
         yorig, xorig = np.indices(im_data.shape)
         y0, x0 = imgsize//2, imgsize//2
@@ -89,47 +134,19 @@ def distortion_correction(input_dataset, astrom_calibration):
         gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
         gridx = gridx - distmapX
         gridy = gridy - distmapY
-
-        # interpolating bad pixels to not spillover during the interpolation while saving bpix
-        im_bpixs = np.zeros_like(im_data)
-        im_bpixs[im_dq.astype(bool)] = im_data[im_dq.astype(bool)]
         
-        im_data[im_dq.astype(bool)] = np.nan
-        
-        kernel = Gaussian2DKernel(3)
-        im_data = interpolate_replace_nans(im_data, kernel)
-    
         undistorted_image = scipy.ndimage.map_coordinates(im_data, [gridy, gridx])
         
-        # interpolate the errors
+        # undistort the errors
         if len(im_err.shape) == 2:
-            
-            err_bpixs = np.zeros_like(im_err)
-            err_bpixs[im_dq.astype(bool)] = im_err[im_dq.astype(bool)]
-            
-            im_err[im_dq.astype(bool)] = np.nan
-            im_err = interpolate_replace_nans(im_err, kernel)
-            
             undistorted_errors = scipy.ndimage.map_coordinates(im_err, [gridy, gridx])
-            undistorted_errors[im_dq.astype(bool)] = err_bpixs[im_dq.astype(bool)]
         else:
             undistorted_errors = []
             for err in im_err:
-                err_bpixs = np.zeros_like(err)
-                err_bpixs[im_dq.astype(bool)] = err[im_dq.astype(bool)]
-            
-                err[im_dq.astype(bool)] = np.nan
-                err = interpolate_replace_nans(err, kernel)
-                
                 und_err = scipy.ndimage.map_coordinates(err, [gridy, gridx])
-                und_err[im_dq.astype(bool)] = err_bpixs[im_dq.astype(bool)]
                 
                 undistorted_errors.append(und_err)
         
-        # put the bad pixels back in
-        
-        undistorted_image[im_dq.astype(bool)] = im_bpixs[im_dq.astype(bool)]
-
         undistorted_ims.append(undistorted_image)
         undistorted_errs.append(undistorted_errors)
 
@@ -316,144 +333,10 @@ def find_star(input_dataset,
     return dataset
 
 
-def crop(input_dataset, sizexy=None, centerxy=None):
-    """
-    
-    Crop the Images in a Dataset to a desired field of view. Default behavior is to 
-    crop the image to the dark hole region, centered on the pixel intersection nearest 
-    to the star location. Assumes 3D Image data is a stack of 2D data arrays, so only 
-    crops the last two indices. Currently only configured for HLC mode.
-
-    TODO: 
-        - Pad with nans if you try to crop outside the array (handle err & DQ too)
-        - Option to crop to an odd data array and center on a pixel?
-
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (any level)
-        sizexy (int or array of int): desired frame size, if only one number is provided the 
-            desired shape is assumed to be square, otherwise xy order. If not provided, 
-            defaults to 60 for NFOV (narrow field-of-view) observations. Defaults to None.
-        centerxy (float or array of float): desired center (xy order), should be a pixel intersection (a.k.a 
-            half-integer) otherwise the function rounds to the nearest intersection. Defaults to the 
-            "STARLOCX/Y" header values.
-
-    Returns:
-        corgidrp.data.Dataset: a version of the input dataset cropped to the desired FOV.
-    """
-
-    # Copy input dataset
-    dataset = input_dataset.copy()
-
-    # Require even data shape
-    if not sizexy is None and not np.all(np.array(sizexy)%2==0):
-        raise UserWarning('Even sizexy is required.')
-       
-    # Need to loop over frames and reinit dataset because array sizes change
-    frames_out = []
-
-    for frame in dataset:
-        prihdr = frame.pri_hdr
-        exthdr = frame.ext_hdr
-        dqhdr = frame.dq_hdr
-        errhdr = frame.err_hdr
-
-        # Pick default crop size based on the size of the effective field of view
-        if sizexy is None:
-            if exthdr['LSAMNAME'] == 'NFOV':
-                sizexy = 60
-            else:
-                raise UserWarning('Crop function is currently only configured for NFOV (narrow field-of-view) observations if sizexy is not provided.')
-
-        # Assign new array sizes and center location
-        frame_shape = frame.data.shape
-        if isinstance(sizexy,int):
-            sizexy = [sizexy]*2
-        if isinstance(centerxy,float):
-            centerxy = [centerxy] * 2
-        elif centerxy is None:
-            if ("STARLOCX" in exthdr.keys()) and ("STARLOCY" in exthdr.keys()):
-                centerxy = np.array([exthdr["STARLOCX"],exthdr["STARLOCY"]])
-            else: raise ValueError('centerxy not provided but STARLOCX/Y are missing from image extension header.')
-        
-        # Round to centerxy to nearest half-pixel
-        centerxy = np.array(centerxy)
-        if not np.all((centerxy-0.5)%1 == 0):
-            old_centerxy = centerxy.copy()
-            centerxy = np.round(old_centerxy-0.5)+0.5
-            print(f'Desired center {old_centerxy} is not at the intersection of 4 pixels. Centering on the nearest intersection {centerxy}')
-            
-        # Crop the data
-        start_ind = (centerxy + 0.5 - np.array(sizexy)/2).astype(int)
-        end_ind = (centerxy + 0.5 + np.array(sizexy)/2).astype(int)
-        x1,y1 = start_ind
-        x2,y2 = end_ind
-
-        # Check if cropping outside the FOV
-        xleft_pad = -x1 if (x1<0) else 0
-        xrright_pad = x2-frame_shape[-1]+1 if (x2 > frame_shape[-1]) else 0
-        ybelow_pad = -y1 if (y1<0) else 0
-        yabove_pad = y2-frame_shape[-2]+1 if (y2 > frame_shape[-2]) else 0
-        
-        if np.any(np.array([xleft_pad,xrright_pad,ybelow_pad,yabove_pad])> 0) :
-            raise ValueError("Trying to crop to a region outside the input data array. Not yet configured.")
-
-        if frame.data.ndim == 2:
-            cropped_frame_data = frame.data[y1:y2,x1:x2]
-            cropped_frame_err = frame.err[:,y1:y2,x1:x2]
-            cropped_frame_dq = frame.dq[y1:y2,x1:x2]
-        elif frame.data.ndim == 3:
-            cropped_frame_data = frame.data[:,y1:y2,x1:x2]
-            cropped_frame_err = frame.err[:,:,y1:y2,x1:x2]
-            cropped_frame_dq = frame.dq[:,y1:y2,x1:x2]
-        else:
-            raise ValueError('Crop function only supports 2D or 3D frame data.')
-
-        # Update headers
-        exthdr["NAXIS1"] = sizexy[0]
-        exthdr["NAXIS2"] = sizexy[1]
-        dqhdr["NAXIS1"] = sizexy[0]
-        dqhdr["NAXIS2"] = sizexy[1]
-        errhdr["NAXIS1"] = sizexy[0]
-        errhdr["NAXIS2"] = sizexy[1]
-        errhdr["NAXIS3"] = cropped_frame_err.shape[-3]
-        if frame.data.ndim == 3:
-            exthdr["NAXIS3"] = frame.data.shape[0]
-            dqhdr["NAXIS3"] = frame.dq.shape[0]
-            errhdr["NAXIS4"] = frame.err.shape[0]
-        
-        updated_hdrs = []
-        if ("STARLOCX" in exthdr.keys()):
-            exthdr["STARLOCX"] -= x1
-            exthdr["STARLOCY"] -= y1
-            updated_hdrs.append('STARLOCX/Y')
-        if ("CRPIX1" in prihdr.keys()):
-            prihdr["CRPIX1"] -= x1
-            prihdr["CRPIX2"] -= y1
-            updated_hdrs.append('CRPIX1/2')
-        if not ("DETPIX0X" in exthdr.keys()):
-            exthdr.set('DETPIX0X',0)
-            exthdr.set('DETPIX0Y',0)
-        exthdr.set('DETPIX0X',exthdr["DETPIX0X"]+x1)
-        exthdr.set('DETPIX0Y',exthdr["DETPIX0Y"]+y1)
-
-        new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
-        new_frame.filename = frame.filename
-        frames_out.append(new_frame)
-
-    output_dataset = data.Dataset(frames_out)
-
-    history_msg1 = f"""Frames cropped to new shape {list(output_dataset[0].data.shape)} on center {list(centerxy)}. Updated header kws: {", ".join(updated_hdrs)}."""
-    output_dataset.update_after_processing_step(history_msg1)
-    
-    return output_dataset
-
-
 def do_psf_subtraction(input_dataset, 
                        ct_calibration=None,
                        reference_star_dataset=None,
                        outdir=None,fileprefix="",
-                       do_crop=True,
-                       crop_sizexy=None,
                        measure_klip_thrupt=True,
                        measure_1d_core_thrupt=True,
                        cand_locs=None,
@@ -467,7 +350,7 @@ def do_psf_subtraction(input_dataset,
     """
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
-        Handle propagate DQ array
+        Handle/propagate DQ array
         Propagate error correctly
         What info is missing from output dataset headers?
         Add comments to new ext header cards
@@ -483,9 +366,6 @@ def do_psf_subtraction(input_dataset,
             star. If not provided, references will be searched for in the input dataset.
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
-        do_crop (bool, optional): whether to crop data before PSF subtraction. Defaults to True.
-        crop_sizexy (list of int, optional): Desired size to crop the images to before PSF subtraction. Defaults to 
-            None, which results in the step choosing a crop size based on the imaging mode. 
         measure_klip_thrupt (bool, optional): Whether to measure KLIP throughput via injection-recovery. Separations 
             and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU']. 
             Defaults to True.
@@ -571,11 +451,6 @@ def do_psf_subtraction(input_dataset,
     outdir = os.path.join(outdir,klip_kwargs['mode'])
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-
-    # Crop data
-    if do_crop:
-        sci_dataset = crop(sci_dataset,sizexy=crop_sizexy)
-        ref_dataset = None if ref_dataset is None else crop(ref_dataset,sizexy=crop_sizexy) 
 
     # Mask data where DQ > 0, let pyklip deal with the nans
     sci_dataset_masked = nan_flags(sci_dataset)
@@ -710,7 +585,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
   
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level) - now handles pol datasets shapes
         use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
 	    rot_center: 'im_center', 'starloc', or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header. 
 
@@ -718,18 +593,19 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         corgidrp.data.Dataset: North is up, East is left
     
     """
-
     # make a copy 
     processed_dataset = input_dataset.copy()
-
     new_all_data = []; new_all_err = []; new_all_dq = []
     for processed_data in processed_dataset:
-
         ## image extension ##
         sci_hd = processed_data.ext_hdr
         sci_data = processed_data.data
-        ylen, xlen = sci_data.shape
-
+        # See if it's pol data (each array is 3D since has two pol modes)
+        is_pol = sci_data.ndim == 3
+        if is_pol:
+            num_pols, ylen, xlen = sci_data.shape # set number of pol modes (nominally 2)
+        else:
+            ylen, xlen = sci_data.shape # for regular data
         # define the center for rotation
         if rot_center == 'im_center':
             xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
@@ -743,71 +619,197 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
             xcen = rot_center[0]
             ycen = rot_center[1]
 
-        # look for WCS solutions
+            # look for WCS solutions
         if use_wcs is True:
             astr_hdr = WCS(sci_hd)
             CD1_2 = sci_hd['CD1_2']
             CD2_2 = sci_hd['CD2_2']
-            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
-
+            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2))  # Compute North Position Angle from the WCS solutions
         else:
             warnings.warn('use "ROLL" instead of WCS to estimate the north position angle')
             astr_hdr = None
             # read the roll angle parameter, assuming this info is recorded in the primary header as requested
             roll_angle = processed_data.pri_hdr['ROLL']
 
-        # derotate
-        sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        # derotate - handle 2D or 3D
+        if is_pol:
+            # one header applies to all pols. Have to rotate both pol images, but header only gets updated once in loop
+            sci_derot = np.stack([rotate(sci_data[i], roll_angle, (xcen, ycen), astr_hdr=astr_hdr if i == 0 else None)
+                                  for i in range(num_pols)])
+        else:
+            sci_derot = rotate(sci_data, roll_angle, (xcen, ycen), astr_hdr=astr_hdr)  # astr_hdr is corrected at above lines
         new_all_data.append(sci_derot)
-
         log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
-        sci_hd['HISTORY'] = log 
+        sci_hd['HISTORY'] = log
 
         # update WCS solutions
         if use_wcs:
-            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0,0]
-            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0,1]
-            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1,0]
-            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1,1]
+            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0, 0]
+            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0, 1]
+            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1, 0]
+            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1, 1]
         #############
-
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = np.expand_dims(rotate(err_data[0],roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
+        if is_pol:
+            # err has shape (num_err_layers, num_pols, ylen, xlen)
+            err_derot = np.stack([rotate(err_data[0, i], roll_angle, (xcen, ycen))
+                                  for i in range(num_pols)])
+            err_derot = np.expand_dims(err_derot, axis=0)  # Add back error layer dimension
+        else:
+            err_derot = np.expand_dims(rotate(err_data[0], roll_angle, (xcen, ycen)), axis=0)
         new_all_err.append(err_derot)
-        #############
 
+        #############
         ## HDU DQ ##
-        # all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
         dq_data = processed_data.dq
-        if xcen != xlen/2 or ycen != ylen/2:
+
+        # pol version has to loop through both images
+        if is_pol:
+
+            dq_derot_planes = []
+            for plane_idx in range(num_pols):
+                dq_pol = dq_data[plane_idx]
+                if xcen != xlen / 2 or ycen != ylen / 2:
+                    # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
+                    xshift = xcen - xlen / 2;
+                    yshift = ycen - ylen / 2
+                    pad_x = int(np.ceil(abs(xshift)));
+                    pad_y = int(np.ceil(abs(yshift)))
+                    dq_pol_padded = np.pad(dq_pol, pad_width=((pad_y, pad_y), (pad_x, pad_x)), mode='constant',
+                                             constant_values=0)
+                    dq_pol_padded_shifted = shift(dq_pol_padded, (-yshift, -xshift), order=0, mode='constant',
+                                                    cval=0)
+                    crop_x = slice(pad_x, pad_x + xlen);
+                    crop_y = slice(pad_y, pad_y + ylen)
+                    dq_pol_derot = shift(
+                        rotate_scipy(dq_pol_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False,
+                                     cval=0), (yshift, xshift), order=0, mode='constant', cval=0)[crop_y, crop_x]
+                else:
+                    dq_pol_derot = rotate_scipy(dq_pol, -roll_angle, order=0, mode='constant', reshape=False,
+                                                  cval=0)
+                dq_derot_planes.append(dq_pol_derot)
+
+            dq_derot = np.stack(dq_derot_planes)
+
+        else: #non pol version
+            if xcen != xlen / 2 or ycen != ylen / 2:
                 # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
                 # calculate shift values
-                xshift = xcen-xlen/2; yshift = ycen-ylen/2
+                xshift = xcen - xlen / 2;
+                yshift = ycen - ylen / 2
 
                 # pad and shift
-                pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
-                dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=0)
-                dq_data_padded_shifted = shift(dq_data_padded,(-yshift,-xshift),order=0,mode='constant',cval=0)
-
+                pad_x = int(np.ceil(abs(xshift)));
+                pad_y = int(np.ceil(abs(yshift)))
+                dq_data_padded = np.pad(dq_data, pad_width=((pad_y, pad_y), (pad_x, pad_x)), mode='constant',
+                                        constant_values=0)
+                dq_data_padded_shifted = shift(dq_data_padded, (-yshift, -xshift), order=0, mode='constant', cval=0)
                 # define slices for cropping
                 crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
 
                 # rotate (invserse direction to pyklip.rotate), re-shift, and crop
-                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=0),\
-                 (yshift,xshift),order=0,mode='constant',cval=0)[crop_y,crop_x]
-        else:
-                # simply rotate 
+                dq_derot = shift(
+                    rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False,
+                                 cval=0), \
+                    (yshift, xshift), order=0, mode='constant', cval=0)[crop_y, crop_x]
+            else:
+                # simply rotate
                 dq_derot = rotate_scipy(dq_data, -roll_angle, order=0, mode='constant', reshape=False, cval=0)
 
         new_all_dq.append(dq_derot)
         ############
-
     history_msg = 'North is Up and East is Left'
-    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
-                                                   new_all_dq=np.array(new_all_dq))
+    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data),
+                                                   new_all_err=np.array(new_all_err), new_all_dq=np.array(new_all_dq))
 
-    return processed_dataset 
+    return processed_dataset
+
+
+def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
+    """ 
+    A procedure for estimating the centroid of the zero-point image
+    (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
+        template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
+                                                  path is taken
+        xcent_guess (float): initial x guess for the centroid fit for all frames
+        ycent_guess (float): initial y guess for the centroid fit for all frames
+        bb_nb_dx (float): horizontal image offset between the narrowband and broadband filters, in EXCAM pixels. 
+                          This will override the offset in the existing lookup table. 
+        bb_nb_dy (float): vertical image offset between the narrowband and broadband filters, in EXCAM pixels. 
+                          This will override the offset in the existing lookup table. 
+        return_all (boolean): if false (default) returns only the broad band science frames, if true it returns all (including narrow band) frames
+    
+    Returns:
+        corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
+                               information as header keywords, which is WAVLEN0, WV0_X, WV0_XERR, WV0_Y, WV0_YERR, WV0_DIMX, WV0_DIMY
+    """
+    dataset = input_dataset.copy()
+    dpamname = dataset.frames[0].ext_hdr["DPAMNAME"]
+    if not dpamname.startswith("PRISM"):
+        raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
+    slit = dataset.frames[0].ext_hdr['FSAMNAME']
+    if not slit.startswith("R"):
+        raise AttributeError("not a slit observation")
+    # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
+    narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
+    band = np.array([s.upper() for s in band])
+    if len(band) < 2:
+        raise AttributeError("there needs to be at least 1 narrowband and 1 science band prism frame in the dataset\
+                             to determine the wavelength zero point")
+        
+    if "3D" in band:
+        sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
+        sci_dataset = narrow_dataset[int(np.nonzero(band != "3D")[0].item())]
+    elif "2C" in band:
+        sat_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
+        sci_dataset = narrow_dataset[int(np.nonzero(band != "2C")[0].item())]
+    else:
+        raise AttributeError("No narrowband frames found in input dataset")
+    
+    if len(sci_dataset) == 0:
+        raise AttributeError("No science frames found in input dataset")
+    
+    if xcent_guess is not None and ycent_guess is not None:
+        n = len(sat_dataset)
+        initial_cent = {"xcent": np.repeat(xcent_guess, n),
+                        "ycent": np.repeat(ycent_guess, n)}
+    else:
+        initial_cent = None
+    spot_centroids = compute_psf_centroid(dataset = sat_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
+    
+    nb_filter = sat_dataset[0].ext_hdr["CFAMNAME"]
+    bb_filter = nb_filter[0]
+    cen_wave, _, xoff_nb, yoff_nb = read_cent_wave(nb_filter)
+    _, _, xoff_bb, yoff_bb = read_cent_wave(bb_filter)
+    # Correct the centroid for the filter-to-filter image offset, so that
+    # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
+    if bb_nb_dx is not None and bb_nb_dy is not None:
+        x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
+        y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
+    else:
+        x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
+        y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
+    x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
+    y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+    if return_all:
+        sci_dataset = dataset
+
+    for frame in sci_dataset:
+        frame.ext_hdr["WAVLEN0"] = cen_wave
+        frame.ext_hdr["WV0_X"] = x0
+        frame.ext_hdr["WV0_XERR"] = x0err
+        frame.ext_hdr["WV0_Y"] = y0
+        frame.ext_hdr["WV0_YERR"] = y0err
+        frame.ext_hdr["WV0_DIMX"] = sat_dataset[0].ext_hdr['NAXIS1']
+        frame.ext_hdr["WV0_DIMY"] = sat_dataset[0].ext_hdr['NAXIS2']
+                              
+    history_msg = "wavelength zeropoint values added to header"
+    sci_dataset.update_after_processing_step(history_msg)
+    return sci_dataset
 
 
 def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials = 1000):
@@ -830,13 +832,13 @@ def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials
         #get the corgidrp.data.Dataset:wavelength zeropoint information from the input science frames header
         head = frames.ext_hdr
         wave_zero = {
-        'wavlen': head['wavlen0'],
-        'x' : head['x0'],
-        'xerr': head['x0err'],
-        'y': head['y0'],
-        'yerr': head['y0err'],
-        'shapex': head['shapex0'],
-        'shapey': head['shapey0']
+        'wavlen': head['WAVLEN0'],
+        'x' : head['WV0_X'],
+        'xerr': head['WV0_XERR'],
+        'y': head['WV0_Y'],
+        'yerr': head['WV0_YERR'],
+        'shapex': head['WV0_DIMX'],
+        'shapey': head['WV0_DIMY']
         }
     
         wave_map, wave_err, pos_lookup, x_refwav, y_refwav = create_wave_cal(disp_model, wave_zero, pixel_pitch_um = pixel_pitch_um, ntrials = ntrials)
@@ -857,6 +859,61 @@ def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials
     dataset.update_after_processing_step(history_msg)
     return dataset
 
+def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
+    """
+    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
+    the wavelength zero point with units photoelectron/s/bin.
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): 
+        halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
+        halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
+        apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
+        
+    Returns:
+        corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
+    """
+    dataset = input_dataset.copy()
+    
+    for image in dataset:
+        xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
+        image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        err_cutout = image.err[:,ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        bad_ind = np.where(dq_cutout > 0)
+        image_cutout[bad_ind] = np.nan
+        err_cutout[bad_ind] = np.nan
+        wave = np.mean(wave_cal_map_cutout, axis=1)
+        wave_err = np.mean(wave_err_cutout, axis=1)
+        err = np.sqrt(np.nansum(np.square(err_cutout), axis=2))
+        # dq collpase: keep all flags on
+        dq_collapse = np.bitwise_or.reduce(dq_cutout, axis=1)
+ 
+        if apply_weights:
+            err_cutout[0][err_cutout[0] == 0] = np.nan
+            whts = 1./np.square(err_cutout[0])
+            spec = np.nansum(image_cutout * whts, axis = 1) / np.nansum (whts, axis = 1) * (2 * halfwidth + 1)
+            err[0] = 1./np.sqrt(np.nansum(whts, axis = 1))
+            weight_str = "weights applied"
+        else:
+            spec = np.nansum(image_cutout, axis=1)
+            weight_str = "no weights applied"
+        image.data = spec
+        image.err = err
+        image.dq = dq_collapse
+        image.hdu_list["WAVE"].data = wave
+        image.hdu_list["WAVE_ERR"].data = wave_err
+        del(image.hdu_list["POSLOOKUP"])
+    history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
+    dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
+    return dataset
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
