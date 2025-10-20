@@ -684,7 +684,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     TODO: Update pixel locations that are saved in the header!
     
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level) - now handles pol datasets shapes
         use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
 	    rot_center: 'im_center', 'starloc', or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header. 
 
@@ -692,18 +692,21 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         corgidrp.data.Dataset: North is up, East is left
     
     """
-
     # make a copy 
     processed_dataset = input_dataset.copy()
-
     new_all_data = []; new_all_err = []; new_all_dq = []
     for processed_data in processed_dataset:
-
         ## image extension ##
         sci_hd = processed_data.ext_hdr
         sci_data = processed_data.data
-        ylen, xlen = sci_data.shape[-2:]
-
+        
+        ylen, xlen = sci_data.shape[-2:] 
+        
+        # See if it's pol data (each array is 3D since has two pol modes)
+        is_pol = sci_data.ndim == 3
+        if is_pol:
+            num_pols = sci_data.shape[0] # set number of pol modes (nominally 2)
+        
         # define the center for rotation
         if rot_center == 'im_center':
             xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
@@ -717,7 +720,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
             xcen = rot_center[0]
             ycen = rot_center[1]
 
-        # look for WCS solutions
+            # look for WCS solutions
         if use_wcs is True:
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
@@ -750,26 +753,22 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         sci_derot = derotate_arr(sci_data,roll_angle, xcen,ycen,astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
         
         new_all_data.append(sci_derot)
-
         log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
-        sci_hd['HISTORY'] = log 
+        sci_hd['HISTORY'] = log
 
         # update WCS solutions
         if use_wcs:
-
-            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0,0]
-            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0,1]
-            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1,0]
-            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1,1]
-
+            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0, 0]
+            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0, 1]
+            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1, 0]
+            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1, 1]
         #############
-
         ## HDU ERR ##
         err_data = processed_data.err
         err_derot = derotate_arr(err_data,roll_angle, xcen,ycen) # err data shape is 1x1024x1024
         new_all_err.append(err_derot)
-        #############
 
+        #############
         ## HDU DQ ##
         # all DQ pixels must have integers
         dq_data = processed_data.dq
@@ -779,12 +778,11 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
         new_all_dq.append(dq_derot)
         ############
-
     history_msg = 'North is Up and East is Left'
-    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
-                                                   new_all_dq=np.array(new_all_dq))
+    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data),
+                                                   new_all_err=np.array(new_all_err), new_all_dq=np.array(new_all_dq))
 
-    return processed_dataset 
+    return processed_dataset
 
 
 def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
