@@ -144,8 +144,8 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
     
     elif data_arr.ndim == 3:
         derotated_arr = []
-        for im in data_arr:
-            derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        for i,im in enumerate(data_arr):
+            derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr if (i==0) else None) # astr_hdr is corrected only once
         
             derotated_arr.append(derotated_im)
 
@@ -153,10 +153,10 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
     
     elif data_arr.ndim == 4:
         derotated_arr = []
-        for set in data_arr:
+        for s,set in enumerate(data_arr):
             derotated_set = []
-            for im in set:
-                derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+            for i,im in enumerate(set):
+                derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr if (i==0 and s==0) else None) # astr_hdr is corrected only once
         
                 derotated_set.append(derotated_im)
             derotated_arr.append(derotated_set)
