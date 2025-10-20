@@ -125,12 +125,13 @@ def create_spatial_pol(dataset,nr=60,pfov_size=174,image_center_x=512,image_cent
         
     return (polmap)  
                
-def combine_pol_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im_size=420,rad_mask=None, planet_rad=None, n_pix=174, n_pad=302,image_center_x=512,image_center_y=512):
+def combine_pol_flatfield_rasters(residual_images,residual_images_err,cent=None,planet=None,band=None,im_size=420,rad_mask=None, planet_rad=None, n_pix=174, n_pad=302,image_center_x=512,image_center_y=512):
     """combine the dataset of residual image frames of neptune or uranus and create flat field 
     	and associated error
 
     	Args:
         	residual_images (np.array): Residual images frames divided by the mnatched filter of neptune and uranus
+            residual_images_err (np.array): Error from the Residual images frames divided by the mnatched filter of neptune and uranus
             cent (np.array): centroid of the image frames
         	planet (str):   name of the planet neptune or uranus
         	band (str):  band of the observation band1 or band4
@@ -172,9 +173,16 @@ def combine_pol_flatfield_rasters(residual_images,cent=None,planet=None,band=Non
         ny = np.arange(0,residual_images[i].shape[0])
         nxx,nyy = np.meshgrid(nx,ny)
         nrr = np.sqrt((nxx-rad-5)**2 + (nyy-rad-5)**2)
-        nrr_copy = nrr.copy();  nrr_err_copy=nrr.copy()
+       
+        nrr_copy = nrr.copy();  
+        nrr_err_copy=nrr.copy()
+    
         nrr_copy[nrr<rad] = residual_images[i][nrr<rad]
+        nrr_err_copy[nrr<rad] = residual_images_err[i][nrr<rad]
+    
         nrr_copy[nrr>=rad] = None
+        nrr_err_copy[nrr>=rad] = None
+       
         ymin = int(cent[i][0])
         ymax = int(cent[i][1])
         xmin = int(cent[i][2])
@@ -183,10 +191,19 @@ def combine_pol_flatfield_rasters(residual_images,cent=None,planet=None,band=Non
         bool_innotzero = np.logical_and(nrr<rad,full_residuals[ymin:ymax,xmin:xmax]!=0)
         bool_iniszero = np.logical_and(nrr<rad,full_residuals[ymin:ymax,xmin:xmax]==0)
         bool_outisnotzero = np.logical_and(nrr>=rad,full_residuals[ymin:ymax,xmin:xmax]!=0)
+
+        bool_innotzero_err = np.logical_and(nrr<rad,err_residuals[ymin:ymax,xmin:xmax]!=0)
+        bool_iniszero_err = np.logical_and(nrr<rad,err_residuals[ymin:ymax,xmin:xmax]==0)
+        bool_outisnotzero_err = np.logical_and(nrr>=rad,err_residuals[ymin:ymax,xmin:xmax]!=0)
         
         full_residuals[ymin:ymax,xmin:xmax][bool_innotzero] = (nrr_copy[bool_innotzero] + full_residuals[ymin:ymax,xmin:xmax][bool_innotzero])/2
         full_residuals[ymin:ymax,xmin:xmax][bool_iniszero] = nrr_copy[bool_iniszero]
         full_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero] = full_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero]
+
+        err_residuals[ymin:ymax,xmin:xmax][bool_innotzero_err] = (nrr_err_copy[bool_innotzero_err] + err_residuals[ymin:ymax,xmin:xmax][bool_innotzero_err])/2
+        err_residuals[ymin:ymax,xmin:xmax][bool_iniszero_err] = nrr_err_copy[bool_iniszero_err]
+        err_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero_err] = err_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero_err]
+    
 
     
         full_residuals_resel = ndimage.convolve(full_residuals,mask)
@@ -195,15 +212,17 @@ def combine_pol_flatfield_rasters(residual_images,cent=None,planet=None,band=Non
     resid_mask = ~np.isnan(full_residuals)
     cent_rmask=centr.centroid_com(resid_mask)
     p_flat=np.roll(full_residuals, (image_center_x-int(cent_rmask[1]),image_center_y-int(cent_rmask[0])), axis=(0,1))
+    p_flat_err=np.roll(err_residuals, (image_center_x-int(cent_rmask[1]),image_center_y-int(cent_rmask[0])), axis=(0,1))
     nx = np.arange(0,full_residuals_resel.shape[1])
     ny = np.arange(0,full_residuals_resel.shape[0])
     nxx,nyy = np.meshgrid(ny,nx)
     cent_n=centr.centroid_com(p_flat)
     nrr = np.sqrt((nxx-cent_n[0])**2 + (nyy-cent_n[1])**2)
     p_flat[nrr>n_pix//2]= 1
+    p_flat_err[nrr>n_pix//2]=0
     
     full_residuals=np.pad(p_flat, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(1))
-    err_residuals=np.pad(err_residuals, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(0))
+    err_residuals=np.pad(p_flat_err, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(0))
     
     return (full_residuals,err_residuals,cent_n)
 
@@ -310,11 +329,14 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         cent_pol1.append((pol1_y-up_radius,pol1_y+up_radius,pol1_x-up_radius,pol1_x+up_radius))
         cent_pol2.append((pol2_y-up_radius,pol2_y+up_radius,pol2_x-up_radius,pol2_x+up_radius))
 
-    resi_images_pol1=flat.flatfield_residuals(raster_images_cent_pol1,N=N)
-    resi_images_pol2=flat.flatfield_residuals(raster_images_cent_pol2,N=N)
+    resi_images_pol1=flat.flatfield_residuals(raster_images_cent_pol1,N=N)[0]
+    resi_images_pol2=flat.flatfield_residuals(raster_images_cent_pol2,N=N)[0]
 
-    raster_com_pol1=combine_pol_flatfield_rasters(resi_images_pol1,planet=planet,band=band,cent=cent_pol1, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=512,image_center_y=512)
-    raster_com_pol2=combine_pol_flatfield_rasters(resi_images_pol2,planet=planet,band=band,cent=cent_pol2, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=512,image_center_y=512)
+    resi_images_pol1_err=flat.flatfield_residuals(raster_images_cent_pol1,N=N)[1]
+    resi_images_pol2_err=flat.flatfield_residuals(raster_images_cent_pol2,N=N)[1]
+
+    raster_com_pol1=combine_pol_flatfield_rasters(resi_images_pol1,resi_images_pol1_err,planet=planet,band=band,cent=cent_pol1, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=512,image_center_y=512)
+    raster_com_pol2=combine_pol_flatfield_rasters(resi_images_pol2,resi_images_pol2_err,planet=planet,band=band,cent=cent_pol2, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=512,image_center_y=512)
     
     if prism == 'POL0':
     #place image according to specified angle

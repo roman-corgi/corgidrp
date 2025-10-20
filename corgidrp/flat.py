@@ -73,11 +73,35 @@ def raster_kernel(width, image, hard=True):
 
     return kernel
 
+# def flatfield_residuals(images, N=None):
+#     """Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
+#      dividing from matched filters
+
+#      Todo: Propoagate the errors: incorporate the errors in the raster frames of neptune and jupiter and the errors in the matched filter
+
+#      Args:
+#     	images (np.array): 2D array of cropped neptune or uranus image frames
+#         N (int): number of images to be grouped. defaults to 3 for both Neptune and uranus. (If we use different number of dithers for neptune and uranus, option is provided to change N)
+
+#      Returns:
+#     	matched_residuals (np.array): residual image frames of neptune or uranus divided by matched filter
+# 	"""
+#     raster_images = np.array(images)
+#     images_split = np.array(np.split(np.array(raster_images),N))
+#     matched_filters = np.array([np.nanmedian(np.stack(images_split[i],2),2) for i in np.arange(0,len(images_split))])
+#     matched_filters_smooth = [gauss(matched_filters[i],3) for i in range(len(matched_filters))] 
+    
+#     matched_residuals=[];
+#     matched_residuals_err=[]
+#     for j in range(len(raster_images)):
+#         n_images=int(np.floor(j//(len(raster_images)//len(matched_filters_smooth))))
+#         matched_residuals.append(raster_images[j]/matched_filters_smooth[n_images])
+#     return(matched_residuals)
+
 def flatfield_residuals(images, N=None):
     """Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
      dividing from matched filters
 
-     Todo: Propoagate the errors: incorporate the errors in the raster frames of neptune and jupiter and the errors in the matched filter
 
      Args:
     	images (np.array): 2D array of cropped neptune or uranus image frames
@@ -85,25 +109,57 @@ def flatfield_residuals(images, N=None):
 
      Returns:
     	matched_residuals (np.array): residual image frames of neptune or uranus divided by matched filter
+        matched_residuals_err (np.array): erros of the residual image frames of neptune or uranus divided by matched filter
 	"""
     raster_images = np.array(images)
+    # M is the number of images in each group used to calculate a filter.
+    M = len(raster_images) // N
     images_split = np.array(np.split(np.array(raster_images),N))
     matched_filters = np.array([np.nanmedian(np.stack(images_split[i],2),2) for i in np.arange(0,len(images_split))])
     matched_filters_smooth = [gauss(matched_filters[i],3) for i in range(len(matched_filters))] 
     
+    #Estimate the initial uncertainty (standard error of the mean/median) for each filter group.
+    sigma_matched_filters = np.array([np.nanstd(images_split[i], axis=0) / np.sqrt(M) for i in np.arange(N)])
+    # Apply the same smoothing (Gauss(sigma=3)) to the error maps as was applied to the filters.
+    sigma_matched_filters_smooth = [gauss(sigma_matched_filters[i], 3) for i in range(N)]
+
+    
     matched_residuals=[];
     matched_residuals_err=[]
     for j in range(len(raster_images)):
+        
         n_images=int(np.floor(j//(len(raster_images)//len(matched_filters_smooth))))
-        matched_residuals.append(raster_images[j]/matched_filters_smooth[n_images])
-    return(matched_residuals)
+        current_image = raster_images[j]
+        
+        current_filter_smooth = matched_filters_smooth[n_images]
+        #calculate the residual
+        residual = current_image / current_filter_smooth
+        matched_residuals.append(residual)
+        
+        #error propagation for division (Z = X/Y) ---
+        # Sigma_Z = |Z| * sqrt( (Sigma_X/X)^2 + (Sigma_Y/Y)^2 )
+        
+        #sigma_x: Image error (Assumed Poisson noise: Sigma_X = sqrt(X))
+        sigma_image = np.sqrt(np.maximum(current_image, 1e-6))
+        current_sigma_filter_smooth = sigma_matched_filters_smooth[n_images]
+        #relative variance of the image: (Sigma_X/X)^2
+        relative_variance_image = (sigma_image / np.maximum(current_image, 1e-6))**2
+        #relative variance of the filter: (Sigma_Y/Y)^2
+        relative_variance_filter = (current_sigma_filter_smooth / np.maximum(current_filter_smooth, 1e-6))**2
+        #final Error Calculation
+        error = residual * np.sqrt(relative_variance_image + relative_variance_filter)
+        matched_residuals_err.append(error)
+        
+    
+    return(matched_residuals,matched_residuals_err)
 	    
-def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im_size=420,rad_mask=None,  planet_rad=None, n_pix=165, n_pad=302):
+def combine_flatfield_rasters(residual_images,residual_images_err,cent=None,planet=None,band=None,im_size=420,rad_mask=None,  planet_rad=None, n_pix=165, n_pad=302):
     """combine the dataset of residual image frames of neptune or uranus and create flat field 
     	and associated error
 
     	Args:
         	residual_images (np.array): Residual images frames divided by the mnatched filter of neptune and uranus
+            residual_images_err (np.array): Error from the Residual images frames divided by the mnatched filter of neptune and uranus
             cent (np.array): centroid of the image frames
         	planet (str):   name of the planet neptune or uranus
         	band (str):  band of the observation band1 or band4
@@ -142,9 +198,15 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
         ny = np.arange(0,residual_images[i].shape[0])
         nxx,nyy = np.meshgrid(nx,ny)
         nrr = np.sqrt((nxx-rad-5)**2 + (nyy-rad-5)**2)
-        nrr_copy = nrr.copy();  nrr_err_copy=nrr.copy()
+        nrr_copy = nrr.copy();  
+        nrr_err_copy=nrr.copy()
+        
         nrr_copy[nrr<rad] = residual_images[i][nrr<rad]
+        nrr_err_copy[nrr<rad] = residual_images_err[i][nrr<rad]
+        
         nrr_copy[nrr>=rad] = None
+        nrr_err_copy[nrr>=rad] = None
+       
         ymin = int(cent[i][0])
         ymax = int(cent[i][1])
         xmin = int(cent[i][2])
@@ -153,22 +215,31 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
         bool_innotzero = np.logical_and(nrr<rad,full_residuals[ymin:ymax,xmin:xmax]!=0)
         bool_iniszero = np.logical_and(nrr<rad,full_residuals[ymin:ymax,xmin:xmax]==0)
         bool_outisnotzero = np.logical_and(nrr>=rad,full_residuals[ymin:ymax,xmin:xmax]!=0)
+
+        bool_innotzero_err = np.logical_and(nrr<rad,err_residuals[ymin:ymax,xmin:xmax]!=0)
+        bool_iniszero_err = np.logical_and(nrr<rad,err_residuals[ymin:ymax,xmin:xmax]==0)
+        bool_outisnotzero_err = np.logical_and(nrr>=rad,err_residuals[ymin:ymax,xmin:xmax]!=0)
         
         full_residuals[ymin:ymax,xmin:xmax][bool_innotzero] = (nrr_copy[bool_innotzero] + full_residuals[ymin:ymax,xmin:xmax][bool_innotzero])/2
         full_residuals[ymin:ymax,xmin:xmax][bool_iniszero] = nrr_copy[bool_iniszero]
         full_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero] = full_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero]
 
+        err_residuals[ymin:ymax,xmin:xmax][bool_innotzero_err] = (nrr_err_copy[bool_innotzero_err] + err_residuals[ymin:ymax,xmin:xmax][bool_innotzero_err])/2
+        err_residuals[ymin:ymax,xmin:xmax][bool_iniszero_err] = nrr_err_copy[bool_iniszero_err]
+        err_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero_err] = err_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero_err]
+
     
         full_residuals_resel = ndimage.convolve(full_residuals,mask)
         
-        
-    
+
     full_residuals[full_residuals==0] = None
+    err_residuals[err_residuals==0] = None
     nx = np.arange(0,full_residuals_resel.shape[1])
     ny = np.arange(0,full_residuals_resel.shape[0])
     nxx,nyy = np.meshgrid(ny,nx)
     nrr = np.sqrt((nxx-n/2)**2 + (nyy-n/2)**2)
     full_residuals[nrr>n_pix]= 1
+    err_residuals[nrr>n_pix]= 0
     
     
     full_residuals=np.pad(full_residuals, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(1))
@@ -252,8 +323,9 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         #centroid of the cropped images
         cent.append((yc-up_radius,yc+up_radius,xc-up_radius,xc+up_radius))
 
-    resi_images=flatfield_residuals(raster_images_cent,N=N)
-    raster_com=combine_flatfield_rasters(resi_images,planet=planet,band=band,cent=cent, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad)
+    resi_images=flatfield_residuals(raster_images_cent,N=N)[0]
+    resi_images_err=flatfield_residuals(raster_images_cent,N=N)[1]
+    raster_com=combine_flatfield_rasters(resi_images,resi_images_err,planet=planet,band=band,cent=cent, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad)
     onskyflat=raster_com[0]
     onsky_flatfield = data.FlatField(onskyflat, pri_hdr=prihdr, ext_hdr=exthdr, input_dataset=dataset)
     onsky_flatfield.err=raster_com[1]
