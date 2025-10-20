@@ -42,21 +42,27 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         shutil.rmtree(fluxcal_outputdir)
     os.mkdir(fluxcal_outputdir)
 
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+
     ####### Run the DRP walker
     print('Running walker')
     walker.walk_corgidrp(flux_data_filelist, '', fluxcal_outputdir)
     
         ####### Load in the output data. It should be the latest kgain file produced.
-    fluxcal_file = glob.glob(os.path.join(fluxcal_outputdir, '*ABF_CAL*.fits'))[0]
+    fluxcal_file = glob.glob(os.path.join(fluxcal_outputdir, '*abf_cal*.fits'))[0]
     flux_fac = data.FluxcalFactor(fluxcal_file)
     print("used color filter", flux_fac.filter)
     print("used ND filter", flux_fac.nd_filter)
     print("fluxcal factor", flux_fac.fluxcal_fac)
     print("fluxcal factor error", flux_fac.fluxcal_err)
     assert flux_fac.fluxcal_fac == pytest.approx(cal_factor, abs = 1.5 * flux_fac.fluxcal_err)
-    # remove entry from caldb
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(flux_fac)
+    
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
    # Print success message
     print('e2e test for flux calibration factor passed')

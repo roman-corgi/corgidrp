@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import logging
 import pytest
 import argparse
+import warnings
+from astropy.io.fits.verify import VerifyWarning
 
 from corgidrp.data import Dataset, DispersionModel
 from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model
@@ -14,165 +16,11 @@ from astropy.table import Table
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
+from corgidrp.check import (check_filename_convention, check_dimensions, 
+                           verify_hdu_count, verify_header_keywords, 
+                           validate_binary_table_fields, get_latest_cal_file)
 
-# ================================================================================
-# Validation functions - can be used in other E2E tests
-# ================================================================================
 
-def check_filename_convention(filename, expected_pattern, frame_info=""):
-    """Check if filename follows the expected naming convention.
-
-    Args:
-        filename (str): Filename to check
-        expected_pattern (str): Expected pattern (e.g., 'cgi_*_l2b.fits')
-        frame_info (str): Additional info for logging (e.g., "Frame 0")
-
-    Returns:
-        bool: True if filename matches convention
-    """
-    if not filename:
-        logger.info(f"{frame_info}: No filename. Naming convention FAIL.")
-        return False
-    
-    # Basic pattern check
-    if expected_pattern == 'cgi_*_l2b.fits':
-        parts = filename.split('_')
-        valid = (len(parts) >= 4 and 
-                parts[0] == 'cgi' and 
-                len(parts[2]) == 16 and parts[2][8] == 't' and 
-                parts[2][:8].isdigit() and parts[2][9:].isdigit() and
-                filename.endswith('_l2b.fits'))
-    elif expected_pattern == 'cgi_*_dpm_cal.fits':
-        valid = filename.startswith('cgi_') and '_dpm_cal.fits' in filename
-    else:
-        valid = expected_pattern in filename
-    
-    status = "PASS" if valid else "FAIL"
-    logger.info(f"{frame_info}: Filename: {filename}. Naming convention {status}.")
-    return valid
-
-def check_dimensions(data, expected_shape, frame_info=""):
-    """Check if data has expected dimensions.
-
-    Args:
-        data (numpy.ndarray): Data array to check
-        expected_shape (tuple): Expected shape tuple
-        frame_info (str): Additional info for logging (e.g., "Frame 0")
-
-    Returns:
-        bool: True if dimensions match
-    """
-    if data.shape == expected_shape:
-        logger.info(f"{frame_info}: Shape={data.shape}. Expected: {expected_shape}. PASS.")
-        return True
-    else:
-        logger.info(f"{frame_info}: Shape={data.shape}. Expected: {expected_shape}. FAIL.")
-        return False
-
-def verify_hdu_count(hdul, expected_count, frame_info=""):
-    """Verify that the number of HDUs in the FITS file is as expected.
-
-    Args:
-        hdul (astropy.io.fits.HDUList): FITS HDUList object
-        expected_count (int): Expected number of HDUs
-        frame_info (str): Additional info for logging (e.g., "Frame 0")
-
-    Returns:
-        bool: True if HDU count matches expected count
-    """
-    if len(hdul) == expected_count:
-        logger.info(f"{frame_info}: HDU count={len(hdul)}. Expected: {expected_count}. PASS.")
-        return True
-
-def verify_header_keywords(header, required_keywords, frame_info=""):
-    """Verify that required header keywords are present and have expected values.
-
-    Args:
-        header (astropy.io.fits.Header): FITS header object
-        required_keywords (dict or list): Dictionary of {keyword: expected_value} or list of keywords
-        frame_info (str): Additional info for logging (e.g., "Frame 0")
-
-    Returns:
-        bool: True if all keywords are valid
-    """
-    all_valid = True
-    
-    if isinstance(required_keywords, dict):
-        # Check keyword-value pairs
-        for keyword, expected_value in required_keywords.items():
-            if keyword not in header:
-                logger.error(f"{frame_info}: Missing required keyword {keyword}!")
-                all_valid = False
-            else:
-                actual_value = header[keyword]
-                if actual_value == expected_value:
-                    logger.info(f"{frame_info}: {keyword}={actual_value}. Expected {keyword}: {expected_value}. PASS.")
-                else:
-                    logger.info(f"{frame_info}: {keyword}={actual_value}. Expected {keyword}: {expected_value}. FAIL.")
-                    all_valid = False
-    else:
-        # Just check if keywords exist
-        for keyword in required_keywords:
-            if keyword not in header:
-                logger.error(f"{frame_info}: Missing required keyword {keyword}!")
-                all_valid = False
-            else:
-                logger.info(f"{frame_info}: {keyword}={header[keyword]},")
-    
-    return all_valid
-
-def validate_binary_table_fields(hdu1, required_fields):
-    """Validate binary table fields with consistent error reporting.
-
-    Args:
-        hdu1 (astropy.io.fits.BinTableHDU): FITS binary table HDU
-        required_fields (list): List of required field names
-
-    Returns:
-        bool: True if all fields are valid
-    """
-    if isinstance(hdu1, fits.BinTableHDU):
-        logger.info("HDU1: Binary table format. Expected: BinTableHDU. PASS.")
-        
-        for field in required_fields:
-            if field in hdu1.data.names:
-                data = hdu1.data[field]
-                # Check if dtype is 64-bit float (ignoring endianness)
-                is_float64 = (data.dtype.kind == 'f' and data.dtype.itemsize == 8)
-                status = "PASS" if is_float64 else "FAIL"
-                logger.info(f"HDU1: Table field '{field}' present. Data type {data.dtype}. Expected: 64-bit float. {status}.")
-                
-                # Additional shape validation for polynomial coefficients
-                if field == 'pos_vs_wavlen_polycoeff':
-                    expected_shape = (1, 4)
-                    shape_status = "PASS" if data.shape == expected_shape else "FAIL"
-                    logger.info(f"HDU1: {field} shape {data.shape}. Expected: {expected_shape}. {shape_status}.")
-            else:
-                logger.info(f"HDU1: Field '{field}' missing. Expected: field present. FAIL.")
-        return True
-    else:
-        logger.info(f"HDU1: Format {type(hdu1)}. Expected: BinTableHDU. FAIL.")
-        # Report all field failures when format is wrong
-        for field in required_fields:
-            logger.info(f"HDU1: Field '{field}' missing. Expected: field present. FAIL.")
-            if field == 'pos_vs_wavlen_polycoeff':
-                logger.info(f"HDU1: Field '{field}' missing. Expected: 64-bit float. FAIL.")
-                logger.info(f"HDU1: Field '{field}' missing. Expected: 1×4 array. FAIL.")
-        return False
-
-def get_latest_cal_file(e2eoutput_path, pattern):
-    """Get the most recent calibration file matching the pattern.
-
-    Args:
-        e2eoutput_path (str): Directory to search for calibration files
-        pattern (str): Pattern to match (e.g., '*_dpm_cal.fits')
-
-    Returns:
-        str: Path to the most recent calibration file
-    """
-    cal_files = sorted(glob.glob(os.path.join(e2eoutput_path, pattern)), key=os.path.getmtime, reverse=True)
-    assert len(cal_files) > 0, f'No {pattern} files found in {e2eoutput_path}!'
-    return cal_files[0]
 
 # ================================================================================
 # Main Spec Prism Disp E2E Test Function
@@ -257,7 +105,9 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
             # Save as FITS
             primary_hdu = fits.PrimaryHDU(header=img.pri_hdr)
             image_hdu = fits.ImageHDU(data=img.data, header=img.ext_hdr)
-            fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=VerifyWarning)
+                fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
 
         # Load saved files back into dataset
         saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))
@@ -279,10 +129,10 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     for i, frame in enumerate(l2b_dataset_with_filenames):
         frame_info = f"Frame {i}"
         
-        check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l2b.fits', frame_info)
-        check_dimensions(frame.data, (81, 81), frame_info)
-        verify_header_keywords(frame.ext_hdr, ['CFAMNAME'], frame_info)
-        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info)
+        check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l2b.fits', frame_info, logger)
+        check_dimensions(frame.data, (81, 81), frame_info, logger)
+        verify_header_keywords(frame.ext_hdr, ['CFAMNAME'], frame_info, logger)
+        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info, logger)
         logger.info("")
 
     logger.info(f"Total input images validated: {len(l2b_dataset_with_filenames)}")
@@ -312,11 +162,11 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Validate output calibration product
-    cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits')
-    check_filename_convention(os.path.basename(cal_file), 'cgi_*_dpm_cal.fits', "DPM calibration product")
+    cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits', logger)
+    check_filename_convention(os.path.basename(cal_file), 'cgi_*_dpm_cal.fits', "DPM calibration product", logger)
 
     with fits.open(cal_file) as hdul:
-        verify_hdu_count(hdul, 2, "DPM calibration product")
+        verify_hdu_count(hdul, 2, "DPM calibration product", logger)
         
         # Verify HDU0 (header only)
         hdu0 = hdul[0]
@@ -327,7 +177,7 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
         
         # Verify HDU1 (binary table with required fields)
         if len(hdul) > 1:
-            validate_binary_table_fields(hdul[1], ['clocking_angle', 'pos_vs_wavlen_polycoeff'])
+            validate_binary_table_fields(hdul[1], ['clocking_angle', 'pos_vs_wavlen_polycoeff'], logger)
         else:
             logger.info("HDU1: Missing. Expected: HDU1 present. FAIL.")
             # Report all field failures when HDU1 is missing
@@ -339,7 +189,7 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
         
         # Verify header keywords
         if len(hdul) > 1:
-            verify_header_keywords(hdul[1].header, {'DATALVL': 'CAL', 'DATATYPE': 'DispersionModel'}, "DPM calibration product")
+            verify_header_keywords(hdul[1].header, {'DATALVL': 'CAL', 'DATATYPE': 'DispersionModel'}, "DPM calibration product", logger)
 
     logger.info("")
     
@@ -351,7 +201,7 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Load and display dispersion model results
-    cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits')
+    cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits', logger)
     disp_model = DispersionModel(cal_file)
 
     coeffs = disp_model.pos_vs_wavlen_polycoeff
@@ -375,8 +225,6 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
         e2edata_path (str): Path to input data directory
         e2eoutput_path (str): Output directory path for results and logs.
 
-    Returns:
-        tuple: (disp_model, coeffs, angle)
     """
     # Set up output directory and logging
     global logger
@@ -430,7 +278,6 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
     
-    return disp_model, coeffs, angle
 
 
 # Run the test if this script is executed directly

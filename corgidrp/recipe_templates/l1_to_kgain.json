@@ -17,6 +17,7 @@
             "name" : "prescan_biassub",
             "keywords" : {
                 "return_full_frame" : true,
+				"dataset_copy" : false,
 		"detector_regions" : {
 		    "SCI" : {
 		        "frame_rows" : 1200,

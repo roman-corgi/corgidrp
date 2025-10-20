@@ -11,7 +11,8 @@
         {
             "name" : "prescan_biassub",
             "keywords" : {
-                "return_full_frame" : false
+                "return_full_frame" : false,
+                "dataset_copy" : false
             }
         },
         {
@@ -46,7 +47,11 @@
             "name" : "em_gain_division"
         },
         {
-            "name" : "add_photon_noise"
+            "name" : "add_shot_noise_to_err",
+            "calibs" : {
+                "KGain" : "AUTOMATIC",
+                "DetectorParams" : "AUTOMATIC"
+            }
         },
         {
             "name" : "dark_subtraction",

@@ -13,7 +13,8 @@
                 "DetectorNoiseMaps" : "AUTOMATIC"
             },
             "keywords" : {
-                "return_full_frame" : true
+                "return_full_frame" : true,
+                "dataset_copy" : false
             }
         },
         {

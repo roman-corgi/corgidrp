@@ -19,7 +19,8 @@
         {
             "name": "get_pc_mean",
             "keywords" : {
-                "inputmode" : "darks"
+                "inputmode" : "darks",
+                "dataset_copy" : false
             }
         },
         {

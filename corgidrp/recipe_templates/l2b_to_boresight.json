@@ -1,0 +1,21 @@
+{
+    "name" : "l2b_to_boresight",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [ 
+        {
+            "name" : "boresight_calibration",
+            "keywords" : {
+                "frames_to_combine" : 24,
+                "find_threshold" : 5
+            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

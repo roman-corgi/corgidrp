@@ -343,7 +343,7 @@ def test_psf_sub_split_dataset():
     # Pass combined dataset to do_psf_subtraction
     result = do_psf_subtraction(mock_sci_and_ref,
                                 fileprefix='test_single_dataset',
-                                do_crop=False,
+                                
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
@@ -374,7 +374,6 @@ def test_psf_sub_split_dataset():
     # Try passing only science frames
     result = do_psf_subtraction(mock_sci,
                                 fileprefix='test_sci_only_dataset',
-                                do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
@@ -389,12 +388,11 @@ def test_psf_sub_split_dataset():
     with pytest.raises(UserWarning):
         _ = do_psf_subtraction(mock_ref,
                                 fileprefix='test_ref_only_dataset',
-                                do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
 
-def test_psf_sub_ADI_nocrop():
+def test_psf_sub_ADI():
     """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
     that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
     output data shape is correct.
@@ -410,7 +408,6 @@ def test_psf_sub_ADI_nocrop():
     klip_kwargs={"numbasis":numbasis}
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 fileprefix='test_ADI',
-                                do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
@@ -478,7 +475,7 @@ def test_psf_sub_ADI_nocrop():
     if psfparams_dict['numbasis'] != f'{numbasis}/1':
         raise Exception(f"Unexpected numbasis was used in KLIP parameters.")
 
-def test_psf_sub_RDI_nocrop(): 
+def test_psf_sub_RDI(): 
     """Tests that psf subtraction step correctly identifies an RDI dataset (single roll, 1 or more references), 
     that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
     output data shape is correct.
@@ -498,7 +495,6 @@ def test_psf_sub_RDI_nocrop():
     result = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
                                 fileprefix='test_RDI',
-                                do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs
@@ -570,7 +566,7 @@ def test_psf_sub_RDI_nocrop():
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after RDI subtraction.")
     
-def test_psf_sub_ADIRDI_nocrop():
+def test_psf_sub_ADIRDI():
     """Tests that psf subtraction step correctly identifies an ADI+RDI dataset (multiple rolls, 1 or more references), 
     that overall counts decrease, that the KLIP result matches the analytical expectation for 1 KL mode, and that the 
     output data shape is correct.
@@ -592,7 +588,6 @@ def test_psf_sub_ADIRDI_nocrop():
                                 
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 fileprefix='test_ADI+RDI',
-                                do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
@@ -644,33 +639,6 @@ def test_psf_sub_ADIRDI_nocrop():
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI+RDI subtraction.")
 
-def test_psf_sub_withcrop():
-    """Tests that psf subtraction step results in the correct data shape when 
-    cropping by default, and that overall counts decrease.
-    """
-
-    numbasis = [1,2]
-    rolls = [270+13,270-13]
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,pl_contrast=1e-3)
-    klip_kwargs={"numbasis":numbasis}
-                                
-    result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
-                                fileprefix='test_withcrop',
-                                measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False,
-                                **klip_kwargs)
-
-    for i,frame in enumerate(result):
-    
-        # Overall counts should decrease        
-        if not np.nansum(mock_sci[0].data) > np.nansum(frame.data):
-            raise Exception(f"PSF subtraction resulted in increased counts for frame {i}.")
-
-    # Check expected data shape
-    expected_data_shape = (1,len(numbasis),60,60)
-    if not result.all_data.shape == expected_data_shape:
-        raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
-
 def test_psf_sub_explicit_klip_kwargs():
     """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
     that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
@@ -686,7 +654,6 @@ def test_psf_sub_explicit_klip_kwargs():
 
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 fileprefix='test_ADI_explicit_klip_kwargs',
-                                do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 mode='ADI',
@@ -733,7 +700,6 @@ def test_psf_sub_badmode():
     with pytest.raises(Exception):
         _ = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 fileprefix='test_SDI',
-                                do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
@@ -759,8 +725,7 @@ if __name__ == '__main__':
     test_psf_sub_split_dataset()
     test_psf_sub_explicit_klip_kwargs()
 
-    test_psf_sub_ADI_nocrop()
-    test_psf_sub_RDI_nocrop()
-    test_psf_sub_ADIRDI_nocrop()
-    test_psf_sub_withcrop()
+    test_psf_sub_ADI()
+    test_psf_sub_RDI()
+    test_psf_sub_ADIRDI()
     test_psf_sub_badmode()
