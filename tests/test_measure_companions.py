@@ -397,7 +397,7 @@ def _common_measure_companions_test(forward_model_flag):
         expected_comp_mag = host_star_apmag - 2.5 * np.log10(comp["counts_scale"])
         measured_mag = result_table['companion estimated mag'][i]
         print(f"Companion {i} Magnitude: {measured_mag}")
-        assert abs(measured_mag - expected_comp_mag) < 0.2, f"Companion {i} magnitude off: expected {expected_comp_mag}, got {measured_mag}"
+        assert abs(measured_mag - expected_comp_mag) < 0.15, f"Companion {i} magnitude off: expected {expected_comp_mag}, got {measured_mag}"
     
     print(result_table)
 
