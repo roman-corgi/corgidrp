@@ -4732,7 +4732,7 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
 
     image_separation_arcsec = 7.5
 
-    arcseconds_per_radian = 180 * 3600 / np.pi()
+    arcseconds_per_radian = 180 * 3600 / np.pi
 
     #determine radius of the images
     if observing_mode == 'NFOV':
