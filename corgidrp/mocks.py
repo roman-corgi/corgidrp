@@ -1025,7 +1025,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             planet_rot_images.append(planet_repoint_current[0][j])
             pred_cents.append(planet_repoint_current[1][j])
 
-    filepattern = "cgi_pppppccaaasssooovvv_yyyymmddt{0:02d}{1:02d}00_l2a.fits"
+    filepattern = "cgi_pppppccaaasssooovvv_yyyymmddt{0:02d}00_l2a.fits"
     frames=[]
     for i in range(numfiles*raster_subexps):
         prihdr, exthdr = create_default_L1_headers()
