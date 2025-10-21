@@ -148,12 +148,29 @@ def get_qu_from_p_theta(p, theta):
     Convert either the degree of polarization and polarization angle to normalized Stokes q (Q/I) and u (U/I), 
     or the polarized intensity (P) and angle (PA) into Stokes Q and U intensities. 
 
+    Convert polarization and angle into Stokes Q and U components.
+
+    This function can operate in two distinct modes depending on the nature of p:
+
+    1. Normalized Stokes:
+       - p represents the degree of polarization (fractional, 0–1, not percent).
+       - Returns the normalized Stokes parameters (q = Q/I, u = U/I), i.e. unitless ratios.
+
+    2. Absolute mode:
+       - p represents the polarized intensity P (same units as total intensity I).
+       - Returns the absolute Stokes intensities Q and U (in the same units as p).
+
     Args:
-        p (float): Degree of polarization (0 to 1), or polarized intensity.
+        p (float): Either the fractional degree of polarization (0–1) or polarized intensity P. 
         theta (float): Polarization angle in degrees.
 
     Returns:
-        tuple: (Q, U) Stokes parameters.
+        tuple: (Q, U) Stokes parameters, either normalized (q,u) or absolute (Q,U) depending on the meaning of p.
+
+    Example:
+        >>> get_qu_from_p_theta(0.05, 30)   # 5% polarization (as fraction) 
+        >>> get_qu_from_p_theta(5, 30)      # polarized intensity = 5 (arbitrary intensity units)
+
     '''
     Q = p * np.cos(2 * np.radians(theta))
     U = p * np.sin(2 * np.radians(theta))
