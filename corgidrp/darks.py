@@ -143,7 +143,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     remove this smeared dark current (and then desmearing may be applied to the 
     processed image if appropriate).  
 
-    Also, add_photon_noise() should NOT have been applied to the frames in
+    Also, add_shot_noise_to_err() should NOT have been applied to the frames in
     dataset.  And note that creation of the
     fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
     functionality requires a master dark, which requires this function first.
@@ -278,7 +278,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     remove this smeared dark current (and then desmearing may be applied to the 
     processed image if appropriate).  
 
-    Also, add_photon_noise() should NOT have been applied to the frames in
+    Also, add_shot_noise_to_err() should NOT have been applied to the frames in
     dataset.  And note that creation of the
     fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
     functionality requires a master dark, which requires this function first.
@@ -760,7 +760,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     
     l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
-    noise_maps.filename = re.sub('_L[0-9].', '', noise_maps.filename)
+    noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
 
     return noise_maps
 

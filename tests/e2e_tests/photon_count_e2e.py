@@ -13,6 +13,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import shutil
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
@@ -22,30 +23,38 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     np.random.seed(1234)
     ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5)
-    output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
-    output_ill_dir = os.path.join(output_dir, 'ill_frames')
-    output_dark_dir = os.path.join(output_dir, 'dark_frames')
-    output_l2a_dir = os.path.join(output_dir, 'l2a')
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
-    # empty out directory of any previous files
-    for f in os.listdir(output_dir):
-        if os.path.isdir(os.path.join(output_dir,f)):
-            continue
-        os.remove(os.path.join(output_dir,f))
+    output_dir = os.path.join(e2eoutput_path, 'photon_count_e2e')
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(output_dir, 'input_l1')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    
+    # Create calibrations subfolder
+    calibrations_dir = os.path.join(output_dir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
+    
+    # Create l2a_to_l2b_output subfolder
+    l2a_to_l2b_output_dir = os.path.join(output_dir, 'l2a_to_l2b')
+    if not os.path.exists(l2a_to_l2b_output_dir):
+        os.makedirs(l2a_to_l2b_output_dir)
+
+    output_ill_dir = os.path.join(input_data_dir, 'ill_l1_frames')
+    output_dark_dir = os.path.join(input_data_dir, 'dark_l1_frames')
+    output_l2a_dir = os.path.join(output_dir, 'l1_to_l2a')
     if not os.path.exists(output_ill_dir):
-        os.mkdir(output_ill_dir)
+        os.makedirs(output_ill_dir)
     if not os.path.exists(output_dark_dir):
-        os.mkdir(output_dark_dir)
+        os.makedirs(output_dark_dir)
     if not os.path.exists(output_l2a_dir):
-        os.mkdir(output_l2a_dir)
-    # empty out directory of any previous files
-    for f in os.listdir(output_ill_dir):
-        os.remove(os.path.join(output_ill_dir,f))
-    for f in os.listdir(output_dark_dir):
-        os.remove(os.path.join(output_dark_dir,f))
-    ill_dataset.save(output_ill_dir, ['pc_frame_ill_{0}.fits'.format(i) for i in range(len(ill_dataset))])
-    dark_dataset.save(output_dark_dir, ['pc_frame_dark_{0}.fits'.format(i) for i in range(len(dark_dataset))])
+        os.makedirs(output_l2a_dir)
+
+    ill_dataset.save(output_ill_dir)
+    dark_dataset.save(output_dark_dir)
     l1_data_ill_filelist = []
     l1_data_dark_filelist = []
     for f in os.listdir(output_ill_dir):
@@ -53,19 +62,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other KGain calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'Dark':
-            this_caldb._db = this_caldb._db.drop(i)
-    this_caldb.save()
-
-    # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({})
-    detector_params.save(filedir=output_dir, filename="detector_params.fits")
-    this_caldb.create_entry(detector_params)
 
     # KGain
     kgain_val = 7. # default value used in mocks.create_photon_countable_frames()
@@ -78,7 +81,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
     kgain.ext_hdr['RN_ERR'] = 0
-    kgain.save(filedir=output_dir, filename="mock_kgain.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -92,7 +95,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=output_dir, filename="mock_detnoisemaps.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
     here = os.path.abspath(os.path.dirname(__file__))
@@ -119,16 +122,21 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    flat.save(filedir=output_dir, filename="mock_flat.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat)
 
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    bp_map.save(filedir=output_dir, filename="mock_bpmap.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     this_caldb.create_entry(bp_map)
 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
     # make PC dark
     # below I leave out the template specification to check that the walker recipe guesser works as expected
     walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir)#, template="l1_to_l2b_pc_dark.json")
@@ -138,7 +146,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for f in os.listdir(output_dir):
         if not f.endswith('.fits'):
             continue
-        if f.endswith('_DRK_CAL.fits'):
+        if f.endswith('_drk_cal.fits'):
             master_dark_filename_list.append(f)
             master_dark_filepath_list.append(os.path.join(output_dir, f))
     
@@ -152,11 +160,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     l2a_files = []
     for filepath in l1_data_ill_filelist:
         # emulate naming change behaviors
-        new_filename = filepath.split(os.path.sep)[-1].replace("_L1_", "_L2a") 
+        new_filename = filepath.split(os.path.sep)[-1].replace("_l1_", "_l2a") 
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)
-    walker.walk_corgidrp(l2a_files, '', output_dir)
+    walker.walk_corgidrp(l2a_files, '', l2a_to_l2b_output_dir)
 
     # get photon-counted frame
     master_ill_filename_list = []
@@ -168,12 +176,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
             return None
         last_modified_file = max(files, key=os.path.getmtime)
         return last_modified_file
-    pc_processed_filepath = get_last_modified_file(output_dir)
+    pc_processed_filepath = get_last_modified_file(l2a_to_l2b_output_dir)
     pc_processed_filename = os.path.split(pc_processed_filepath)[-1]
-    for f in os.listdir(output_dir):
+    for f in os.listdir(l2a_to_l2b_output_dir):
         if f == pc_processed_filename: 
             master_ill_filename_list.append(f)
-            master_ill_filepath_list.append(os.path.join(output_dir, f))
+            master_ill_filepath_list.append(os.path.join(l2a_to_l2b_output_dir, f))
     for i in range(len(master_ill_filepath_list)):
         pc_frame = fits.getdata(master_ill_filepath_list[i])
         pc_frame_err = fits.getdata(master_ill_filepath_list[i], 'ERR')
@@ -186,17 +194,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         assert pc_frame_err.min() >= 0
         assert pc_dark_frame_err.min() >= 0
 
-    # load in CalDB again to reflect the PC Dark that was implicitly added in (but not found in this_caldb, which was loaded before the Dark was created)
-    post_caldb = caldb.CalDB()
-    post_caldb.remove_entry(kgain)
-    post_caldb.remove_entry(noise_map)
-    post_caldb.remove_entry(new_nonlinearity)
-    post_caldb.remove_entry(flat)
-    post_caldb.remove_entry(bp_map)
-    post_caldb.remove_entry(detector_params)
-    for filepath in master_dark_filepath_list:
-        pc_dark = data.Dark(filepath)
-        post_caldb.remove_entry(pc_dark)
+    # Print success message
+    print('e2e test for photon counting calibration passed')
+
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+
 
 
 if __name__ == "__main__":
@@ -207,7 +210,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

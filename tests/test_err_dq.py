@@ -168,6 +168,25 @@ def test_add_error_term():
     assert image_test_3d.err_hdr["Layer_2"] == "error_noid"
     assert image_test_3d.err_hdr["Layer_3"] == "error_nuts"
 
+
+def test_rescale_error():
+    """
+    test the rescale_error function
+
+    Runs assuming tracking individual errors
+    """
+    corgidrp.track_individual_errors = True
+
+    image_test = Image('test_image0.fits')
+    scale_factor = 8.1
+    image_test.rescale_error(scale_factor, "test_factor")
+    assert np.allclose(image_test.err[1], err1 * scale_factor, rtol=1e-6)
+    scale_factor = np.ones([1024,1024]) * 8.1
+    image_test.rescale_error(scale_factor, "test_factor")
+    assert np.allclose(image_test.err[1], err1 * scale_factor * scale_factor, rtol=1e-6)
+    assert "test_factor" in str(image_test.err_hdr["HISTORY"])
+    
+
 def test_err_dq_dataset():
     """
     test the behavior of the err and data arrays in the dataset
@@ -185,6 +204,20 @@ def test_err_dq_dataset():
     assert dataset.all_dq.ndim == 3
     assert dataset.all_err.shape[2] == err.shape[0]
     assert dataset.all_dq.shape[2] == dq.shape[1]
+    
+    #test add_error_term for datasets
+    dataset.add_error_term(err1, "err_add")
+    print(dataset[0].err.shape)
+    assert dataset[0].err.shape == (2, 1024, 1024)
+    assert dataset[1].err.shape == (2, 1024, 1024)
+    assert dataset[0].err_hdr["Layer_2"] == "err_add"
+    
+    #test rescale_error for datasets
+    scale_factor = 8.1
+    dataset.rescale_error(scale_factor, "scale_test")
+    assert np.array_equal(dataset[0].err[1], err1 * scale_factor)
+    assert np.array_equal(dataset[1].err[1], err1 * scale_factor)
+    assert "scale_test" in str(dataset[1].err_hdr["HISTORY"])
 
 def test_get_masked_data():
     """
@@ -197,6 +230,7 @@ def test_get_masked_data():
     assert masked_data.mask[0,0] == True
     assert masked_data.mean()==2
     assert masked_data.sum()==image2.data.sum()-2
+
 
 def test_err_adderr_notrack():
     """
@@ -219,6 +253,7 @@ def test_err_adderr_notrack():
     assert image1.err.shape == (1,1024,1024)
     assert image1.err[0,0,0] == np.sqrt(err1[0,0]**2 + err2[0,0]**2)
 
+
 def test_read_many_errors_notrack():
     """
     Check that we can successfully discard errors when reading in a frame with multiple errors
@@ -233,6 +268,7 @@ def test_read_many_errors_notrack():
         assert image_test.err_hdr["Layer_2"] == "error_noid"
     with pytest.raises(KeyError):
         assert image_test.err_hdr["Layer_3"] == "error_nuts"
+
 
 def test_err_array_sizes():
     '''
@@ -271,6 +307,8 @@ def test_err_array_sizes():
     dark_frame.save(filedir=calibdir, filename=dark_filename)
     testcaldb.scan_dir_for_new_entries(calibdir)
 
+
+
 def teardown_module():
     """
     Runs automatically at the end. ONLY IN PYTEST
@@ -282,17 +320,18 @@ def teardown_module():
 
     corgidrp.track_individual_errors = old_err_tracking
 
+
 # for debugging. does not run with pytest!!
 if __name__ == '__main__':
     test_single_float_data()
     test_err_dq_creation()
     test_err_dq_copy()
     test_add_error_term()
+    test_rescale_error()
     test_err_dq_dataset()
     test_get_masked_data()
     test_err_adderr_notrack()
     test_read_many_errors_notrack()
-    test_err_array_sizes()
 
 
     for i in range(5):

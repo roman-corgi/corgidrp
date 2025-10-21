@@ -6,6 +6,7 @@ import glob
 import pytest
 import numpy as np
 import astropy.time as time
+from astropy.io import fits
 
 import corgidrp
 import corgidrp.data as data
@@ -13,6 +14,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
+import corgidrp.l2b_to_l3 as l2b_to_l3
 from corgidrp import caldb
 
 # this file's folder
@@ -20,6 +22,19 @@ thisfile_dir = os.path.dirname(__file__)
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
+    """Test corethroughput calibration with mock data
+
+    Args:
+        e2edata_path (str): Path to the test data
+        e2eoutput_path (str): Path to the output directory
+
+    """
+    # make output directory if needed
+    corethroughput_outputdir = os.path.join(e2eoutput_path, "corethroughput_cal_e2e/mock_data")
+    if os.path.exists(corethroughput_outputdir):
+        shutil.rmtree(corethroughput_outputdir)
+    os.makedirs(corethroughput_outputdir)
+    
     # Mock a CT dataset (CT PAM, pupil image and off-axis PSFs)
     # Some arbitrary positive value
     exp_time_s = np.pi
@@ -48,8 +63,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         ext_hdr=exthd_pupil, err=err)]
     corethroughput_image_list += mocks.create_ct_psfs(50, e2e=True)[0]
     # Make sure all dataframes share the same common header values
-    for image in corethroughput_image_list:
-        image.pri_hdr['VISTYPE'] = 'CORETPUT'
+    for i, image in enumerate(corethroughput_image_list):
+        image.pri_hdr['VISTYPE'] = 'CGIVST_CAL_CORETHRPT'
         image.ext_hdr['EXPTIME'] = exp_time_s
         # DRP
         image.ext_hdr['DRPCTIME'] = time.Time.now().isot
@@ -63,30 +78,31 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         image.ext_hdr['FSAM_V'] = FSAM_V_CT
     corethroughput_dataset = data.Dataset(corethroughput_image_list)
 
-    output_dir = os.path.join(e2eoutput_path, 'corethroughput_test_data')
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.mkdir(output_dir)
+    # Create input data directory
+    input_l2b_dir = os.path.join(corethroughput_outputdir, 'input_l2b')
+    os.makedirs(input_l2b_dir)
     
-    # List of filenames
-    corethroughput_data_filelist = ['corethroughput_e2e_{0}_L2b.fits'.format(i) for i in range(len(corethroughput_dataset))]
-    corethroughput_dataset.save(output_dir, corethroughput_data_filelist)
-
-    # make DRP output directory if needed
-    corethroughput_outputdir = os.path.join(e2eoutput_path, 'l2b_to_corethroughput_output')
-    if os.path.exists(corethroughput_outputdir):
-        shutil.rmtree(corethroughput_outputdir)
-    os.mkdir(corethroughput_outputdir)
+    # Save with proper CGI naming convention
+    corethroughput_data_filepath = mocks.rename_files_to_cgi_format(
+        list_of_fits=corethroughput_image_list, 
+        output_dir=input_l2b_dir, 
+        level_suffix="l2b"
+    )
+    
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
 
     # Run the DRP walker
     print('Running walker')
-    # Add path to files
-    corethroughput_data_filepath = [os.path.join(output_dir, f) for f in corethroughput_data_filelist]
     walker.walk_corgidrp(corethroughput_data_filepath, '', corethroughput_outputdir)
     
-    # Load in the output data. It should be the latest CTP_CAL file produced.
+    # Load in the output data. It should be the latest ctp_cal file produced.
     corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
-        '*CTP_CAL*.fits'))[0]
+        '*ctp_cal.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
 
     # CT cal file from mock data directly
@@ -103,12 +119,91 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     assert np.all(ct_cal_drp.ct_fpam == ct_cal_mock.ct_fpam)
     assert np.all(ct_cal_drp.ct_fsam == ct_cal_mock.ct_fsam)
 
-    # Remove entry from caldb
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(ct_cal_drp)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
     # Print success message
-    print('e2e test for corethroughput calibration passed')
+    print('e2e test for corethroughput calibration with mock data passed')
+    
+@pytest.mark.e2e
+def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
+    """Test corethroughput calibration with simulated band 3 shaped pupil data
+
+    Args:
+        e2edata_path (str): Path to the test data
+        e2eoutput_path (str): Path to the output directory
+
+    """
+    
+    # Create the output directory
+    corethroughput_outputdir = os.path.join(e2eoutput_path, 'corethroughput_cal_e2e/band3_spc_data')
+    if os.path.exists(corethroughput_outputdir):
+        shutil.rmtree(corethroughput_outputdir)
+    os.makedirs(corethroughput_outputdir)
+    
+    # Read the files in the directory
+    input_dir = os.path.join(e2edata_path, "ct_band3_shapedpupil")
+    files = os.listdir(input_dir)
+    files.sort()
+    datafiles = glob.glob(os.path.join(input_dir, "*.fits"))
+    # datafiles = datafiles[::5] # only use every 5 files to make it smaller
+
+    # Create the input data in the right format
+    images = []
+    for file in datafiles:
+        image = fits.open(file)
+        new_image = data.Image(image[0].data, pri_hdr=image[0].header, ext_hdr=image[1].header)
+        new_image.pri_hdr['VISTYPE'] = 'CGIVST_CAL_CORETHRPT'
+        new_image.ext_hdr['DATALVL'] = "L2b"
+        new_image.ext_hdr['BUNIT'] = "photoelectron"
+        ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])
+        new_image.filename = f'cgi_{new_image.pri_hdr["VISITID"]}_{ftimeutc}_l2b.fits'
+        images.append(new_image)
+    filenames = [img.filename for img in images]
+    def get_filename(img):
+        return img.filename
+    images.sort(key=get_filename)
+
+    dataset = data.Dataset(images)
+
+    # save the input data
+    l2b_data_dir = os.path.join(corethroughput_outputdir, 'input_l2b')
+    os.makedirs(l2b_data_dir)
+    dataset.save(filedir=l2b_data_dir)
+    l2b_filenames = glob.glob(os.path.join(l2b_data_dir, '*.fits'))
+    l2b_filenames.sort()
+
+    walker.walk_corgidrp(l2b_filenames, '', corethroughput_outputdir)
+    
+    # Load in the output data. It should be the latest CTP_CAL file produced.
+    corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
+        '*ctp_cal.fits'))[0]
+    ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
+    
+    # run the recipe directly to check out it comes
+    dataset_normed = l2b_to_l3.divide_by_exptime(dataset)
+    ct_cal_sim = corethroughput.generate_ct_cal(dataset_normed)
+
+    # Asserts
+
+    assert ct_cal_drp.data == pytest.approx(ct_cal_sim.data, abs=1e-12)
+    assert ct_cal_drp.ct_excam == pytest.approx(ct_cal_sim.ct_excam, abs=1e-12)
+    assert np.all(ct_cal_drp.err == ct_cal_sim.err)
+    assert np.all(ct_cal_drp.dq == ct_cal_sim.dq)
+    assert np.all(ct_cal_drp.ct_fpam == ct_cal_sim.ct_fpam)
+    assert np.all(ct_cal_drp.ct_fsam == ct_cal_sim.ct_fsam)
+
+    assert ct_cal_drp.data is not None, "CoreThroughput calibration data is None"
+    assert len(ct_cal_drp.data) == len(dataset) - 1, "CoreThroughput calibration data length does not match dataset length"
+    assert ct_cal_drp.data.shape[0] == ct_cal_drp.ct_excam.shape[1], "CoreThroughput calibration excam length does not match data length"
+    assert ct_cal_drp.err is not None, "CoreThroughput error data is None"
+    assert ct_cal_drp.dq is not None, "CoreThroughput dq data is None"
+    
+    assert np.min(ct_cal_drp.ct_excam[2]) > 0, "CoreThroughput measurements have non-positive values"
+    assert np.max(ct_cal_drp.ct_excam[2]) <= 1, "CoreThroughput measurements exceed 1"
+
+    # Print success message
+    print('e2e test for corethroughput calibration with simulated band 3 shaped pupil data passed')
     
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -117,7 +212,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     outputdir = thisfile_dir
-    e2edata_path =  '.'
+    e2edata_path = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,
@@ -127,3 +222,4 @@ if __name__ == "__main__":
     args = ap.parse_args()
     outputdir = args.outputdir
     test_expected_results_e2e(args.e2edata_dir, args.outputdir)
+    test_expected_results_spc_band3_simdata_e2e(args.e2edata_dir, args.outputdir)

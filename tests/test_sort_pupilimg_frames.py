@@ -5,12 +5,17 @@ import random
 import numpy as np
 from pathlib import Path
 import astropy.io.fits as fits
+import time
+from datetime import datetime
 
 from corgidrp import sorting as sorting
 import corgidrp.data as data
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L1_headers
+from datetime import timedelta
+from collections import defaultdict
 
+np.random.seed(42)  # For reproducibility
 # Functions
 def get_cmdgain_exptime_mean_frame(
     exptime_sec=None,
@@ -77,7 +82,7 @@ def get_cmdgain_exptime_nonlin(
     Args:
       exptime_sec (list): set of distinct exposure times in seconds chosen to
         collect frames for non-linearity calibration for each EM gain
-      nonunity_em (list): set of ditinct (non-unity) EM gains chosen to collect
+      nonunity_em (list): set of distinct (non-unity) EM gains chosen to collect
         data for non-linearity
       change_exptime (bool) (optional): if True, it will change the input exposure
         times by a small amount without changing the ordering of exptime_sec
@@ -146,6 +151,9 @@ def make_minimal_image(
     cmdgain=1,
     exptime_sec=0,
     frameid=0,
+    previous_exptime=0,
+    previous_timestamp=None,
+    auxfile=''
         ):
     """
     This function makes a mock frame with minimum memory in its data and error
@@ -155,16 +163,31 @@ def make_minimal_image(
       cmdgain (float): commanded gain of the frame
       exptime_sec (float): exposure time of the frame
       frameid (int): an integer value used to indentify the frame
-
+      previous_exptime (float): exposure time of the previous frame, used to make the time stamp for the frame accurate
+      previous_timestamp (str): timestamp of the previous frame, used to make the time stamp for the current frame
+      auxfile (str): auxiliary file name to be used in the header of the FITS file.  Defaults to an empty string.
+    
     Returns:
-      filename (String): filename with path of the generated FITS file
+      filepath (String): filepath of the generated FITS file
     """
     signal = np.zeros(1)
-
-    prhd, exthd = create_default_L1_headers()
-    # Mock error maps
-    err = np.ones(1)
-    dq = np.zeros(1, dtype = np.uint16)
+    prhd, exthd = create_default_L1_headers() # makes timestamp according to current time
+    if previous_timestamp is None:
+        previous_timestamp = exthd['DATETIME'][:26]
+    if len(previous_timestamp) == 19:
+        dt_obj = datetime.strptime(previous_timestamp, "%Y-%m-%dT%H:%M:%S")
+    else:        
+        dt_obj = datetime.strptime(previous_timestamp, "%Y-%m-%dT%H:%M:%S.%f")
+    # Add previous_exptime (in seconds) to dt_obj to get updated_time, along with a little offset time (time between frames)
+    updated_time = dt_obj + timedelta(seconds=float(previous_exptime)+0.2)
+    # Round to nearest tenth of a second
+    microsec = int(round(updated_time.microsecond / 1e5) * 1e5)
+    if microsec == 1000000:
+        updated_time = updated_time.replace(microsecond=0) + timedelta(seconds=1)
+    else:
+        updated_time = updated_time.replace(microsecond=microsec)
+    # Convert output back to ISO format string
+    exthd['DATETIME'] = updated_time.isoformat(timespec='microseconds')
     # Creating a FITS file to assign it a filename with the frame ID
     prim = fits.PrimaryHDU(header = prhd)
     hdr_img = fits.ImageHDU(signal, header=exthd)
@@ -174,11 +197,22 @@ def make_minimal_image(
     # Record actual exposure time
     hdul[1].header['EXPTIME'] = exptime_sec
     # Add corresponding VISTYPE
-    hdul[0].header['VISTYPE'] = 'PUPILIMG'
-    # IIT filename convention. TODO: replace with latest L1 filename version
-    filename = str(Path('simdata', f'cgi_excam_l1_{frameid:0{10}d}.fits'))
-    hdul.writeto(filename, overwrite = True)
-    return filename
+    hdul[0].header['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
+    hdul[0].header['AUXFILE'] = auxfile
+    hdul[1].header['DPAMNAME'] = 'PUPIL,PUPIL_FFT' #from latest update of TVAC files from SSC
+    hdul[1].header['CFAMNAME'] = 'CLEAR' # would have actual filter names, but for now, just shouldn't be 'DARK'
+    year=exthd['DATETIME'][:4]
+    month=exthd['DATETIME'][5:7]
+    day=exthd['DATETIME'][8:10]
+    hour= exthd['DATETIME'][11:13]
+    minute= exthd['DATETIME'][14:16]
+    seconds= exthd['DATETIME'][17:19]
+    tenth = int(updated_time.microsecond/1E5)
+    filename = 'cgi_0200001001001001001_{0}{1}{2}T{3}{4}{5}{6}_l1_.fits'.format(year, month, day, hour, minute, seconds, tenth)
+    filepath = str(Path('simdata', filename))
+    hdul.writeto(filepath, overwrite = True)
+    return filepath
+
 
 def setup_module():
     global EXPTIME_MEAN_FRAME, NFRAMES_MEAN_FRAME
@@ -315,17 +349,30 @@ def setup_module():
     # Create directory for temporary data files (not tracked by git)
     if not os.path.exists(Path('simdata')):
         os.mkdir(Path('simdata'))
-    
+    # clean out any previous files in there; files are not overwritten since their names depend on the present time
+    for filename in os.listdir('simdata'):
+        if not filename.endswith('.fits'):
+            continue
+        filepath = os.path.join('simdata', filename)
+        os.remove(filepath)
     idx_frame = 0
     filename_list = []
+    exptimes = []
+    timestamps = []
     # Mean frame
     print('Generating frames for mean frame')
+    previous_timestamp = None # initialize
     for i_f in range(n_mean_frame_total):
         filename = make_minimal_image(
             cmdgain=cmdgain_mean_frame[i_f],
             exptime_sec=exptime_mean_frame[i_f],
             frameid=idx_frame,
+            previous_exptime=0 if i_f == 0 else exptime_mean_frame[i_f-1],
+            previous_timestamp=previous_timestamp
             )
+        previous_timestamp = fits.getheader(filename, 1)['DATETIME']
+        timestamps += [previous_timestamp]
+        exptimes += [fits.getheader(filename, 1)['EXPTIME']]
         filename_list += [filename]
         idx_frame += 1
     # K-gain
@@ -335,20 +382,47 @@ def setup_module():
             cmdgain=cmdgain_kgain[i_f],
             exptime_sec=exptime_kgain[i_f],
             frameid=idx_frame,
+            previous_exptime=exptime_mean_frame[-1] if i_f == 0 else exptime_kgain[i_f-1],
+            previous_timestamp=previous_timestamp
             )
+        previous_timestamp = fits.getheader(filename, 1)['DATETIME']
+        timestamps += [previous_timestamp]
+        exptimes += [fits.getheader(filename, 1)['EXPTIME']]
         filename_list += [filename]
         idx_frame += 1
     # EM-gain
     print('Generating frames for em-gain')
-    for i_f in range( n_emgain_total):
+    for i_f in range(n_emgain_total):
         filename = make_minimal_image(
             cmdgain=cmdgain_emgain[i_f],
             exptime_sec=exptime_emgain[i_f],
             frameid=idx_frame,
+            previous_exptime=exptime_kgain[-1] if i_f == 0 else exptime_emgain[i_f-1],
+            previous_timestamp=previous_timestamp
             )
+        previous_timestamp = fits.getheader(filename, 1)['DATETIME']
+        timestamps += [previous_timestamp]
+        exptimes += [fits.getheader(filename, 1)['EXPTIME']]
         filename_list += [filename]
         idx_frame += 1
-    # Non-linearity (two cases)
+    # EM-gain (different temperature)
+    print('Generating frames for em-gain at different temperature')
+    for i_f in range(n_emgain_total):
+        # making AUXFILE different; testing AUXFILE filter in sorting.py with this
+        filename = make_minimal_image(
+            cmdgain=cmdgain_emgain[i_f],
+            exptime_sec=exptime_emgain[i_f]+ 11, #makes it big enough to keep an increasing order of exposure times in sorting.py
+            frameid=idx_frame,
+            previous_exptime=exptime_kgain[-1] if i_f == 0 else exptime_emgain[i_f-1],
+            previous_timestamp=previous_timestamp,
+            auxfile='TEMPERATURE'
+            )
+        previous_timestamp = fits.getheader(filename, 1)['DATETIME']
+        timestamps += [previous_timestamp]
+        exptimes += [fits.getheader(filename, 1)['EXPTIME']]
+        filename_list += [filename]
+        idx_frame += 1
+    # Non-linearity (two cases) 
     print('Generating frames for non-linearity')
     filename_wo_change_list = copy.deepcopy(filename_list)
     for i_f in range(n_nonlin_wo_change_total):
@@ -356,21 +430,31 @@ def setup_module():
             cmdgain=cmdgain_nonlin_wo_change[i_f],
             exptime_sec=exptime_nonlin_wo_change[i_f],
             frameid=idx_frame,
+            previous_exptime=exptime_emgain[-1] if i_f == 0 else exptime_nonlin_wo_change[i_f-1],
+            previous_timestamp=previous_timestamp
             )
+        previous_timestamp = fits.getheader(filename, 1)['DATETIME']
+        timestamps += [previous_timestamp]
+        exptimes += [fits.getheader(filename, 1)['EXPTIME']]
         filename_wo_change_list += [filename]
         idx_frame += 1
     
     filename_w_change_list = copy.deepcopy(filename_list)
     for i_f in range(n_nonlin_w_change_total):
         filename = make_minimal_image(
-            cmdgain=cmdgain_nonlin_wo_change[i_f],
-            exptime_sec=exptime_nonlin_wo_change[i_f],
+            cmdgain=cmdgain_nonlin_w_change[i_f],
+            exptime_sec=exptime_nonlin_w_change[i_f],
             frameid=idx_frame,
+            previous_exptime=exptime_emgain[-1] if i_f == 0 else exptime_nonlin_w_change[i_f-1],
+            previous_timestamp=previous_timestamp
             )
+        previous_timestamp = fits.getheader(filename, 1)['DATETIME']
+        timestamps += [previous_timestamp]
+        exptimes += [fits.getheader(filename, 1)['EXPTIME']]
         filename_w_change_list += [filename]
         idx_frame += 1
-    
-    # Shuffle file order randomnly
+
+    # Shuffle file order randomly
     random.shuffle(filename_wo_change_list)
     random.shuffle(filename_w_change_list)
     
@@ -396,7 +480,7 @@ def test_kgain_sorting():
     dataset is consistent with the input dataset. K-gain uses unity gain
     frames only. No need to test both non-linearity subsets of data.
     """
-    dataset_kgain = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='k-gain')
+    dataset_kgain = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='k-gain', actual_visit=True)
 
     # Checks
     n_mean_frame = 0
@@ -421,26 +505,25 @@ def test_kgain_sorting():
                 raise Exception((f'Frame #{idx_frame}: Unidentified calibration',
                     'type in the Kgain calibration dataset'))
     
-    # Same number of files as expected
-    assert n_kgain_test == n_kgain_total
+    # Same number of files as expected (sort_pupilimg_frames deletes the repeated set since no drift correction is done for k gain cal and so that that exposure time isn't doubly weighted compared to the others)
+    assert n_kgain_test == n_kgain_total - NFRAMES_KGAIN
     # Unique exposure time for the mean frame
     assert len(set(exptime_mean_frame_list)) == 1
     # Expected exposure time for the mean frame
     assert exptime_mean_frame_list[0] == EXPTIME_MEAN_FRAME
     # Expected number of frames for the mean frame
     assert n_mean_frame == NFRAMES_MEAN_FRAME
-    # Expected identical number of frames per exposure time in K-gain with
-    # only one repeated case at the end
+    # Expected identical number of frames per exposure time in K-gain
     kgain_unique, kgain_counts = np.unique(exptime_kgain_list, return_counts=True)
-    assert len(set(kgain_counts)) == 2
-    assert min(kgain_counts) == NFRAMES_KGAIN
-    assert max(kgain_counts) == 2*min(kgain_counts)
+    assert len(set(kgain_counts)) == 1
+    assert (kgain_counts == NFRAMES_KGAIN).all()
     # Needs ordering
     idx_kgain_sort = np.argsort(filename_kgain_list)
     # Expected exposure times for K-gain
     exptime_kgain_arr = np.array(exptime_kgain_list)[idx_kgain_sort]
     assert len(set(exptime_kgain_arr[-NFRAMES_KGAIN:])) == 1
-    assert exptime_kgain_arr[-1] in exptime_kgain_arr[0:-NFRAMES_KGAIN]
+    _, vals = dataset_kgain.split_dataset(prihdr_keywords=['AUXFILE'])
+    assert len(vals) == 1
 
 def test_nonlin_sorting_wo_change():
     """
@@ -451,7 +534,7 @@ def test_nonlin_sorting_wo_change():
     identical exposure times among the different subsets of non-unity gain
     used to calibrate non-linearity
     """        
-    dataset_nonlin_wo_change = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='non-lin')
+    dataset_nonlin_wo_change = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='non-lin',actual_visit=True)
 
     # Checks
     n_mean_frame = 0
@@ -514,7 +597,7 @@ def test_nonlin_sorting_w_change():
     different exposure times among the different subsets of non-unity gain
     used to calibrate non-linearity
     """
-    dataset_nonlin_w_change = sorting.sort_pupilimg_frames(dataset_w_change, cal_type='non-lin')
+    dataset_nonlin_w_change = sorting.sort_pupilimg_frames(dataset_w_change, cal_type='non-lin',actual_visit=True)
 
     # Checks
     n_mean_frame = 0
@@ -568,6 +651,7 @@ def test_nonlin_sorting_w_change():
             exptime_nonlin_arr[idx_em*n_exptime_nonlin:(idx_em+1)*n_exptime_nonlin-1])
     
 if __name__ == "__main__":
+    setup_module()
     print('Running test_sort_pupilimg_sorting')
     # Testing the sorting algorithm for K-gain calibration
     test_kgain_sorting()
@@ -580,3 +664,4 @@ if __name__ == "__main__":
     test_nonlin_sorting_w_change()
     print('* Non-linearity tests with different exposure times among non-unity gains passed')
 
+    

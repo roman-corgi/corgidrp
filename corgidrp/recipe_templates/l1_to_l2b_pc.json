@@ -13,7 +13,8 @@
                 "DetectorNoiseMaps" : "AUTOMATIC"
             },
             "keywords" : {
-                "return_full_frame" : false
+                "return_full_frame" : false,
+                "dataset_copy" : false
             }
         },
         {
@@ -46,6 +47,9 @@
             "name": "get_pc_mean",
             "calibs" : {
                 "Dark" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "dataset_copy" : false
             }
         },
         {

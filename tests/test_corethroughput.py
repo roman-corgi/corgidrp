@@ -8,6 +8,7 @@ from scipy.signal import decimate
 from astropy.modeling import models
 from astropy.modeling.models import Gaussian2D
 from termcolor import cprint
+import corgidrp.caldb as caldb
 
 import corgidrp
 from corgidrp.mocks import (create_default_L3_headers, create_ct_psfs,
@@ -32,6 +33,9 @@ def setup_module():
     """
     Create datasets needed for the UTs
     """
+    # Ensure default calibration files exist
+    caldb.initialize()
+    
     global FPAM_H_CT, FPAM_V_CT, FSAM_H_CT, FSAM_V_CT
     # Choose some H/V values for FPAM/FSAM  during corethroughput observations
     FPAM_H_CT, FPAM_V_CT, FSAM_H_CT, FSAM_V_CT = 6854, 22524, 29471, 12120
@@ -130,6 +134,8 @@ def setup_module():
     exthd['STARLOCX'] = 509
     exthd['STARLOCY'] = 513
     data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
+    # Set proper filename following CGI convention
+    data_cor[0].filename = "cgi_0000000000000090526_20240101t1200000_l2b.fits"
     dataset_cor = Dataset(data_cor)
 
     # Dataset with some CT profile defined in create_ct_interp
@@ -166,7 +172,7 @@ def setup_module():
     ct_cal_tmp = corethroughput.generate_ct_cal(Dataset(data_ct_interp))
     # FPAM/FSAM
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     # FPM during the CT observations (different to the coronagraphic one since
     # FPAM/FSAM H/V values are different)
     fpm_ct = ct_cal_tmp.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
@@ -319,7 +325,7 @@ def test_fpm_pos():
     """
     # FPAM/FSAM transformations
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     
     fpam2excam_matrix, fsam2excam_matrix = fpam_fsam_cal.data
     # TVAC files
@@ -510,7 +516,7 @@ def test_ct_interp():
     # Get CT FPM center
     # FPAM/FSAM
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     fpam_ct_pix = ct_cal_in.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # Reference grid to test the interpolation: wrt CT FPM because the positions
     # used to interpolate the CT are, by definition, wrt the FPM
@@ -742,7 +748,7 @@ def test_ct_map():
     
         # FPAM/FSAM
         fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-            'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+            'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     
         # Create CT map for the HLC area (default)
         ct_map_def = corethroughput.create_ct_map(dataset_cor, fpam_fsam_cal,
@@ -819,7 +825,7 @@ def test_psf_interp():
     # We need to refer the PSF locations to the FPM's center
     # Get PAM cal file
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     # Get CT FPM's center
     fpam_ct_pix_eq = ct_cal_eq.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # PSF locations with respect to the FPM's center. EXCAM pixels
@@ -856,7 +862,7 @@ def test_psf_interp():
     # We need to refer the PSF locations to the FPM's center
     # Get PAM cal file
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     # Get CT FPM's center
     fpam_ct_pix = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # PSF locations with respect to the FPM's center. EXCAM pixels

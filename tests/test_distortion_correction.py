@@ -13,8 +13,7 @@ def test_distortion_correction():
     # Create a bad pixel map for testing
     datashape = (1024, 1024)  # Example shape, adjust as needed
     
-    random = np.random.rand(datashape[0], datashape[1]) 
-    bpixmap = random < 0.001 # Selecting 0.1% of pixels to be bad pixels
+    bpixmap = np.zeros(datashape) # Assuming bad pixels have been corrected before this step.
 
     # create an undistorted dataset
     field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")

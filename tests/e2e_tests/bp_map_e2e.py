@@ -1,42 +1,42 @@
 import argparse
 import os
+import glob
 import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from astropy.io import fits
+import corgidrp
 from corgidrp import data
 from corgidrp import caldb
 from corgidrp import detector
 from corgidrp import darks
 from corgidrp import walker
+from corgidrp import mocks
+import shutil
 
 # Get the directory of the current script file
 thisfile_dir = os.path.dirname(__file__)
 
-def fix_headers_for_tvac(
+def fix_str_for_tvac(
     list_of_fits,
     ):
     """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
+    Gets around EMGAIN_A being set to 1 in TVAC data.
+    
     Args:
         list_of_fits (list): list of FITS files that need to be updated.
     """
-    print("Fixing TVAC headers")
     for file in list_of_fits:
         fits_file = fits.open(file)
-        prihdr = fits_file[0].header
         exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-        exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        if float(exthdr['EMGAIN_A']) == 1:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        if type(exthdr['EMGAIN_C']) is str:
+            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
+
 
 @pytest.mark.e2e
 def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
@@ -44,10 +44,20 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
-    # Create output directory for bad pixel map results if it doesn't exist
-    bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
-    if not os.path.exists(bp_map_outputdir):
-        os.mkdir(bp_map_outputdir)
+    # Create main output directory and master dark subfolder
+    main_output_dir = os.path.join(e2eoutput_path, "bp_map_cal_e2e")
+    bp_map_outputdir = os.path.join(main_output_dir, "bp_map_master_dark")
+    
+    # Clean up existing directory to ensure fresh run
+    if os.path.exists(bp_map_outputdir):
+        shutil.rmtree(bp_map_outputdir)
+    os.makedirs(bp_map_outputdir)
+
+    input_data_dir = os.path.join(bp_map_outputdir, 'input_l1')
+    os.makedirs(input_data_dir)
+
+    calibrations_dir = os.path.join(bp_map_outputdir, "calibrations")
+    os.mkdir(calibrations_dir)
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
@@ -58,24 +68,29 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
 
     # Define the list of raw science data files for input, selecting the first two files as examples
     input_image_filelist = []
-    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    l1_data_filelist = []
+    for filename in os.listdir(l1_datadir)[:2]:
+        l1_data_filelist.append(os.path.join(l1_datadir, filename))
+    #l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
-    # update TVAC headers
-    fix_headers_for_tvac(l1_data_filelist)
+    # Copy files to input directory
+    l1_data_filelist = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in l1_data_filelist
+    ]
 
-    ###### Setup necessary calibration files
-    # Modify input files to set KGAIN value in their headers
-    for file in l1_data_filelist:
-        with fits.open(file, mode='update') as hdulist:
-            # Modify the extension header to set KGAIN to 8.7
-            pri_hdr = hdulist[0].header
-            ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-            ext_hdr["KGAINPAR"] = 8.7
+    # update TVAC files
+    fix_str_for_tvac(l1_data_filelist)
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
 
     # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
     # Load and combine noise maps from various calibration files into a single array
@@ -96,6 +111,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Initialize additional noise map parameters
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+    pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
     ext_hdr['B_O'] = 0
@@ -105,7 +121,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    noise_maps.save(filedir=bp_map_outputdir, filename="mock_detnoisemaps_DNM_CAL.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_maps], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_maps)
 
     ## Load and save flat field calibration data
@@ -113,7 +129,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                           input_dataset=mock_input_dataset)
-    flat.save(filedir=bp_map_outputdir, filename="mock_flat_FLT_CAL.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat)
 
     # Load and save bad pixel map data
@@ -121,14 +137,19 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                               input_dataset=mock_input_dataset)
-    bp_map.save(filedir=bp_map_outputdir, filename="mock_bpmap_BPM_CAL.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     this_caldb.create_entry(bp_map)
 
     # Build and save a synthesized master dark frame
     master_dark = darks.build_synthesized_dark(mock_input_dataset, noise_maps)
-    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock_DRK_CAL.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[master_dark], output_dir=calibrations_dir, level_suffix="drk_cal")
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
+
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the CorGI DRP walker script
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
@@ -139,7 +160,11 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     this_caldb.remove_entry(master_dark)
     this_caldb.remove_entry(bp_map)
 
-    generated_bp_map_file = os.path.join(bp_map_outputdir, "mock_flat_BPM_CAL.fits")
+    # Load the generated bad pixel map file from the output directory
+    generated_bp_map_files = glob.glob(os.path.join(bp_map_outputdir, '*_bpm_cal.fits'))
+    if not generated_bp_map_files:
+        raise FileNotFoundError(f"No bad pixel map file found in {bp_map_outputdir}")
+    generated_bp_map_file = generated_bp_map_files[0]
 
     # Load the generated bad pixel map image and master dark reference data
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
@@ -213,7 +238,8 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
         output_path = os.path.join(bp_map_outputdir, "bp_map_master_dark_test.png")
         plt.savefig(output_path)
 
-    this_caldb.remove_entry(generated_bp_map_img)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 @pytest.mark.e2e
 def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
@@ -221,10 +247,20 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
-    # Create output directory for bad pixel map results if it doesn't exist
-    bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
-    if not os.path.exists(bp_map_outputdir):
-        os.mkdir(bp_map_outputdir)
+    # Create main output directory and simulated dark subfolder
+    main_output_dir = os.path.join(e2eoutput_path, "bp_map_cal_e2e")
+    bp_map_outputdir = os.path.join(main_output_dir, "bp_map_simulated_dark")
+    
+    # Clean up existing directory to ensure fresh test run
+    if os.path.exists(bp_map_outputdir):
+        shutil.rmtree(bp_map_outputdir)
+    os.makedirs(bp_map_outputdir)
+
+    input_data_dir = os.path.join(bp_map_outputdir, 'input_l1')
+    os.makedirs(input_data_dir)
+
+    calibrations_dir = os.path.join(bp_map_outputdir, "calibrations")
+    os.mkdir(calibrations_dir)
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
@@ -232,32 +268,39 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
 
     # Define the list of raw science data files for input, selecting the first two files as examples
     input_image_filelist = []
-    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    l1_data_filelist = []
+    for filename in os.listdir(l1_datadir)[:2]:
+        l1_data_filelist.append(os.path.join(l1_datadir, filename))
+    # l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
-    # update TVAC headers
-    fix_headers_for_tvac(l1_data_filelist)
-
-    ###### Setup necessary calibration files
-    # Modify input files to set KGAIN value in their headers
-    for file in l1_data_filelist:
-        with fits.open(file, mode='update') as hdulist:
-            # Modify the extension header to set KGAIN to 8.7
-            pri_hdr = hdulist[0].header
-            ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-            ext_hdr["KGAIN"] = 8.7
-
+    # Create input directory and copy files
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    
+    # Copy files to input directory
+    l1_data_filelist = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in l1_data_filelist
+    ]
+    
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
 
     # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
     ## Load and save flat field calibration data
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
+    pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                           input_dataset=mock_input_dataset)
-    flat.save(filedir=bp_map_outputdir, filename="mock_flat_FLT_CAL.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat)
 
     # Create a simulated dark frame with random hot pixels for testing
@@ -285,11 +328,14 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     # Create a dark object and save it
     master_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                             input_dataset=mock_input_dataset)
-
-    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock_DRK_CAL.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[master_dark], output_dir=calibrations_dir, level_suffix="drk_cal")
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     ####### Run the CorGI DRP walker script
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
@@ -297,9 +343,11 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(master_dark)
 
-    generated_bp_map_file = os.path.join(bp_map_outputdir, "mock_flat_BPM_CAL.fits")
-
-    # Load the generated bad pixel map image and reference dark data
+    # Load the generated bad pixel map file from the output directory
+    generated_bp_map_files = glob.glob(os.path.join(bp_map_outputdir, '*_bpm_cal.fits'))
+    if not generated_bp_map_files:
+        raise FileNotFoundError(f"No bad pixel map file found in {bp_map_outputdir}")
+    generated_bp_map_file = generated_bp_map_files[0]
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
 
     with fits.open(master_dark_ref) as hdulist:
@@ -341,12 +389,11 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         output_path = os.path.join(bp_map_outputdir, "bp_map_simulated_dark_test.png")
         plt.savefig(output_path)
     
-    this_caldb.remove_entry(generated_bp_map_img)
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    e2edata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
-    #e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
+    # e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     # Argument parser setup

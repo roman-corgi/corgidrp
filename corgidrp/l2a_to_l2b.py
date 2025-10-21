@@ -1,45 +1,60 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
 import numpy as np
+from scipy.interpolate import interp1d
 import copy
 import warnings
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
-from corgidrp.detector import detector_areas
-import warnings
+from corgidrp.detector import detector_areas, ENF
 
-def add_photon_noise(input_dataset):
+
+def add_shot_noise_to_err(input_dataset, kgain, detector_params):
     """
-    Propagate the photon/shot noise determined from the image signal to the error map. 
+    Propagate the Poisson/shot noise determined from the image signal to the error map. 
+    Estimation of photon/poisson/shot noise by interpolation of the photon transfer curve,
+    added excess noise in case of em_gain > 1.
+    Especially useful when a dataset has very few frames so that the shot noise is not
+    accurately obtained by averaging the frames.
 
     Args:
        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+       kgain (corgidrp.data.KGain): kgain calibration object
+       detector_params (corgidrp.data.DetectorParams): detector parameters calibration object
 
     Returns:
-        corgidrp.data.Dataset: photon noise propagated to the image error extensions of the input dataset
+        corgidrp.data.Dataset: shot noise propagated to the image error extensions of the input dataset
     """
     # you should make a copy the dataset to start
-    phot_noise_dataset = input_dataset.copy() # necessary at all?
-
+    phot_noise_dataset = input_dataset.copy()
+    
+    #get the noise from the ptc curve
+    ptc = kgain.ptc
+    nem = detector_params.params['NEMGAIN']
+    
     for i, frame in enumerate(phot_noise_dataset.frames):
-        try: # use measured gain if available
-            em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_M"]
+        # use measured gain if available TODO change hdr name if necessary
+        try:
+            em_gain = frame.ext_hdr["EMGAIN_M"]
         except:
+            # use EM applied EM gain if available
             em_gain = frame.ext_hdr.get("EMGAIN_A", 0)
-            if em_gain > 0: # use EM applied EM gain if available
+            if em_gain > 0:
                 em_gain = em_gain
-            else: # otherwise use commanded EM gain
+            else : # otherwise use commanded EM gain
                 em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=RuntimeWarning)
-            phot_err = np.sqrt(frame.data)
-        #add excess noise in case of em_gain
+                
+        #estimate of photon/poisson/shot noise by interpolation of the photon transfer curve
+        interp_func = interp1d(ptc[:,0], ptc[:,1], kind='linear', fill_value='extrapolate')
+
+        phot_err = interp_func(frame.data)
+        #add excess noise in case of em_gain > 1
         if em_gain > 1:
-            phot_err *= np.sqrt(2)           
-        frame.add_error_term(phot_err, "photnoise_error")
+            phot_err *= ENF(em_gain, nem)           
+        frame.add_error_term(phot_err, "shotnoise_error")
     
     new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])        
     
-    history_msg = "photon noise propagated to error map"
+    history_msg = "Poisson/shot noise propagated to error map"
     # update the output dataset
     phot_noise_dataset.update_after_processing_step(history_msg, new_all_err = new_all_err)
 
@@ -283,17 +298,17 @@ def convert_to_electrons(input_dataset, k_gain):
     kgain_cube = kgain_dataset.all_data
 
     kgain = k_gain.value #extract from caldb
-    kgainerr = k_gain.error
-    # x = c*kgain, where c (counts beforehand) and kgain both have error, so do propogation of error due to the product of 2 independent sources
-    kgain_error = np.zeros_like(input_dataset.all_err)
-    kgain_tot_err = (np.sqrt((kgain*kgain_dataset.all_err[:,0,:,:])**2 + (kgain_cube*kgainerr)**2))
-    kgain_error[:,0,:,:] = kgain_tot_err
+    error_frame = kgain_cube * k_gain.error
     kgain_cube *= kgain
     
+    #scale also the old error with kgain and propagate the error 
+    kgain_dataset.rescale_error(kgain, "kgain") 
+    kgain_dataset.add_error_term(error_frame, "kgain_error")
+
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
     # update the output dataset with this converted data and update the history
-    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electron", "KGAINPAR":kgain, 
+    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, header_entries = {"BUNIT":"detected EM electron", "KGAINPAR":kgain, 
                                                "KGAIN_ER": k_gain.error, "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
     return kgain_dataset
 

@@ -9,10 +9,13 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
+try:
+    from numpy.exceptions import RankWarning
+except:
+    from numpy import RankWarning
 
 from corgidrp import check
 import corgidrp.data as data
-from corgidrp.calibrate_kgain import CalKgainException
 
 # Dictionary with constant non-linearity calibration parameters
 nonlin_params_default = {
@@ -159,7 +162,7 @@ def calibrate_nonlin(dataset_nl,
         subset -- 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
         6.923, 7.692, 8.462, 9.231, 10.000, 11.538, 10.769, 12.308, 13.077,
         13.846, 14.615, 15.385, and 1.538 (again).
-        Set with non-unity gain frames:: a set of subsets of frames. All frames
+        Set with non-unity gain frames: a set of subsets of frames. All frames
         in each subset have a unique, non-unity EM gain. For instance, in TVAC,
         11 subsets were considered with EM values (EMGAIN_C): 1.65, 5.24, 8.60,
         16.70, 27.50, 45.26, 87.50, 144.10, 237.26, 458.70 and 584.40. These
@@ -176,7 +179,7 @@ def calibrate_nonlin(dataset_nl,
         2.816, 3.520, 4.225, 4.929, 5.633, 6.337, 7.041, 7.745, 8.449, 9.153,
         9.857, 10.561, 11.265, 11.969, 12.674, 13.378, 14.082, and 1.408 (repeated).
       n_cal (int):
-        Minimum number of sub-stacks used to calibrate Non-Linearity. The default
+        Minimum number of frames per sub-stack used to calibrate Non-Linearity. The default
         value is 20.
       n_mean (int):
         Minimum number of frames used to generate the mean frame. The default value
@@ -239,8 +242,10 @@ def calibrate_nonlin(dataset_nl,
     if np.ndim(dataset_nl.all_data) != 3:
         raise Exception('dataset_nl.all_data must be 3-D')
     # cast dataset objects into np arrays and retrieve aux information
-    cal_arr, mean_frame_arr, exp_arr, datetime_arr, len_list, actual_gain_arr = \
-        nonlin_dataset_2_stack(dataset_nl, apply_dq = apply_dq)
+    cal_list, mean_frame_list, exp_arr, datetime_arr, len_list, actual_gain_arr, datetimes_sort_inds, _ = \
+        nonlin_kgain_dataset_2_stack(dataset_nl, apply_dq = apply_dq, cal_type='nonlin')
+    cal_arr = np.vstack(cal_list)[datetimes_sort_inds]
+    mean_frame_arr = np.stack(mean_frame_list)
     # Get relevant constants
     rowroi1 = nonlin_params['rowroi1']
     rowroi2 = nonlin_params['rowroi2']
@@ -301,6 +306,7 @@ def calibrate_nonlin(dataset_nl,
     if (exp_arr <= min_exp_time).any():
         raise CalNonlinException('Each element of exp_arr must be '
             ' greater than min_exp_time.')
+    # check to see if there is at least one set of exposure times with length different from that of the others
     index = 0
     r_flag = True
     for x in range(len(len_list)):
@@ -312,9 +318,26 @@ def calibrate_nonlin(dataset_nl,
         if all_elements_same == True:
             r_flag = False
         index = index + len_list[x]
-    if not r_flag:
-        raise CalNonlinException('each substack of cal_arr must have a '
-            'group of frames with a repeated exposure time.')   
+    # check to see that there is a repeated exposure time (e.g., at least one set in between 2 sets of the same exposure time)
+    index = 0
+    repeated_lens = [] # to be used later, to know how to split up the repeated sets
+    for x in range(len(len_list)):
+        temp = np.copy(exp_arr[index:index+len_list[x]])
+        # first condition below: frames are already time-ordered, so if there is non-monotonicity, there is repitition, which we want
+        # r_flag condition:  merely a set with length longer than the others (which TVAC code has); this gives a "way out" if no repeated set after other sets
+        if np.all(np.diff(temp) >= 0) and not r_flag:
+            raise CalNonlinException('Each substack of cal_arr must have a '
+            'group of frames with a repeated exposure time.')
+        if np.all(np.diff(temp) < 0):
+            repeat_ind = np.where(np.diff(temp) < 0)[0][0]
+            ending = np.where(np.diff(temp)[repeat_ind+1:] != 0)[0]
+            if len(ending) == 0: # repeated set is last one in time
+                end_ind = None
+            else:
+                end_ind = ending[0]+1
+            repeated_lens.append(len(np.diff(temp)[repeat_ind:end_ind]))
+        
+        index = index + len_list[x]
     if len(len_list) != len(actual_gain_arr):
         raise CalNonlinException('Length of actual_gain_arr be the same as the '
                                  'length of len_list.')
@@ -522,13 +545,19 @@ def calibrate_nonlin(dataset_nl,
                 del_s = (ctime_datetime[idx] - ctime_datetime[0]).total_seconds()
                 group_mean_time.append(np.mean(del_s))
             elif t0 == repeat_exp and not first_flag:
-                idx_2 = len(idx) // 2
-                del_s = (ctime_datetime[idx[:idx_2]] - ctime_datetime[0]).total_seconds()
-                group_mean_time.append(np.mean(del_s))
+                # NOTE works fine for same number of frames per exposure time for a given EM gain (which is the observation plan, and this 
+                # is what the TVAC code has), but for more general case, use repeated_lens[gain_index] instead for the number of frames in the 2nd (repeated) set
+                idx_2 = len(idx) // 2 
+                start_time_repeated = ctime_datetime[idx[0]]
+                end_time_repeated = ctime_datetime[idx[idx_2]]
+                del_s2 = (ctime_datetime[idx[:idx_2]] - ctime_datetime[0]).total_seconds()
+                group_mean_time.append(np.mean(del_s2))
                 first_flag = True
         
         if verbose is True:
             print(group_mean_time)
+            print('Time between repeated exposure frames for EM gain = ', actual_gain_arr[gain_index],': ',
+                  (end_time_repeated - start_time_repeated).total_seconds(), 'seconds')
         
         # Additional setup
         mean_signal = []
@@ -584,6 +613,8 @@ def calibrate_nonlin(dataset_nl,
                 elif repeat_flag:
                     # for repeated exposure frames, split into the first half/set
                     # and the second half/set
+                    # NOTE works fine for same number of frames per exposure time for a given EM gain (which is the observation plan, and this 
+                    # is what the TVAC code has), but for more general case, use repeated_lens[gain_index] instead for the number of frames in the 2nd (repeated) set
                     first_half = len(selected_files) // 2
                     for i in range(first_half):
 
@@ -657,6 +688,8 @@ def calibrate_nonlin(dataset_nl,
         repeat_times_idx = np.where(exp_em == repeat_exp)[0]  # np.where returns a tuple, extract first element
         
         # Calculate the mean times for the first and second halves of these indices
+        # NOTE works fine for same number of frames per exposure time for a given EM gain (which is the observation plan, and this 
+        # is what the TVAC code has), but for more general case, use repeated_lens[gain_index] instead for the number of frames in the 2nd (repeated) set
         first_half = len(repeat_times_idx) // 2
         first_half_mean_time = delta_ctimes_s.iloc[repeat_times_idx[:first_half]].mean()
         
@@ -702,15 +735,17 @@ def calibrate_nonlin(dataset_nl,
         y_rel_err = np.abs((corr_mean_signal_sorted - y0)/corr_mean_signal_sorted)
         rms_y_rel_err = np.sqrt(np.mean(y_rel_err**2))
         # NOTE: the following limits were determined with simulated frames
-        if rms_y_rel_err < rms_low_limit:
-            p1 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
-        elif (rms_y_rel_err >= rms_low_limit) and (rms_y_rel_err < rms_upp_limit):
-            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 
-                            corr_mean_signal_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 1)
-        else:
-            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 
-                            corr_mean_signal_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 1)
-        y1 = np.polyval(p1, filt_exp_times_sorted)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RankWarning)
+            if rms_y_rel_err < rms_low_limit:
+                p1 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
+            elif (rms_y_rel_err >= rms_low_limit) and (rms_y_rel_err < rms_upp_limit):
+                p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 
+                                corr_mean_signal_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 1)
+            else:
+                p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 
+                                corr_mean_signal_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 1)
+            y1 = np.polyval(p1, filt_exp_times_sorted)
         
         if make_plot:
             fname = 'non_lin_fit'
@@ -775,7 +810,7 @@ def calibrate_nonlin(dataset_nl,
         normconst = rel_gain_interp[idxnorm]
         rel_gain_interp /= normconst
         if (norm_val < temp_min) or (norm_val > temp_max):
-            warnings.warn('norm_val is not between the minimum and maximum values '
+            print('norm_val is not between the minimum and maximum values '
                           'of the means for the current EM gain. Extrapolation '
                           'will be used for norm_val.')
         
@@ -832,7 +867,7 @@ def calibrate_nonlin(dataset_nl,
     
     return nonlin
 
-def nonlin_dataset_2_stack(dataset, apply_dq = True):
+def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
     """
     Casts the CORGIDRP Dataset object for non-linearity calibration into a stack
     of numpy arrays sharing the same commanded gain value. It also returns the list of
@@ -844,13 +879,18 @@ def nonlin_dataset_2_stack(dataset, apply_dq = True):
         dataset (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
         pupil L1 SCI frames (counts in DN)
         apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
+        cal_type (str): If 'kgain', then sets of frames with the same exposure time for a given EM gain 
+            are truncated so that each has the same number of frames.  Otherwise (for the 'nonlin' case), there is no truncation.
 
     Returns:
-        numpy array with stack of stacks of data array associated with each frame
+        list of data arrays associated with each frame
+        list of mean frames
         array of exposure times associated with each frame
         array of datetimes associated with each frame
         list with the number of frames with same EM gain
         List of actual EM gains
+        array of indices for timestamp ordering
+        number of frames each set of frames with same exposure time truncated to for EM gain = 1 frames
 
     """
     # Split Dataset
@@ -870,16 +910,25 @@ def nonlin_dataset_2_stack(dataset, apply_dq = True):
     len_sstack = []
     # Record measured gain of each substack of calibration frames
     gains = []
+    smallest_set_len = None
     for idx_set, data_set in enumerate(split[0]):
-        # Second layer for calibration data (array of different exposure times)
-        sub_stack = []
+        obsname_dsets, obsname_vals = data_set.split_dataset(prihdr_keywords=['OBSNAME'])
+        cal_dsets = []
+        mnframe_ind = None
+        for i, v in enumerate(obsname_vals):
+            if v.upper()=='MNFRAME':
+                mnframe_ind = i
+            else:
+                cal_dsets.append(obsname_dsets[i])
+        # First layer (array of unique EM values)
+        stack_cp = []
         len_cal_frames = 0
         record_gain = True 
-        for frame in data_set.frames:
-            if apply_dq:
-                bad = np.where(frame.dq > 0)
-                frame.data[bad] = np.nan
-            if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
+        if mnframe_ind is not None:
+            for frame in obsname_dsets[mnframe_ind]:
+                if apply_dq:
+                    bad = np.where(frame.dq > 0)
+                    frame.data[bad] = np.nan
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
                     record_exp_time = False
@@ -888,49 +937,77 @@ def nonlin_dataset_2_stack(dataset, apply_dq = True):
                 if frame.ext_hdr['EMGAIN_C'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
-            elif (frame.pri_hdr['OBSNAME'] == 'KGAIN' or
-                frame.pri_hdr['OBSNAME'] == 'NONLIN'):
-                len_cal_frames += 1
-                sub_stack.append(frame.data)
-                exp_time = frame.ext_hdr['EXPTIME']
-                if isinstance(exp_time, float) is False:
-                    raise Exception('Exposure times must be float')
-                if exp_time <=0:
-                    raise Exception('Exposure times must be positive')
-                exp_times.append(exp_time)
-                datetime = frame.ext_hdr['DATETIME']
-                
-                if isinstance(datetime, str) is False:
-                    raise Exception('DATETIME must be a string')
-                datetimes.append(datetime)
-                if record_gain:
-                    try: # if EM gain measured directly from frame
-                        gains.append(frame.ext_hdr['EMGAIN_M'])
-                    except:
-                        if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
-                            gains.append(frame.ext_hdr['EMGAIN_A'])
-                        else: # use commanded gain otherwise
-                            gains.append(frame.ext_hdr['EMGAIN_C'])
-                        record_gain = False
+        for cal_dset in cal_dsets:
+            # each of dsets has just one frame in it
+            dsets, vals = cal_dset.split_dataset(exthdr_keywords=['DATETIME','EXPTIME'])
+            smallest_set_length = np.inf
+            sub = []
+            start_val = float(vals[0][1])
+            start_val_ind = 0
+            exptime_dsets = []
+            for val in vals:
+                if vals.index(val) == 0:
+                    continue
+                if float(val[1]) == start_val:
+                    pass
+                else:
+                    exptime_dsets.append(dsets[start_val_ind:vals.index(val)])
+                    start_val = float(val[1])
+                    start_val_ind = vals.index(val)
+            # ending set not covered
+            exptime_dsets.append(dsets[start_val_ind:])
+            for i in exptime_dsets:
+                if len(i) < smallest_set_length:
+                    smallest_set_length = len(i)
+            if cal_type == 'nonlin':
+                smallest_set_length = None # for nonlin, don't need to truncate exptime sets to be same length for a given EM gain
+            for i, exptime_dset_list in enumerate(exptime_dsets):
+                sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]])
+                for exptime_dset in exptime_dset_list[:smallest_set_length]:
+                    frame = exptime_dset.frames[0]
+                    if not (frame.pri_hdr['OBSNAME'] == 'KGAIN' or 
+                    frame.pri_hdr['OBSNAME'] == 'NONLIN'):
+                        raise Exception('OBSNAME can only be MNFRAME or NONLIN in non-linearity')
+                    datetime = frame.ext_hdr['DATETIME']                
+                    if isinstance(datetime, str) is False:
+                        raise Exception('DATETIME must be a string')
+                    datetimes.append(datetime)
+                    exp_time = frame.ext_hdr['EXPTIME']
+                    if isinstance(exp_time, float) is False:
+                        raise Exception('Exposure times must be float')
+                    if exp_time <=0:
+                        raise Exception('Exposure times must be positive')
+                    exp_times.append(exp_time)
+                    if record_gain:
+                        try: # if EM gain measured directly from frame
+                            gains.append(frame.ext_hdr['EMGAIN_M'])
+                        except:
+                            if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
+                                gains.append(frame.ext_hdr['EMGAIN_A'])
+                            else: # use commanded gain otherwise
+                                gains.append(frame.ext_hdr['EMGAIN_C'])
+                            record_gain = False
+                    if gains[-1] == 1:
+                        smallest_set_len = smallest_set_length
+                stack_cp.append(sub)
+                len_cal_frames += len(sub)
+            # Length of substack must be at least 1
+            if len(stack_cp) == 0:
+                raise Exception('Substacks must have at least one element')
             else:
-                raise Exception('OBSNAME can only be MNFRAME or NONLIN in non-linearity')
-        
-        # First layer (array of unique EM values)
-        if len(sub_stack):
-            stack.append(np.stack(sub_stack))
-            len_sstack.append(len_cal_frames)
-
+                stack.append(np.vstack(stack_cp))
+                len_sstack.append(len_cal_frames)
+    
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):
         raise Exception('DATETIMEs cannot be duplicated')
-    # Length of substack must be at least 1
-    if len(len_sstack) == 0:
-        raise Exception('Substacks must have at least one element')
     # Every EM gain must be greater than or equal to 1
     if np.any(np.array(split[1]) < 1):
         raise Exception('Each set of frames categorized by commanded EM gains must be have 1 or more frames')
     if np.any(np.array(gains) < 1):
         raise Exception('Actual EM gains must be greater than or equal to 1')
-
-    return (np.vstack(stack), np.stack(mean_frame_stack), np.array(exp_times),
-        np.array(datetimes), len_sstack, np.array(gains))
+    
+    # sort frames by time stamp for drift correction later
+    datetimes_sort_inds = np.argsort(datetimes)
+    return (stack, mean_frame_stack, np.array(exp_times)[datetimes_sort_inds],
+        np.array(datetimes)[datetimes_sort_inds], len_sstack, np.array(gains), datetimes_sort_inds, smallest_set_len)

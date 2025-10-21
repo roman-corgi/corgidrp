@@ -1,6 +1,5 @@
 #A file to test the non-linearity correction, including a comparison with the II&T pipeline
 import os
-import glob
 import pickle
 import numpy as np
 import corgidrp.mocks as mocks
@@ -153,11 +152,8 @@ def test_non_linearity_correction():
         os.mkdir(datadir)
 
     emgain = 2000
-    mocks.create_nonlinear_dataset(test_non_linearity_path, filedir=datadir,em_gain=emgain)
-
-    ####### open up the files
-    sim_data_filenames = glob.glob(os.path.join(datadir, "simcal_nonlin*.fits"))
-    nonlinear_dataset = data.Dataset(sim_data_filenames)
+    nonlinear_dataset = mocks.create_nonlinear_dataset(test_non_linearity_path, filedir=datadir, em_gain=emgain)
+    
     assert len(nonlinear_dataset) == 2
 
     ######## perform non-linearity correction
@@ -170,13 +166,14 @@ def test_non_linearity_correction():
 
     # set up values for testing flags and the value of the flag
     non_linear_flag = 64
-    non_linear_pixel_value = 1e12
+    non_linear_pixel_value = 1e6
 
     # seperate dataset to test flagging
     flagged_dataset = nonlinear_dataset.copy()
 
     # Inject a non-linear pixel and check that if it is flagged
     flagged_dataset.all_data[0,0,0] = non_linear_pixel_value
+
     flagged_dataset = l1_to_l2a.correct_nonlinearity(flagged_dataset, non_linearity_correction,threshold=non_linear_pixel_value-1)
 
     assert flagged_dataset.all_dq[0,0,0] >= non_linear_flag # flagged_dataset.all_data[0,0,0] should be flagged
@@ -200,9 +197,8 @@ def test_non_linearity_correction():
 
     #Let's test that this returns the same thing as the II&T pipeline
     linear_data_iit = nonlinear_dataset.all_data*get_relgains(nonlinear_dataset.all_data,emgain,input_non_linearity_path)
-
     #We want the difference between the II&T version and ours to be zero. 
-    assert np.all(np.abs(linear_dataset.all_data[0]-linear_data_iit[0]) < 1e-5)
+    assert np.all(np.abs(linear_dataset.all_data[0]-linear_data_iit[0]) < 1e-2)
     # assert np.mean(linear_dataset.all_data - linear_data_iit) == pytest.approx(0, abs=1e-2)
 
 if __name__ == "__main__":

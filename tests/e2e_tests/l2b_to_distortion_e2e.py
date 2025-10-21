@@ -3,11 +3,14 @@ import os
 import numpy as np
 from corgidrp.data import AstrometricCalibration
 
+import corgidrp
+import corgidrp.caldb as caldb
 import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
 import corgidrp.walker as walker
 import pytest
 import glob
+import shutil
 
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
@@ -32,13 +35,15 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
 
     '''
 
-    distortion_outputdir = os.path.join(e2eoutput_path, "l2b_to_distortion_output")
-    if not os.path.exists(distortion_outputdir):
-        os.mkdir(distortion_outputdir)
+    distortion_outputdir = os.path.join(e2eoutput_path, "l2b_to_distortion_e2e")
+    if os.path.exists(distortion_outputdir):
+        shutil.rmtree(distortion_outputdir)
+    os.makedirs(distortion_outputdir)
 
-    e2e_mockdata_path = os.path.join(distortion_outputdir, "astrom_distortion")
+    # Create input_data subfolder
+    e2e_mockdata_path = os.path.join(distortion_outputdir, 'input_l2b')
     if not os.path.exists(e2e_mockdata_path):
-        os.mkdir(e2e_mockdata_path)
+        os.makedirs(e2e_mockdata_path)
 
 
     #################################
@@ -52,10 +57,6 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=e2e_mockdata_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=3)
     # update headers to be L2b level
     l2b_pri_hdr, l2b_ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
-    for mock_image in mock_dataset:
-        mock_image.pri_hdr = l2b_pri_hdr
-        mock_image.pri_hdr['RA'], mock_image.pri_hdr['DEC'] = 80.553428801, -69.514096821
-        mock_image.ext_hdr = l2b_ext_hdr
 
     # expected_platescale, expected_northangle = 21.8, 20.
     expected_coeffs = np.genfromtxt(distortion_coeffs_path)
@@ -67,11 +68,18 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_mockdata_path, "*.fits")))
     template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),"corgidrp","recipe_templates","l2b_to_distortion.json")
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+
     # template_path = '/Users/macuser/Roman/corgidrp/corgidrp/recipe_templates/l2b_to_distortion.json'
     walker.walk_corgidrp(l2b_data_filelist, "", distortion_outputdir, template=template_path)
 
     #Read in th Astrometric Calibration file
-    ast_cal_filename = glob.glob(os.path.join(distortion_outputdir, "*AST_CAL.fits"))[0]
+    ast_cal_filename = glob.glob(os.path.join(distortion_outputdir, "*ast_cal.fits"))[0]
     ast_cal = AstrometricCalibration(ast_cal_filename)
 
     #Check that distortion map error within the central 1" x 1" region of the detector is <4 [mas] (~0.1835 [pixel])
@@ -96,7 +104,10 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     assert np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < 0.1835)
     assert np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < 0.1835)
 
-
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+    
+    print('e2e test for l2b_to_distortion calibration passed')
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -106,7 +117,7 @@ if __name__ == "__main__":
     # workflow.
 
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the l2b->distortion end-to-end test")
 

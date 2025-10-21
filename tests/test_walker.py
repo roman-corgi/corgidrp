@@ -549,7 +549,8 @@ def test_generate_multiple_recipes():
     dataset = mocks.create_nonlinear_dataset(test_non_linearity_path, filedir=datadir)
     # add vistype
     for frame in dataset:
-        frame.pri_hdr['VISTYPE'] = "PUPILIMG"
+        frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_PUPIL_IMAGING"
+        frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_PUPIL_IMAGING"
     dataset.save()
     filelist = [frame.filepath for frame in dataset]
 
