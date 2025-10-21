@@ -4375,6 +4375,115 @@ def get_formatted_filename(dt, visitid):
     timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
     return f"cgi_{visitid}_{timestamp}_l2b.fits"
 
+def create_spatial_pol(dataset,nr=60,pfov_size=174,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet=None,band=None,prism='POL0'):
+    """Turns a dataset of neptune or uranus images with single planet images into the images observed through the wollaston prisms also incorporates the spatial variation of polarization on the 
+        surface of the planet
+
+    
+        Args:
+            dataset (corgidrp.data.Dataset): a dataset of image frames that are raster scanned (L2a-level)
+            nr (int): planet radius
+            pfov_size (int): size of the image created for the polarization variation, typically ~ 2 x nr
+            image_center_x (int): x coordinate of the center pixel of the final image with two orthogonal pol components
+            image_center_y (int): y coordinate of the center pixel of the final image with two orthogonal pol components
+            separation_diameter_arcsec (float): separation between the two orthogonal pol components in arcsecs
+            alignment_angle_WP1 (int): wollaston prism angle for Pol0 - 0
+            alignment_angle_WP2 (int): wollaston prism angle for Pol45- 45
+            planet (str): neptune or uranus
+            band (str): 1 or 4
+            prism (str): wollaston prism pol0 or pol45
+            
+    	Returns:
+    		data.Dataset: dataset of uranus or neptune with spatial variation of polarization corresponding to specific wollaston prism
+    		
+	"""
+    pfov = pfov_size
+    polar_fov = np.ones((pfov,pfov))
+
+     # default to unvignetted polarimetry FOV diameter of 3.8"
+    radius_arcsec = 3.8 / 2
+    # convert to pixel: 0.0218" = 1 pixel
+    radius_pix = int(round(radius_arcsec / 0.0218))
+
+    x = np.arange(0,pfov)
+    y = np.arange(0,pfov)
+    xx, yy = np.meshgrid(x,y)
+    nrr = np.sqrt((xx-(pfov//2))**2 + (yy-(pfov//2))**2)
+
+    polar_filter = np.logical_and(yy<.99*xx,yy<.99*(pfov-xx)) + np.logical_and(yy>.99*xx,yy>.99*(pfov-xx))
+    
+    for i in range(len(dataset)):
+        target=dataset[i].pri_hdr['TARGET']
+        filter=dataset[i].pri_hdr['FILTER']
+        if planet==target and band==filter: 
+            planet_image=dataset[i].data
+    
+    if planet == 'uranus' and band=="1":
+        polar_fov[polar_filter==True] = .0115
+        polar_fov[polar_filter==False] = -0.0115
+    elif planet == 'uranus' and band=="4" or planet == 'neptune' and band=="4":
+        polar_fov[polar_filter==True] = .005
+        polar_fov[polar_filter==False] = -0.005
+    elif planet == 'neptune' and band=="1":
+        polar_fov[polar_filter==True] = .006
+        polar_fov[polar_filter==False] = -0.006
+    r_xy = polar_fov
+    
+    n_rad=nr
+    if n_rad is None:
+        if planet.lower() =='neptune':
+             n_rad = 60
+        elif planet.lower() == 'uranus':
+             n_rad = 95
+    
+    r_xy[nrr>=n_rad] = 0
+    
+   
+    u_data=planet_image
+    I_1 = u_data.copy()
+    I_2 = u_data.copy()
+    centroid_init = centr.centroid_1dg(u_data)
+    xc_init=int(centroid_init[0])
+    yc_init=int(centroid_init[1])
+
+
+    if prism == 'POL0':
+    #place image according to specified angle
+        angle_rad = (alignment_angle_WP1 * np.pi) / 180
+    else:
+        angle_rad = (alignment_angle_WP2 * np.pi) / 180
+     
+    
+    displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
+    displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
+    center_left = (image_center_x - displacement_x, image_center_y + displacement_y)
+    center_right = (image_center_x + displacement_x, image_center_y - displacement_y)
+
+    WP_image=np.random.poisson(lam=0.199, size=(1024, 1024)).astype(np.float64)
+    
+    image_radius = pfov_size // 2
+    start_left = (center_left[0] - image_radius, center_left[1] - image_radius)
+    start_right = (center_right[0] - image_radius, center_right[1] - image_radius)
+
+    y, x = np.indices([np.shape(WP_image)[0], np.shape(WP_image)[1]])
+    x_left = x + start_left[0]
+    y_left = y + start_left[1]
+    x_right = x + start_right[0]
+    y_right = y + start_right[1]
+    
+    WP_pol=WP_image.copy() 
+    WP_pol[start_left[1]:start_left[1]+pfov, start_left[0]:start_left[0]+pfov]=I_1[yc_init - (pfov//2):yc_init + (pfov//2),xc_init - (pfov//2):xc_init + (pfov//2)]* 0.5 * (1+(2*r_xy)) 
+    WP_pol[start_right[1]:start_right[1]+pfov, start_right[0]:start_right[0]+pfov]=I_2[yc_init - (pfov//2):yc_init + (pfov//2),xc_init - (pfov//2):xc_init + (pfov//2)]* 0.5 * (1-(2*r_xy))
+
+
+    prihdr, exthdr = create_default_L1_headers()
+    frame = data.Image(WP_pol, pri_hdr=prihdr, ext_hdr=exthdr)
+    frame.pri_hdr.set('TARGET', planet)
+    frame.pri_hdr.set('FILTER',band)
+    polmap = data.Dataset([frame])
+        
+    return (polmap) 
+
 def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
                                        left_image_value=1, right_image_value=1, alignment_angle=None):
     """
