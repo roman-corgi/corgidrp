@@ -4,12 +4,10 @@ import numpy as np
 import os
 import pyklip.rdi
 from pyklip.klip import rotate, collapse_data
-from pyklip.klip import rotate, collapse_data
 import scipy.ndimage
 from astropy.wcs import WCS
 
 from corgidrp import data
-from corgidrp.combine import derotate_arr, prop_err_dq
 from corgidrp.combine import derotate_arr, prop_err_dq
 from corgidrp import star_center
 import corgidrp
