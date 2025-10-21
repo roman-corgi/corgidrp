@@ -571,7 +571,7 @@ def do_psf_subtraction(input_dataset,
                         dq=dq_out_collapsed
                         )
         
-        collapsed_frame.filename = sci_dataset.frames[-1].filename
+        #collapsed_frame.filename = sci_dataset.frames[-1].filename
     
         collapsed_frames.append(collapsed_frame)
 
@@ -584,8 +584,12 @@ def do_psf_subtraction(input_dataset,
             collapsed_dataset.all_data,
             pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
             err=collapsed_dataset.all_err[:,0],
-            dq=collapsed_dataset.all_dq
+            dq=collapsed_dataset.all_dq,
+            err_hdr=sci_dataset[0].err_hdr,
+            dq_hdr=sci_dataset[0].dq_hdr,
         )
+    
+    frame.filename = sci_dataset.frames[-1].filename
     
     dataset_out = data.Dataset(
         [frame]
