@@ -265,93 +265,111 @@ def find_star(input_dataset,
     """
 
     # Copy input dataset
+
     dataset = input_dataset.copy()
 
     satellite_spot_parameters_defaults = star_center.satellite_spot_parameters_defaults
 
+
     # Separate the dataset into frames with and without satellite spots
-    sci_frames = []
-    sat_spot_frames = []
+    split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+    out_frames = []
+    for val, split_dataset in  zip(unique_vals, split_datasets):
+        observing_mode = []
+        sci_frames = []
+        sat_spot_frames = []
+        for frame in split_dataset.frames:
+            if frame.pri_hdr["SATSPOTS"] == 0:
+                sci_frames.append(frame)
+                observing_mode.append(frame.ext_hdr['FSMPRFL'])
+            elif frame.pri_hdr["SATSPOTS"] == 1:
+                sat_spot_frames.append(frame)
+                observing_mode.append(frame.ext_hdr['FSMPRFL'])
+            else:
+                raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
 
-    observing_mode = []
+        assert all(mode == observing_mode[0] for mode in observing_mode), \
+            "All frames should have the same observing mode."
 
-    for frame in dataset.frames:
-        if frame.pri_hdr["SATSPOTS"] == 0:
-            sci_frames.append(frame)
-            observing_mode.append(frame.ext_hdr['FSMPRFL'])
-        elif frame.pri_hdr["SATSPOTS"] == 1:
-            sat_spot_frames.append(frame)
-            observing_mode.append(frame.ext_hdr['FSMPRFL'])
-        else:
-            raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
+        observing_mode = observing_mode[0]
 
-    assert all(mode == observing_mode[0] for mode in observing_mode), \
-        "All frames should have the same observing mode."
+        sci_dataset = data.Dataset(sci_frames)
+        sat_spot_dataset = data.Dataset(sat_spot_frames)
 
-    observing_mode = observing_mode[0]
-
-    sci_dataset = data.Dataset(sci_frames)
-    sat_spot_dataset = data.Dataset(sat_spot_frames)
-
-    # If the input data is polarimetric
-    if sat_spot_dataset.frames[0].data.shape[0] == 2:
-        sat_spot_split_datasets, sat_spot_unique_vals = sat_spot_dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
-        sci_split_datasets, sci_unique_vals = sci_dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
-
-        for i in [0,len(sat_spot_unique_vals)-1]:
-            if sat_spot_unique_vals[i] == 'POL0' : 
-                sat_spot_dataset_pol_0 = sat_spot_split_datasets[i]
-            if sat_spot_unique_vals[i] == 'POL45' : 
-                sat_spot_dataset_pol_45 = sat_spot_split_datasets[i]
-
-        for i in [0,len(sci_unique_vals)-1]:
-            if sat_spot_unique_vals[i] == 'POL0' : 
-                sci_split_datasets_pol_0 = sci_split_datasets[i]
-            if sci_unique_vals[i] == 'POL45' : 
-                sci_split_datasets_pol_45 = sci_split_datasets[i]
-
-        # Compute median images and take first slice
-        img_ref = np.median(sci_split_datasets_pol_0.all_data, axis=0)[0]
-        img_sat_spot = np.median(sat_spot_dataset_pol_0.all_data, axis=0)[0]
-    else :
+        tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
+        # See if the satellite spot parameters are provided, if not used defaults
+        if satellite_spot_parameters is not None:
+            tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
         # Compute median images
         img_ref = np.median(sci_dataset.all_data, axis=0)
         img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
 
-    # Default star_coordinate_guess to center of img_sat_spot if None
-    if star_coordinate_guess is None:
-        star_coordinate_guess = (img_sat_spot.shape[1] // 2, img_sat_spot.shape[0] // 2)
+        # if polarimetry
+        if val  == 'POL0' or val == 'POL45': 
+            # Compute median images and find star on both slices
+            star_xy_list = []
+            for i in [0,1]: #for i in range(0, len(unique_vals))
+                img_ref_slice = img_ref[i]
+                img_sat_spot_slice = img_sat_spot[i]
+                # Default star_coordinate_guess to center of img_sat_spot if None
+                if star_coordinate_guess is None:
+                    star_coordinate_guess = (img_sat_spot_slice.shape[1] // 2, img_sat_spot_slice.shape[0] // 2)
 
-    tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
-    # See if the satellite spot parameters are provided, if not used defaults
-    if satellite_spot_parameters is not None:
-        tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
+                star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+                    img_ref=img_ref_slice,
+                    img_sat_spot=img_sat_spot_slice,
+                    star_coordinate_guess=star_coordinate_guess,
+                    thetaOffsetGuess=thetaOffsetGuess,
+                    satellite_spot_parameters=tuningParamDict,
+                )
+                star_xy_list.append(star_xy)
+                
+            #align second slice on first slice and drop satellite spot images if necessary
+            shift_value = star_xy_list[0]-star_xy_list[1]
+            for frame in split_dataset:
+                if not drop_satspots_frames or frame.pri_hdr["SATSPOTS"] == 0 :
+                    aligned_slice = shift(frame.data[1], shift_value)
+                    frame.data[1] = aligned_slice
+                    frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]
+                    frame.ext_hdr['STARLOCY'] =star_xy_list[0][1]
+                    frame.ext_hdr['HISTORY'] = (
+                                    f"Satellite spots analyzed. Star location at x={star_xy_list[0][0]} "
+                                    f"and y={star_xy_list[0][1]}."
+                                )
 
-    # Find star center
-    star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
-        img_ref=img_ref,
-        img_sat_spot=img_sat_spot,
-        star_coordinate_guess=star_coordinate_guess,
-        thetaOffsetGuess=thetaOffsetGuess,
-        satellite_spot_parameters=tuningParamDict,
-    )
+                    out_frames.append(frame)
+            processed_dataset = data.Dataset(out_frames)
 
-    # Add star location to frame headers
-    header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
+        else :
 
-    if drop_satspots_frames:
-        dataset = sci_dataset
+            # Default star_coordinate_guess to center of img_sat_spot if None
+            if star_coordinate_guess is None:
+                star_coordinate_guess = (img_sat_spot.shape[1] // 2, img_sat_spot.shape[0] // 2)
 
-    history_msg = (
-        f"Satellite spots analyzed. Star location at x={star_xy[0]} "
-        f"and y={star_xy[1]}."
-    )
+            # Find star center
+            star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+                img_ref=img_ref,
+                img_sat_spot=img_sat_spot,
+                star_coordinate_guess=star_coordinate_guess,
+                thetaOffsetGuess=thetaOffsetGuess,
+                satellite_spot_parameters=tuningParamDict,
+            )
+            if drop_satspots_frames:
+                processed_dataset = sci_dataset
 
-    dataset.update_after_processing_step(
-        history_msg,
-        header_entries=header_entries)
+            # Add star location to frame headers
+            header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
 
-    return dataset
+            history_msg = (
+                f"Satellite spots analyzed. Star location at x={star_xy[0]} "
+                f"and y={star_xy[1]}."
+            )
+
+            processed_dataset.update_after_processing_step(
+                history_msg,
+                header_entries=header_entries)
+
+    return processed_dataset
 
 
 def do_psf_subtraction(input_dataset, 
