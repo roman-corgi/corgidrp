@@ -70,6 +70,7 @@ all_steps = {
     "compute_psf_centroid": corgidrp.spec.compute_psf_centroid,
     "calibrate_dispersion_model": corgidrp.spec.calibrate_dispersion_model,
     "fit_line_spread_function": corgidrp.spec.fit_line_spread_function,
+    "split_image_by_polarization_state": corgidrp.l2b_to_l3.split_image_by_polarization_state,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -286,7 +287,8 @@ def guess_template(dataset):
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC']:
+            # explicitly check if ISPC is True or 1 (in case this value is overloaded/ assigned other integer values)
+            if image.ext_hdr['ISPC'] in (True, 1):
                 recipe_filename = "l1_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l1_to_l2a_noisemap.json"
@@ -311,17 +313,26 @@ def guess_template(dataset):
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC']:
+            if image.ext_hdr['ISPC'] in (True, 1):
                 recipe_filename = "l2a_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l2a_to_l2a_noisemap.json"
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "l2a_build_trad_dark_image.json"
         else:
-            if image.ext_hdr['ISPC']:
-                recipe_filename = "l2a_to_l2b_pc.json"
+            # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
+            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
+            
+            if is_spectroscopy:
+                if image.ext_hdr['ISPC'] in (True, 1):
+                    recipe_filename = "l2a_to_l2b_pc_spec.json"
+                else:
+                    recipe_filename = "l2a_to_l2b_spec.json"
             else:
-                recipe_filename = "l2a_to_l2b.json"  # science data and all else
+                if image.ext_hdr['ISPC'] in (True, 1):
+                    recipe_filename = "l2a_to_l2b_pc.json"
+                else:
+                    recipe_filename = "l2a_to_l2b.json"  # science data and all else
     # L2b -> L3 data processing
     elif image.ext_hdr['DATALVL'] == "L2b":
         if image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
@@ -336,7 +347,13 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
         else:
-            recipe_filename = "l2b_to_l3.json"
+            # Check if this is polarimetry data (POL0 or POL45 - not sure of VISTYPE yet)
+            is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45')
+            
+            if is_polarimetry:
+                recipe_filename = "l2b_to_l3_pol.json"
+            else:
+                recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
     elif image.ext_hdr['DATALVL'] == "L3":
         if image.ext_hdr['FSMLOS'] == 1:
