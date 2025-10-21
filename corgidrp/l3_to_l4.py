@@ -580,10 +580,18 @@ def do_psf_subtraction(input_dataset,
     # upgrade to L4 should be done by a serpate receipe
     collapsed_dataset = data.Dataset(collapsed_frames)
 
+    # let fits save handle NAXIS info in the err/dq headers.
+    for err_key in list(sci_dataset[0].err_hdr): 
+        if 'NAXIS' in err_key: 
+            del sci_dataset[0].err_hdr[err_key]
+    for dq_key in list(sci_dataset[0].dq_hdr): 
+        if 'NAXIS' in dq_key: 
+            del sci_dataset[0].dq_hdr[dq_key]
+
     frame = data.Image(
             collapsed_dataset.all_data,
             pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
-            err=collapsed_dataset.all_err[:,0],
+            err=collapsed_dataset.all_err[np.newaxis,:,0,:,:],
             dq=collapsed_dataset.all_dq,
             err_hdr=sci_dataset[0].err_hdr,
             dq_hdr=sci_dataset[0].dq_hdr,
@@ -594,10 +602,6 @@ def do_psf_subtraction(input_dataset,
     dataset_out = data.Dataset(
         [frame]
     )
-
-    # # Flag nans in the dq array and then add nans to the error array
-    # dataset_out = flag_nans(dataset_out,flag_val=1)
-    # dataset_out = nan_flags(dataset_out,threshold=1)
     
     history_msg = f'PSF subtracted via pyKLIP {klip_kwargs["mode"]}.'
     dataset_out.update_after_processing_step(history_msg)
