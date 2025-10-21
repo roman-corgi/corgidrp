@@ -799,6 +799,8 @@ def test_p_below_min():
     if not i_beg is None:
         raise Exception("find_plateaus did not ignore plateau below sat threshold.")
 
+def test_oversat_frame():
+    print("hi")
 
 if __name__ == "__main__":
     test_iit_vs_corgidrp()
@@ -820,3 +822,4 @@ if __name__ == "__main__":
     test_mask_box_corners()
     test_cosm_tail_2()
     test_cosm_tail_bleed_over()
+    test_oversat_frame()
