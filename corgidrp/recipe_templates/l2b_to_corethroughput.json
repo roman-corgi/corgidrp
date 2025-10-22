@@ -1,0 +1,20 @@
+{
+    "name" : "l2b_to_corethroughput",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name": "divide_by_exptime"
+        },
+        {
+            "name" : "generate_ct_cal"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

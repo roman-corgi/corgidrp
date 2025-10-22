@@ -1,0 +1,65 @@
+# Used to make a smaller-scale full frame for the purpose of having
+# smaller file sizes for test data for tpump_analysis.
+
+# Any regions not specified are assumed to be shielded or unused pixels.
+#
+# Geometry regions are defined as:
+#   rows: number of region rows
+#   cols: number of region columns
+#   r0c0: coordinates (row, col) of the corner closest to (0, 0) of the array
+#
+# For example, in a 5x5 array, the following geometry would look as follows:
+#   rows: 2
+#   cols: 3
+#   r0c0:
+#     - 2
+#     - 1
+#
+# [
+#     [0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0],
+#     [0, 1, 1, 1, 0],
+#     [0, 1, 1, 1, 0],
+#     [0, 0, 0, 0, 0]
+# ]
+#
+# where (0, 0) is defined as the top left of this array.
+frame_rows: 120
+frame_cols: 220
+geom:
+  image:
+    rows: 104
+    cols: 105
+    r0c0:
+      - 2
+      - 108
+  prescan:
+    rows: 120
+    cols: 108
+    # good, reliable cols used for getting row-by-row bias, relative to r0c0
+    #For such a small test frame, we need enough columns to get an accurate
+    # bias subtraction, so we choose all of them.
+    col_start: 0 #10
+    col_end: 108 #100
+    r0c0:
+      - 0
+      - 0
+  parallel_overscan:
+    rows: 14
+    cols: 107
+    r0c0:
+      - 106
+      - 108
+  serial_overscan:
+    rows: 120
+    cols: 5
+    r0c0:
+      - 0
+      - 215
+eperdn: #7
+fwc: #100000
+sat_thresh: 0.99
+plat_thresh: 0.85
+cosm_filter: 2
+tail_filter: #5
+cic_thresh: #100

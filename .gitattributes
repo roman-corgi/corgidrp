@@ -1,0 +1,15 @@
+tests/test_data/FluxMap1024.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/medcombined-neptune_band_1.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/medcombined-neptune_band_4.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/medcombined-uranus_band_4.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/medcombined-uranus_band_1.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/mock_northup.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/CGI_bandpass_centers.csv filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/TVAC_PRISM3_dispersion_profile.npz filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R3C1SLIT_PRISM3_offset_array.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits filter=lfs diff=lfs merge=lfs -text
+corgidrp/data/header_formats/*.csv filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,42 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: E2E tests
+
+on: workflow_dispatch 
+
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: 
+      group: E2E-Testing
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Git LFS
+      run: |
+        git lfs install
+        git lfs pull
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.12"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest flake8-docstrings-complete
+        if [ -f requirements.txt ]; then pip install -r requirements.txt .; fi
+        pip install -r requirements_e2etests.txt corgidrp
+    - name: Download E2E test data
+      run: |
+        mkdir e2e_test_data
+        # download file
+        wget -O E2E_Test_Data.tar.xz https://zenodo.org/records/17065109/files/E2E_Test_Data.tar.xz?download=1
+        tar -xvf E2E_Test_Data.tar.xz -C e2e_test_data
+    - name: Test with pytest
+      run: |
+        pytest --which e2e --e2edata_path e2e_test_data/E2E_Test_Data/ --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/

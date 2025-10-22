@@ -1,0 +1,17 @@
+{
+    "name" : "saving_test",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "save",
+            "keywords" : {
+                "suffix" : "test"
+            }
+        }
+    ]
+}

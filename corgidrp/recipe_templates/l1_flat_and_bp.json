@@ -1,0 +1,98 @@
+{
+    "name" : "l1_flat_and_bp",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false,
+        "jit_calib_id" : true
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "prescan_biassub",
+            "keywords" : {
+                "return_full_frame" : false
+            }
+        },
+        {
+            "name" : "detect_cosmic_rays",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC",
+                "KGain" : "AUTOMATIC, OPTIONAL"
+            }
+        },
+        {
+            "name" : "correct_nonlinearity",
+            "calibs" : {
+                "NonLinearityCalibration" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "update_to_l2a"
+        },
+        {
+            "name" : "save"
+        },
+        {
+            "name" : "frame_select"
+        },
+        {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "em_gain_division"
+        },
+        {
+            "name" : "add_photon_noise"
+        },
+        {
+            "name" : "dark_subtraction",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "outputdir" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "cti_correction",
+            "calibs" : {
+                "TrapCalibration" : "AUTOMATIC,OPTIONAL"
+            }
+        },
+        {
+            "name" : "combine_subexposures",
+            "keywords" : {
+                "num_frames_per_group" : 6
+            }
+        },
+        {
+            "name" : "create_onsky_flatfield",
+            "keywords" : {
+                "up_radius" : 60
+            }
+        },
+        {
+            "name" : "save"
+        },
+        {
+            "name" : "create_bad_pixel_map",
+            "calibs": {
+                "DetectorNoiseMaps": "AUTOMATIC",
+                "FlatField" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

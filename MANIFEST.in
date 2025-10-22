@@ -1,0 +1,12 @@
+include requirements.txt
+include corgidrp/recipe_templates/*.json
+include tests/test_data/example_L1_input.fits
+include tests/test_data/metadata.yaml
+include tests/test_data/metadata_eng.yaml
+include tests/test_data/nonlin_sample.csv
+include tests/test_data/nonlin_sample.fits
+include tests/test_data/fpam_to_excam_modelbased.fits
+include tests/test_data/fsam_to_excam_modelbased.fits
+include corgidrp/data/JWST_CALFIELD2020.csv
+include corgidrp/data/filter_curves/pupil_lens_v0.txt
+include corgidrp/data/filter_curves/imaging_lens_v0.txt

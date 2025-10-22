@@ -1,0 +1,100 @@
+#############
+# This file is the default file used by gsw_process.Process and is valid
+# for SCIENCE/ACQUIRE and TRAP PUMPING sequences.  The SCI format frame
+# is broken up from the ENG format frame.  For example, prescan specifies
+# the SCI prescan section of the frame, and this along with eng_prescan
+# specifies the entire prescan region of the ENG format frame for these
+# sequences.  For the unbroken sections of the ENG format frame for these
+# sequences, see metadata_eng.yaml.
+#############
+
+# Any regions not specified are assumed to be shielded or unused pixels.
+#
+# Geometry regions are defined as:
+#   rows: number of region rows
+#   cols: number of region columns
+#   r0c0: coordinates (row, col) of the corner closest to (0, 0) of the array
+#
+# For example, in a 5x5 array, the following geometry would look as follows:
+#   rows: 2
+#   cols: 3
+#   r0c0:
+#     - 2
+#     - 1
+#
+# [
+#     [0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0],
+#     [0, 1, 1, 1, 0],
+#     [0, 1, 1, 1, 0],
+#     [0, 0, 0, 0, 0]
+# ]
+#
+# where (0, 0) is defined as the top left of this array.
+
+# total ENG frame:
+eng_frame_rows: 2200
+eng_frame_cols: 2200
+
+# SCI frame:
+frame_rows: 1200
+frame_cols: 2200
+geom:
+  image:
+    rows: 1024
+    cols: 1024
+    r0c0:
+      - 13
+      - 1088
+  prescan:
+    rows: 1200
+    cols: 1088
+    # good, reliable cols used for getting row-by-row bias, relative to r0c0
+    col_start: 800
+    col_end: 1000
+    r0c0:
+      - 0
+      - 0
+  parallel_overscan:
+    rows: 163
+    cols: 1056
+    r0c0:
+      - 1037
+      - 1088
+  serial_overscan:
+    rows: 1200
+    cols: 56
+    r0c0:
+      - 0
+      - 2144
+
+# upper part of ENG frame:
+eng_upper_rows: 1000
+eng_upper_cols: 2200
+eng_geom:
+  eng_parallel_overscan: #cols are in the range of the image cols of SCI half
+    rows: 1000
+    cols: 1056
+    r0c0:
+      - 1200
+      - 1088
+  eng_prescan:
+    rows: 1000
+    cols: 1088
+    r0c0:
+      - 1200
+      - 0
+  eng_serial_overscan:
+    rows: 1000
+    cols: 56
+    r0c0:
+      - 1200
+      - 2144
+
+eperdn: #7
+fwc: #100000
+sat_thresh: 0.99
+plat_thresh: 0.85
+cosm_filter: 2
+tail_filter: #5
+cic_thresh: #100

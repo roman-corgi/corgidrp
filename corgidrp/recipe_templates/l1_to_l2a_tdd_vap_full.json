@@ -1,0 +1,72 @@
+{
+    "name" : "l1_to_l2a_basic",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "prescan_biassub",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
+            },
+            "keywords" : {
+		"return_full_frame" : true,
+                "detector_regions" : {
+                        "SCI" : { 
+                            "frame_rows" : 1200,
+                            "frame_cols" : 2200,
+                            "image" : {
+                                "rows": 1024,
+                                "cols": 1024,
+                                "r0c0": [13, 1088]
+                                },
+                            "prescan" : {
+                                "rows": 1200,
+                                "cols": 1088,
+                                "r0c0": [0, 0],
+                                "col_start": 800,
+                                "col_end": 1000
+                                },
+                            "prescan_reliable" : {
+                                "rows": 1200,
+                                "cols": 1088,
+                                "r0c0": [0, 0]
+                                },
+                            "parallel_overscan" : {
+                                "rows": 163,
+                                "cols": 1056,
+                                "r0c0": [1037, 1088]
+                                },
+                            "serial_overscan" : {
+                                "rows": 1200,
+                                "cols": 56,
+                                "r0c0": [0, 2144]
+                                }
+                            }
+                    }
+            }
+        },
+        {
+            "name" : "detect_cosmic_rays",
+            "calibs" : {
+				"DetectorParams" : "AUTOMATIC",
+                "KGain" : "AUTOMATIC, OPTIONAL"
+            }
+        },
+        {
+            "name" : "correct_nonlinearity",
+            "calibs" : {
+                "NonLinearityCalibration" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "update_to_l2a"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

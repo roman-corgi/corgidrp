@@ -1,0 +1,102 @@
+{
+    "name" : "trap_pump_cal",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "prescan_biassub",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
+            },
+            "keywords" : {
+                "detector_regions" : {
+                        "SCI" : { 
+                            "frame_rows" : 120,
+                            "frame_cols" : 220,
+                            "image" : {
+                                "rows": 104,
+                                "cols": 105,
+                                "r0c0": [2, 108]
+                                },
+                            "prescan" : {
+                                "rows": 120,
+                                "cols": 108,
+                                "r0c0": [0, 0],
+                                "col_start": 0,
+                                "col_end": 108
+                                },
+                            "prescan_reliable" : {
+                                "rows": 120,
+                                "cols": 108,
+                                "r0c0": [0, 0]
+                                },
+                            "parallel_overscan" : {
+                                "rows": 14,
+                                "cols": 107,
+                                "r0c0": [106, 108]
+                                },
+                            "serial_overscan" : {
+                                "rows": 120,
+                                "cols": 5,
+                                "r0c0": [0, 215]
+                                }
+                            },
+                    "ENG" : { 
+                            "frame_rows" : 220,
+                            "frame_cols" : 220,
+                            "image" : {
+                                "rows": 102,
+                                "cols": 102,
+                                "r0c0": [13, 108]
+                                },
+                            "prescan" : {
+                                "rows": 220,
+                                "cols": 108,
+                                "r0c0": [0, 0],
+                                "col_start": 0,
+                                "col_end": 108
+                                },
+                            "prescan_reliable" : {
+                                "rows": 220,
+                                "cols": 20,
+                                "r0c0": [0, 80]
+                                },
+                            "parallel_overscan" : {
+                                "rows": 116,
+                                "cols": 105,
+                                "r0c0": [104, 108]
+                                },
+                            "serial_overscan" : {
+                                "rows": 220,
+                                "cols": 5,
+                                "r0c0": [0, 215]
+                                }
+                            }
+                    },
+                "use_imaging_area" : true
+            }
+        },
+        {
+            "name" : "correct_nonlinearity",
+            "calibs" : {
+                "NonLinearityCalibration" : "AUTOMATIC,OPTIONAL"
+            }
+        },
+        {
+            "name" : "update_to_l2a"
+        },
+        {
+            "name" : "em_gain_division"
+        },
+        {
+            "name" : "calibrate_trap_pump"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}
