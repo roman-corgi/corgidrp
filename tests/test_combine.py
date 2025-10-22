@@ -306,9 +306,9 @@ def test_invalid_collapse():
     with pytest.raises(ValueError):
         combined_dataset = combine.combine_subexposures(dataset, collapse="invalid_option")
 
-def test_prop_err_dq():
+def test_prop_err_dq_rdi():
     """
-    Test that the expected dq and err arrays are produced in RDI, ADI, and ADI+RDI cases.
+    Test that the expected dq and err arrays are produced in RDI case.
     """
 
     # RDI
@@ -336,6 +336,10 @@ def test_prop_err_dq():
     assert dqs == pytest.approx(expected_dqs)
     assert np.all(np.isnan(errs))
 
+def test_prop_err_dq_adi():
+    """
+    Test that the expected dq and err arrays are produced in ADI.
+    """
     # ADI
     rolls = [0,90]
     mode = 'ADI'
@@ -364,6 +368,10 @@ def test_prop_err_dq():
     assert dqs == pytest.approx(expected_dqs)
     assert np.all(np.isnan(errs))
 
+def test_prop_err_dq_adirdi():
+    """
+    Test that the expected dq and err arrays are produced in ADI+RDI case.
+    """
     # ADI+RDI
     rolls = [0,90,0,0]
     mode = 'ADI+RDI'
@@ -400,7 +408,50 @@ def test_prop_err_dq():
     assert dqs == pytest.approx(expected_dqs)
     assert np.all(np.isnan(errs))
 
-    pass
+def test_prop_err_dq_misaligned():
+
+    rolls = [0,90,0,0]
+    mode = 'ADI+RDI'
+    dq_thresh = 4
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls)
+    mock_sci[1].ext_hdr['STARLOCX'], mock_sci[1].ext_hdr['STARLOCY'] = mock_sci[0].ext_hdr['STARLOCX']+1, mock_sci[0].ext_hdr['STARLOCY']+1
+    mock_ref[1].ext_hdr['STARLOCX'], mock_ref[1].ext_hdr['STARLOCY'] = mock_ref[0].ext_hdr['STARLOCX']+2, mock_ref[0].ext_hdr['STARLOCY']+2
+
+    mock_sci.all_dq[0,5,5] = 4     # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[0,94,5] = 4    # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[0,94,94] = 4    # This should not become flagged
+    mock_sci.all_dq[1,6,6] = 4     # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[1,95,6] = 4    # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[1,95,95] = 4    # This should not become flagged
+    mock_sci.all_dq[:,18,30] = 4   # This should not become flagged
+    mock_sci.all_dq[0,98,1] = 4    # This should not become flagged
+    mock_sci.all_dq[:,44,45] = 1   # This should not become flagged
+    mock_sci.all_dq[1,98,98] = 4   # This should not become flagged
+    
+    mock_ref.all_dq[0,2,2] = 4  # This should become flagged bc all ref data after derotation will be flagged
+    mock_ref.all_dq[0,97,2] = 4  # This should become flagged bc all ref data after derotation will be flagged
+    mock_ref.all_dq[0,97,97] = 4  # This should not become flagged
+    mock_ref.all_dq[1,4,4] = 4  # This should become flagged bc all ref data after derotation will be flagged
+    mock_ref.all_dq[1,99,4] = 4  # This should become flagged bc all ref data after derotation will be flagged
+    mock_ref.all_dq[1,99,99] = 4  # This should not become flagged
+    mock_ref.all_dq[:,7,9] = 1  # This should not become flagged
+    mock_ref.all_dq[0,3,9] = 4  # This should not become flagged
+
+    expected_dqs = np.zeros_like(mock_sci.all_dq[0])
+    expected_dqs[5,5] = 1
+    expected_dqs[94,5] = 1
+    expected_dqs[2,2] = 1
+    expected_dqs[97,2] = 1
+
+    dqs, errs = combine.prop_err_dq(mock_sci,mock_ref,mode,dq_thresh)
+
+    # Check shape of output dq & err arrays
+    assert dqs.shape == mock_sci.all_dq[0].shape
+    assert errs.shape == mock_sci.all_err[0].shape
+
+    # Check values of output dq & error arrays
+    assert dqs == pytest.approx(expected_dqs)
+    assert np.all(np.isnan(errs))
 
 
 def test_derotate_arr_2d():
@@ -413,14 +464,14 @@ def test_derotate_arr_2d():
     test_arr[5,5] = 10.
     test_arr[9,9] = np.nan
 
-    xcen, ycen = 4.5, 4.5
-
     # Check that the array stays the same if roll angle is 0
+    xcen, ycen = 4.5, 4.5
     roll_angle = 0
     derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     
     assert derotated_arr[~np.isnan(derotated_arr)] == pytest.approx(test_arr[~np.isnan(test_arr)])
 
+    # Check 90 degree rotation about the center
     roll_angle = 90
     derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     expected_arr = np.ones_like(test_arr)
@@ -429,9 +480,19 @@ def test_derotate_arr_2d():
     expected_arr[9,0] = np.nan
     assert derotated_arr[~np.isnan(derotated_arr)] == pytest.approx(expected_arr[~np.isnan(expected_arr)])
 
+    # Check shifting to new center
+    new_center = (5.5,5.5)
+    derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen,new_center=new_center)
+    expected_arr = np.ones_like(test_arr)
+    expected_arr[2,9] = 10.
+    expected_arr[6,5] = 10.
+    expected_arr[0,:] = np.nan
+    expected_arr[:,0] = np.nan
+    assert derotated_arr[~np.isnan(derotated_arr)] == pytest.approx(expected_arr[~np.isnan(expected_arr)])
+    
+
     # Check that rotating around a location other than the array center works
     xcen, ycen = 3.5, 3.5
-
     roll_angle = 90
     derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     expected_arr = np.ones_like(test_arr)
@@ -489,4 +550,7 @@ def test_derotate_arr_nd():
 if __name__ == "__main__":
     test_derotate_arr_2d()
     test_derotate_arr_nd()
-    test_prop_err_dq()
+    test_prop_err_dq_rdi()
+    test_prop_err_dq_adi()
+    test_prop_err_dq_adirdi()
+    test_prop_err_dq_misaligned()

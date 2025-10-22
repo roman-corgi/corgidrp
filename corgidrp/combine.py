@@ -115,7 +115,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     return new_dataset
 
 
-def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
+def derotate_arr(data_arr,roll_angle, xcen,ycen,new_center=None,astr_hdr=None,
                  is_dq=False,dq_round_threshold=0.05):
     """Derotates an array based on the provided roll angle, about the provided
     center. Treats DQ arrays specially, converting to float to do the rotation, 
@@ -140,12 +140,16 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
         data_arr = data_arr.astype(np.float32)
 
     if data_arr.ndim == 2:
-        derotated_arr = rotate(data_arr,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        derotated_arr = rotate(data_arr,roll_angle,(xcen,ycen),
+                               new_center=new_center,
+                               astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
     
     elif data_arr.ndim == 3:
         derotated_arr = []
         for i,im in enumerate(data_arr):
-            derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr if (i==0) else None) # astr_hdr is corrected only once
+            derotated_im = rotate(im,roll_angle,(xcen,ycen),
+                               new_center=new_center,
+                               astr_hdr=astr_hdr if (i==0) else None) # astr_hdr is corrected only once
         
             derotated_arr.append(derotated_im)
 
@@ -156,7 +160,9 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,astr_hdr=None,
         for s,set in enumerate(data_arr):
             derotated_set = []
             for i,im in enumerate(set):
-                derotated_im = rotate(im,roll_angle,(xcen,ycen),astr_hdr=astr_hdr if (i==0 and s==0) else None) # astr_hdr is corrected only once
+                derotated_im = rotate(im,roll_angle,(xcen,ycen),
+                               new_center=new_center,
+                               astr_hdr=astr_hdr if (i==0 and s==0) else None) # astr_hdr is corrected only once
         
                 derotated_set.append(derotated_im)
             derotated_arr.append(derotated_set)
@@ -195,32 +201,71 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1):
     """
 
     # Assign master output dq & error (before derotation)
-    # TODO: handle 3D data!
     # dq shape = (n_rolls, n_wls(optional), y, x)
     sci_input_dqs = sci_dataset.all_dq >= dq_thresh
+    sci_input_errs = np.full_like(sci_dataset.all_err,np.nan) # Set errors to np.nan for now
+    
+    # Align frames
+    aligned_sci_dq_arr = []
+    aligned_sci_err_arr = []
+    for i,frame in enumerate(sci_dataset):
+        xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
+        if i == 0:
+            xcen0, ycen0 = xcen, ycen
+        frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY'] = xcen0, ycen0
+        
+        aligned_sci_dq = derotate_arr(sci_input_dqs[i],0, xcen,ycen,
+                                      new_center=(xcen0,ycen0),is_dq=True)
+        aligned_sci_err = derotate_arr(sci_input_errs[i],0, xcen,ycen,
+                                      new_center=(xcen0,ycen0))
+        
+        aligned_sci_dq_arr.append(aligned_sci_dq)
+        aligned_sci_err_arr.append(aligned_sci_err)
+    aligned_sci_dq_arr = np.array(aligned_sci_dq_arr)
+    aligned_sci_err_arr = np.array(aligned_sci_err_arr)
+
+    if "RDI" in mode:
+        ref_input_dqs = ref_dataset.all_dq >= dq_thresh
+        ref_input_errs = np.full_like(ref_dataset.all_err,np.nan) # Set errors to np.nan for now
+
+
+        aligned_ref_dq_arr = []
+        aligned_ref_err_arr = []
+        for i,frame in enumerate(ref_dataset):
+            xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
+            if i == 0:
+                xcen0, ycen0 = xcen, ycen
+            frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY'] = xcen0, ycen0
+            
+            aligned_ref_dq = derotate_arr(ref_input_dqs[i],0, xcen,ycen,
+                                        new_center=(xcen0,ycen0),is_dq=True)
+            aligned_ref_err = derotate_arr(ref_input_errs[i],0, xcen,ycen,
+                                        new_center=(xcen0,ycen0))
+            
+            aligned_ref_dq_arr.append(aligned_ref_dq)
+            aligned_ref_err_arr.append(aligned_ref_err)
+
+        aligned_ref_dq_arr = np.array(aligned_ref_dq_arr)
+        aligned_ref_err_arr = np.array(aligned_ref_err_arr)
 
     # If doing ADI, flag pixels that are bad in all science frames
     if 'ADI' in mode:
-        sci_input_dqs[:] = np.all(sci_input_dqs,axis=0)
+        aligned_sci_dq_arr[:] = np.all(aligned_sci_dq_arr,axis=0)
 
     # If using references, flag pixels that are bad in all the ref frames
     if 'RDI' in mode:
-        ref_output_dqs_flat = np.all(ref_dataset.all_dq>=dq_thresh,axis=0,keepdims=True)
-        sci_input_dqs = np.logical_or(sci_input_dqs,ref_output_dqs_flat) 
+        ref_output_dqs_flat = np.all(aligned_ref_dq_arr,axis=0,keepdims=True)
+        aligned_sci_dq_arr = np.logical_or(aligned_sci_dq_arr,ref_output_dqs_flat) 
 
-    # Set errors to np.nan for now
-    sci_input_errs = np.full_like(sci_dataset.all_err,np.nan)
-
-    # Derotate dq & error
+   # Derotate dq & error
     derotated_dq_arr = []
     derotated_err_arr = []
     for i,frame in enumerate(sci_dataset):
-        
         roll = frame.pri_hdr['ROLL']
         xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
         
-        derotated_dq = derotate_arr(sci_input_dqs[i],roll, xcen,ycen,is_dq=True)
-        derotated_err = derotate_arr(sci_input_errs[i],roll, xcen,ycen)
+        derotated_dq = derotate_arr(aligned_sci_dq_arr[i],roll, xcen,ycen,is_dq=True)
+        derotated_err = derotate_arr(aligned_sci_err_arr[i],roll, xcen,ycen)
         
         derotated_dq_arr.append(derotated_dq)
         derotated_err_arr.append(derotated_err)
