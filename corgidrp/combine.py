@@ -127,6 +127,7 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,new_center=None,astr_hdr=None,
         roll_angle (float): telescope roll angle in degrees
         xcen (float): x-coordinate of center about which to rotate
         ycen (float): y-coordinate of center about which to rotate
+        new_center (tuple, optional): tuple of x- and y- coordinate of the new center to shift to.
         astr_hdr (astropy.fits.Header, optional): WCS header which will be updated. Defaults to None.
         is_dq (bool, optional): Flag to determine if this is a DQ array. Defaults to False.
         dq_round_threshold (float, optional): value between 0-1 which determines the 
