@@ -929,24 +929,24 @@ def align_polarimetry_frames(input_dataset):
     processed_dataset = input_dataset.copy()
 
     split_datasets, unique_vals = processed_dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
-    # # If two values, align POL45 on POL0
-    # if len(unique_vals)>1:
-    #     pol0_dataset =split_datasets[unique_vals.index("POL0")]
-    #     pol45_dataset =split_datasets[pol_unique_vals.index("POL45")]
-    #     new_star_center_x = pol0_dataset.frames[0].ext_hdr['STARLOCX']
-    #     new_star_center_y = pol0_dataset.frames[0].ext_hdr['STARLOCY']
+    # If two values, align POL45 on POL0
+    if len(unique_vals)>1:
+        pol0_dataset =split_datasets[unique_vals.index("POL0")]
+        pol45_dataset =split_datasets[unique_vals.index("POL45")]
+        new_star_center_x = pol0_dataset.frames[0].ext_hdr['STARLOCX']
+        new_star_center_y = pol0_dataset.frames[0].ext_hdr['STARLOCY']
 
-    #     shift_value = (0, new_star_center_x - pol45_dataset.frames[0].ext_hdr['STARLOCX'], new_star_center_y - pol45_dataset.frames[0].ext_hdr['STARLOCY'] )
-    #     for frame in processed_dataset:
-    #         if frame.ext_hdr['DPAMNAME'] == 'POL45' :
-    #             frame = shift(frame, shift_value)
-    #             frame.ext_hdr['STARLOCX'] = new_star_center_x
-    #             frame.ext_hdr['STARLOCY'] = new_star_center_y
+        shift_value = (0, new_star_center_y - pol45_dataset.frames[0].ext_hdr['STARLOCY'] , new_star_center_x - pol45_dataset.frames[0].ext_hdr['STARLOCX'])
+        for frame in processed_dataset:
+            if frame.ext_hdr['DPAMNAME'] == 'POL45' :
+                frame = shift(frame, shift_value)
+                frame.ext_hdr['STARLOCX'] = new_star_center_x
+                frame.ext_hdr['STARLOCY'] = new_star_center_y
 
-    # history_msgs = "Image centered on star location."
+    history_msgs = "Image centered on star location."
 
-    # processed_dataset.update_after_processing_step(
-    #     history_msgs)
+    processed_dataset.update_after_processing_step(
+        history_msgs)
 
     
     return processed_dataset
