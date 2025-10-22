@@ -5,7 +5,6 @@ from corgidrp.data import Image
 from corgidrp.mocks import create_mock_IQUV_image
 from corgidrp.l4_to_tda import compute_QphiUphii
 
-
 def test_compute_QphiUphi_center_correct():
     img = create_mock_IQUV_image()
     res = compute_QphiUphi(img)
@@ -13,10 +12,13 @@ def test_compute_QphiUphi_center_correct():
     # check shape
     assert res.data.shape[0] == 6, "Output should have 6 planes (I,Q,U,V,Q_phi,U_phi)"
 
+    # check Q, U are positive
+    assert np.all(res.data[1] > 0), "Q should be positive"
+    assert np.all(res.data[2] > 0), "U should be positive"
+
     # check U_phi ~ 0 when center is correct
     U_phi = res.data[5]
     assert np.allclose(U_phi, 0.0, atol=1e-6), "U_phi should be ~0 for correct center"
-
 
 def test_compute_QphiUphi_center_wrong():
     img = create_mock_IQUV_image()
@@ -39,11 +41,6 @@ def test_compute_QphiUphi_err_shape():
     assert res.dq.shape == res.data.shape, "dq should have the same shape as data"
 
 def test_dq_propagation():
-    """
-    Verify that the dq of Q_phi and U_phi propagates as the bitwise-OR of
-    the input dq for Q and U. We set distinct bits on all pixels of Q and U
-    so the expected OR relationship holds regardless of geometry.
-    """
     img = create_mock_IQUV_image()
 
     # Expect at least (I, Q, U, V) planes in the input dq
