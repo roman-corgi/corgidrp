@@ -6,7 +6,6 @@ import pyklip.rdi
 from pyklip.klip import rotate
 import scipy.ndimage
 from astropy.wcs import WCS
-from photutils.aperture import CircularAperture
 
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
@@ -915,92 +914,6 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
     dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
     return dataset
-
-def calc_stokes_unocculted(dataset,
-                           pos=None, encircled_radius=1., method='subpixel', subpixels=5,
-                           apply_mm=False, mm=None):
-    """
-    Compute Stokes vector (I, Q, U) from L3b polarimetric datacubes using aperture photometry.
-
-    Each channel (I0/I90 or POL0/POL90) in each slice is treated separately; roll and prism are shared.
-    Returns I, Q/I, U/I with propagated errors.
-
-    Args:
-        dataset (list of datacubes): L3b polarimetric datacubes (each with .data and .err arrays).
-        pos (array_like, optional): (y, x) center of aperture. Defaults to image center.
-        encircled_radius (float, optional): Aperture radius in pixels. Default is 1.
-        method (str, optional): Aperture photometry method. Default is 'subpixel'.
-        subpixels (int, optional): Number of subpixels per pixel for subpixel photometry.
-        apply_mm (bool, optional): Apply Mueller matrix correction if True. Default is False.
-        mm (ndarray, optional): 3x3 Mueller matrix for correction (used if apply_mm=True).
-
-    Returns:
-        Q (ndarray): [Q/I, Q/I_error]
-        U (ndarray): [U/I, U/I_error]
-    """
-
-    # Step 0: Aperture setup
-    if pos is None:
-        pos = np.array(dataset[0].data.shape[1:]) / 2  # (y, x) center
-    aper = CircularAperture(pos, encircled_radius)
-
-    fluxes, flux_errs, thetas = [], [], []
-
-    # Step 1: Photometry loop
-    for ds in dataset:
-        roll = ds.pri_hdr['ROLL']
-        prism = ds.ext_hdr['DPAMNAME']
-
-        if prism == 'POL0':
-            prism_angles = [0., 90.]
-        elif prism == 'POL45':
-            prism_angles = [45., 135.]
-        else:
-            raise ValueError(f"Unknown prism: {prism}")
-
-        for i, phi in enumerate(prism_angles):
-            theta = np.radians(roll + phi)
-            aperture_sum, aperture_err = aper.do_photometry(
-                ds.data[i], error=ds.err[i], method=method, subpixels=subpixels
-            )
-            fluxes.append(aperture_sum[0])
-            flux_errs.append(aperture_err[0])
-            thetas.append(theta)
-
-    fluxes = np.array(fluxes)
-    flux_errs = np.array(flux_errs)
-    thetas = np.array(thetas)
-
-    # Step 2: Design matrix
-    A = np.vstack([np.ones_like(thetas),
-                   0.5 * np.cos(2 * thetas),
-                   0.5 * np.sin(2 * thetas)]).T
-
-    # Step 3: Weighted least squares
-    W = np.diag(1.0 / flux_errs**2)
-    cov = np.linalg.inv(A.T @ W @ A)
-    params = cov @ (A.T @ W @ fluxes)
-    I_val, Q_val, U_val = params
-    I_err, Q_err, U_err = np.sqrt(np.diag(cov))
-
-    # Step 4: Fractional polarization
-    Q_frac = Q_val / I_val
-    U_frac = U_val / I_val
-    Q_frac_err = np.sqrt((Q_err/I_val)**2 + (Q_val*I_err/I_val**2)**2)
-    U_frac_err = np.sqrt((U_err/I_val)**2 + (U_val*I_err/I_val**2)**2)
-
-    # Step 5: Mueller correction (optional)
-    if apply_mm and mm is not None:
-        stokes_vec = mm @ np.array([I_val, Q_val, U_val])
-        I_val, Q_val, U_val = stokes_vec
-        cov = mm @ cov @ mm.T
-        I_err, Q_err, U_err = np.sqrt(np.diag(cov))
-        Q_frac = Q_val / I_val
-        U_frac = U_val / I_val
-        Q_frac_err = np.sqrt((Q_err/I_val)**2 + (Q_val*I_err/I_val**2)**2)
-        U_frac_err = np.sqrt((U_err/I_val)**2 + (U_val*I_err/I_val**2)**2)
-
-    return np.array([Q_frac, Q_frac_err]), np.array([U_frac, U_frac_err])
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
