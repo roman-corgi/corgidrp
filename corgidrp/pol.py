@@ -29,8 +29,6 @@ def calc_pol_p_and_pa_image(input_Image):
         U = input_Image.data[2]
         # V, Qphi, Uphi = Image.data[3:6] # unused
 
-        if len(input_Image.err.shape) == 4:
-            input_Image.err = input_Image.err[0]
         Ierr = input_Image.err[0]
         Qerr = input_Image.err[1]
         Uerr = input_Image.err[2]
