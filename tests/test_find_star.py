@@ -57,7 +57,7 @@ def test_find_star_offset():
 
         measured_x, measured_y = (dataset_with_center.frames[0].ext_hdr['STARLOCX'],
                                 dataset_with_center.frames[0].ext_hdr['STARLOCY'])
-
+        print(measured_x, measured_y)
         assert np.isclose(injected_position[0], measured_x, atol=0.1), \
             f"{mode}. Expected {injected_position[0]}, got {measured_x}"
         assert np.isclose(injected_position[1], measured_y, atol=0.1), \
@@ -188,9 +188,9 @@ def test_find_star_polarimetry():
                                 dataset_with_center.frames[0].ext_hdr['STARLOCY'])
 
         assert np.isclose(dataset_with_center.frames[0].data[0].shape[0]//2 + injected_position[0][0], measured_x, atol=0.1), \
-            f"{mode}. Expected {injected_position[0]}, got {measured_x}"
+            f"{mode}. Expected {injected_position[0][1]}, got {measured_x}"
         assert np.isclose(dataset_with_center.frames[0].data[0].shape[1]//2 + injected_position[0][1], measured_y, atol=0.1), \
-            f"{mode}. Expected {injected_position[1]}, got {measured_y}"
+            f"{mode}. Expected {injected_position[0][0]}, got {measured_y}"
 
     corgidrp.track_individual_errors = old_err_tracking
 

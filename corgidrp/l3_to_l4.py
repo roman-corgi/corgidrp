@@ -260,7 +260,8 @@ def find_star(input_dataset,
           ``star_center.star_center_from_satellite_spots`` routine.
         • Future enhancements may include separate handling of positive vs. negative 
           satellite spot frames once the relevant metadata keywords are defined.
-        • This routine can fail, if the guess position is off by more than a few pixel.
+        • This routine can fail, if the guess position is off by more than a few pixels.
+        More than 2 pixels on any axis leads almost systematically to failure
           A significantly wrong guess of the angle offset can also lead to failure.
     """
 
@@ -325,7 +326,7 @@ def find_star(input_dataset,
                 star_xy_list.append(star_xy)
                 
             #align second slice on first slice and drop satellite spot images if necessary
-            shift_value = star_xy_list[0]-star_xy_list[1]
+            shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
             for frame in split_dataset:
                 if not drop_satspots_frames or frame.pri_hdr["SATSPOTS"] == 0 :
                     aligned_slice = shift(frame.data[1], shift_value)
@@ -927,14 +928,26 @@ def align_polarimetry_frames(input_dataset):
     """
     processed_dataset = input_dataset.copy()
 
-    new_center = (processed_dataset.frames[0].ext_hdr['STARLOCX'],processed_dataset.frames[0].ext_hdr['STARLOCY']) 
+    split_datasets, unique_vals = processed_dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+    # # If two values, align POL45 on POL0
+    # if len(unique_vals)>1:
+    #     pol0_dataset =split_datasets[unique_vals.index("POL0")]
+    #     pol45_dataset =split_datasets[pol_unique_vals.index("POL45")]
+    #     new_star_center_x = pol0_dataset.frames[0].ext_hdr['STARLOCX']
+    #     new_star_center_y = pol0_dataset.frames[0].ext_hdr['STARLOCY']
 
-    for frame in processed_dataset:
-        frame.data[0]= pyklip.klip.align_and_scale(frame.data[0], new_center=new_center, old_center=(frame.data[0].shape[0] // 2, frame.data[0].shape[1] // 2))
-        frame.data[1] = pyklip.klip.align_and_scale(frame.data[1], new_center=new_center, old_center=(frame.data[1].shape[0] // 2, frame.data[1].shape[1] // 2))
+    #     shift_value = (0, new_star_center_x - pol45_dataset.frames[0].ext_hdr['STARLOCX'], new_star_center_y - pol45_dataset.frames[0].ext_hdr['STARLOCY'] )
+    #     for frame in processed_dataset:
+    #         if frame.ext_hdr['DPAMNAME'] == 'POL45' :
+    #             frame = shift(frame, shift_value)
+    #             frame.ext_hdr['STARLOCX'] = new_star_center_x
+    #             frame.ext_hdr['STARLOCY'] = new_star_center_y
 
-    history_msg = "Image centered on star location."
-    processed_dataset.update_after_processing_step(history_msg)
+    # history_msgs = "Image centered on star location."
+
+    # processed_dataset.update_after_processing_step(
+    #     history_msgs)
+
     
     return processed_dataset
 
