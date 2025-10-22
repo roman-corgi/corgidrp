@@ -4507,7 +4507,7 @@ def create_mock_polimage(
             raise ValueError(f"Invalid prism: {prism}")
         cubes_prism.append(pair_cube)
 
-    cubes_stokes = np.array(cubes_stokes)
+    cubes_stokes = np.array(cubes_stokes)[0]
     cubes_prism = np.array(cubes_prism)
 
     if return_stokes:
