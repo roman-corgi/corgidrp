@@ -172,6 +172,9 @@ def find_star(input_dataset,
     The star's (x, y) location is stored in each frame's extension header under 
     ``STARLOCX`` and ``STARLOCY``.
 
+    In case of polarimetric data, the star location is estimated on the first slice and 
+    the second slice is aligned on it. POL 0 and POL 45 are processed independantly 
+
     You can replace many of the default settings for by adjusting the satellite_spot_parameters 
     dictionary. You only need to replace the parameters of interest and the rest will stay as defaults. 
 
@@ -239,7 +242,7 @@ def find_star(input_dataset,
             If None, default parameters corresponding to the specified observing_mode will be used.     
         drop_satspots_frames (bool, optional):
             If True, frames with satellite spots (``SATSPOTS=1``) will be removed from 
-            the returned dataset. Defaults to False.
+            the returned dataset. Defaults to True.
 
     Returns:
         corgidrp.data.Dataset:
@@ -261,7 +264,7 @@ def find_star(input_dataset,
         • Future enhancements may include separate handling of positive vs. negative 
           satellite spot frames once the relevant metadata keywords are defined.
         • This routine can fail, if the guess position is off by more than a few pixels.
-        More than 2 pixels on any axis leads almost systematically to failure
+          More than 2 pixels on any axis leads almost systematically to failure
           A significantly wrong guess of the angle offset can also lead to failure.
     """
 
