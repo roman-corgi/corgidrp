@@ -69,11 +69,13 @@ tests/test_data/L4_to_TDA_Inputs/*
 tests/e2e_tests/pc_sim_test_data/l2a/*.json
 tests/e2e_tests/pc_sim_test_data/l2a_dark/*.json
 tests/e2e_tests/pc_sim_test_data/*.json
+*.xlsx
 
 # editor files
 .vscode/*
 .*.swp
 .exrc
+.idea/*
 
 #jupyter cruft
 .ipynb_checkpoints

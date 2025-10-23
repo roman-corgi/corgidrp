@@ -60,7 +60,7 @@ Helper function to standardize TVAC FITS headers for pipeline compatibility:
             fits_file = fits.open(file)
             prihdr = fits_file[0].header
             exthdr = fits_file[1].header
-            prihdr['VISTYPE'] = "TDEMO"
+            prihdr['VISTYPE'] = "CGIVST_TDD_OBS"
             prihdr['OBSNUM'] = prihdr['OBSID']
             exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
             exthdr['EMGAIN_A'] = -1

@@ -3,7 +3,7 @@ import glob
 import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, LinearNDInterpolator
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread
 import os
 from astropy.io import ascii, fits
@@ -864,7 +864,7 @@ def star_spec_registration(
         assert exthdr['FPAMNAME'].upper() == fpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
         assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
         assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
-        assert exthdr['FSAMNAME'].upper() in fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
+        assert exthdr['FSAMNAME'].upper() == fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
         # Confirm presence of FSMX, FSMY
         assert 'FSMX' in exthdr.keys() and 'FSMY' in exthdr.keys(), 'Missing FSMX/Y'
 
@@ -1023,3 +1023,274 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
     
     line_spread = LineSpread(ls_data, pri_hdr = prihdr, ext_hdr = exthdr, gauss_par = gauss_profile, input_dataset = nar_dataset)
     return line_spread
+
+def slit_transmission(
+    dataset_slit,
+    dataset_open,
+    target_pix=None,
+    x_range=[40.,42],
+    y_range=[32.,34],
+    n_gridx=10,
+    n_gridy=10,
+    kind='linear',
+    average='mean',
+    ):
+    """ This step function addresses:
+  
+      CGI-REQT-5475 – Given (1) a series of cleaned images of a prism-dispersed
+      unocculted star observed through the FSAM slit mask, observed with a CFAM
+      filter, and acquired over one or more FSM offsets, (2) a series of cleaned
+      images of the same prism-dispersed unocculted star observed with the FSAM
+      slit mask removed (FSAM in OPEN position), the same CFAM filter, and
+      acquired over one or more FSM offsets, the CTC GSW should compute the slit
+      transmission map.
+
+    Args:
+      dataset_slit (Dataset): Dataset containing a set of extracted spectra for
+        some set of FSM positions with the FSAM slit in its position. There can
+        be a different number of frames for each FSM position.
+      dataset_open (Dataset): Dataset containing a set of extracted spectra for
+        some set of FSM positions with the FSAM slit in OPEN position. There can
+        be a different number of frames for each FSM position.
+      target_pix (array) (optional): a user-defined Mx2 array containing the
+        pixel positions for M target pixels where the slit transmission will be
+        derived by interpolation. The target pixels are measured with respect
+        the zero-point in (fractional) EXCAM pixels. Default is None. In this
+        case, a rectangular grid of pixel positions is used. 
+      x_range (array): Two values [xmin, xmax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the zero-point
+        solution along EXCAM +X direction.
+      y_range (array): Two values [ymin, ymax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the zero-point
+        solution along EXCAM +Y direction.
+      n_gridx (int) (optional): Number of positions when pos_range is set.
+      n_gridy (int) (optional): Number of positions when pos_range is set.
+      kind (string): Specifies the kind of interpolation. See scipy documentation.
+        Default is piecewise linear.
+      average (str): The type of average (first momentum) applied to each subset
+        of spectra. The slitless spectra are all averaged at once regardless of
+        their FSMX, FSMY values. The spectra with the slit in are averaged over
+        subsets with the same FSMX, FSMY values. Options are 'mean' and 'median'.
+
+    Returns:
+      3-element tuple with:
+        1/ Slit transmission map derived at different locations by interpolation.
+        2/ Corresponding locations along EXCAM +X direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+        3/ Corresponding locations along EXCAM +Y direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+    """
+    # Confirm spectroscopy configuration for different PAMs
+    # CFAM
+    cfam_name = dataset_slit[0].ext_hdr['CFAMNAME'].upper()
+    if cfam_name.find('3') != -1:
+        dpam_name = 'PRISM3'
+        # fsam_name = []
+    elif cfam_name.find('2') != -1:
+        dpam_name = 'PRISM2'
+        # fsam_name = []
+    else:
+        raise ValueError(f'{cfam_name} is not a spectroscopy filter')
+    # DPAM
+    if dataset_slit[0].ext_hdr['DPAMNAME'] != dpam_name:
+        raise ValueError(f'DPAMNAME should be {dpam_name}')
+    # FPAM
+    fpam_name = dataset_slit[0].ext_hdr['FPAMNAME'].upper()
+    if (fpam_name != 'OPEN' and fpam_name != 'ND225' and fpam_name != 'ND475'):
+        raise ValueError('FPAMNAME should be either OPEN, ND225 or ND475')
+    # SPAM
+    spam_name = dataset_slit[0].ext_hdr['SPAMNAME'].upper()
+    if spam_name[0:4] != 'SPEC':
+        raise ValueError('SPAMNAME should be SPEC')
+    # LSAM
+    lsam_name = dataset_slit[0].ext_hdr['LSAMNAME'].upper()
+    if lsam_name[0:4] != 'SPEC':
+        raise ValueError('LSAMNAME should be SPEC')
+    # FSAM: slit in
+    fsam_name = dataset_slit[0].ext_hdr['FSAMNAME'].upper()
+    if (fsam_name != 'R1C2' and fsam_name != 'R6C5' and fsam_name != 'R3C1'):
+        raise ValueError('FSAMNAME with the slit in must be either R1C2, R6C5 or R3C1')
+    # FSAM: slitless
+    if dataset_open[0].ext_hdr['FSAMNAME'] != 'OPEN':
+        raise ValueError('FSAMNAME must be OPEN for slitless observations.')
+
+    # All images with the slit in must have the same setup
+    for image in dataset_slit:
+        exthdr = image.ext_hdr
+        assert exthdr['CFAMNAME'].upper() == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
+        assert exthdr['DPAMNAME'].upper() == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
+        assert exthdr['FPAMNAME'].upper() == fpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
+        assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
+        assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
+        assert exthdr['FSAMNAME'].upper() == fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected value: {fsam_name}"
+
+    # All images without the slit must have the same setup as with the slit, but
+    # for FSAMNAME=OPEN
+    for image in dataset_open:
+        exthdr = image.ext_hdr
+        assert exthdr['CFAMNAME'].upper() == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
+        assert exthdr['DPAMNAME'].upper() == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
+        assert exthdr['FPAMNAME'].upper() == fpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
+        assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
+        assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
+        # It can only be OPEN
+        assert exthdr['FSAMNAME'].upper() == 'OPEN', f"FSAMNAME={exthdr['FSAMNAME']} differs from expected value: OPEN"
+
+    # Split each subset with the slit in by FSMX/Y values (FSM values are not used)
+    dataset_slit_subsets = []
+    dataset_slit_y = dataset_slit.split_dataset(exthdr_keywords=['FSMY'])[0]
+    for ds_1 in dataset_slit_y:
+        dataset_slit_subsets += ds_1.split_dataset(exthdr_keywords=['FSMX'])[0]
+        
+    # Average all spectra of the images with FSAM=OPEN
+    if average.lower() == 'mean': 
+        spec_open = np.mean([ds.data for ds in dataset_open], axis=0)
+    elif average.lower() == 'median':
+        spec_open = np.median([ds.data for ds in dataset_open], axis=0)
+    else:
+        raise ValueError(f'Averaging method {average} not recognized.')
+
+    # Average all spectra of the images with the slit in by FSM position and get
+    # the wavelength zero-point solution for each one
+    slit_trans_fsm = []
+    slit_pos_x = []
+    slit_pos_y = []
+    for subset in dataset_slit_subsets:
+        slit_pos_x += [subset[0].ext_hdr['WV0_X']]
+        slit_pos_y += [subset[0].ext_hdr['WV0_Y']]
+        if average.lower() == 'mean':
+            slit_trans_fsm += [np.mean([ds.data/spec_open for ds in subset], axis=0)]
+        # At this point average can only take 'mean' and 'median' values
+        else:
+            slit_trans_fsm += [np.median([ds.data/spec_open for ds in subset], axis=0)]
+    # Double check they all have the same length
+    slit_pos_x = np.array(slit_pos_x)
+    slit_pos_y = np.array(slit_pos_y)
+    slit_trans_fsm = np.array(slit_trans_fsm) 
+    if not (len(slit_pos_x) == len(slit_pos_y) == len(slit_trans_fsm)):
+        raise ValueError('The lengths of distinct FSM positions and averaged spectra is different.')
+
+    # If there's only one position, there's no interpolation
+    if len(np.unique(slit_pos_y)) == len(np.unique(slit_pos_x)) == 1:
+        print('Only one unique position in the data. Returning slit transmission at that position.')
+        return (slit_trans_fsm,
+            slit_pos_x,
+            slit_pos_y)
+
+    # If no target pixels are provided, create a series
+    if target_pix == None:
+        # If the FSM images are along one direction:
+        if len(np.unique(slit_pos_x)) == 1:
+            x_tmp = np.ones(n_gridy) * np.unique(slit_pos_x)
+            y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
+        elif len(np.unique(slit_pos_y)) == 1:
+            x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
+            y_tmp = np.ones(n_gridx) * np.unique(slit_pos_y)
+        # If the FSM images span a 2-d grid:
+        else:
+            x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
+            y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
+        target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
+
+    # Derive slit transmission at desired locations 
+    # 1-d cases: The positions along one of the slit dimensions is constant.
+    # P.S. scipy takes care of raising exceptions if there's any extrapolation
+    if len(np.unique(slit_pos_y)) == 1:
+        interpolant = interp1d(slit_pos_x, slit_trans_fsm, axis=0, kind=kind)
+        slit_trans_interp = interpolant(target_pix[0])
+    elif len(np.unique(slit_pos_x)) == 1:
+        interpolant = interp1d(slit_pos_y, slit_trans_fsm, axis=0, kind=kind)
+        slit_trans_interp = interpolant(target_pix[1])
+    else:
+    # 2-d grid:
+        try:
+            if kind.lower() != 'linear':
+                raise ValueError('Only linear interpolation is available for',
+                    'two dimensional scattered data.')
+            else:
+                interpolator = LinearNDInterpolator(np.c_[slit_pos_x, slit_pos_y],
+                    slit_trans_fsm)
+                slit_trans_interp = interpolator(target_pix[0], target_pix[1])
+            # If there's some extrapolation, redefine target points to be within limits
+            if np.sum(np.isnan(slit_trans_interp) == True):
+                raise ValueError('Some target points require extrapolation.'
+                    'Make sure all target points are within the interpolator support.')   
+        except:
+            raise ValueError('Not enough independent values to derive a slit transmission map')
+
+    # Raise ValueError if all values are NaN
+    if np.all(np.isnan(slit_trans_interp)):
+        raise ValueError('There are no valid target positions within the ' +
+            'range of input PSF locations')
+
+    return (slit_trans_interp,
+        target_pix[0],
+        target_pix[1])
+
+def star_pos_spec(
+    dataset,
+    r_lamD=0,
+    phi_deg=0,
+    ):
+    """ Find the position of the star using the information from the satellite
+      spot. The position of the satellite spot on EXCAM is given by the
+      zero-point solution. Using the information of the commanded position of
+      the satellite spot with respect the occulted star, one can infer the
+      location of the occulted star.
+      The relative of the satellite spot with respect the occulted star is given
+      in polar coordinates. The radial distance of the satellite spot is measured
+      in units lambda/D, with lambda the band reference wavelength, either 730 nm
+      (band 3) or 660 nm (band 2), and D=2.4 m. The polar angle is measured in
+      degrees, with 0 degrees meaning +X and 90 degrees meaning +Y. The polar
+      coordinates of the satellite spot are translated into (X,Y) EXCAM pixel
+      coordinates, which can then be subtracted from the zero-point solution to
+      infer the location of the occulted star.
+
+      Args:
+        dataset (Dataset): A Dataset with L3 spectroscopy frames.
+        r_lamD (float): Radial distance of the satellite spot on EXCAM with respect
+        the occulted star in units of lambda/D.
+        phi_deg (float): Polar angle of the satellite spot on EXCAM with respect
+        the occulted star in degrees, with 0 degrees meaning +X and 90 degrees
+        meaning +Y.
+
+      Returns:
+          Input Dataset with updated keywords recording the satellite position
+          in EXCAM pixels.
+    """ 
+    # Primary diameter of Roman Space Telescope in meters
+    D_m=2.4
+    # Basic checks
+    if r_lamD <= 0:
+        raise ValueError('r_lamD must be positive. Usual range is 3-20.')
+
+    dataset_cp = dataset.copy()
+    for img in dataset_cp:
+        # Check it is L3
+        if img.ext_hdr['DATALVL'] != 'L3':
+            raise ValueError(f"The data level must be L3 and it is {img.ext_hdr['DATALVL']}")
+        cfamname = img.ext_hdr['CFAMNAME']
+        # Extract satellite spot wavelength from L3 extended header (it must be present)
+        try:
+            lam_sat_nm = float(img.ext_hdr['WAVLEN0'])
+        except:
+            raise ValueError(f'WAVLEN0 keyword missing in L3 frame.')
+
+        # Conversion from EXCAM pixels to milliarsec
+        plate_scale_mas = img.ext_hdr['PLTSCALE']
+        # Conversion from radians to milliarsec (mas/rad)
+        rad2mas = 180/np.pi*3600*1e3
+        # lam/D in radians
+        lamDrad = 1e-9*lam_sat_nm/D_m
+        # lam/D to EXCAM pixels
+        r_pix = r_lamD*lamDrad*rad2mas/plate_scale_mas
+        # EXCAM (X,Y) coordinates
+        X_pix = r_pix * np.cos(phi_deg*np.pi/180)
+        Y_pix = r_pix * np.sin(phi_deg*np.pi/180)
+        # Update estimated location of the occulted star
+        img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_X'] - X_pix
+        img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y'] - Y_pix
+
+    return dataset_cp
