@@ -248,7 +248,7 @@ def find_star(input_dataset,
         corgidrp.data.Dataset:
             The original dataset, augmented with the star's (x, y) location stored in 
             the extension header (``ext_hdr``) of each frame under the keys 
-            ``FSM_PROFILE_UNKNOWN`` and ``STARLOCY``.
+            ``STARLOCX`` and ``STARLOCY``.
 
     Raises:
         AssertionError:
