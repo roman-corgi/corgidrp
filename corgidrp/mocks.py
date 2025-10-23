@@ -4440,7 +4440,7 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
 
     return image
     
-def create_mock_stokes(
+def create_mock_stokes_image(
         image_size=256,
         fwhm=100.0,
         I0=1e3,

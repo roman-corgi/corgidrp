@@ -94,7 +94,7 @@ def test_calc_pol_p_and_pa_image(p_input=0.1, theta_input=10.0):
     """Test calc_pol_p_and_pa_image using a mock Stokes cube."""
 
     # Generate mock Stokes cube
-    Image_polmock = mocks.create_mock_stokes(
+    Image_polmock = mocks.create_mock_stokes_image(
         badpixel_fraction=0.,
         p=p_input,
         theta_deg=theta_input,
