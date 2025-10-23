@@ -936,10 +936,11 @@ def align_polarimetry_frames(input_dataset):
         new_star_center_x = pol0_dataset.frames[0].ext_hdr['STARLOCX']
         new_star_center_y = pol0_dataset.frames[0].ext_hdr['STARLOCY']
 
-        shift_value = (0, new_star_center_y - pol45_dataset.frames[0].ext_hdr['STARLOCY'] , new_star_center_x - pol45_dataset.frames[0].ext_hdr['STARLOCX'])
+        shift_value = (new_star_center_y - pol45_dataset.frames[0].ext_hdr['STARLOCY'] , new_star_center_x - pol45_dataset.frames[0].ext_hdr['STARLOCX'])
         for frame in processed_dataset:
             if frame.ext_hdr['DPAMNAME'] == 'POL45' :
-                frame = shift(frame, shift_value)
+                frame.data[0] = shift( frame.data[0], shift_value)
+                frame.data[1] = shift( frame.data[1], shift_value)
                 frame.ext_hdr['STARLOCX'] = new_star_center_x
                 frame.ext_hdr['STARLOCY'] = new_star_center_y
 
