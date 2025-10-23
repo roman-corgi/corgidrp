@@ -3,8 +3,9 @@ import os
 
 import corgidrp.data as data
 import corgidrp.mocks as mocks
-from corgidrp.l1_to_l2a import detect_cosmic_rays
+from corgidrp.l1_to_l2a import detect_cosmic_rays, remove_sat_images
 from corgidrp.detector import find_plateaus, calc_sat_fwc
+from corgidrp.data import Image, Dataset
 
 import numpy as np
 from astropy.time import Time
@@ -799,8 +800,9 @@ def test_p_below_min():
     if not i_beg is None:
         raise Exception("find_plateaus did not ignore plateau below sat threshold.")
 
-def test_oversat_frame():
-    print("hi")
+def test_remove_sat_images():
+    ds = Dataset(["oversat_image.fits"])
+    remove_sat_images(ds, 1, 0.5)
 
 if __name__ == "__main__":
     test_iit_vs_corgidrp()
@@ -822,4 +824,4 @@ if __name__ == "__main__":
     test_mask_box_corners()
     test_cosm_tail_2()
     test_cosm_tail_bleed_over()
-    test_oversat_frame()
+    test_remove_sat_images()
