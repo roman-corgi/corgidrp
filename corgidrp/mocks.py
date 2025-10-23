@@ -4439,101 +4439,163 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
     return image
-
-def create_mock_polimage(
+    
+def create_mock_stokes(
         image_size=256,
         fwhm=100.0,
         I0=1e3,
+        badpixel_fraction=1e-3,
         p=0.1,
         theta_deg=10.0,
         roll_angles=None,
         prisms=None,
-        return_stokes=False,
+        level='l4',
+        seed=None
 ):
     """
-    Generate mock polarimetric images with controlled polarization angles.
+    Generate mock polarimetric images with controlled polarization, optional bad pixels,
+    and configurable data levels (L2b, L3, or L4).
 
+    This function creates synthetic polarimetric data cubes that emulate typical
+    instrument outputs at different data levels used in corgiDRP.
+    - L2b: Prism-pair images for each polarization analyzer (e.g., POL0, POL45),
+      representing dual-beam data before Stokes reconstruction.
+    - L3: Calibrated Stokes (I, Q, U, V=0) cube derived from the input polarization
+      parameters, suitable for higher-level analysis.
+    - L4: Extended Stokes cube including placeholders for derived quantities such as
+      Qphi and Uphi, simulating a fully processed polarimetric product.
+      
     Args:
         image_size (int): Size of the square image (H x W).
         fwhm (float): Full width at half maximum of the Gaussian source in pixels.
         I0 (float): Peak intensity of the Gaussian source.
+        badpixel_fraction (float): Fraction of randomly placed bad pixels.
         p (float): Fractional polarization.
-        theta_deg (float): Polarization angle in degrees.
-        roll_angles (list of float, optional): Telescope roll angles for each prism.
-        prisms (list of str, optional): Prism orientations ('POL0' or 'POL45').
-        return_stokes (bool, optional): If True, return full Stokes cubes [I,Q,U],
-            otherwise return prism pairs.
+        theta_deg (float): Intrinsic polarization angle in degrees.
+        roll_angles (list of float, optional): Telescope roll angles per prism.
+        prisms (list of str, optional): Prism orientations ('POL0', 'POL45').
+        level (str): Output data level ('l2b', 'l3', or 'l4').
+        seed (int, optional): Random seed for reproducibility.
 
     Returns:
-        Image: Image object containing either Stokes cubes or prism pair cubes
-        in `Image.data` with corresponding `err` and `dq`.
+        Image: Synthetic Image object containing Stokes or prism-pair data, with
+            associated err, dq, and FITS-like headers.
 
     Raises:
-        ValueError: If `roll_angles` and `prisms` lengths do not match, or
-                    if an invalid prism string is provided.
+        ValueError: If the input parameters are invalid, such as:
+            - Mismatched lengths of `roll_angles` and `prisms`.
+            - An invalid `level` (must be 'l2b', 'l3', or 'l4').
+            - A prism name not in {'POL0', 'POL45'}.
     """
+    # --- Default configuration ---
     if roll_angles is None:
         roll_angles = [-15, 15, -15, 15]
     if prisms is None:
         prisms = ['POL0', 'POL0', 'POL45', 'POL45']
+    if level != 'l2b':
+        roll_angles = [0.]
+        prisms = ['POL0']
 
     if len(roll_angles) != len(prisms):
-        raise ValueError("roll_angles and prisms must have the same length")
+        raise ValueError("roll_angles and prisms must have the same length.")
 
-    # Create 2D Gaussian intensity map
+    rng = np.random.default_rng(seed)
+
+    # --- Create 2D Gaussian intensity map ---
     y, x = np.mgrid[0:image_size, 0:image_size]
     x0 = y0 = image_size / 2.0
     sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2)))
     I_map = I0 * np.exp(-((x - x0)**2 + (y - y0)**2) / (2.0 * sigma**2))
 
-    cubes_stokes = []
-    cubes_prism = []
+    # --- Introduce bad pixels ---
+    n_pixels = I_map.size
+    n_bad = int(n_pixels * badpixel_fraction)
+    idx_bad = rng.choice(n_pixels, size=n_bad, replace=False)
+    dq = np.zeros_like(I_map, dtype=int)
+    dq.flat[idx_bad] = 1
+    I_map.flat[idx_bad] = -I_map
 
-    for i, prism in enumerate(prisms):
-        theta_obs = np.radians(theta_deg + roll_angles[i])
+    # --- Containers ---
+    cubes_stokes, cubes_stokes_err = [], []
+    cubes_prism, cubes_prism_err = [], []
+
+    # --- Generate Stokes and prism cubes ---
+    for roll, prism in zip(roll_angles, prisms):
+        theta_obs = np.radians(theta_deg + roll)
         Q_map = I_map * p * np.cos(2 * theta_obs)
         U_map = I_map * p * np.sin(2 * theta_obs)
 
-        # Stokes cube
         stokes_cube = np.stack([I_map, Q_map, U_map])
-        cubes_stokes.append(stokes_cube)
-
-        # Prism pair
-        if prism == 'POL0':
-            pair_cube = np.stack([0.5*(I_map+Q_map), 0.5*(I_map-Q_map)])
-        elif prism == 'POL45':
-            pair_cube = np.stack([0.5*(I_map+U_map), 0.5*(I_map-U_map)])
-        else:
-            raise ValueError(f"Invalid prism: {prism}")
-        cubes_prism.append(pair_cube)
-
-    cubes_stokes = np.array(cubes_stokes)[0]
-    cubes_prism = np.array(cubes_prism)
-
-    if return_stokes:
-        # Add blank slices for V, Qphi, Uphi
-        cubes_blank = np.zeros_like(cubes_stokes)
-        cubes_stokes = np.concatenate([cubes_stokes, cubes_blank], axis=0)
-        cubes_out = cubes_stokes
-    else:
-        cubes_out = cubes_prism
         
-    err = np.sqrt(np.abs(cubes_out))
-    dq = np.zeros_like(cubes_out, dtype=int)
+        # Muller Matrix Application (Not yet implemented.)
+        #if level == 'l2b':
 
-    Image_polmock = Image(
-        cubes_out,
-        pri_hdr=Header(),
-        ext_hdr=Header(),
-        err=err,
-        dq=dq,
-        err_hdr=Header(),
-        dq_hdr=Header()
-    )
+        # Prism simulation
+        if prism == 'POL0':
+            pair_cube = np.stack([0.5 * (I_map + Q_map), 0.5 * (I_map - Q_map)])
+        elif prism == 'POL45':
+            pair_cube = np.stack([0.5 * (I_map + U_map), 0.5 * (I_map - U_map)])
+        else:
+            raise ValueError(f"Invalid prism name: {prism}")
+        
+        pair_err = np.stack([np.sqrt(pair_cube), np.sqrt(pair_cube)])
     
+        stokes_err = np.sqrt(pair_cube[0]**2. + pair_cube[1]**2.)
+        stokes_err = np.stack([stokes_err, stokes_err, stokes_err])
+
+        cubes_stokes.append(stokes_cube)
+        cubes_stokes_err.append(stokes_err)
+        cubes_prism.append(pair_cube)
+        cubes_prism_err.append(pair_err)
+
+    # --- Convert to arrays ---
+    cubes_stokes = np.array(cubes_stokes)[0]
+    cubes_stokes_err = np.array(cubes_stokes_err)[0]
+    cubes_prism = np.array(cubes_prism)
+    cubes_prism_err = np.array(cubes_prism_err)
+
+    # --- Select output level ---
+    blankhdrs = (Header(), Header(), Header(), Header(), Header())
+
+    if level == 'l2b':
+        data_out = cubes_prism
+        err_out = cubes_prism_err
+        prihdr, exthdr, errhdr, dqhdr, biashdr = blankhdrs #create_default_L2b_headers()
+    elif level == 'l3':
+        # Add blank slice for V
+        blank = np.zeros_like(I_map)
+        data_out = np.concatenate([cubes_stokes, [blank]], axis=0)
+        err_out = np.concatenate([cubes_stokes_err, [blank]], axis=0)
+        prihdr, exthdr, errhdr, dqhdr, biashdr = blankhdrs #create_default_L3_headers()
+    elif level == 'l4':
+        # Add blank slices for V, Qphi, Uphi
+        blank = np.zeros_like(cubes_stokes)
+        data_out = np.concatenate([cubes_stokes, blank], axis=0)
+        err_out = np.concatenate([cubes_stokes_err, blank], axis=0)
+        prihdr, exthdr, errhdr, dqhdr, biashdr = blankhdrs #create_default_L4_headers()
+    else:
+        raise ValueError(f"Invalid level: {level}. Must be 'l2b', 'l3', or 'l4'.")
+
+    # --- dq array (same shape as data_out) ---
+    dq_out = np.broadcast_to(dq, data_out.shape).copy()
+
+    # --- Create Image object ---
+    Image_polmock = Image(
+        data_out,
+        pri_hdr=prihdr,
+        ext_hdr=exthdr,
+        err=err_out,
+        dq=dq_out,
+        err_hdr=errhdr,
+        dq_hdr=dqhdr
+    )
+
+    # --- Somehow needed ---
     if len(Image_polmock.data) == 1:
     	Image_polmock.data = Image_polmock.data[0]
     if len(Image_polmock.err) == 1:
     	Image_polmock.err = Image_polmock.err[0]
-    
+    if len(Image_polmock.dq) == 1:
+    	Image_polmock.dq = Image_polmock.dq[0]
+
     return Image_polmock

@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 import corgidrp.mocks as mocks
 import corgidrp.l2b_to_l3 as l2b_to_l3
+import corgidrp.l4_to_tda as l4_to_tda
 import corgidrp.data as data
 
 def test_image_splitting():
@@ -87,6 +88,29 @@ def test_image_splitting():
     # test that an error is raised if we set the image size too big
     with pytest.raises(ValueError):
         invalid_output = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=682)
-                
+
+        
+def test_calc_pol_p_and_pa_image(p_input=0.1, theta_input=10.0):
+    """Test calc_pol_p_and_pa_image using a mock Stokes cube."""
+
+    # Generate mock Stokes cube
+    Image_polmock = mocks.create_mock_stokes(
+        badpixel_fraction=0.,
+        p=p_input,
+        theta_deg=theta_input,
+        level='l4'
+    )
+
+    # Compute polarization products
+    image_pol = l4_to_tda.calc_pol_p_and_pa_image(Image_polmock)
+
+    p_map = image_pol.data[1]       # fractional polarization
+    evpa_map = image_pol.data[2]    # EVPA
+
+    assert p_map == pytest.approx(p_input)
+    assert evpa_map == pytest.approx(theta_input)
+
+    
 if __name__ == "__main__":
     test_image_splitting()
+    test_calc_pol_p_and_pa_image()
