@@ -8,7 +8,7 @@ import corgidrp.combine as combine
 
 img1 = np.ones([100, 100])
 err1 = np.ones([100, 100])
-dq = np.zeros([100, 100], dtype = int)
+dq = np.zeros([100, 100], dtype = np.uint16)
 prhd, exthd = mocks.create_default_L1_headers()
 errhd = fits.Header()
 errhd["CASE"] = "test"
