@@ -915,7 +915,7 @@ def test_spec_psf_subtraction():
     for img in input_dset:
         img.data = img.data.astype(float)
         img.dq = np.zeros_like(img.data, dtype=int)
-        # roughly the center of the imaged area
+        # pick a location for this test, roughly center of imaged area
         img.ext_hdr['WV0_X'] = 1600
         img.ext_hdr['WV0_Y'] = 547
         np.random.seed(1039)
@@ -924,17 +924,13 @@ def test_spec_psf_subtraction():
     output = l3_to_l4.spec_psf_subtraction(input_dset)
     shift = steps.get_shift_correlation(input_dset[1].data, input_dset[0].data)
     # check that the subtraction actually decreased the residual because of the rescaling in each band
-    #nanmean b/c mean-combining frames for ref frame exposed the DQ pixels as NaNs in the image
-    assert np.mean(input_dset[0].data - input_dset[1].data) > np.nanmean(output[0].data) 
-    assert output[1].dq[533,1600] == 1
+    assert np.mean(input_dset[0].data - input_dset[1].data) > np.mean(output[0].data) 
     assert output[0].dq[533-shift[0], 1600-shift[1]] == 1
-    # way outside the image region, no additional error added
-    assert np.array_equal(output[0].err[0,0:100,0:100], input_dset[0].err[0,0:100,0:100])
     # example where we know the exact solution
     for img in input_dset:
         img.data = np.zeros_like(img.data, dtype=float)
         img.dq = np.zeros_like(img.data, dtype=int)
-        # roughly the center of the imaged area
+        # pick a location for this test, roughly center of imaged area
         img.ext_hdr['WV0_X'] = 1600
         img.ext_hdr['WV0_Y'] = 547
         img.err = np.zeros((1,img.data.shape[0],img.data.shape[1])).astype(float)

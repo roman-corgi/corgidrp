@@ -1334,9 +1334,10 @@ def spec_psf_subtraction(input_dataset):
         input_dataset (corgidrp.data.Dataset): L3 dataset containing the science and reference images
     
     Returns:
-        corgidrp.data.Dataset: dataset containing the PSF-subtracted science images and the mean reference image as the last image
+        corgidrp.data.Dataset: dataset containing the PSF-subtracted science images
     
     '''
+    #TODO This is a simplistic implementation of spec PSF subtraction. More accurate implementation left for a future version.
     dataset = input_dataset.copy()
     input_datasets, values = dataset.split_dataset(prihdr_keywords=["PSFREF"])
     if values != [0,1] and values != [1,0]:
@@ -1367,13 +1368,6 @@ def spec_psf_subtraction(input_dataset):
         # at this point in the pipeline, the err is mainly shot noise, so multiplying the err is appropriate
         # shifting may throw off err at the edges of the frame, but those pixels aren't used anyways
         shifted_scaled_referr = np.roll(mean_ref.err[0], (shift[0], shift[1]), axis=(0,1))*scale
-        # to prevent affecting future steps with error propagated forward from pixels here we don't use: 
-        # crop to the relevant region only
-        x0 = frame.ext_hdr['WV0_X']
-        y0 = frame.ext_hdr['WV0_Y']
-        crop_shift_scale_referr = np.zeros_like(shifted_scaled_referr)
-        crop_shift_scale_referr[y0-35:y0+36, x0-25:x0+26] = shifted_scaled_referr[y0-35:y0+36, x0-25:x0+26]
-        shifted_scaled_referr = crop_shift_scale_referr
         # subtract the shifted, scaled ref from the frame
         frame.data -= shifted_scaled_ref
         # update the dq and err arrays
@@ -1384,8 +1378,8 @@ def spec_psf_subtraction(input_dataset):
         all_err.append(frame.err)
         image_list.append(frame)
 
-    out_dataset = data.Dataset(image_list+[mean_ref])
-    history_msg = f'RDI PSF subtraction applied using averaged reference image.  Last Image is shifted, scaled mean ref frame.'
+    out_dataset = data.Dataset(image_list)
+    history_msg = f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
     out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 
