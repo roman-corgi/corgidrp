@@ -419,13 +419,13 @@ def do_psf_subtraction(input_dataset,
 
     assert len(sci_dataset) > 0, "Science dataset has no data."
 
-    # Require nan pixels to be replaced
+    # Suggest nan pixels to be replaced
     if np.any(np.isnan(sci_dataset.all_data)):
-        raise ValueError('nans present in science data, please run replace_bad_pixels()')
+        print('NOTE: NaNs present in science data which may cause unexpected results. We suggest running replace_bad_pixels()')
     if not reference_star_dataset is None:
         if np.any(np.isnan(ref_dataset.all_data)):
-            raise ValueError('nans present in reference data, please run replace_bad_pixels()')
-
+            print('NOTE: NaNs present in reference data which may cause unexpected results. We suggest running replace_bad_pixels()')
+    
     if 'mode' not in klip_kwargs.keys():
         # Choose PSF subtraction mode if unspecified
         if not ref_dataset is None and len(sci_dataset)==1:
