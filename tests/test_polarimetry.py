@@ -138,5 +138,5 @@ def test_calc_pol_p_and_pa_image():
 
     
 if __name__ == "__main__":
-    #test_image_splitting()
+    test_image_splitting()
     test_calc_pol_p_and_pa_image()
