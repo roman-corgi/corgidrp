@@ -930,25 +930,23 @@ def align_polarimetry_frames(input_dataset):
 
     """
     processed_dataset = input_dataset.copy()
+    starloc0 = (processed_dataset.frames[0].ext_hdr['STARLOCX'],processed_dataset.frames[0].ext_hdr['STARLOCY'])
 
-    split_datasets, unique_vals = processed_dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
-    # If two values, align POL45 on POL0
-    if len(unique_vals)>1:
-        pol0_dataset =split_datasets[unique_vals.index("POL0")]
-        pol45_dataset =split_datasets[unique_vals.index("POL45")]
-        new_star_center_x = pol0_dataset.frames[0].ext_hdr['STARLOCX']
-        new_star_center_y = pol0_dataset.frames[0].ext_hdr['STARLOCY']
+    for frame in processed_dataset:
+        starloc = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        if starloc != starloc0:
+            shift_value = (starloc0[1] - starloc[1] , starloc0[0] - starloc[0])
+            frame.data[0] = shift( frame.data[0], shift_value)
+            frame.data[1] = shift( frame.data[1], shift_value)
+            frame.ext_hdr['STARLOCX'] = starloc0[0]
+            frame.ext_hdr['STARLOCY'] = starloc0[1]
 
-        shift_value = (new_star_center_y - pol45_dataset.frames[0].ext_hdr['STARLOCY'] , new_star_center_x - pol45_dataset.frames[0].ext_hdr['STARLOCX'])
-        for frame in processed_dataset:
-            if frame.ext_hdr['DPAMNAME'] == 'POL45' :
-                frame.data[0] = shift( frame.data[0], shift_value)
-                frame.data[1] = shift( frame.data[1], shift_value)
-                frame.ext_hdr['STARLOCX'] = new_star_center_x
-                frame.ext_hdr['STARLOCY'] = new_star_center_y
+    history_msgs = "Images centered on star location."
 
-    history_msgs = "Image centered on star location."
-
+    history_msg = (
+        f"Image centered on star location at x={starloc0[0]} "
+        f"and y={starloc0[1]}."
+    )
     processed_dataset.update_after_processing_step(
         history_msgs)
 

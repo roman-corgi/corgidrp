@@ -140,13 +140,16 @@ def test_align_frames():
 
     assert np.isclose(injected_x_slice_45, starloc_pol45[0], atol=0.1), \
         f"Expected {injected_x_slice_45}, got {starloc_pol45[0]}"
-    assert np.isclose(injected_x_slice_45, starloc_pol45[0], atol=0.1), \
-        f"Expected {injected_x_slice_45}, got {starloc_pol45[1]}"
+    assert np.isclose(injected_y_slice_45, starloc_pol45[1], atol=0.1), \
+        f"Expected {injected_y_slice_45}, got {starloc_pol45[1]}"
 
+    # Test that the difference between the measured stars is the difference between the injected positions. 
+    assert np.isclose( starloc_pol0[0] - starloc_pol45[0], injected_x_slice_0 - injected_x_slice_45, atol=0.1)
+    assert np.isclose( starloc_pol0[1] - starloc_pol45[1], injected_y_slice_0 - injected_y_slice_45, atol=0.1)
     # Align the pol 45 data with the pol 0 data 
     output_dataset_aligned= l3_to_l4.align_polarimetry_frames(dataset_with_center)
     
-    # Check tyat the pol 45 frames are now aligned on the pol 0 frames
+    # Check that the pol 45 frames are now aligned on the pol 0 frames
     star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
         img_ref=output_dataset_aligned.frames[3].data[0],
         img_sat_spot=output_dataset_aligned.frames[2].data[0],

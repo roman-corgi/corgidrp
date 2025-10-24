@@ -4376,7 +4376,7 @@ def get_formatted_filename(dt, visitid):
     return f"cgi_{visitid}_{timestamp}_l2b.fits"
 
 def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
-                                       left_image_value=1, right_image_value=1, alignment_angle=None):
+                                       left_image_value=1, right_image_value=1, image_separation_arcsec=7.5, alignment_angle=None):
     """
     Creates mock L2b polarimetric data with two polarized images placed on the larger
     detector frame. Image size and placement depends on the wollaston used and the observing mode.
@@ -4399,8 +4399,6 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     # create initial blank frame
     image_data = np.zeros(shape=(1024, 1024))
 
-    image_separation_arcsec = 7.5
-
     #determine radius of the images
     if observing_mode == 'NFOV':
         cfamname = '1F'
@@ -4419,8 +4417,8 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
         else:
             alignment_angle = 45
     angle_rad = alignment_angle * (np.pi / 180)
-    displacement_x = int(round((7.5 * np.cos(angle_rad)) / (2 * 0.0218)))
-    displacement_y = int(round((7.5 * np.sin(angle_rad)) / (2 * 0.0218)))
+    displacement_x = int(round((image_separation_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
+    displacement_y = int(round((image_separation_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
     center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
     center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
 
@@ -4446,7 +4444,8 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     dpamname='POL0', 
     observing_mode='NFOV',
     left_image_value=1, 
-    right_image_value=1, 
+    right_image_value=1,
+    image_separation_arcsec = 7.5,
     alignment_angle=None,
     image_shape =(1024,1024),
     star_center = None, 
@@ -4499,20 +4498,27 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     # Adapted from create_mock_l2b_polarimetric_image
     assert dpamname in ['POL0', 'POL45'], \
     "Invalid prism selected, must be 'POL0' or 'POL45'"
+    
     # create initial frame
     image_data = np.random.normal(loc=0, scale=bg_sigma, size=image_shape) + bg_offset
-    image_separation_arcsec = 7.5
 
+    pixel_scale = 0.0218 #arcsec/pixel
+    primary_d = 2.363114 #meters
+    arcseconds_per_radian = 180 * 3600 / np.pi
     #determine radius of the images
     if observing_mode == 'NFOV':
         cfamname = '1F'
-        radius = int(round((9.7 * ((0.5738 * 1e-6) / 2.363114) * 206265) / 0.0218))
+        outer_radius_lambda_over_d = 9.7
+        central_wavelength =0.5738 * 1e-6
+        radius = int(round((outer_radius_lambda_over_d * (central_wavelength / primary_d) * arcseconds_per_radian) / pixel_scale))
     elif observing_mode == 'WFOV':
         cfamname = '4F'
-        radius = int(round((20.1 * ((0.8255 * 1e-6) / 2.363114) * 206265) / 0.0218))
+        outer_radius_lambda_over_d = 20.1
+        central_wavelength = 0.8255e-6 #meters
+        radius = int(round((outer_radius_lambda_over_d * ((central_wavelength) / primary_d) * arcseconds_per_radian) / pixel_scale))
     else:
         cfamname = '1F'
-        radius = int(round(1.9 / 0.0218))
+        radius = int(round(1.9 / pixel_scale))
     
     #determine the center of the two images
     if alignment_angle is None:
@@ -4521,8 +4527,8 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
         else:
             alignment_angle = 45
     angle_rad = alignment_angle * (np.pi / 180)
-    displacement_x = int(round((7.5 * np.cos(angle_rad)) / (2 * 0.0218)))
-    displacement_y = int(round((7.5 * np.sin(angle_rad)) / (2 * 0.0218)))
+    displacement_x = int(round((image_separation_arcsec * np.cos(angle_rad)) / (2 * pixel_scale)))
+    displacement_y = int(round((image_separation_arcsec * np.sin(angle_rad)) / (2 * pixel_scale)))
     center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
     center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
 
