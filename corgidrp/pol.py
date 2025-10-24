@@ -1,32 +1,39 @@
 # A file that holds the functions to handle polarimetry data 
 import numpy as np
 from astropy.io.fits import Header
-from photutils.aperture import CircularAperture
-from corgidrp.data import Image
 
+from corgidrp.data import Image
+from corgidrp.fluxcal import aper_phot
 
 def calc_stokes_unocculted(dataset,
-                           pos=None,
-                           encircled_radius=1.,
-                           method='subpixel',
-                           subpixels=5):
+                           encircled_radius=3., pos=None):
     """
-    Compute Stokes vector (I, Q/I, U/I) from L3b polarimetric datacubes using aperture photometry.
+    Compute the uncalibrated Stokes parameters (I, Q/I, U/I) from L2b polarimetric datacubes.
 
-    Each channel (I0/I90 or POL0/POL90) in each slice is treated separately; roll and prism are shared.
+    Each dataset corresponds to a specific Wollaston prism (e.g., POL0 or POL45)
+    and roll angle. Within each dataset, two channels correspond to orthogonal
+    analyzer orientations (e.g., 0 deg and 90 deg for POL0).
+
+    The function performs aperture photometry on each channel and solves for the
+    Stokes vector using a weighted least-squares fit.
 
     Args:
-        dataset (list of Image-like): L3b polarimetric datacubes with .data and .err arrays.
-        pos (array_like, optional): (y, x) center of aperture. Defaults to image center.
-        encircled_radius (float, optional): Aperture radius in pixels. Default 1.
-        method (str, optional): Aperture photometry method. Default 'subpixel'.
-        subpixels (int, optional): Number of subpixels per pixel for subpixel photometry.
-
-    Raises:
-        ValueError: If `dataset` is empty or contains unknown prism types.
+        dataset (list of Image): List of L3b polarimetric datacubes. Each entry
+            must have `.data`, `.err`, and `.dq` arrays, and FITS headers with
+            keywords 'ROLL' and 'DPAMNAME'.
+        encircled_radius (float, optional): Aperture radius in pixels. Default is 3.0.
+        pos (array_like, optional): (y, x) coordinates of the aperture center.
+            Defaults to the center of the first image.
 
     Returns:
-        Image: Stokes vector image (I, Q/I, U/I) with propagated errors and headers.
+        Image: A `corgidrp.data.Image` instance containing:
+            - data (ndarray, shape=(3,)): [I, Q/I, U/I]
+            - err (ndarray, shape=(3,)): propagated uncertainties
+            - dq (ndarray, shape=(3,)): quality flags (zeros)
+            - pri_hdr, ext_hdr, err_hdr, dq_hdr: corresponding FITS headers
+
+    Raises:
+        ValueError: If the dataset is empty or contains unknown prism types.
     """
 
     if not dataset:
@@ -35,7 +42,6 @@ def calc_stokes_unocculted(dataset,
     # --- Aperture setup ---
     if pos is None:
         pos = np.array(dataset[0].data.shape[1:]) / 2
-    aper = CircularAperture(pos, encircled_radius)
 
     prism_map = {'POL0': [0., 90.], 'POL45': [45., 135.]}
 
@@ -43,19 +49,24 @@ def calc_stokes_unocculted(dataset,
 
     # --- Photometry loop ---
     for ds in dataset:
-        roll = ds.pri_hdr.get('ROLL', 0.0)
+        roll = ds.pri_hdr.get('ROLL')
         prism = ds.ext_hdr.get('DPAMNAME')
         if prism not in prism_map:
             raise ValueError(f"Unknown prism: {prism}")
 
         for i, phi in enumerate(prism_map[prism]):
-            theta = np.radians(roll + phi)
-            aperture_sum, aperture_err = aper.do_photometry(
-                ds.data[i], error=ds.err[i], method=method, subpixels=subpixels
-            )
-            fluxes.append(aperture_sum[0])
-            flux_errs.append(aperture_err[0])
-            thetas.append(theta)
+            # Handle the 2-channel polarimetric data cube of shape [2, H, W]
+            ds_copy = ds.copy()
+            ds_copy.data = ds_copy.data[i]
+            ds_copy.err = ds_copy.err[i].reshape(np.append([1],[ds_copy.data.shape]))
+            ds_copy.dq  = ds_copy.dq[i]
+            
+            flux, flux_err = aper_phot(ds_copy, encircled_radius,
+                                       centering_method='xy', centering_initial_guess=pos)
+            
+            fluxes.append(flux)
+            flux_errs.append(flux_err)
+            thetas.append(np.radians(roll + phi))
 
     fluxes = np.array(fluxes)
     flux_errs = np.array(flux_errs)
@@ -66,8 +77,8 @@ def calc_stokes_unocculted(dataset,
 
     # --- Weighted least squares ---
     A = np.vstack([np.ones_like(thetas),
-                   0.5 * np.cos(2 * thetas),
-                   0.5 * np.sin(2 * thetas)]).T
+                   np.cos(2 * thetas),
+                   np.sin(2 * thetas)]).T
     W = np.diag(1.0 / flux_errs**2)
     cov = np.linalg.inv(A.T @ W @ A)
     params = cov @ (A.T @ W @ fluxes)
@@ -87,7 +98,7 @@ def calc_stokes_unocculted(dataset,
     # --- Headers ---
     pri_hdr = Header()
     ext_hdr = Header()
-    ext_hdr.add_history("Computed uncalibrated Stokes parameters: I, Q/I, U/I")
+    ext_hdr.add_history("Computed uncalibrated Stokes parameters: data=[I, Q/I, U/I]")
     err_hdr = Header()
     dq_hdr = Header()
 

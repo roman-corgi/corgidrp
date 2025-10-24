@@ -4439,39 +4439,42 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
     return image
-
-def create_mock_polimage(
+    
+def create_mock_stokes_image_l2b(
         image_size=256,
         fwhm=100.0,
         I0=1e3,
+        badpixel_fraction=1e-3,
+        fractional_error=None,
         p=0.1,
-        theta_deg=10.0,
+        theta_deg=20.0,
         roll_angles=None,
         prisms=None,
-        return_stokes=False,
+        seed=None
 ):
     """
-    Generate mock polarimetric images with controlled polarization angles.
+    Generate mock L2b polarimetric images with controlled polarization,
+    optional bad pixels, and configurable intensity levels.
 
     Args:
         image_size (int): Size of the square image (H x W).
         fwhm (float): Full width at half maximum of the Gaussian source in pixels.
         I0 (float): Peak intensity of the Gaussian source.
-        p (float): Fractional polarization.
+        badpixel_fraction (float): Fraction of randomly placed bad pixels (0-1).
+        fractional_error (float or None): Fractional Gaussian noise; if None, photon noise is used.
+        p (float): Fractional polarization (0-1).
         theta_deg (float): Polarization angle in degrees.
-        roll_angles (list of float, optional): Telescope roll angles for each prism.
-        prisms (list of str, optional): Prism orientations ('POL0' or 'POL45').
-        return_stokes (bool, optional): If True, return full Stokes cubes [I,Q,U],
-            otherwise return prism pairs.
+        roll_angles (list of float, optional): Roll angles per prism. Defaults to [-15, 15, -15, 15].
+        prisms (list of str, optional): Prism orientations ('POL0', 'POL45'). Defaults to ['POL0','POL0','POL45','POL45'].
+        seed (int, optional): Random seed.
 
     Returns:
-        Image: Image object containing either Stokes cubes or prism pair cubes
-        in `Image.data` with corresponding `err` and `dq`.
+        Image: Synthetic Image object with data, err, dq, and FITS-like headers.
 
     Raises:
-        ValueError: If `roll_angles` and `prisms` lengths do not match, or
-                    if an invalid prism string is provided.
+        ValueError: If roll_angles and prisms lengths mismatch or prism name invalid.
     """
+    # --- defaults ---
     if roll_angles is None:
         roll_angles = [-15, 15, -15, 15]
     if prisms is None:
@@ -4480,60 +4483,73 @@ def create_mock_polimage(
     if len(roll_angles) != len(prisms):
         raise ValueError("roll_angles and prisms must have the same length")
 
-    # Create 2D Gaussian intensity map
+    rng = np.random.default_rng(seed)
+
+    # --- Gaussian source ---
     y, x = np.mgrid[0:image_size, 0:image_size]
     x0 = y0 = image_size / 2.0
     sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2)))
     I_map = I0 * np.exp(-((x - x0)**2 + (y - y0)**2) / (2.0 * sigma**2))
 
-    cubes_stokes = []
-    cubes_prism = []
+    # --- bad pixels ---
+    n_pixels = I_map.size
+    n_bad = int(n_pixels * badpixel_fraction)
+    dq = np.zeros_like(I_map, dtype=int)
+    if n_bad > 0:
+        idx_bad = rng.choice(n_pixels, size=n_bad, replace=False)
+        dq.flat[idx_bad] = 1
+        I_map.flat[idx_bad] *= -1
 
-    for i, prism in enumerate(prisms):
-        theta_obs = np.radians(theta_deg + roll_angles[i])
+    cubes_out = []
+    cubes_out_err = []
+
+    for roll, prism in zip(roll_angles, prisms):
+        theta_obs = np.radians(theta_deg + roll)
         Q_map = I_map * p * np.cos(2 * theta_obs)
         U_map = I_map * p * np.sin(2 * theta_obs)
 
-        # Stokes cube
-        stokes_cube = np.stack([I_map, Q_map, U_map])
-        cubes_stokes.append(stokes_cube)
-
-        # Prism pair
+        # dual-beam prism simulation
         if prism == 'POL0':
-            pair_cube = np.stack([0.5*(I_map+Q_map), 0.5*(I_map-Q_map)])
+            pair_cube = np.stack([0.5 * (I_map + Q_map),
+                                  0.5 * (I_map - Q_map)])
         elif prism == 'POL45':
-            pair_cube = np.stack([0.5*(I_map+U_map), 0.5*(I_map-U_map)])
+            pair_cube = np.stack([0.5 * (I_map + U_map),
+                                  0.5 * (I_map - U_map)])
         else:
-            raise ValueError(f"Invalid prism: {prism}")
-        cubes_prism.append(pair_cube)
+            raise ValueError(f"Invalid prism name: {prism}")
 
-    cubes_stokes = np.array(cubes_stokes)[0]
-    cubes_prism = np.array(cubes_prism)
+        # error map
+        if fractional_error is not None:
+            pair_err = np.abs(pair_cube) * fractional_error
+        else:
+            pair_err = np.sqrt(np.abs(pair_cube))
 
-    if return_stokes:
-        # Add blank slices for V, Qphi, Uphi
-        cubes_blank = np.zeros_like(cubes_stokes)
-        cubes_stokes = np.concatenate([cubes_stokes, cubes_blank], axis=0)
-        cubes_out = cubes_stokes
-    else:
-        cubes_out = cubes_prism
+        pair_cube += rng.normal(loc=0.0, scale=pair_err)
 
-    err = np.sqrt(np.abs(cubes_out))
-    dq = np.zeros_like(cubes_out, dtype=int)
+        cubes_out.append(pair_cube)
+        cubes_out_err.append(pair_err)
 
-    Image_polmock = Image(
+    # convert to arrays
+    cubes_out = np.array(cubes_out)
+    cubes_out_err = np.array(cubes_out_err)
+
+    # --- headers ---
+    try:
+        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    except:
+        prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
+
+    # --- broadcast dq ---
+    dq_out = np.broadcast_to(dq, cubes_out.shape).copy()
+
+    # --- create Image object ---
+    return Image(
         cubes_out,
-        pri_hdr=Header(),
-        ext_hdr=Header(),
-        err=err,
-        dq=dq,
-        err_hdr=Header(),
-        dq_hdr=Header()
+        pri_hdr=prihdr,
+        ext_hdr=exthdr,
+        err=cubes_out_err,
+        dq=dq_out,
+        err_hdr=errhdr,
+        dq_hdr=dqhdr
     )
-    
-    if len(Image_polmock.data) == 1:
-    	Image_polmock.data = Image_polmock.data[0]
-    if len(Image_polmock.err) == 1:
-    	Image_polmock.err = Image_polmock.err[0]
-    
-    return Image_polmock
+
