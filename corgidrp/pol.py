@@ -75,7 +75,7 @@ def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_
             wollaston = 'POL45' 
         else:
             raise ValueError("DPAMNAME keyword must contain either POL0 or POL45 to determine polarization angle.")
-        norm_diff, norm_diff_err = measure_normalized_difference_L3(
+        norm_diff, norm_diff_err = measure_normalized_difference_L2b(
             image,
             image_center_x=image_center_x,
             image_center_y=image_center_y,
@@ -176,7 +176,7 @@ def get_qu_from_p_theta(p, theta):
     U = p * np.sin(2 * np.radians(theta))
     return Q, U
 
-def measure_normalized_difference_L3(input_pol_Image,
+def measure_normalized_difference_L2b(input_pol_Image,
                                     image_center_x=512,image_center_y=512,
                                     separation_diameter_arcsec=7.5, alignment_angle=None,
                                     phot_kwargs=None):
