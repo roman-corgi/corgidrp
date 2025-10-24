@@ -1,0 +1,12 @@
+import numpy as np
+from astropy.io.fits import Header
+import pytest
+
+from corgidrp.data import Image
+from corgidrp.l4_to_tda import calc_pol_p_and_pa_image
+
+
+
+
+if __name__ == "__main__":
+    test_calc_pol_p_and_pa_image()

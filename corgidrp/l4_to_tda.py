@@ -560,7 +560,7 @@ def calc_pol_p_and_pa_image(input_Image):
     # --- Extract Stokes parameters ---
     try:
         I, Q, U = input_Image.data[0:3]
-        Ierr, Qerr, Uerr = input_Image.err[0:3]
+        Ierr, Qerr, Uerr = input_Image.err[0][0:3]
         Idq, Qdq, Udq = input_Image.dq[0:3]
         # V, Qphi, Uphi = Image.data[3:6] # unused
     except AttributeError as e:
@@ -571,7 +571,6 @@ def calc_pol_p_and_pa_image(input_Image):
     # --- Polarized intensity and error ---
     P = np.sqrt(Q**2 + U**2)
     Perr = np.sqrt((Q * Qerr)**2 + (U * Uerr)**2) / np.maximum(P, 1e-10)
-    Perr *= P  # convert to absolute uncertainty
 
     # --- Fractional polarization and its error ---
     p = P / np.maximum(I, 1e-10)
