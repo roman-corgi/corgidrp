@@ -4387,6 +4387,7 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
         observing_mode (optional, string): observing mode of the coronagraph
         left_image_value (optional, int): value to fill inside the radius of the left image, corresponding to 0 or 45 degree polarization
         right_image_value (optional, int): value to fill inside the radius of the right image, corresponding to 90 or 135 degree polarization
+        image_separation_arcsec (optional, float): Separation between the two polarized images in arcseconds.        
         alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
             defaults to 0 for WP1 and 45 for WP2
     
@@ -4472,6 +4473,7 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
             polarized image (0 or 45 degree polarization), before adding spots.
         right_image_value (optional, int): Constant value to fill inside the radius of the right 
             polarized image (90 or 135 degree polarization), before adding spots.
+        image_separation_arcsec (optional, float): Separation between the two polarized images in arcseconds.        
         alignment_angle (optional, float): The angle in degrees of how the two polarized images 
             are aligned with respect to the horizontal. Defaults to 0 for POL0 and 45 for POL45.
         image_shape (tuple of int, optional): The (ny, nx) shape of the detector array.
