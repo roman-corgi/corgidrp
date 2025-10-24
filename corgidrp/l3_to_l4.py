@@ -1121,9 +1121,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 
 def combine_polarization_states(input_dataset,
                                 system_mueller_matrix_cal,
+                                svd_threshold=1e-5,
+                                use_wcs=True,
+                                rot_center='im_center',
                                 ct_calibration=None,
                                 reference_star_dataset=None,
-                                measure_klip_thrupt=True,
+                                measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=True,
                                 cand_locs=None,
                                 kt_seps=None,
@@ -1134,17 +1137,22 @@ def combine_polarization_states(input_dataset,
     """
     Takes in a L3 polarimetric dataset, performs PSF subtraction on total intensity, calculates
     and returns the on-sky Stokes datacube
+    TODO: determine how to propagate DQ extension through matrix inversion
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of polarimetric Images (L3-level), should be of the same size and same target
-         system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the instrument
+        system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the instrument
+        svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
+        use_wcs (bool, optional): Uses WCS coordinates to rotate northup, defaults to true. If false, uses roll angle header instead.
+        rot_center (string, optional): Define the center to rotate the images with respect to. Options are 'im_center', 'starloc',
+            or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header.
         ct_calibration (corgidrp.data.CoreThroughputCalibration, optional): For PSF Subtraction. core throughput calibration object. Required 
             if measuring KLIP throughput or 1D core throughput. Defaults to None.
         reference_star_dataset (corgidrp.data.Dataset, optional): For PSF Subtraction. a dataset of Images of the reference 
             star. If not provided, references will be searched for in the input dataset.
         measure_klip_thrupt (bool, optional): For PSF Subtraction. Whether to measure KLIP throughput via injection-recovery. Separations 
             and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU']. 
-            Defaults to True.
+            Defaults to False.
         measure_1d_core_thrupt (bool, optional): For PSF Subtraction. Whether to measure the core throughput as a function of separation. 
             Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
             Defaults to True.
@@ -1159,7 +1167,9 @@ def combine_polarization_states(input_dataset,
         num_processes (int): For PSF Subtraction. number of processes for parallelizing the PSF subtraction
         klip_kwargs: For PSF Subtraction. Additional keyword arguments to be passed to pyKLIP fm.klip_dataset, as defined `here <https://pyklip.readthedocs.io/en/latest/pyklip.html#pyklip.fm.klip_dataset>`. 
             'mode', e.g. ADI/RDI/ADI+RDI, is chosen autonomously if not specified. 'annuli' defaults to 1. 'annuli_spacing' 
-            defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. 'numbasis' defaults to [1,4,8,16].
+            defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. 'numbasis' defaults to [1] if no
+            reference star dataset is provided, and [len(reference_star_dataset)] otherwise, numbasis must be of length 1 only
+            for this step function.
 
     Returns:
         corgidrp.data.Dataset: Dataset consisting of a 4xnxm on-sky Stokes datacube, where the first dimension corresponds to IQUV
@@ -1181,12 +1191,40 @@ def combine_polarization_states(input_dataset,
         total_intensity_data = frame.data[0] + frame.data[1]
         # error propagation
         total_intensity_err = np.sqrt(frame.err[:,0,:,:]**2 + frame.err[:,1,:,:]**2)
+        # dq propagation with bitwise or
+        total_intensity_dq = frame.dq[0] | frame.dq[1]
         # construct image
         total_intensity_img = data.Image(total_intensity_data,
                                          pri_hdr=frame.pri_hdr.copy(),
                                          ext_hdr=frame.ext_hdr.copy(),
-                                         err=total_intensity_err)
+                                         err=total_intensity_err,
+                                         err_hdr=frame.err_hdr.copy(),
+                                         dq=total_intensity_dq,
+                                         dq_hdr=frame.dq_hdr.copy())
         total_intensity_frames.append(total_intensity_img)
+    # add reference star dataset to total intensity dataset as well for psf subtraction
+    if reference_star_dataset is not None:
+        ref_data = reference_star_dataset.copy()
+        for frame in ref_data:
+            # sum polarized slices if reference data is taken with wollaston in place
+            if frame.ext_hdr['DPAMNAME'] in ['POL0', 'POL45']:
+                # sum orthogonal polarization axis to obtain total intensity
+                total_intensity_data = frame.data[0] + frame.data[1]
+                # error propagation
+                total_intensity_err = np.sqrt(frame.err[:,0,:,:]**2 + frame.err[:,1,:,:]**2)
+                # dq propagation with bitwise or
+                total_intensity_dq = frame.dq[0] | frame.dq[1]
+                # construct image
+                total_intensity_img = data.Image(total_intensity_data,
+                                                pri_hdr=frame.pri_hdr.copy(),
+                                                ext_hdr=frame.ext_hdr.copy(),
+                                                err=total_intensity_err,
+                                                err_hdr=frame.err_hdr.copy(),
+                                                dq=total_intensity_dq,
+                                                dq_hdr=frame.dq_hdr.copy())
+                total_intensity_frames.append(total_intensity_img)
+            else:
+                total_intensity_frames.append(frame)
     total_intensity_dataset = data.Dataset(total_intensity_frames)
 
     # ensure only one KL basis is used for PSF subtraction, so that only one image is returned
@@ -1210,7 +1248,6 @@ def combine_polarization_states(input_dataset,
         warnings.filterwarnings('ignore', category=FITSFixedWarning)
         psf_subtracted_dataset = do_psf_subtraction(total_intensity_dataset,
                                                     ct_calibration=ct_calibration,
-                                                    reference_star_dataset=reference_star_dataset,
                                                     measure_klip_thrupt=measure_klip_thrupt,
                                                     measure_1d_core_thrupt=measure_1d_core_thrupt,
                                                     cand_locs=cand_locs,
@@ -1225,7 +1262,7 @@ def combine_polarization_states(input_dataset,
         # suppress astropy warnings
         warnings.filterwarnings('ignore', category=VerifyWarning)
         warnings.filterwarnings('ignore', category=FITSFixedWarning)
-        derotated_dataset = northup(dataset)
+        derotated_dataset = northup(dataset, use_wcs=use_wcs, rot_center=rot_center)
 
     # construct polarimetric measurement matrix and output intensity vector
     dataset_size = len(derotated_dataset)
@@ -1268,7 +1305,7 @@ def combine_polarization_states(input_dataset,
     # compute the measurement matrix pseudoinverse using SVD
     u,s,v=np.linalg.svd(measurement_matrix, full_matrices=False)
     # limit the singular values to improve the conditioning of the inversion
-    s[s < 1e-5] = 1e-5
+    s[s < svd_threshold] = svd_threshold
     measurement_matrix_inv = np.dot(v.transpose(), np.dot(np.diag(s**-1), u.transpose()))
     # measurement matrix inverse is of size (i, j) where i is 4 and j is the number of output intensities gathered from the input dataset
     # output intensity vector is of size (j, y, x), where y and x are spatial coordinates
@@ -1287,13 +1324,16 @@ def combine_polarization_states(input_dataset,
     output_err[0,2] = np.sqrt(stokes_cov[2, 2])
     output_err[0,3] = np.sqrt(stokes_cov[3, 3])
 
+    #TODO: propagate DQ extension through matrix inversion, add DQ extension and header to output frame
+
     # construct output
     output_frame = data.Image(stokes_datacube,
                               pri_hdr=psf_subtracted_intensity.pri_hdr.copy(),
                               ext_hdr=psf_subtracted_intensity.ext_hdr.copy(),
-                              err=output_err)
+                              err=output_err,
+                              err_hdr=psf_subtracted_intensity.err_hdr.copy())
     updated_dataset = data.Dataset([output_frame])
-    history_msg = "Combined Polarization States"
+    history_msg = f"Combined polarization states, performed PSF subtraction, and rotated data north-up. Final output size: {output_frame.data.shape}"
     updated_dataset.update_after_processing_step(history_msg)
     return updated_dataset
 

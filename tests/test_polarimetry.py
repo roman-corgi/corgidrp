@@ -10,7 +10,7 @@ import shutil
 import warnings
 from astropy.io.fits.verify import VerifyWarning
 from astropy.wcs import FITSFixedWarning
-import matplotlib.pyplot as plt
+from pyklip.klip import rotate
 
 def test_image_splitting():
     """
@@ -286,12 +286,15 @@ def test_combine_polarization_states():
     target_stokes_vector = np.array([1, 0.4, -0.3, 0.02])
 
     # construct input polarimetric images, taken with both wollastons at roll angles from 0 to 180 in 30 degree increments
-    # also construct nonpolarimetric images to test PSF sub
+    # also construct nonpolarimetric images to test PSF subs
     input_pol_frames = []
     input_psfsub_frames = []
     prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
     # use mock gaussian as unpolarized target image
-    target_total_intensity = mocks.gaussian_array(amp=100)
+    target_total_intensity = mocks.gaussian_array(array_shape=[50, 50], sigma=2, amp=100)
+    # add spot that gets rotated to test the output image is rotated northup
+    spot = mocks.gaussian_array(array_shape=[10, 10], sigma=2, amp=50)
+    target_total_intensity[30:40, 20:30] += spot
     # loops through roll angles 0, 30, 60, ... , 180
     roll_angle  = 0
     while roll_angle <= 180:
@@ -302,33 +305,38 @@ def test_combine_polarization_states():
         intensity_90 = (pol.lin_polarizer_mueller_matrix(90) @ output_stokes_vector)[0]
         intensity_135 = (pol.lin_polarizer_mueller_matrix(135) @ output_stokes_vector)[0]
 
+        # rotate the image so it is in the right orientation with respect to the roll angle
+        target_rotated = rotate(target_total_intensity, -roll_angle, [24, 24])
+        # replace NaN values from rotation with 0s
+        target_rotated[np.isnan(target_rotated)] = 0
+
         # construct POL0 image
-        pol0_data = np.array([intensity_0 * target_total_intensity, intensity_90 * target_total_intensity])
+        pol0_data = np.array([intensity_0 * target_rotated , intensity_90 * target_rotated])
         pol0_img = data.Image(pol0_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         pol0_img.pri_hdr['ROLL'] = roll_angle
         pol0_img.ext_hdr['DPAMNAME'] = 'POL0'
-        pol0_img.ext_hdr['STARLOCX'] = 25
-        pol0_img.ext_hdr['STARLOCY'] = 25
+        pol0_img.ext_hdr['STARLOCX'] = 24
+        pol0_img.ext_hdr['STARLOCY'] = 24
         input_pol_frames.append(pol0_img)
 
         # construct POL45 image
-        pol45_data = np.array([intensity_45 * target_total_intensity, intensity_135 * target_total_intensity])
+        pol45_data = np.array([intensity_45 * target_rotated, intensity_135 * target_rotated])
         pol45_img = data.Image(pol45_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         pol45_img.pri_hdr['ROLL'] = roll_angle
         pol45_img.ext_hdr['DPAMNAME'] = 'POL45'
-        pol45_img.ext_hdr['STARLOCX'] = 25
-        pol45_img.ext_hdr['STARLOCY'] = 25
+        pol45_img.ext_hdr['STARLOCX'] = 24
+        pol45_img.ext_hdr['STARLOCY'] = 24
         input_pol_frames.append(pol45_img)
 
         # construct total intensity image for psf sub
-        psfsub_img_1 = data.Image( (intensity_0 + intensity_90) * target_total_intensity, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        psfsub_img_2 = data.Image( (intensity_45 + intensity_135) * target_total_intensity, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+        psfsub_img_1 = data.Image( (intensity_0 + intensity_90) * target_rotated, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+        psfsub_img_2 = data.Image( (intensity_45 + intensity_135) * target_rotated, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         psfsub_img_1.pri_hdr['ROLL'] = roll_angle
         psfsub_img_2.pri_hdr['ROLL'] = roll_angle
-        psfsub_img_1.ext_hdr['STARLOCX'] = 25
-        psfsub_img_2.ext_hdr['STARLOCX'] = 25
-        psfsub_img_1.ext_hdr['STARLOCY'] = 25
-        psfsub_img_2.ext_hdr['STARLOCY'] = 25
+        psfsub_img_1.ext_hdr['STARLOCX'] = 24
+        psfsub_img_2.ext_hdr['STARLOCX'] = 24
+        psfsub_img_1.ext_hdr['STARLOCY'] = 24
+        psfsub_img_2.ext_hdr['STARLOCY'] = 24
         input_psfsub_frames.append(psfsub_img_1)
         input_psfsub_frames.append(psfsub_img_2)
         
@@ -338,17 +346,23 @@ def test_combine_polarization_states():
     # construct datasets
     input_pol_dataset = data.Dataset(input_pol_frames)
     input_psfsub_dataset = data.Dataset(input_psfsub_frames)
+    test_dataset = data.Dataset([input_psfsub_dataset.copy()[2]])
 
     # construct mueller matrix calibration file
     mm_prihdr, mm_exthdr, mm_errhdr, mm_dqhdr = mocks.create_default_calibration_product_headers()
     system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr, ext_hdr=mm_exthdr, input_dataset=input_pol_dataset)
 
     # call combine_polarization_states to obtain stokes datacube
-    output_dataset = l3_to_l4.combine_polarization_states(input_pol_dataset, 
-                                                          system_mueller_matrix_cal=system_mm_cal, 
-                                                          measure_klip_thrupt=False,
-                                                          measure_1d_core_thrupt=False)
+    with warnings.catch_warnings():
+        # catch warning raised when rotating with roll angle instead of wcs
+        warnings.filterwarnings('ignore', category=UserWarning)
+        output_dataset = l3_to_l4.combine_polarization_states(input_pol_dataset, 
+                                                            system_mueller_matrix_cal=system_mm_cal,
+                                                            use_wcs=False, 
+                                                            measure_klip_thrupt=False,
+                                                            measure_1d_core_thrupt=False)
     stokes_datacube = output_dataset.frames[0].data
+    stokes_datacube_err = output_dataset.frames[0].err
     # run PSF subtraction on total intensity dataset
     with warnings.catch_warnings():
         # suppress astropy warnings
@@ -360,15 +374,19 @@ def test_combine_polarization_states():
                                                             numbasis=1)
     psfsub_image = output_psfsub_dataset.frames[0].data[0]
     
-    # check that the output dataset is the right size, and the output Stokes datacube is the right dimension
+    # check that the output dataset is the right size, and the output Stokes datacube and error is the right dimension
     assert len(output_dataset) == 1
     assert stokes_datacube.shape == (4, 50, 50)
+    assert stokes_datacube_err.shape == (1, 4, 50, 50)
     # check that output Stokes I is the PSF subtracted version
     assert np.allclose(psfsub_image, stokes_datacube[0], equal_nan=True)
     # check that Stokes Q, U, and V is correctly recovered
-    assert np.allclose(target_stokes_vector[1] * target_total_intensity, stokes_datacube[1], equal_nan=True)
-    assert np.allclose(target_stokes_vector[2] * target_total_intensity, stokes_datacube[2], equal_nan=True)
-    assert np.allclose(target_stokes_vector[3] * target_total_intensity, stokes_datacube[3], equal_nan=True)
+    # replace NaNs on the outer edges of the stokes datacube with 0s so we can compare directly with the original image
+    stokes_datacube[np.isnan(stokes_datacube)] = 0
+    assert np.allclose(target_stokes_vector[1] * (target_total_intensity), stokes_datacube[1], atol=0.05)
+    assert np.allclose(target_stokes_vector[2] * (target_total_intensity), stokes_datacube[2], atol=0.05)
+    assert np.allclose(target_stokes_vector[3] * (target_total_intensity), stokes_datacube[3], atol=0.05)
+    
 
 if __name__ == "__main__":
     test_image_splitting()
