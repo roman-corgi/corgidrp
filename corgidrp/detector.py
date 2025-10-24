@@ -2,8 +2,9 @@
 
 import numpy as np
 from scipy import interpolate
-from scipy.ndimage import median_filter
 from scipy.ndimage import gaussian_filter as gauss
+from scipy.ndimage import median_filter
+
 from scipy import ndimage
 from scipy.signal import convolve2d
 import astropy.io.fits as fits

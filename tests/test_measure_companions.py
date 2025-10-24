@@ -25,7 +25,7 @@ ROLL_ANGLES = np.zeros(NUM_IMAGES)
 ROLL_ANGLES[NUM_IMAGES//2:] = 45
 NUMBASIS = [1, 4, 8]
 FULL_SIZE_IMAGE = (1024, 1024)
-CROPPED_IMAGE_SIZE = (200, 200) # Practically this will be an odd shape so we should test that
+CROPPED_IMAGE_SIZE = (201, 201) # Practically this will be an odd shape so we should test that
 PLOT_RESULTS = False
 LOAD_FROM_DISK = False  # Flag to control whether to load mocks from disk (if available)
 KL_MODE = -1            # Use the last KL_MODE
@@ -380,7 +380,7 @@ def _common_measure_companions_test(forward_model_flag):
     
     # Determine the expected companion positions in the cropped image.
     # The cropped star center is at (CROPPED_IMAGE_SIZE[0]//2, CROPPED_IMAGE_SIZE[1]//2)
-    star_loc_cropped = (CROPPED_IMAGE_SIZE[0] // 2, CROPPED_IMAGE_SIZE[1] // 2)
+    star_loc_cropped = (psf_sub_image.ext_hdr['STARLOCX'],psf_sub_image.ext_hdr['STARLOCY'])
     apmag_data = l4_to_tda.determine_app_mag(host_star_image, host_star_image.pri_hdr['TARGET'])
     host_star_apmag = float(apmag_data[0].ext_hdr['APP_MAG'])
     
@@ -390,8 +390,8 @@ def _common_measure_companions_test(forward_model_flag):
         expected_y = star_loc_cropped[1] + dy
         measured_x = result_table['x'][i]
         measured_y = result_table['y'][i]
-        assert abs(measured_x - expected_x) < 5, f"Companion {i} x-coordinate off: expected {expected_x}, got {measured_x}"
-        assert abs(measured_y - expected_y) < 5, f"Companion {i} y-coordinate off: expected {expected_y}, got {measured_y}"
+        assert abs(measured_x - expected_x) < 0.5, f"Companion {i} x-coordinate off: expected {expected_x}, got {measured_x}"
+        assert abs(measured_y - expected_y) < 0.5, f"Companion {i} y-coordinate off: expected {expected_y}, got {measured_y}"
         
         # Calculate expected companion magnitude.
         expected_comp_mag = host_star_apmag - 2.5 * np.log10(comp["counts_scale"])
@@ -458,19 +458,18 @@ def test_update_companion_location():
     assert new_x == 90, f"Expected new companion x-coordinate 90, got {new_x}"
 
 
-
 if __name__ == "__main__":
     # Run tests when executing the file directly.
-    print("Running test: non-forward modeling")
-    test_measure_companions_non_forward_modeling()
-    print("Non-forward modeling test passed.")
+    # print("Running test: non-forward modeling")
+    # test_measure_companions_non_forward_modeling()
+    # print("Non-forward modeling test passed.")
 
     print("Running test: using saved L4 KLIP throughput")
     test_measure_companions_using_L4_klipthroughput()
     print("L4 KLIP throughput test passed.")
     
-    print("Running companion location test.")
-    test_update_companion_location()
-    print("Companion location update test passed.")
+    # print("Running companion location test.")
+    # test_update_companion_location()
+    # print("Companion location update test passed.")
 
     print("All tests passed successfully.")
