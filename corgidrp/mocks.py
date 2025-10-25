@@ -4442,8 +4442,8 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     
 def create_mock_stokes_image_l4(
         image_size=256,
-        fwhm=100.0,
-        I0=1e3,
+        fwhm=3,
+        I0=1e4,
         badpixel_fraction=1e-3,
         p=0.1,
         theta_deg=20.0,
@@ -4489,8 +4489,8 @@ def create_mock_stokes_image_l4(
 
     stokes_err = np.stack([
         I_map_err,
-        I_map_err * p * np.cos(2 * theta_obs),
-        I_map_err * p * np.sin(2 * theta_obs)
+        I_map_err,
+        I_map_err
     ])
     stokes_cube += rng.normal(0.0, stokes_err)
 

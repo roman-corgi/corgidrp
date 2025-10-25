@@ -584,9 +584,7 @@ def calc_pol_p_and_pa_image(input_Image):
     evpa_err = np.degrees(evpa_err)
 
     # --- Data quality propagation ---
-    dq = Idq + Qdq + Udq
-    if np.max(dq) > 0:
-        dq = dq / np.max(dq)
+    dq = np.bitwise_or(np.bitwise_or(Idq, Qdq), Udq)
 
     # --- Stack results ---
     data_out = np.stack([P, p, evpa], axis=0)
