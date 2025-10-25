@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 import corgidrp.mocks as mocks
 import corgidrp.l2b_to_l3 as l2b_to_l3
+import corgidrp.l4_to_tda as l4_to_tda
 import corgidrp.data as data
 
 def test_image_splitting():
@@ -87,6 +88,78 @@ def test_image_splitting():
     # test that an error is raised if we set the image size too big
     with pytest.raises(ValueError):
         invalid_output = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=682)
-                
+
+        
+def test_calc_pol_p_and_pa_image(n_sim=100, tol=0.1):
+    """
+    Test `calc_pol_p_and_pa_image` using mock L4 Stokes cubes.
+
+    This test verifies that the recovered fractional polarization (p)
+    and electric-vector position angle (EVPA) are statistically consistent
+    with the true input values within their propagated uncertainties.
+
+    For each simulation, we compute normalized residuals:
+        chi = (measured - true) / sigma
+    for both p and EVPA. If the uncertainty propagation is correct,
+    the chi distribution should follow N(0, 1).
+
+    We then check that the median of the chi means is near zero,
+    and the median of the chi standard deviations is near one.
+
+    The tolerance (tol = 0.1) defines the acceptable deviation from
+    the expected values. This choice is justified because:
+    - The number of simulations (n_sim = 100) gives statistical
+    fluctuations of about 0.1 in both mean and std estimates
+    for a unit-variance normal distribution (standard error of
+    the mean ~ 1/sqrt(n_sim), standard error of std ~ 1/sqrt(2*(n_sim-1))).
+    - The mock data are approximately Gaussian with no strong bias.
+    - A smaller tol improves sensitivity while remaining robust
+    to expected random variation.
+    """
+    # --- Simulation parameters ---
+    p_input = 0.1 + 0.2 * np.random.rand(n_sim)
+    theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
+
+    # --- Containers for chi statistics ---
+    p_chi_mean, p_chi_std = [], []
+    evpa_chi_mean, evpa_chi_std = [], []
+
+    for p, theta in zip(p_input, theta_input):
+
+        # Generate mock Stokes cube
+        Image_polmock = mocks.create_mock_stokes_image_l4(
+            badpixel_fraction=0.0,
+            fwhm=1e2,
+            I0=1e10,
+            p=p,
+            theta_deg=theta
+        )
+
+        # Compute polarization products
+        Image_pol = l4_to_tda.calc_pol_p_and_pa_image(Image_polmock)
+
+        p_map = Image_pol.data[1]       # fractional polarization
+        evpa_map = Image_pol.data[2]    # EVPA
+        p_map_err = Image_pol.err[0][1]
+        evpa_map_err = Image_pol.err[0][2]
+
+        # Compute chi statistics
+        p_chi = (p_map - p) / p_map_err
+        evpa_chi = (evpa_map - theta) / evpa_map_err
+
+        p_chi_mean.append(np.nanmedian(p_chi))
+        p_chi_std.append(np.nanstd(p_chi))
+        evpa_chi_mean.append(np.nanmedian(evpa_chi))
+        evpa_chi_std.append(np.nanstd(evpa_chi))
+
+    #print(np.median(p_chi_mean), np.median(p_chi_std),
+    #      np.median(evpa_chi_mean), np.median(evpa_chi_std))
+    assert np.median(p_chi_mean) == pytest.approx(0.0, abs=tol)
+    assert np.median(p_chi_std) == pytest.approx(1.0, abs=tol)
+    assert np.median(evpa_chi_mean) == pytest.approx(0.0, abs=tol)
+    assert np.median(evpa_chi_std) == pytest.approx(1.0, abs=tol)
+
+    
 if __name__ == "__main__":
     test_image_splitting()
+    test_calc_pol_p_and_pa_image()
