@@ -10,6 +10,7 @@ import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
 from astropy.time import Time
+from astropy.io.fits import Header
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
