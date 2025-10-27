@@ -1153,7 +1153,7 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         frame.ext_hdr['FLXCALFN'] = flux_cal.filename.split("/")[-1] #Associate the flux calibration file
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
+        frame.filename = frame.filename.replace("_l3", "_l4", 1)
 
     history_msg = "Updated Data Level to L4"
     updated_dataset.update_after_processing_step(history_msg)

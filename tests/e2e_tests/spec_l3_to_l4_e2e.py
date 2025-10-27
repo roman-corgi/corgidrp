@@ -11,7 +11,9 @@ from astropy.io.fits.verify import VerifyWarning
 
 from corgidrp.data import Dataset, LineSpread
 from corgidrp.data import Image
-from corgidrp.mocks import create_default_L2b_headers
+from corgidrp.mocks import create_default_L3_headers,\
+    create_default_calibration_product_headers
+from corgidrp.mocks import rename_files_to_cgi_format
 from corgidrp.walker import walk_corgidrp
 import corgidrp
 import corgidrp.caldb as caldb
@@ -22,11 +24,11 @@ from corgidrp.check import (check_filename_convention, check_dimensions,
 
 
 # ================================================================================
-# Main Spec Linespread E2E Test Function
+# Main Spec L3 to L4 E2E Test Function not PSF subtracted
 # ================================================================================
 
-def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
-    """Run the complete spectroscopy linespread end-to-end test.
+def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
+    """Run the complete spectroscopy l3 to l4 end-to-end test.
     
     This function consolidates all the test steps into a single linear flow
     for easier reading and understanding.
@@ -47,13 +49,13 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Check if input folder already contains the expected files
-    existing_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))
+    existing_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l3.fits')))
     
     if existing_files:
-        logger.info(f"Found {len(existing_files)} existing L2b files in {e2edata_path}")
+        logger.info(f"Found {len(existing_files)} existing L3 files in {e2edata_path}")
         logger.info("Using existing input files (skipping generation)")
         saved_files = existing_files
-        l2b_dataset_with_filenames = Dataset(saved_files)
+        l3_dataset_with_filenames = Dataset(saved_files)
     else:
         logger.info("No existing input files found. Generating new input files...")
         
@@ -69,13 +71,13 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         psf_array_spot = fits.getdata(file_path_spot, ext=0)[12]
         
         # Create dataset with mock headers and noise
-        pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+        pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
         # add a fake satellite spot image from a small band simulation
         image_spot = Image(psf_array_spot, pri_hdr = pri_hdr.copy(), ext_hdr = ext_hdr.copy(),
-                           err =np.zeros_like(psf_array_spot),
-                           dq=np.zeros_like(psf_array_spot, dtype=int))
+                           err =np.zeros_like(psf_array_spot), err_hdr = errhdr.copy(),
+                           dq=np.zeros_like(psf_array_spot, dtype=int), dq_hdr = dqhdr.copy())
         image_spot.ext_hdr["CFAMNAME"] = "3D"
         # Add random noise for reproducibility
         np.random.seed(5)
@@ -98,14 +100,14 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         psf_images.append(image_spot)
         
         # Save images to disk with timestamped filenames
-        def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
+        def get_formatted_filename(pri_hdr, dt, suffix="l3"):
             visitid = pri_hdr.get('VISITID', '0000000000000000000')
             now = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
             return f"cgi_{visitid}_{now}_{suffix}.fits"
 
         basetime = datetime.now()
         for i, img in enumerate(psf_images):
-            fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l2b")
+            fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l3")
             fpath = os.path.join(e2edata_path, fname)
             
             # Save as FITS
@@ -116,10 +118,10 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
                 fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
 
         # Load saved files back into dataset
-        saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))
-        assert len(saved_files) > 0, f'No saved L2b files found in {e2edata_path}!'
+        saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l3.fits')))
+        assert len(saved_files) > 0, f'No saved L3 files found in {e2edata_path}!'
 
-        l2b_dataset_with_filenames = Dataset(saved_files)
+        l3_dataset_with_filenames = Dataset(saved_files)
         logger.info(f"Generated and saved {len(saved_files)} new input files")
 
     logger.info('')
@@ -132,16 +134,16 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Validate all input images
-    for i, frame in enumerate(l2b_dataset_with_filenames):
-        frame_info = f"L2b Frame {i}"
+    for i, frame in enumerate(l3_dataset_with_filenames):
+        frame_info = f"L3 Frame {i}"
         
-        check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l2b.fits', frame_info, logger)
+        check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l3.fits', frame_info, logger, data_level = 'l3')
         check_dimensions(frame.data, (81, 81), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
-        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info, logger)
+        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3'}, frame_info, logger)
         logger.info("")
 
-    logger.info(f"Total input images validated: {len(l2b_dataset_with_filenames)}")
+    logger.info(f"Total input images validated: {len(l3_dataset_with_filenames)}")
     logger.info("")
     
     # Create a temporary caldb and add the default DispersionModel calibration
@@ -151,6 +153,23 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     if os.path.exists(corgidrp.caldb_filepath):
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
+    
+    # Create calibrations subfolder
+    calibrations_dir = os.path.join(e2eoutput_path, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
+    #Create a mock flux calibration file
+    fluxcal_factor = 2e-12
+    fluxcal_factor_error = 1e-14
+    prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
+    # Set consistent header values for flux calibration factor
+    exthd['CFAMNAME'] = '3'
+    exthd['DPAMNAME'] = 'PRISM3'
+    exthd['FSAMNAME'] = 'R1C2'
+    fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = l3_dataset_with_filenames)
+
+    rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
+    this_caldb.create_entry(fluxcal_fac)
     
     # Scan for default calibrations
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
@@ -167,7 +186,7 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         filelist=saved_files, 
         CPGS_XML_filepath="",
         outputdir=e2eoutput_path,
-        template="l2b_to_spec_linespread.json"
+        template="l3_to_l4_spec.json"
     )
     logger.info("")
     
@@ -178,12 +197,12 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Test Case 2: Output Calibration Product Data Format and Content')
     logger.info('='*80)
 
-    # Validate output calibration product
-    cal_file = get_latest_cal_file(e2eoutput_path, '*_line_spread.fits', logger)
-    check_filename_convention(os.path.basename(cal_file), 'cgi_*_line_spread.fits', "LineSpread calibration product", logger)
+    # Validate output product
+    out_file = get_latest_cal_file(e2eoutput_path, '*_l4.fits', logger)
+    check_filename_convention(os.path.basename(out_file), 'cgi_*_l4.fits', "spec l4 output product", logger, data_level = "l4")
 
-    with fits.open(cal_file) as hdul:
-        verify_hdu_count(hdul, 3, "linespread calibration product", logger)
+    with fits.open(out_file) as hdul:        
+        verify_hdu_count(hdul, 6, "spec l4 output product", logger)
         
         # Verify HDU0 (header only)
         hdu0 = hdul[0]
@@ -193,7 +212,7 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
             logger.info(f"HDU0: Contains data with shape {hdu0.data.shape}. Expected: header only. FAIL.")
         #verify HDU1
         hdu1 = hdul[1]
-        check_dimensions(hdu1.data, (2,19), "HDU1 Data Array: containing the 1D wavelengths and the line spread function", logger)
+        check_dimensions(hdu1.data, (19,), "HDU1 Data Array: containing the 1D spectral distribution", logger)
         if np.isnan(hdu1.data).any() is True:
             logger.info(f"HDU1 Data Array: Contains NANs in the data. Expected: no NANs. FAIL.")
         else:
@@ -202,17 +221,30 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
             logger.info(f"HDU1 Data Array: Contains INFs in the data. Expected: no INFs. FAIL.")
         else:
             logger.info(f"HDU1 Data Array: No INFs in the data. Expected: no INFs. PASS.")
-        #verify that the line spread function is normalized to 1
-        if np.float32(np.sum(hdu1.data[1,:])) != 1.:
-            logger.info(f"HDU1 Data Array: sum of the line spread function is not approx. 1. Expected: line spread function normalized to 1. FAIL.")
-        else:
-            logger.info(f"HDU1 Data Array: sum of the line spread function is approx. 1. Expected: line spread function normalized to 1. PASS.")
-        # Verify HDU2 (Gaussian parameters)
-        gauss_par = hdul[2].data
-        check_dimensions(gauss_par, (6,), "HDU2 Data Array: 1D array with the Gaussian fit parameters", logger)
+        # Verify HDU2 (error)
+        hdu2 = hdul[2]
+        err = hdu2.data
+        check_dimensions(err, (1, 19), "HDU2 Data Array: 1D array with the corresponding spectral uncertainty", logger)
+        # Verify HDU3 (dq)
+        hdu3 = hdul[3]
+        dq = hdu3.data
+        check_dimensions(dq, (19,), "HDU3 Data Array: 1D array with the corresponding spectral data quality", logger)
+        
+        # Verify HDU4 (wavelength)
+        hdu4 = hdul[4]
+        wave = hdu4.data
+        check_dimensions(wave, (19,), "HDU4 Data Array: 1D array with the corresponding wavelength", logger)
+        
+        # Verify HDU5 (wavelength uncertainties)
+        hdu5 = hdul[5]
+        wave_err = hdu5.data
+        check_dimensions(wave_err, (19,), "HDU5 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
         
         # Verify header keywords
-        verify_header_keywords(hdul[1].header, {'DATALVL': 'CAL', 'DATATYPE': 'LineSpread', 'CFAMNAME' : '3D', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3'}, "linespread calibration product", logger)
+        verify_header_keywords(hdul[1].header, {'DATALVL': 'L4', 'CFAMNAME' : '3', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3', 'BUNIT' : 'photoelectron/s/bin'},
+                                               "spec output product", logger)
+        verify_header_keywords(hdul[1].header, {'WAVLEN0', 'WV0_X', 'WV0_Y', 'WV0_DIMX', 'WV0_DIMY'},
+                                               "spec output product", logger)
 
     logger.info("")
     
@@ -223,23 +255,19 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Test Case 3: Baseline Performance Checks')
     logger.info('='*80)
 
-    # Load and display linespread model results
-    linespread = LineSpread(cal_file)
-    wavlens = linespread.data[0, :]
-    flux_profile = linespread.data[1, :]
-    logger.info(f"wavelengths: {wavlens} nm")
-    logger.info(f"flux profile: {flux_profile}")
-    logger.info(f"Gaussian fit parameters:") 
-    logger.info(f"amplitude: {linespread.amplitude} +- {linespread.amp_err}")
-    logger.info(f"mean_wave: {linespread.mean_wave} +- {linespread.wave_err} nm")
-    logger.info(f"fwhm: {linespread.fwhm} +- {linespread.fwhm_err} nm")
+    # Load and display spec output product results
+    spec_out = Image(out_file)
+    sed = spec_out.data
+    wave = spec_out.hdu_list["WAVE"].data
+    logger.info(f"wavelengths: {wave} nm")
+    logger.info(f"spectrum: {sed}")
     logger.info("")
     
     # Clean up temporary caldb file
     if os.path.exists(tmp_caldb_csv):
         os.remove(tmp_caldb_csv)
     
-    return wavlens, flux_profile, gauss_par
+    return spec_out
 
 
 
@@ -258,9 +286,9 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     # Set up output directory and logging
     global logger
     
-    # Create the spec_linespread_e2e subfolder regardless
-    input_top_level = os.path.join(e2edata_path, 'spec_linespread_e2e')
-    output_top_level = os.path.join(e2eoutput_path, 'spec_linespread_e2e')
+    # Create the spec_l3_to_l4_e2e subfolder regardless
+    input_top_level = os.path.join(e2edata_path, 'spec_l3_to_l4_e2e')
+    output_top_level = os.path.join(e2eoutput_path, 'spec_l3_to_l4_e2e')
     
     os.makedirs(input_top_level, exist_ok=True)
     os.makedirs(output_top_level, exist_ok=True)
@@ -269,10 +297,10 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     e2edata_path = input_top_level
     e2eoutput_path = output_top_level
     
-    log_file = os.path.join(e2eoutput_path, 'spec_linespread_e2e.log')
+    log_file = os.path.join(e2eoutput_path, 'spec_l3_to_l4_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
-    logger = logging.getLogger('spec_linespread_e2e')
+    logger = logging.getLogger('spec_l3_to_l4_e2e')
     logger.setLevel(logging.INFO)
     
     # Clear any existing handlers to avoid duplicates
@@ -296,12 +324,12 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.addHandler(console_handler)
     
     logger.info('='*80)
-    logger.info('SPECTROSCOPY LINESPREAD FUNCTION END-TO-END TEST')
+    logger.info('SPECTROSCOPY L3 to L4 END-TO-END TEST')
     logger.info('='*80)
     logger.info("")
     
     # Run the complete end-to-end test
-    linespread = run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path)
+    spec_out = run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path)
     
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
@@ -313,11 +341,11 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level spec_linespread_e2e folder
-    top_level_dir = os.path.join(thisfile_dir, 'spec_linespread_e2e')
+    top_level_dir = os.path.join(thisfile_dir, 'spec_l3_to_l4_e2e')
     outputdir = os.path.join(top_level_dir, 'output')
     e2edata_dir = os.path.join(top_level_dir, 'input_data')
 
-    ap = argparse.ArgumentParser(description="run the spectroscopy linespread end-to-end test")
+    ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
                     help="directory to get input files from [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,

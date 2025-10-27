@@ -63,6 +63,7 @@ all_steps = {
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
     "determine_wave_zeropoint": corgidrp.l3_to_l4.determine_wave_zeropoint,
     "add_wavelength_map": corgidrp.l3_to_l4.add_wavelength_map,
+    "extract_spec": corgidrp.l3_to_l4.extract_spec,
     "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
     "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
     "create_ct_map": corgidrp.corethroughput.create_ct_map,
