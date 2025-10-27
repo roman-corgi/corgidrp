@@ -5,6 +5,7 @@ import os, shutil
 import glob
 import pytest
 import numpy as np
+from datetime import datetime
 
 import corgidrp
 import corgidrp.data as data
@@ -15,7 +16,7 @@ import corgidrp.fluxcal as fluxcal
 from corgidrp import caldb
 
 @pytest.mark.e2e
-def test_expected_results_e2e(e2edata_path, e2eoutput_path):
+def test_expected_results_e2e(e2eoutput_path):
     # Test Band 3
     cfam_name = '3F'
     #mock a point source image
@@ -35,46 +36,35 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #LSAMNAME= 'NFOV'
     #FPAMNAME= 'HOLE'
     #SPAMNAME= 'OPEN
-    flux_dataset = data.Dataset([flux_image])
-    output_dir = os.path.join(e2eoutput_path, 'flux_sim_test_data')
+    output_dir = os.path.join(e2eoutput_path, 'flux_cal_band3_e2e')
 
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
-    os.mkdir(output_dir)
+    os.makedirs(output_dir)
     
- 
-    flux_dataset.save(output_dir, ['flux_e2e_{0}.fits'.format(i) for i in range(len(flux_dataset))])
-    flux_data_filelist = []
-    for f in os.listdir(output_dir):
-        flux_data_filelist.append(os.path.join(output_dir, f))
-    print(flux_data_filelist)
-
-    # make DRP output directory if needed
-    fluxcal_outputdir = os.path.join(e2eoutput_path, "l2b_to_fluxcal_factor_output")
-    if os.path.exists(fluxcal_outputdir):
-        shutil.rmtree(fluxcal_outputdir)
-    os.mkdir(fluxcal_outputdir)
+    # Create input_data subfolder
+    input_data_dir = os.path.join(output_dir, 'input_l2b')
+    os.makedirs(input_data_dir, exist_ok=True)
+    
+    flux_image.save(input_data_dir)
+    flux_data_filelist = [flux_image.filepath]
 
     # One last check
-    for img in flux_dataset:
-        if img.ext_hdr['CFAMNAME'] != cfam_name:
-            raise ValueError(f'CFAMNAME should be {cfam_name:s}')
+    if flux_image.ext_hdr['CFAMNAME'] != cfam_name:
+        raise ValueError(f'CFAMNAME should be {cfam_name:s}')
 
     ####### Run the DRP walker
     print('Running walker')
-    walker.walk_corgidrp(flux_data_filelist, '', fluxcal_outputdir)
+    walker.walk_corgidrp(flux_data_filelist, '', output_dir)
     
     ####### Load in the output data. It should be the latest kgain file produced.
-    fluxcal_file = glob.glob(os.path.join(fluxcal_outputdir, '*abf_cal*.fits'))[0]
+    fluxcal_file = glob.glob(os.path.join(output_dir, '*abf_cal*.fits'))[0]
     flux_fac = data.FluxcalFactor(fluxcal_file)
     print("used color filter", flux_fac.filter)
     print("used ND filter", flux_fac.nd_filter)
     print("fluxcal factor", flux_fac.fluxcal_fac)
     print("fluxcal factor error", flux_fac.fluxcal_err)
     assert flux_fac.fluxcal_fac == pytest.approx(cal_factor, abs = 1.5 * flux_fac.fluxcal_err)
-    # remove entry from caldb
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(flux_fac)
 
    # Print success message
     print('e2e test for flux calibration factor passed')
@@ -87,13 +77,10 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  "/home/schreiber/DataCopy/fluxcal_mock_data/"
 
     ap = argparse.ArgumentParser(description="run the l2b-> FluxcalFactor end-to-end test")
-    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
-                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     outputdir = args.outputdir
-    test_expected_results_e2e(e2edata_dir, outputdir)
+    test_expected_results_e2e(outputdir)

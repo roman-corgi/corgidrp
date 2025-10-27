@@ -184,7 +184,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
     produce a calibrated 1-sigma flux ratio "contrast" curve (or "noise curve" since contrast curve is typically 5-sigma), also accounting for the throughput of the coronagraph.
     It calculates flux ratio noise curve value for each radial separation from the subtracted star location, interpolating KLIP and core throughput values at these input separations.
     It uses a dataset of unocculted stars and ND transmission to determine the integrated flux of the Gaussian-fit star (where each frame in the dataset is assumed to correspond to the frames 
-    in the input_dataset), and the an estimate of planet flux per frame of inupt_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to 
+    in the input_dataset), and an estimate of planet flux per frame of input_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to 
     the annular noise and FWHM equal to that used for KLIP algorithm througput for each radial separation.
 
     Args:
@@ -475,7 +475,7 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
     image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
     
     sn_source, xy_source = [], []
-       
+
     # Iteratively detect sources above the SNR threshold
     while np.nanmax(image_snmap) >= nsigma_threshold:
 
