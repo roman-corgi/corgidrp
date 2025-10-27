@@ -4439,11 +4439,11 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
     return image
-    
-def create_mock_stokes_image_l2b(
+
+def create_mock_stokes_image_l3(
         image_size=256,
         fwhm=100.0,
-        I0=1e3,
+        I0=1e4,
         badpixel_fraction=1e-3,
         fractional_error=None,
         p=0.1,
@@ -4453,8 +4453,14 @@ def create_mock_stokes_image_l2b(
         seed=None
 ):
     """
-    Generate mock L2b polarimetric images with controlled polarization,
-    optional bad pixels, and configurable intensity levels.
+    Generate mock L3 polarimetric datasets with controlled fractional polarization
+    and polarization angles, including optional bad pixels and configurable intensity.
+
+    Each dataset can contain multiple images corresponding to different Wollaston
+    prisms and roll angles. For each image, a dual-beam simulation is performed
+    to produce the two analyzer channels (e.g., 0/90 deg for POL0, 45/135 deg for POL45),
+    and observational noise is applied according to the specified fractional error
+    or photon noise.
 
     Args:
         image_size (int): Size of the square image (H x W).
@@ -4469,11 +4475,13 @@ def create_mock_stokes_image_l2b(
         seed (int, optional): Random seed.
 
     Returns:
-        Image: Synthetic Image object with data, err, dq, and FITS-like headers.
+        Dataset: Synthetic Dataset object containing Image objects with data, error maps,
+                 and data quality arrays.
 
     Raises:
-        ValueError: If roll_angles and prisms lengths mismatch or prism name invalid.
+        ValueError: If roll_angles and prisms lengths mismatch or prism name is invalid.
     """
+
     # --- defaults ---
     if roll_angles is None:
         roll_angles = [-15, 15, -15, 15]
@@ -4520,9 +4528,9 @@ def create_mock_stokes_image_l2b(
 
         # error map
         if fractional_error is not None:
-            pair_err = np.abs(pair_cube) * fractional_error
+            pair_err = abs(pair_cube) * fractional_error
         else:
-            pair_err = np.sqrt(np.abs(pair_cube))
+            pair_err = np.sqrt(abs(pair_cube))
 
         pair_cube += rng.normal(loc=0.0, scale=pair_err)
 
@@ -4542,14 +4550,25 @@ def create_mock_stokes_image_l2b(
     # --- broadcast dq ---
     dq_out = np.broadcast_to(dq, cubes_out.shape).copy()
 
-    # --- create Image object ---
-    return Image(
-        cubes_out,
-        pri_hdr=prihdr,
-        ext_hdr=exthdr,
-        err=cubes_out_err,
-        dq=dq_out,
-        err_hdr=errhdr,
-        dq_hdr=dqhdr
-    )
+    Image_out = []
+    for i, (roll, prism) in enumerate(zip(roll_angles, prisms)):
+        prihdr_i = prihdr.copy()
+        exthdr_i = exthdr.copy()
+        prihdr_i['ROLL'] = roll
+        exthdr_i['DPAMNAME'] = prism
+        Image_out.append(
+            Image(
+                cubes_out[i],
+                pri_hdr=prihdr_i,
+                ext_hdr=exthdr_i,
+                err=cubes_out_err[i],
+                dq=dq_out[i],
+                err_hdr=errhdr,
+                dq_hdr=dqhdr
+            )
+        )
+        
+    Dataset_out = Dataset(Image_out)
 
+    # --- create Image object ---
+    return Dataset_out
