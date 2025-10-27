@@ -90,7 +90,7 @@ def test_image_splitting():
         invalid_output = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=682)
 
         
-def test_calc_pol_p_and_pa_image(n_sim=100, tol=0.1):
+def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3.):
     """
     Test `calc_pol_p_and_pa_image` using mock L4 Stokes cubes.
 
@@ -106,15 +106,13 @@ def test_calc_pol_p_and_pa_image(n_sim=100, tol=0.1):
     We then check that the median of the chi means is near zero,
     and the median of the chi standard deviations is near one.
 
-    The tolerance (tol = 0.1) defines the acceptable deviation from
-    the expected values. This choice is justified because:
-    - The number of simulations (n_sim = 100) gives statistical
-    fluctuations of about 0.1 in both mean and std estimates
-    for a unit-variance normal distribution (standard error of
-    the mean ~ 1/sqrt(n_sim), standard error of std ~ 1/sqrt(2*(n_sim-1))).
-    - The mock data are approximately Gaussian with no strong bias.
-    - A smaller tol improves sensitivity while remaining robust
-    to expected random variation.
+    The tolerance (`nsigma_tol`) defines the acceptable deviation from
+    ideal statistics in units of standard errors. For `n_sim` simulations,
+    the expected fluctuations of the median and standard deviation of chi
+    are approximately 1/sqrt(n_sim) and 1/sqrt(2*(n_sim-1)), respectively.
+    Multiplying by `nsigma_tol` allows for a configurable confidence
+    interval, e.g., `nsigma_tol=3` corresponds roughly to a 3-sigma limit
+    on expected statistical deviations.
     """
     # --- Simulation parameters ---
     p_input = 0.1 + 0.2 * np.random.rand(n_sim)
@@ -154,10 +152,12 @@ def test_calc_pol_p_and_pa_image(n_sim=100, tol=0.1):
 
     #print(np.median(p_chi_mean), np.median(p_chi_std),
     #      np.median(evpa_chi_mean), np.median(evpa_chi_std))
-    assert np.median(p_chi_mean) == pytest.approx(0.0, abs=tol)
-    assert np.median(p_chi_std) == pytest.approx(1.0, abs=tol)
-    assert np.median(evpa_chi_mean) == pytest.approx(0.0, abs=tol)
-    assert np.median(evpa_chi_std) == pytest.approx(1.0, abs=tol)
+    tol_mean = 1. / np.sqrt(n_sim) * nsigma_tol
+    tol_std = 1. / np.sqrt(2.*(n_sim-1.)) * nsigma_tol
+    assert np.median(p_chi_mean) == pytest.approx(0.0, abs=tol_mean)
+    assert np.median(p_chi_std) == pytest.approx(1.0, abs=tol_std)
+    assert np.median(evpa_chi_mean) == pytest.approx(0.0, abs=tol_mean)
+    assert np.median(evpa_chi_std) == pytest.approx(1.0, abs=tol_std)
 
     
 if __name__ == "__main__":
