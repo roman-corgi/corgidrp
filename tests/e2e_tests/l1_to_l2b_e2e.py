@@ -56,7 +56,7 @@ def fix_str_for_tvac(
     for file in list_of_fits:
         with fits.open(file, mode='update') as fits_file:
             exthdr = fits_file[1].header
-            if float(exthdr['EMGAIN_A']) == 1:
+            if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
                 exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
             if type(exthdr['EMGAIN_C']) is str:
                 exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
@@ -601,7 +601,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b end-to-end test")

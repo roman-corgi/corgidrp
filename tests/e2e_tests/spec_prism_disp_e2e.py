@@ -19,6 +19,8 @@ from corgidrp.walker import walk_corgidrp
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
                            validate_binary_table_fields, get_latest_cal_file)
+import corgidrp
+import corgidrp.caldb as caldb
 
 
 
@@ -230,6 +232,13 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
         if os.path.isfile(file_path):
             os.remove(file_path)
     
+
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    
     # Create input_l2b subfolder for input data
     input_l2b_dir = os.path.join(spec_prism_outputdir, 'input_l2b')
     os.makedirs(input_l2b_dir, exist_ok=True)
@@ -275,6 +284,10 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
+    
+    # Clean up temporary caldb file
+    if os.path.exists(tmp_caldb_csv):
+        os.remove(tmp_caldb_csv)
     
     print('e2e test for spectroscopy prism dispersion calibration passed')
     

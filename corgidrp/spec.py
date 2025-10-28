@@ -5,6 +5,7 @@ import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d, LinearNDInterpolator
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread
+from corgidrp.combine import combine_subexposures
 import os
 from astropy.io import ascii, fits
 from astropy.table import Table
@@ -28,7 +29,7 @@ def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     """
     return lambda y,x: peak * np.exp(-( ((x - x0) / sigma_x) ** 2 + ((y - y0) / sigma_y) **2 ) / 2)
 
-def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6, 
+def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
                    halfwidth=3, halfheight=5, guesspeak=1, oversample=5, refinefit=True):
     """
     Fits a 2-d Gaussian to the data at point (xguess, yguess), with pixel integration.
@@ -71,21 +72,21 @@ def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
     ncols = fitbox.shape[1]
     fitbox[np.where(np.isnan(fitbox))] = 0
 
-    oversampled_ycoord = np.linspace(-(oversample // 2) / oversample, 
+    oversampled_ycoord = np.linspace(-(oversample // 2) / oversample,
                                      nrows - 1 + (oversample // 2) / oversample + 1./oversample,
                                      nrows * oversample)
-    oversampled_xcoord = np.linspace(-(oversample // 2) / oversample, 
+    oversampled_xcoord = np.linspace(-(oversample // 2) / oversample,
                                      ncols - 1 + (oversample // 2) / oversample + 1./oversample,
                                      ncols * oversample)
     oversampled_grid = np.meshgrid(oversampled_ycoord, oversampled_xcoord, indexing='ij')
-    
+
     if refinefit:
         errorfunction = lambda p: np.ravel(
-                np.reshape(gauss2d(*p)(*oversampled_grid), 
+                np.reshape(gauss2d(*p)(*oversampled_grid),
                 (nrows, oversample, ncols, oversample)).mean(
                 axis = 1).mean(axis = 2) - fitbox)
-  
-        guess = (halfwidth, halfheight, 
+
+        guess = (halfwidth, halfheight,
                  xfwhm_guess/(2 * np.sqrt(2*np.log(2))),
                  yfwhm_guess/(2 * np.sqrt(2*np.log(2))),
                  guesspeak)
@@ -98,12 +99,12 @@ def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
         yfwhm = p[3] * (2 * np.sqrt(2*np.log(2)))
         peakflux = p[4]
 
-        model = np.reshape(gauss2d(*p)(*oversampled_grid), 
+        model = np.reshape(gauss2d(*p)(*oversampled_grid),
                         (nrows, oversample, ncols, oversample)).mean(
                         axis = 1).mean(axis = 2)
         residual = fitbox - model
     else:
-        model = np.reshape(gauss2d(*guess)(*oversampled_grid), 
+        model = np.reshape(gauss2d(*guess)(*oversampled_grid),
                         (nrows, oversample, ncols, oversample)).mean(
                         axis = 1).mean(axis = 2)
         residual = fitbox - model
@@ -151,10 +152,10 @@ def get_center_of_mass(frame):
 
     """
     y, x = np.indices(frame.shape)
-    
+
     ycen = np.sum(y * frame)/np.sum(frame)
     xcen = np.sum(x * frame)/np.sum(frame)
-    
+
     return xcen, ycen
 
 def rotate_points(points, angle_rad, pivot_point):
@@ -171,7 +172,7 @@ def rotate_points(points, angle_rad, pivot_point):
     Returns:
         Two-element tuple of rotated (x,y) coordinates.
     """
-    rotated_points = (points[0] - pivot_point[0], points[1] - pivot_point[1]) 
+    rotated_points = (points[0] - pivot_point[0], points[1] - pivot_point[1])
     rotated_points = (rotated_points[0] * np.cos(angle_rad) - rotated_points[1] * np.sin(angle_rad),
                       rotated_points[0] * np.sin(angle_rad) + rotated_points[1] * np.cos(angle_rad))
     rotated_points = (rotated_points[0] + pivot_point[0], rotated_points[1] + pivot_point[1])
@@ -180,7 +181,7 @@ def rotate_points(points, angle_rad, pivot_point):
 def fit_psf_centroid(psf_data, psf_template,
                      xcent_template = None, ycent_template = None,
                      xcent_guess = None, ycent_guess = None,
-                     halfwidth = 10, halfheight = 10, 
+                     halfwidth = 10, halfheight = 10,
                      fwhm_major_guess = 3, fwhm_minor_guess = 6,
                      gauss2d_oversample = 9):
     """
@@ -220,7 +221,7 @@ def fit_psf_centroid(psf_data, psf_template,
     if not isinstance(halfheight, int):
         raise ValueError("halfheight must be an integer")
     # Use the center of mass as a starting point if positions were not provided.
-    if xcent_template is None or ycent_template is None: 
+    if xcent_template is None or ycent_template is None:
         xcom_template, ycom_template = np.rint(get_center_of_mass(psf_template))
         xcent_template, ycent_template = xcom_template, ycom_template
     else:
@@ -231,43 +232,43 @@ def fit_psf_centroid(psf_data, psf_template,
         xcom_data, ycom_data = np.rint(get_center_of_mass(median_filt_psf))
     else:
         xcom_data, ycom_data = (np.rint(xcent_guess), np.rint(ycent_guess))
-    
+
     xmin_template_cut, xmax_template_cut = (int(xcom_template) - halfwidth, int(xcom_template) + halfwidth)
-    ymin_template_cut, ymax_template_cut = (int(ycom_template) - halfheight, int(ycom_template) + halfheight) 
-    
+    ymin_template_cut, ymax_template_cut = (int(ycom_template) - halfheight, int(ycom_template) + halfheight)
+
     xmin_data_cut, xmax_data_cut = (int(xcom_data) - halfwidth, int(xcom_data) + halfwidth)
-    ymin_data_cut, ymax_data_cut = (int(ycom_data) - halfheight, int(ycom_data) + halfheight) 
-    
+    ymin_data_cut, ymax_data_cut = (int(ycom_data) - halfheight, int(ycom_data) + halfheight)
+
     template_stamp = psf_template[ymin_template_cut:ymax_template_cut+1, xmin_template_cut:xmax_template_cut+1]
     data_stamp = psf_data[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1]
-    
+
     xoffset_guess, yoffset_guess = (0.0, 0.0)
     amp_guess = np.sum(psf_data) / np.sum(psf_template)
     guess_params = (xoffset_guess, yoffset_guess, amp_guess)
-    registration_result = optimize.minimize(psf_registration_costfunc, guess_params, 
-                                         args=(template_stamp, data_stamp), 
+    registration_result = optimize.minimize(psf_registration_costfunc, guess_params,
+                                         args=(template_stamp, data_stamp),
                                          method='Powell')
 
     if not registration_result.success:
         print(f"Warning: Registration optimization did not converge: {registration_result.message}")
-    
+
     xfit = xcent_template + (xcom_data - xcom_template) + registration_result.x[0]
     yfit = ycent_template + (ycom_data - ycom_template) + registration_result.x[1]
 
     psf_data_bkg = psf_data.copy()
     psf_data_bkg[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1] = np.nan
     psf_peakpix_snr = np.max(psf_data) / np.nanstd(psf_data_bkg)
-    
+
     (gauss2d_xfit, gauss2d_yfit, xfwhm, yfwhm, gauss2d_peakfit,
      fitted_data_stamp, model, residual) = gaussfit2d_pix(psf_data,
                                                 xguess = xfit,
                                                 yguess = yfit,
-                                                xfwhm_guess = fwhm_minor_guess, 
+                                                xfwhm_guess = fwhm_minor_guess,
                                                 yfwhm_guess = fwhm_major_guess,
-                                                halfwidth = 1, halfheight = halfheight, 
-                                                guesspeak = np.max(psf_data), oversample = gauss2d_oversample, 
+                                                halfwidth = 1, halfheight = halfheight,
+                                                guesspeak = np.max(psf_data), oversample = gauss2d_oversample,
                                                 refinefit = True)
-    
+
     (x_precis, y_precis) = (np.abs(xfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr,
                             np.abs(yfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr)
 
@@ -293,7 +294,7 @@ def get_template_dataset(dataset):
         fsamname = frames.ext_hdr['FSAMNAME']
         if dpamname != "PRISM3":
             raise AttributeError("currently we only have template files for PRISM3, not for "+ dpamname)
-          
+
         cfamname.append (frames.ext_hdr['CFAMNAME'])
         slits.append (fsamname)
     if len(np.unique(slits)) != 1:
@@ -314,7 +315,7 @@ def get_template_dataset(dataset):
         filenames = sorted(glob.glob(os.path.join(template_dir, "spec_unocc_noslit_prism3_filtersweep_*.fits")))
         filtersweep = True
     return Dataset(filenames), filtersweep
-    
+
 def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, filtersweep = False, halfwidth=10, halfheight=10, verbose = False):
     """
     Compute PSF centroids for a grid of PSFs and return them as a calibration object.
@@ -334,7 +335,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     """
     if not isinstance(dataset, Dataset):
         raise TypeError("Input must be a corgidrp.data.Dataset object.")
-    
+
     if initial_cent is None:
         xcent, ycent = None, None
     else:
@@ -344,21 +345,21 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
             raise ValueError("initial_cent dictionary must contain 'xcent' and 'ycent' arrays.")
         if len(dataset) != len(xcent) or len(dataset) != len(ycent):
             raise ValueError("Mismatch between dataset length and centroid guess arrays.")
-    
+
     if template_dataset is None:
         template_dataset, filtersweep = get_template_dataset(dataset)
-    
+
     xcent_temp = []
     ycent_temp = []
     for frame in template_dataset:
         if "XCENT" in frame.ext_hdr:
             xcent_temp.append(frame.ext_hdr["XCENT"])
         else:
-            xcent_temp.append(None)    
+            xcent_temp.append(None)
         if "YCENT" in frame.ext_hdr:
             ycent_temp.append(frame.ext_hdr["YCENT"])
         else:
-            ycent_temp.append(None)    
+            ycent_temp.append(None)
     xcent_temp = np.asarray(xcent_temp)
     ycent_temp = np.asarray(ycent_temp)
     centroids = np.zeros((len(dataset), 2))
@@ -366,7 +367,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
 
     pri_hdr_centroid = dataset[0].pri_hdr.copy()
     ext_hdr_centroid = dataset[0].ext_hdr.copy()
-    
+
     filters = []
     for idx, frame in enumerate(dataset):
         cfam = frame.ext_hdr['CFAMNAME']
@@ -377,7 +378,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
         else:
             xguess = xcent[idx]
             yguess = ycent[idx]
-            
+
         if filtersweep:
             found_cfam = False
             for k, temp_frame in enumerate(template_dataset):
@@ -399,10 +400,10 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
                 temp_psf_data = template_dataset[-1].data
                 temp_x = xcent_temp[-1]
                 temp_y = ycent_temp[-1]
-        # larger fitting stamp needed for broadband filter 
+        # larger fitting stamp needed for broadband filter
         if cfam == '2' or cfam == '3':
             halfheight = 30
-            
+
         xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis = fit_psf_centroid(
             psf_data, temp_psf_data,
             xcent_template=temp_x,
@@ -418,7 +419,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
 
         if verbose:
             print(f"Slice {idx}: x = {xfit:.3f}, y = {yfit:.3f}")
-    
+
     if filtersweep:
         ext_hdr_centroid['FILTERS'] = ",".join(filters)
     else:
@@ -431,7 +432,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
         err = centroids_err,
         input_dataset=dataset
     )
-        
+
     return calibration
 
 def read_cent_wave(band, filter_file = None):
@@ -464,7 +465,7 @@ def read_cent_wave(band, filter_file = None):
     for i in range(3, 6):
         ret_list.append(data.columns[i][filter_names == band][0])
     return ret_list
-    
+
 def estimate_dispersion_clocking_angle(xpts, ypts, weights):
     """ 
     Estimate the clocking angle of the dispersion axis based on the centroids of
@@ -479,16 +480,16 @@ def estimate_dispersion_clocking_angle(xpts, ypts, weights):
         clocking_angle, clocking_angle_uncertainty
     """
     linear_fit, V = np.polyfit(ypts, xpts, deg=1, w=weights, cov=True)
-    
+
     theta = np.arctan(1/linear_fit[0])
     if theta > 0:
         clocking_angle = np.rad2deg(theta - np.pi)
     else:
         clocking_angle = np.rad2deg(theta)
-    clocking_angle_uncertainty = np.abs(np.rad2deg(np.arctan(linear_fit[0] + np.sqrt(V[0,0]))) - 
+    clocking_angle_uncertainty = np.abs(np.rad2deg(np.arctan(linear_fit[0] + np.sqrt(V[0,0]))) -
                                         np.rad2deg(np.arctan(linear_fit[0] - np.sqrt(V[0,0])))) / 2
 
-    return clocking_angle, clocking_angle_uncertainty 
+    return clocking_angle, clocking_angle_uncertainty
 
 def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wavlen, pixel_pitch_um=13.0):
     """ 
@@ -520,12 +521,12 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
     pixel_pitch_mm = pixel_pitch_um * 1E-3
 
     # Rotate the centroid coordinates so the dispersion axis is horizontal
-    # to define a rotation pivot point, select the filter closest to the nominal 
+    # to define a rotation pivot point, select the filter closest to the nominal
     # zero deviation wavelength
     refidx = np.argmin(np.abs(wavlens - ref_wavlen))
-    (x_rot, y_rot) = rotate_points((xpts, ypts), -np.deg2rad(clock_ang), 
+    (x_rot, y_rot) = rotate_points((xpts, ypts), -np.deg2rad(clock_ang),
                                     pivot_point = (xpts[refidx], ypts[refidx]))
-    
+
     # Fit an intermediate polynomial to wavelength versus position
     delta_x = (x_rot - x_rot[refidx]) * pixel_pitch_mm
     pos_err = cent_errs * pixel_pitch_mm
@@ -539,16 +540,16 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
     np.testing.assert_almost_equal(lambda_func_x(pos_ref), ref_wavlen)
     displacements_mm = delta_x - pos_ref
 
-    # Fit two polynomials:  
-    # 1. Displacement from the band center along the dispersion axis as a 
-    #    function of wavelength  
+    # Fit two polynomials:
+    # 1. Displacement from the band center along the dispersion axis as a
+    #    function of wavelength
     # 2. Wavelength as a function of displacement along the dispersion axis
     (pfit_pos_vs_wavlen,
      cov_pos_vs_wavlen) = np.polyfit(x = (wavlens - ref_wavlen) / ref_wavlen,
                                       y = displacements_mm, deg = 3, w = weights, cov=True)
-    
+
     (pfit_wavlen_vs_pos,
-     cov_wavlen_vs_pos) = np.polyfit(x = displacements_mm, y = wavlens, deg = 3, 
+     cov_wavlen_vs_pos) = np.polyfit(x = displacements_mm, y = wavlens, deg = 3,
                                       w = weights, cov=True)
 
     return pfit_pos_vs_wavlen, cov_pos_vs_wavlen, pfit_wavlen_vs_pos, cov_wavlen_vs_pos
@@ -569,7 +570,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
     prism = centroid_psf.ext_hdr['DPAMNAME']
     if prism not in ['PRISM2', 'PRISM3']:
         raise ValueError("prism must be PRISM2 or PRISM3")
-    
+
     #PRISM2 not yet available
     if prism == 'PRISM2':
         subband_list = ['2A', '2B', '2C', '2F']
@@ -579,7 +580,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
         subband_list = ['3A', '3B', '3C', '3D', '3E', '3G']
         ref_cfam = '3'
         ref_wavlen = 730.
-    
+
     ##bandpass_frac = fwhm/cen_wave, needed for the wavelength calibration
     band_list = read_cent_wave(ref_cfam, filter_file = band_center_file)
     band_center = band_list[0]
@@ -618,7 +619,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
 
     (pfit_pos_vs_wavlen, cov_pos_vs_wavlen,
      pfit_wavlen_vs_pos, cov_wavlen_vs_pos) = fit_dispersion_polynomials(
-            center_wavel, xfit, yfit, 
+            center_wavel, xfit, yfit,
             yfit_err, clocking_angle, ref_wavlen, pixel_pitch_um = pixel_pitch_um
      )
 
@@ -689,23 +690,23 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     n_wav_odd = n_wav + (n_wav % 2 == 0) # force odd array length
     wavlen_beg = ref_wavlen - n_wav_odd // 2 * delta_wav
     wavlen_end = ref_wavlen + n_wav_odd // 2 * delta_wav
-    
+
     wavlens = np.linspace(wavlen_beg, wavlen_end, n_wav_odd)
     #np.testing.assert_almost_equal(wavlens[n_wav_odd // 2], ref_wavlen)
-        
+
     # Use a Monte Carlo error propagation to estimate the uncertainties of the
-    # values in the wavelength calibration map and the position lookup table. 
+    # values in the wavelength calibration map and the position lookup table.
     polyfit_order = len(disp_model.pos_vs_wavlen_polycoeff) - 1
     prand_wavlen_pos = np.zeros((ntrials, polyfit_order + 1))
     prand_pos_wavlen = np.zeros((ntrials, polyfit_order + 1))
-    
-    # Add the wavelength zero-point position error to the dispersion profile uncertainty 
+
+    # Add the wavelength zero-point position error to the dispersion profile uncertainty
     d_zp_err_mm = np.sqrt((wave_zeropoint.get('xerr') * np.cos(theta))**2 + (wave_zeropoint.get('yerr') * np.sin(theta))**2) * pixel_pitch_mm
     # To translate the position uncertainty to wavelength uncertainty, use the second coefficient of the
     # the wavelength(x) polynomial, which is the linear dispersion coefficient (units nm/mm).
-    d_zp_err_nm = disp_model.wavlen_vs_pos_polycoeff[2] * d_zp_err_mm 
+    d_zp_err_nm = disp_model.wavlen_vs_pos_polycoeff[2] * d_zp_err_mm
     disp_model.pos_vs_wavlen_cov[polyfit_order, polyfit_order] += d_zp_err_mm**2
-    disp_model.wavlen_vs_pos_cov[polyfit_order, polyfit_order] += d_zp_err_nm**2 
+    disp_model.wavlen_vs_pos_cov[polyfit_order, polyfit_order] += d_zp_err_nm**2
 
     # Generate random polynomial coefficients consistent with the covariance
     # matrix in the dispersion profile.
@@ -715,26 +716,26 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
 
     ws = (wavlens - wavlen_c) / wavlen_c
     ds_mm = pos_vs_wavlen_poly(ws)
-    
+
     ds_vander = np.vander(ds_mm, N=polyfit_order+1, increasing=False)
     ws_vander = np.vander(ws, N=polyfit_order+1, increasing=False)
-    
+
     wavlen_rand_eval = prand_wavlen_pos.dot(ds_vander.T)
     pos_rand_eval = prand_pos_wavlen.dot(ws_vander.T)
     pos_eval_std = np.std(pos_rand_eval, axis=0)
     wavlen_eval_std = np.std(wavlen_rand_eval, axis=0)
-    
+
     pos_vs_wavlen_err_func = interp1d(wavlens, pos_eval_std, fill_value="extrapolate")
     wavlen_vs_pos_err_func = interp1d(ds_mm, wavlen_eval_std, fill_value="extrapolate")
 
     # Wavelength uncertainty map
     wavlen_uncertainty_map = wavlen_vs_pos_err_func(dd_mm)
 
-    # Build the position lookup table 
+    # Build the position lookup table
     ds_eval = pos_vs_wavlen_poly((wavlens - wavlen_c) / wavlen_c) / pixel_pitch_mm
     xs_eval, ys_eval = (x_refwav + ds_eval * np.cos(theta),
                         y_refwav + ds_eval * np.sin(theta))
-    
+
     xs_uncertainty, ys_uncertainty = (np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.cos(theta)),
                                       np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.sin(theta)))
 
@@ -964,14 +965,14 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the line spread function LSF
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
     band = np.array([s.upper() for s in band])
-        
+
     if "3D" in band:
         nar_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
     elif "2C" in band:
         nar_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
     else:
         raise AttributeError("No narrowband frames found in input dataset")
-    
+
     wave = []
     wave_err = []
     fwhm = []
@@ -995,7 +996,7 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
         flux_profile.append(flux_p)
         wavlens.append(wav)
         g_init = models.Gaussian1D(amplitude = np.max(flux_p),
-                                   mean = wav[halfheight], 
+                                   mean = wav[halfheight],
                                    stddev = guess_fwhm/(2 * np.sqrt(2*np.log(2))))
         fit_g = fitting.LevMarLSQFitter(calc_uncertainties=True)
         g_func = fit_g(g_init, x = wav, y = flux_p)
@@ -1006,7 +1007,7 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
         peak_err.append(errors[0])
         wave_err.append(errors[1])
         fwhm_err.append(errors[2] * 8 * np.log(2))
-    
+
     mean_peak = np.mean(np.array(peak))
     mean_fwhm = np.mean(np.array(fwhm))
     mean_wave = np.mean(np.array(wave))
@@ -1017,10 +1018,10 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
     mean_wavlens = np.mean(np.array(wavlens), axis = 0)
     prihdr = nar_dataset[0].pri_hdr.copy()
     exthdr = nar_dataset[0].ext_hdr.copy()
-    
+
     ls_data = np.array([mean_wavlens, mean_flux_profile])
     gauss_profile = np.array([mean_peak, mean_wave, mean_fwhm, mean_peak_err, mean_wave_err, mean_fwhm_err])
-    
+
     line_spread = LineSpread(ls_data, pri_hdr = prihdr, ext_hdr = exthdr, gauss_par = gauss_profile, input_dataset = nar_dataset)
     return line_spread
 
@@ -1228,3 +1229,69 @@ def slit_transmission(
     return (slit_trans_interp,
         target_pix[0],
         target_pix[1])
+
+def star_pos_spec(
+    dataset,
+    r_lamD=0,
+    phi_deg=0,
+    ):
+    """ Find the position of the star using the information from the satellite
+      spot. The position of the satellite spot on EXCAM is given by the
+      zero-point solution. Using the information of the commanded position of
+      the satellite spot with respect the occulted star, one can infer the
+      location of the occulted star.
+      The relative of the satellite spot with respect the occulted star is given
+      in polar coordinates. The radial distance of the satellite spot is measured
+      in units lambda/D, with lambda the band reference wavelength, either 730 nm
+      (band 3) or 660 nm (band 2), and D=2.4 m. The polar angle is measured in
+      degrees, with 0 degrees meaning +X and 90 degrees meaning +Y. The polar
+      coordinates of the satellite spot are translated into (X,Y) EXCAM pixel
+      coordinates, which can then be subtracted from the zero-point solution to
+      infer the location of the occulted star.
+
+      Args:
+        dataset (Dataset): A Dataset with L3 spectroscopy frames.
+        r_lamD (float): Radial distance of the satellite spot on EXCAM with respect
+        the occulted star in units of lambda/D.
+        phi_deg (float): Polar angle of the satellite spot on EXCAM with respect
+        the occulted star in degrees, with 0 degrees meaning +X and 90 degrees
+        meaning +Y.
+
+      Returns:
+          Input Dataset with updated keywords recording the satellite position
+          in EXCAM pixels.
+    """ 
+    # Primary diameter of Roman Space Telescope in meters
+    D_m=2.4
+    # Basic checks
+    if r_lamD <= 0:
+        raise ValueError('r_lamD must be positive. Usual range is 3-20.')
+
+    dataset_cp = dataset.copy()
+    for img in dataset_cp:
+        # Check it is L3
+        if img.ext_hdr['DATALVL'] != 'L3':
+            raise ValueError(f"The data level must be L3 and it is {img.ext_hdr['DATALVL']}")
+        cfamname = img.ext_hdr['CFAMNAME']
+        # Extract satellite spot wavelength from L3 extended header (it must be present)
+        try:
+            lam_sat_nm = float(img.ext_hdr['WAVLEN0'])
+        except:
+            raise ValueError(f'WAVLEN0 keyword missing in L3 frame.')
+
+        # Conversion from EXCAM pixels to milliarsec
+        plate_scale_mas = img.ext_hdr['PLTSCALE']
+        # Conversion from radians to milliarsec (mas/rad)
+        rad2mas = 180/np.pi*3600*1e3
+        # lam/D in radians
+        lamDrad = 1e-9*lam_sat_nm/D_m
+        # lam/D to EXCAM pixels
+        r_pix = r_lamD*lamDrad*rad2mas/plate_scale_mas
+        # EXCAM (X,Y) coordinates
+        X_pix = r_pix * np.cos(phi_deg*np.pi/180)
+        Y_pix = r_pix * np.sin(phi_deg*np.pi/180)
+        # Update estimated location of the occulted star
+        img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_X'] - X_pix
+        img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y'] - Y_pix
+
+    return dataset_cp

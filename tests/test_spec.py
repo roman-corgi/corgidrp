@@ -3,11 +3,13 @@ import numpy as np
 import pytest
 import logging
 import warnings
+import sys
 from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
 import corgidrp.spec as steps
-from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
+from corgidrp.mocks import (create_default_L2b_headers,
+    create_default_L3_headers, get_formatted_filename)
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
 from datetime import datetime, timedelta
@@ -413,7 +415,7 @@ def test_add_wavelength_map():
     pos_lookup = Table(out_im.hdu_list["poslookup"].data)
     assert len(pos_lookup.colnames) == 5
     assert np.allclose(pos_lookup.columns[0].data, ref_wavlen, atol = 65)
-    
+
 def test_determine_zeropoint():
     """
     test the calculation of the wavelength zeropoint position of narrowband/satspot data
@@ -516,10 +518,10 @@ def test_determine_zeropoint():
         )
         psf_images.append(image)
 
-    #test it as non-coronagraphic observation of only psf narrowband, so no science frames
+    #test it as non-coronagraphic observation of only psf narrowband, so no science frames, a print statement should be raised
     input_dataset2 = Dataset(psf_images)
-    with pytest.raises(AttributeError):
-        dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2)
+    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2)
+    assert len(dataset) > 0
     
     #only 1 fake science dataset frame
     input_dataset2.frames[0].ext_hdr['CFAMNAME'] = '3'
@@ -894,6 +896,56 @@ def test_linespread_function():
     assert line_spread_bad.fwhm == pytest.approx(line_spread.fwhm, rel = 0.1)
     assert line_spread_bad.amplitude == pytest.approx(line_spread.amplitude, rel = 0.1)
 
+def test_spec_psf_subtraction():
+    """
+    test the spec PSF subtraction 
+    """
+    # first testing helper function 
+    r=np.array([[0,0,1,2,3,0,0,0],[0,0,0,0,0,0,0,0]])
+    s = np.roll(r,1)
+    shift = steps.get_shift_correlation(r,s)
+    shifted_s = np.roll(s, shift, axis=(0,1))
+    assert np.array_equal(shifted_s, r)
+
+    # now the PSF subtraction
+    ref_filepath = os.path.join("tests", "test_data", "spectroscopy", "sim_rdi_L1", "spec_sim_rdi_reference_L1.fits")
+    sci_filepath = os.path.join("tests", "test_data", "spectroscopy", "sim_rdi_L1", "spec_sim_rdi_target_L1.fits")
+    input_dset = Dataset([sci_filepath, ref_filepath]) 
+    input_dset[0].pri_hdr['PSFREF'] = 0
+    input_dset[1].pri_hdr['PSFREF'] = 1
+    for img in input_dset:
+        img.data = img.data.astype(float)
+        img.dq = np.zeros_like(img.data, dtype=int)
+        # pick a location for this test, roughly center of imaged area
+        img.ext_hdr['WV0_X'] = 1600
+        img.ext_hdr['WV0_Y'] = 547
+        np.random.seed(1039)
+        img.err = np.random.randint(0,100, (1, img.data.shape[0],img.data.shape[1])).astype(float)
+    input_dset[1].dq[533, 1600] = 1
+    output = l3_to_l4.spec_psf_subtraction(input_dset)
+    shift = steps.get_shift_correlation(input_dset[1].data, input_dset[0].data)
+    # check that the subtraction actually decreased the residual because of the rescaling in each band
+    assert np.mean(input_dset[0].data - input_dset[1].data) > np.mean(output[0].data) 
+    assert output[0].dq[533-shift[0], 1600-shift[1]] == 1
+    # example where we know the exact solution
+    for img in input_dset:
+        img.data = np.zeros_like(img.data, dtype=float)
+        img.dq = np.zeros_like(img.data, dtype=int)
+        # pick a location for this test, roughly center of imaged area
+        img.ext_hdr['WV0_X'] = 1600
+        img.ext_hdr['WV0_Y'] = 547
+        img.err = np.zeros((1,img.data.shape[0],img.data.shape[1])).astype(float)
+    input_dset[0].data[547-20:547+20, 1600-30:1600+30] = 1000.
+    input_dset[0].data[547-20:547+20, 1100-30:1100+30] = 2000.
+    # ref shifted by 400 columns and scaled differently in each band
+    input_dset[1].data[547-20:547+20, 1200-30:1200+30] = 3000.
+    input_dset[1].data[547-20:547+20, 700-30:700+30] = 10000.
+    input_dset[1].dq[547, 1200] = 1 # this shouldn't mess it up
+    output = l3_to_l4.spec_psf_subtraction(input_dset)
+    # should be perfect subtraction in both bands
+    assert(output[0].data.all()==0)
+
+
 def test_extract_spec():
     """
     test the l3_to_l4.extract_spec() function, that extracts the 1D spectrum 
@@ -1209,16 +1261,63 @@ def test_slit_trans():
         # VAP requirement
         logger.info(f'The peak value of the slit transmission is {slit_trans_out.max()}')
         logger.info(f'The mean value of the slit transmission is {slit_trans_out.mean()}')
-        
+
+def test_star_pos():
+    """ Test translation of a position on EXCAM measured in polar coordinates
+      to rectangular ones. """
+    # Define some default L3 Dataset (data are not used)
+    pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
+    ext_hdr['CFAMNAME'] = '3F'
+    # Setup some wavelength zero-point values
+    ext_hdr['WV0_X'], ext_hdr['WV0_Y'] = 38, 42
+    # Add expected wavelength for a satellite spot (for UT, it could be any)
+    ext_hdr['WAVLEN0'] = 753.83
+    # Arbitrary number of images
+    image_list = []
+    for _ in range(12):
+        data_2d = np.zeros([ext_hdr['NAXIS1'], ext_hdr['NAXIS2']])
+        err = np.zeros_like(data_2d)
+        dq = np.zeros_like(data_2d, dtype=int)
+        image_list += [Image(
+            data_or_filepath=data_2d,
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
+            err=err,
+            dq=dq)]
+    dataset_in = Dataset(image_list)       
+
+    # Set the seed
+    np.random.seed(0)
+    # Test it a few times
+    for _ in range(10):
+        # Assign some random location on EXCAM to a satellite spot
+        [x_in, y_in] = np.random.randint(-300, 300, 2)
+        # Get the radial distance in lamD for band 3 (730 nm), default plate scale
+        # 21.8 mas/pix and D=2.4 m
+        mas2lamD = 1e-3/3600/180*np.pi*2.4/(ext_hdr['WAVLEN0']*1e-9)
+        r_lamD_in = np.sqrt(x_in**2 + y_in**2) * 21.8 * mas2lamD
+        phi_deg_in = np.arctan2(y_in, x_in)*180/np.pi
+        dataset_out = steps.star_pos_spec(
+            dataset_in,
+            r_lamD=r_lamD_in,
+            phi_deg=phi_deg_in)
+
+        # Check if the satellite position has been properly recorded in all images
+        for img in dataset_out:
+            assert ext_hdr['WV0_X'] - x_in == pytest.approx(img.ext_hdr['STARLOCX'], abs=1e-10), 'The X position of the star is incorrect.'
+            assert ext_hdr['WV0_Y'] - y_in == pytest.approx(img.ext_hdr['STARLOCY'], abs=1e-10), 'The Y position of the star is incorrect.'
+       
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
+    test_spec_psf_subtraction()
+    test_determine_zeropoint()
     test_psf_centroid()
     test_dispersion_model()
     test_read_cent_wave()
     test_calibrate_dispersion_model()
-    test_determine_zeropoint()
     test_add_wavelength_map()
     test_star_spec_registration()
     test_linespread_function()
     test_extract_spec()
     test_slit_trans()
+    test_star_pos()
