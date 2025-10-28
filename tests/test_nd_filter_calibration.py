@@ -10,7 +10,6 @@ import copy
 from termcolor import cprint
 
 import corgidrp
-from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 import corgidrp.l2b_to_l3 as l2b_tol3
@@ -139,6 +138,9 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
             add_gauss_noise=add_gauss_noise_val,
             noise_scale=1.0, file_save=True
         )
+        # ND filter calibration requires photoelectron/s units (L3 data)
+        flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
+        flux_image.ext_hdr['DATALVL'] = 'L3'
         dim_star_images.append(flux_image)
     return dim_star_images
 
@@ -181,6 +183,9 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
                     add_gauss_noise=add_gauss_noise_val,
                     noise_scale=1.0, file_save=True
                 )
+                # ND filter calibration requires photoelectron/s units (L3 data)
+                flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
+                flux_image.ext_hdr['DATALVL'] = 'L3'
                 bright_star_images.append(flux_image)
     return bright_star_images
 
@@ -272,11 +277,14 @@ def test_nd_filter_calibration_object_with_calspec(bright_files_cached):
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None, calspec_files = [calspec_filepath])
     
-    results.save(filedir=default_cal_dir)
+    test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
+    os.makedirs(test_output_dir, exist_ok=True)
+    
+    results.save(filedir=test_output_dir)
 
-    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_ndf_cal.fits')]
+    nd_files = [fn for fn in os.listdir(test_output_dir) if fn.endswith('_ndf_cal.fits')]
     assert nd_files, "No NDFilterOD files were generated."
-    with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
+    with fits.open(os.path.join(test_output_dir, nd_files[0])) as hdul:
         primary_hdr = hdul[0].header
         ext_hdr = hdul[1].header
         assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE not True."
@@ -293,11 +301,14 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
     
-    results.save(filedir=default_cal_dir)
+    test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
+    os.makedirs(test_output_dir, exist_ok=True)
+    
+    results.save(filedir=test_output_dir)
 
-    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_ndf_cal.fits')]
+    nd_files = [fn for fn in os.listdir(test_output_dir) if fn.endswith('_ndf_cal.fits')]
     assert nd_files, "No NDFilterOD files were generated."
-    with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
+    with fits.open(os.path.join(test_output_dir, nd_files[0])) as hdul:
         primary_hdr = hdul[0].header
         ext_hdr = hdul[1].header
         assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE not True."
@@ -313,19 +324,23 @@ def test_output_filename_convention(stars_dataset_cached):
     # Make a copy of the dataset and retrieve expected values.
     ds_copy = copy.deepcopy(stars_dataset_cached)
 
+    # Create test output directory
+    test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
+    os.makedirs(test_output_dir, exist_ok=True)
+
     # Construct the expected filename from the last input dataset filename.
     expected_filename = re.sub('_l[0-9].', '_ndf_cal', stars_dataset_cached[-1].filename)
-    full_expected_path = os.path.join(default_cal_dir, expected_filename)
+    full_expected_path = os.path.join(test_output_dir, expected_filename)
 
     # Create the calibration product
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
         fluxcal_factor=None
     )
-    results.save(filedir=default_cal_dir)
+    results.save(filedir=test_output_dir)
     
     assert os.path.exists(full_expected_path), (
-        f"Expected file {expected_filename} not found in {default_cal_dir}."
+        f"Expected file {expected_filename} not found in {test_output_dir}."
     )
     print("The nd_filter_calibration product file exists and meets the expected naming convention.")
 
@@ -430,6 +445,10 @@ def test_multiple_nd_levels(dim_dir, output_dir, test_od):
 
     dim_filepaths = glob.glob(os.path.join(dim_dir, "*")) # use cached dim images
     dim_images = [Image(path) for path in dim_filepaths]
+    # Update BUNIT for ND filter calibration requirements
+    for img in dim_images:
+        img.ext_hdr['BUNIT'] = 'photoelectron/s'
+        img.ext_hdr['DATALVL'] = 'L3'
     combined_files = bright_images + dim_images
     combined_dataset = Dataset(combined_files)
 
@@ -456,6 +475,10 @@ def test_nd_filter_calibration_with_fluxcal(dim_dir, stars_dataset_cached, phot_
     assert len(dim_filepaths) > 0, f"No FITS files found in {dim_dir}"
     
     dim_images = [Image(path) for path in dim_filepaths]
+    # Update BUNIT for ND filter calibration requirements
+    for img in dim_images:
+        img.ext_hdr['BUNIT'] = 'photoelectron/s'
+        img.ext_hdr['DATALVL'] = 'L3'
 
     # Convert list of Image objects into a Dataset
     dim_dataset = Dataset(dim_images)
@@ -641,9 +664,9 @@ def test_calculate_od_at_new_location(output_dir):
     clean_frame_entry = Image(data_or_filepath=clean_image_data, pri_hdr=cframe_prihdr, 
                               ext_hdr=cframe_exthdr)
 
-    # Default FPAM/FSAM transformations
-    fpamfsamcal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))    
+    # Default FPAM/FSAM transformations (use mock instead of loading from file which
+    # seems to be inconsistent)
+    fpamfsamcal = mocks.create_mock_fpamfsam_cal(save_file=False)    
 
     # Call the function under test
     interpolated_od = nd_filter_calibration.calculate_od_at_new_location(

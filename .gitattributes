@@ -7,6 +7,8 @@ tests/test_data/mock_northup.fits filter=lfs diff=lfs merge=lfs -text
 tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits filter=lfs diff=lfs merge=lfs -text
 tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits filter=lfs diff=lfs merge=lfs -text
 tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R3C1SLIT_PRISM3_offset_array.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/sim_rdi_L1/spec_sim_rdi_reference_L1.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/sim_rdi_L1/spec_sim_rdi_target_L1.fits filter=lfs diff=lfs merge=lfs -text
 corgidrp/data/header_formats/*.csv filter=lfs diff=lfs merge=lfs -text
 corgidrp/data/spectroscopy/templates/spec_unocc_noslit_offset_prism3_3d_12.fits filter=lfs diff=lfs merge=lfs -text
 corgidrp/data/spectroscopy/templates/spec_unocc_noslit_prism3_filtersweep_0.fits filter=lfs diff=lfs merge=lfs -text
@@ -16,3 +18,8 @@ corgidrp/data/spectroscopy/templates/spec_unocc_noslit_prism3_filtersweep_03.fit
 corgidrp/data/spectroscopy/templates/spec_unocc_noslit_prism3_filtersweep_04.fits filter=lfs diff=lfs merge=lfs -text
 corgidrp/data/spectroscopy/templates/spec_unocc_noslit_prism3_filtersweep_05.fits filter=lfs diff=lfs merge=lfs -text
 corgidrp/data/spectroscopy/templates/spec_unocc_r1c2slit_offset_prism3_3d_12.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/spec_reg_fsm_offset_template_cfam3F_00.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/spec_reg_fsm_offset_template_cfam3F_01.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/spec_reg_fsm_offset_template_cfam3F_02.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/spec_reg_fsm_offset_template_cfam3F_03.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/spectroscopy/spec_reg_fsm_offset_template_cfam3F_04.fits filter=lfs diff=lfs merge=lfs -text
