@@ -49,7 +49,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Check if input folder already contains the expected files
-    existing_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l3.fits')))
+    existing_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l3_.fits')))
     
     if existing_files:
         logger.info(f"Found {len(existing_files)} existing L3 files in {e2edata_path}")
@@ -100,14 +100,14 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
         psf_images.append(image_spot)
         
         # Save images to disk with timestamped filenames
-        def get_formatted_filename(pri_hdr, dt, suffix="l3"):
+        def get_formatted_filename(pri_hdr, dt, suffix="l3_"):
             visitid = pri_hdr.get('VISITID', '0000000000000000000')
             now = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
             return f"cgi_{visitid}_{now}_{suffix}.fits"
 
         basetime = datetime.now()
         for i, img in enumerate(psf_images):
-            fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l3")
+            fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l3_")
             fpath = os.path.join(e2edata_path, fname)
             
             # Save as FITS
@@ -118,7 +118,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
                 fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
 
         # Load saved files back into dataset
-        saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l3.fits')))
+        saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l3_.fits')))
         assert len(saved_files) > 0, f'No saved L3 files found in {e2edata_path}!'
 
         l3_dataset_with_filenames = Dataset(saved_files)
@@ -137,7 +137,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
     for i, frame in enumerate(l3_dataset_with_filenames):
         frame_info = f"L3 Frame {i}"
         
-        check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l3.fits', frame_info, logger, data_level = 'l3')
+        check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l3_.fits', frame_info, logger, data_level = 'l3_')
         check_dimensions(frame.data, (81, 81), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3'}, frame_info, logger)
@@ -198,8 +198,8 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Validate output product
-    out_file = get_latest_cal_file(e2eoutput_path, '*_l4.fits', logger)
-    check_filename_convention(os.path.basename(out_file), 'cgi_*_l4.fits', "spec l4 output product", logger, data_level = "l4")
+    out_file = get_latest_cal_file(e2eoutput_path, '*_l4_.fits', logger)
+    check_filename_convention(os.path.basename(out_file), 'cgi_*_l4_.fits', "spec l4 output product", logger, data_level = "l4_")
 
     with fits.open(out_file) as hdul:        
         verify_hdu_count(hdul, 6, "spec l4 output product", logger)
