@@ -4587,7 +4587,78 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
     return image
+    
+def create_mock_stokes_image_l4(
+        image_size=256,
+        fwhm=3,
+        I0=1e4,
+        badpixel_fraction=1e-3,
+        p=0.1,
+        theta_deg=20.0,
+        seed=None
+):
+    """
+    Generate mock L4 Stokes cube with Gaussian source and controlled polarization.
 
+    Args:
+        image_size (int): H x W size
+        fwhm (float): Gaussian FWHM in pixels
+        I0 (float): Peak intensity
+        badpixel_fraction (float): Fraction of bad pixels
+        p (float): Fractional polarization
+        theta_deg (float): Polarization angle in degrees
+        seed (int, optional): Random seed
+
+    Returns:
+        Image: Stokes cube Image object with data, err, dq, and headers
+    """
+    rng = np.random.default_rng(seed)
+
+    # Gaussian source
+    y, x = np.mgrid[0:image_size, 0:image_size]
+    x0 = y0 = image_size / 2.0
+    sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2)))
+    I_map = I0 * np.exp(-((x - x0)**2 + (y - y0)**2) / (2.0 * sigma**2))
+    I_map_err = np.sqrt(I_map)  # simple photon noise
+
+    # bad pixels
+    n_pixels = I_map.size
+    n_bad = int(n_pixels * badpixel_fraction)
+    dq = np.zeros_like(I_map, dtype=int)
+    if n_bad > 0:
+        idx_bad = rng.choice(n_pixels, size=n_bad, replace=False)
+        dq.flat[idx_bad] = 1
+        I_map.flat[idx_bad] *= -1
+
+    theta_obs = np.radians(theta_deg)
+    Q_map = I_map * p * np.cos(2 * theta_obs)
+    U_map = I_map * p * np.sin(2 * theta_obs)
+    stokes_cube = np.stack([I_map, Q_map, U_map])
+
+    stokes_err = np.stack([
+        I_map_err,
+        I_map_err,
+        I_map_err
+    ])
+    stokes_cube += rng.normal(0.0, stokes_err)
+
+    # headers
+    try:
+        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L4_headers()
+    except:
+        prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
+
+    dq_out = np.broadcast_to(dq, stokes_cube.shape).copy()
+
+    return Image(
+        stokes_cube,
+        pri_hdr=prihdr,
+        ext_hdr=exthdr,
+        err=stokes_err,
+        dq=dq_out,
+        err_hdr=errhdr,
+        dq_hdr=dqhdr
+    )
 def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
     """
     Create a mock Image with [I, Q, U, V] planes for testing.
