@@ -11,6 +11,7 @@ import pandas as pd
 import astropy.io.fits as fits
 from astropy.io.fits import Header
 from astropy.time import Time
+from astropy.io.fits import Header
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
@@ -4377,7 +4378,7 @@ def get_formatted_filename(dt, visitid):
     return f"cgi_{visitid}_{timestamp}_l2b.fits"
 
 def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
-                                       left_image_value=1, right_image_value=1, alignment_angle=None):
+                                       left_image_value=1, right_image_value=1, image_separation_arcsec=7.5, alignment_angle=None):
     """
     Creates mock L2b polarimetric data with two polarized images placed on the larger
     detector frame. Image size and placement depends on the wollaston used and the observing mode.
@@ -4388,6 +4389,7 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
         observing_mode (optional, string): observing mode of the coronagraph
         left_image_value (optional, int): value to fill inside the radius of the left image, corresponding to 0 or 45 degree polarization
         right_image_value (optional, int): value to fill inside the radius of the right image, corresponding to 90 or 135 degree polarization
+        image_separation_arcsec (optional, float): Separation between the two polarized images in arcseconds.        
         alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
             defaults to 0 for WP1 and 45 for WP2
     
@@ -4399,8 +4401,6 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     
     # create initial blank frame
     image_data = np.zeros(shape=(1024, 1024))
-
-    image_separation_arcsec = 7.5
 
     #determine radius of the images
     if observing_mode == 'NFOV':
@@ -4420,8 +4420,8 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
         else:
             alignment_angle = 45
     angle_rad = alignment_angle * (np.pi / 180)
-    displacement_x = int(round((7.5 * np.cos(angle_rad)) / (2 * 0.0218)))
-    displacement_y = int(round((7.5 * np.sin(angle_rad)) / (2 * 0.0218)))
+    displacement_x = int(round((image_separation_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
+    displacement_y = int(round((image_separation_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
     center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
     center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
 
@@ -4436,6 +4436,154 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     exthdr['CFAMNAME'] = cfamname
     exthdr['DPAMNAME'] = dpamname
     exthdr['LSAMNAME'] = observing_mode
+    exthdr['FSMPRFL'] = observing_mode
+
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+    return image
+
+def create_mock_l2b_polarimetric_image_with_satellite_spots(
+    image_center=(512, 512), 
+    dpamname='POL0', 
+    observing_mode='NFOV',
+    left_image_value=1, 
+    right_image_value=1,
+    image_separation_arcsec = 7.5,
+    alignment_angle=None,
+    image_shape =(1024,1024),
+    star_center = None, 
+    bg_sigma = 1e-4,  #Default values from test_l2b_to_l3
+    bg_offset = 0,  #Default values from test_l2b_to_l3
+    gaussian_fwhm = 2,  #Default values from test_l2b_to_l3
+    separation = 14.79,  #Default values from test_l2b_to_l3
+    angle_offset=0, #Default values from test_l2b_to_l3
+    amplitude_multiplier=10):
+    """
+    Creates a mock L2b polarimetric image with two separated polarized channels (left and right), 
+    where each channel contains four synthetic Gaussian satellite spots.
+
+    The function first establishes the geometry and background of the dual-channel image
+    and then overlays the satellite spot pattern, centered on the middle of each channel.
+
+    Args:
+        image_center (optional, tuple(int, int)): Pixel location (x, y) where the two images 
+            are centered on the larger detector frame.
+        dpamname (optional, string): Name of the Wollaston prism used, accepted values are 
+            'POL0' and 'POL45'.
+        observing_mode (optional, string): Observing mode of the coronagraph.
+        left_image_value (optional, int): Constant value to fill inside the radius of the left 
+            polarized image (0 or 45 degree polarization), before adding spots.
+        right_image_value (optional, int): Constant value to fill inside the radius of the right 
+            polarized image (90 or 135 degree polarization), before adding spots.
+        image_separation_arcsec (optional, float): Separation between the two polarized images in arcseconds.        
+        alignment_angle (optional, float): The angle in degrees of how the two polarized images 
+            are aligned with respect to the horizontal. Defaults to 0 for POL0 and 45 for POL45.
+        image_shape (tuple of int, optional): The (ny, nx) shape of the detector array.
+        star_center (list of tuple of float, optional):  
+            displacement (dx, dy) from the center of each channel at which the four Gaussians will be centered for each slice.
+            If None, defaults to the center of each channel.
+        bg_sigma (float, optional): Standard deviation of the background Gaussian noise applied 
+            to the entire image.
+        bg_offset (float, optional): Constant background level added to the entire image.
+        gaussian_fwhm (float, optional): Full width at half maximum (FWHM, in pixels) for the 
+            2D Gaussian satellite spots.
+        separation (float, optional): Radial separation (in pixels) of each satellite spot 
+            from the center of its respective polarized image.
+        angle_offset (float, optional): An additional angle (in degrees) to rotate the four 
+            satellite spots in each channel (counterclockwise).
+        amplitude_multiplier (float, optional): Multiplier for the amplitude of the Gaussians 
+            relative to `bg_sigma`. By default, amplitude is 10 * `bg_sigma`.
+    
+    Returns:
+        corgidrp.data.Image: The simulated L2b polarimetric image containing satellite spots.
+    """
+
+    # Create polarimetric image
+    # Adapted from create_mock_l2b_polarimetric_image
+    assert dpamname in ['POL0', 'POL45'], \
+    "Invalid prism selected, must be 'POL0' or 'POL45'"
+    
+    # create initial frame
+    image_data = np.random.normal(loc=0, scale=bg_sigma, size=image_shape) + bg_offset
+
+    pixel_scale = 0.0218 #arcsec/pixel
+    primary_d = 2.363114 #meters
+    arcseconds_per_radian = 180 * 3600 / np.pi
+    #determine radius of the images
+    if observing_mode == 'NFOV':
+        cfamname = '1F'
+        outer_radius_lambda_over_d = 9.7
+        central_wavelength =0.5738 * 1e-6
+        radius = int(round((outer_radius_lambda_over_d * (central_wavelength / primary_d) * arcseconds_per_radian) / pixel_scale))
+    elif observing_mode == 'WFOV':
+        cfamname = '4F'
+        outer_radius_lambda_over_d = 20.1
+        central_wavelength = 0.8255e-6 #meters
+        radius = int(round((outer_radius_lambda_over_d * ((central_wavelength) / primary_d) * arcseconds_per_radian) / pixel_scale))
+    else:
+        cfamname = '1F'
+        radius = int(round(1.9 / pixel_scale))
+    
+    #determine the center of the two images
+    if alignment_angle is None:
+        if dpamname == 'POL0':
+            alignment_angle = 0
+        else:
+            alignment_angle = 45
+    angle_rad = alignment_angle * (np.pi / 180)
+    displacement_x = int(round((image_separation_arcsec * np.cos(angle_rad)) / (2 * pixel_scale)))
+    displacement_y = int(round((image_separation_arcsec * np.sin(angle_rad)) / (2 * pixel_scale)))
+    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+
+    #fill the location where the images are with 1s
+    y, x = np.indices(image_shape)
+    image_data[((x - center_left[0])**2) + ((y - center_left[1])**2) <= radius**2] = left_image_value
+    image_data[((x - center_right[0])**2) + ((y - center_right[1])**2) <= radius**2] = right_image_value
+    
+    # Add satellite spots in each image
+    # Adapted from create_synthetic_satellite_spot_image
+
+    # Define the default position angles (in degrees) and add any additional angle offset.
+    default_angles_deg = np.array([0, 90, 180, 270])
+    angles_rad = np.deg2rad(default_angles_deg + angle_offset)
+
+    # Compute the amplitude and convert FWHM to standard deviation.
+    amplitude = amplitude_multiplier * bg_sigma
+    # FWHM = 2 * sqrt(2 * ln(2)) * stddev  --> stddev = FWHM / (2*sqrt(2*ln(2)))
+    stddev = gaussian_fwhm / (2 * np.sqrt(2 * np.log(2)))
+    y_indices, x_indices = np.indices(image_shape)
+
+    for idx, center in enumerate([center_left, center_right]):
+        center_x, center_y = center
+        if star_center is not None:
+            center_x  = center_x + star_center [idx][0]
+            center_y = center_y + star_center[idx][1]
+
+        for angle in angles_rad:
+            dx = separation * np.cos(angle)
+            dy = separation * np.sin(angle)
+            gauss_center_x = center_x + dx
+            gauss_center_y = center_y + dy
+
+            gauss = Gaussian2D(
+                amplitude=amplitude,
+                x_mean=gauss_center_x,
+                y_mean=gauss_center_y,
+                x_stddev=stddev,
+                y_stddev=stddev,
+                theta=0,
+            )
+            image_data += gauss(x_indices, y_indices)
+
+    #create L2b headers
+    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    #define necessary header keywords
+    exthdr['CFAMNAME'] = cfamname
+    exthdr['DPAMNAME'] = dpamname
+    exthdr['LSAMNAME'] = observing_mode
+    exthdr['FSMPRFL'] = observing_mode
+    prihdr["SATSPOTS"] = 1
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
     return image
@@ -4511,3 +4659,49 @@ def create_mock_stokes_image_l4(
         err_hdr=errhdr,
         dq_hdr=dqhdr
     )
+def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
+    """
+    Create a mock Image with [I, Q, U, V] planes for testing.
+
+    Args:
+        n (int): Image height (pixels).
+        m (int): Image width (pixels).
+        fwhm (float): FWHM of the Gaussian PSF used for I.
+        amp (float): Peak amplitude of the Gaussian PSF.
+        pfrac (float): Polarization fraction. Q, U are scaled by this fraction.
+        bg (float): Background level added to the image.
+
+    Returns:
+        Image: Mock Image object with data of shape [4, n, m], err and dq arrays included.
+    """
+
+
+    y, x = np.mgrid[0:n, 0:m]
+    x0, y0 = 0.5*(m-1), 0.5*(n-1)
+
+    sigma = fwhm / (2*np.sqrt(2*np.log(2)))
+    r2 = (x-x0)**2 + (y-y0)**2
+    I = bg + amp * np.exp(-0.5*r2/sigma**2)
+
+    phi = np.arctan2(y-y0, x-x0)
+    Q = -pfrac * I * np.cos(2*phi)
+    U = -pfrac * I * np.sin(2*phi)
+    V = np.zeros_like(I)
+
+    cube = np.stack([I, Q, U, V], axis=0)
+
+    pri_hdr = Header()
+    ext_hdr = Header()
+    ext_hdr["STARLOCX"] = float(x0)
+    ext_hdr["STARLOCY"] = float(y0)
+
+    return Image(
+        cube,
+        pri_hdr=pri_hdr,
+        ext_hdr=ext_hdr,
+        err=np.zeros_like(cube),
+        dq=np.zeros(cube.shape, dtype=np.uint16),
+        err_hdr=Header(),
+        dq_hdr=Header(),
+    )
+
