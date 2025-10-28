@@ -532,33 +532,6 @@ def do_psf_subtraction(input_dataset,
         # Assign derotated dq and err maps
         derotated_output_dataset.all_dq[:] = dq_out_collapsed
         derotated_output_dataset.all_err[:] = err_out_collapsed
-                
-        # # Plots
-        # if output.shape[1] > 1:
-        #     import matplotlib.pyplot as plt
-        #     r1 = derotated_output_dataset.all_data[0,0]
-        #     fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-        #     im0 = axes[0].imshow(r1,origin='lower')
-        #     plt.colorbar(im0,ax=axes[0],shrink=0.8)
-        #     axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-        #     axes[0].set_title(f'PSF Sub Result R1: {dataset_for_derotation[0].pri_hdr["ROLL"]} deg')
-
-        #     r2 = derotated_output_dataset.all_data[1,0]
-        #     im1 = axes[1].imshow(r2,origin='lower')
-        #     plt.colorbar(im1,ax=axes[1],shrink=0.8)
-        #     axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-        #     axes[1].set_title(f'PSF Sub Result R2: {dataset_for_derotation[1].pri_hdr["ROLL"]} deg')
-
-        #     diff = r1 - r2
-        #     im2 = axes[2].imshow(diff,origin='lower')
-        #     plt.colorbar(im2,ax=axes[2],shrink=0.8)
-        #     axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-        #     axes[2].set_title('Difference')
-
-        #     fig.suptitle(f'{klip_kwargs["mode"]}, (kl modes: {numbasis})')
-
-        #     plt.show()
-        #     plt.close()
 
         collapsed_psfsub_data = collapse_data(derotated_output_dataset.all_data, 
                                               pixel_weights=None, axis=0, 
@@ -682,17 +655,19 @@ def do_psf_subtraction(input_dataset,
     return dataset_out
 
 
-def northup(input_dataset,use_wcs=True,rot_center='im_center'):
+def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
     The northup function looks for 'STARLOCX' and 'STARLOCY' for the star location. If not, it uses the center of the FoV as the star location.
     With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
     TODO: Update pixel locations that are saved in the header!
+    TODO: Add tests for behavior of new_center
     
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level) - now handles pol datasets shapes
         use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
 	    rot_center: 'im_center', 'starloc', or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header. 
+        new_center: location (xy) to move the center to after rotation.
 
     Returns:
         corgidrp.data.Dataset: North is up, East is left
@@ -715,13 +690,13 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         
         # define the center for rotation
         if rot_center == 'im_center':
-            xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
+            xcen, ycen = [(xlen-1) / 2., (ylen-1) / 2.]
         elif rot_center == 'starloc':
             try:
                 xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY'] 
             except KeyError:
                 warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
-                xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
+                xcen, ycen = [(xlen-1) / 2., (ylen-1) / 2.]
         else:
             xcen = rot_center[0]
             ycen = rot_center[1]
@@ -756,7 +731,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
             roll_angle = processed_data.pri_hdr['ROLL']
 
         # derotate
-        sci_derot = derotate_arr(sci_data,roll_angle, xcen,ycen,astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        sci_derot = derotate_arr(sci_data,roll_angle, xcen,ycen,astr_hdr=astr_hdr,new_center=new_center) # astr_hdr is corrected at above lines
         
         new_all_data.append(sci_derot)
         log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
@@ -771,7 +746,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         #############
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = derotate_arr(err_data,roll_angle, xcen,ycen) # err data shape is 1x1024x1024
+        err_derot = derotate_arr(err_data,roll_angle, xcen,ycen,new_center=new_center) # err data shape is 1x1024x1024
         new_all_err.append(err_derot)
 
         #############
@@ -780,7 +755,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
         dq_data = processed_data.dq
 
         dq_derot = derotate_arr(dq_data,roll_angle,xcen,ycen,
-                                is_dq=True)
+                                is_dq=True,new_center=new_center)
 
         new_all_dq.append(dq_derot)
         ############
