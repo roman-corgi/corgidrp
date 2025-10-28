@@ -9,6 +9,7 @@ import datetime
 import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
+from astropy.io.fits import Header
 from astropy.time import Time
 from astropy.io.fits import Header
 import astropy.io.ascii as ascii
@@ -4633,3 +4634,135 @@ def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
         dq_hdr=Header(),
     )
 
+def create_mock_polarization_l3_dataset(
+        image_size=1024,
+        fwhm=100.0,
+        I0=1e4,
+        badpixel_fraction=1e-3,
+        fractional_error=None,
+        p=0.1,
+        theta_deg=20.0,
+        roll_angles=None,
+        prisms=None,
+        seed=None
+):
+    """
+    Generate mock L3 polarimetric datasets with controlled fractional polarization
+    and polarization angles, including optional bad pixels and configurable intensity.
+
+    Each dataset can contain multiple images corresponding to different Wollaston
+    prisms and roll angles. For each image, a dual-beam simulation is performed
+    to produce the two analyzer channels (e.g., 0/90 deg for POL0, 45/135 deg for POL45),
+    and observational noise is applied according to the specified fractional error
+    or photon noise.
+
+    Args:
+        image_size (int): Size of the square image (H x W).
+        fwhm (float): Full width at half maximum of the Gaussian source in pixels.
+        I0 (float): Peak intensity of the Gaussian source.
+        badpixel_fraction (float): Fraction of randomly placed bad pixels (0-1).
+        fractional_error (float or None): Fractional Gaussian noise; if None, photon noise is used.
+        p (float): Fractional polarization (0-1).
+        theta_deg (float): Polarization angle in degrees.
+        roll_angles (list of float, optional): Roll angles per prism. Defaults to [-15, 15, -15, 15].
+        prisms (list of str, optional): Prism orientations ('POL0', 'POL45'). Defaults to ['POL0','POL0','POL45','POL45'].
+        seed (int, optional): Random seed.
+
+    Returns:
+        Dataset: Synthetic Dataset object containing Image objects with data, error maps,
+                 and data quality arrays.
+
+    Raises:
+        ValueError: If roll_angles and prisms lengths mismatch or prism name is invalid.
+    """
+
+    # --- defaults ---
+    if roll_angles is None:
+        roll_angles = [-15, 15, -15, 15]
+    if prisms is None:
+        prisms = ['POL0', 'POL0', 'POL45', 'POL45']
+
+    if len(roll_angles) != len(prisms):
+        raise ValueError("roll_angles and prisms must have the same length")
+
+    rng = np.random.default_rng(seed)
+
+    # --- Gaussian source ---
+    y, x = np.mgrid[0:image_size, 0:image_size]
+    x0 = y0 = image_size / 2.0
+    sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2)))
+    I_map = I0 * np.exp(-((x - x0)**2 + (y - y0)**2) / (2.0 * sigma**2))
+
+    # --- bad pixels ---
+    n_pixels = I_map.size
+    n_bad = int(n_pixels * badpixel_fraction)
+    dq = np.zeros_like(I_map, dtype=int)
+    if n_bad > 0:
+        idx_bad = rng.choice(n_pixels, size=n_bad, replace=False)
+        dq.flat[idx_bad] = 1
+        I_map.flat[idx_bad] *= -1
+
+    cubes_out = []
+    cubes_out_err = []
+
+    for roll, prism in zip(roll_angles, prisms):
+        theta_obs = np.radians(theta_deg + roll)
+        Q_map = I_map * p * np.cos(2 * theta_obs)
+        U_map = I_map * p * np.sin(2 * theta_obs)
+
+        # dual-beam prism simulation
+        if prism == 'POL0':
+            pair_cube = np.stack([0.5 * (I_map + Q_map),
+                                  0.5 * (I_map - Q_map)])
+        elif prism == 'POL45':
+            pair_cube = np.stack([0.5 * (I_map + U_map),
+                                  0.5 * (I_map - U_map)])
+        else:
+            raise ValueError(f"Invalid prism name: {prism}")
+
+        # error map
+        if fractional_error is not None:
+            pair_err = abs(pair_cube) * fractional_error
+        else:
+            pair_err = np.sqrt(abs(pair_cube))
+
+        pair_cube += rng.normal(loc=0.0, scale=pair_err)
+
+        cubes_out.append(pair_cube)
+        cubes_out_err.append(pair_err)
+
+    # convert to arrays
+    cubes_out = np.array(cubes_out)
+    cubes_out_err = np.array(cubes_out_err)
+
+    # --- headers ---
+    try:
+        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    except:
+        prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
+
+    # --- broadcast dq ---
+    dq_out = np.broadcast_to(dq, cubes_out.shape).copy()
+
+    Image_out = []
+    for i, (roll, prism) in enumerate(zip(roll_angles, prisms)):
+        prihdr_i = prihdr.copy()
+        exthdr_i = exthdr.copy()
+        prihdr_i['ROLL'] = roll
+        exthdr_i['DPAMNAME'] = prism
+        Image_out.append(
+            Image(
+                cubes_out[i],
+                pri_hdr=prihdr_i,
+                ext_hdr=exthdr_i,
+                err=cubes_out_err[i],
+                dq=dq_out[i],
+                err_hdr=errhdr,
+                dq_hdr=dqhdr
+            )
+        )
+        
+    Dataset_out = Dataset(Image_out)
+
+    # --- create Image object ---
+    return Dataset_out
