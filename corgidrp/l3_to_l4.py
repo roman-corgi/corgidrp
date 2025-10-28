@@ -772,21 +772,25 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
     band = np.array([s.upper() for s in band])
+    with_science = True
     if len(band) < 2:
-        raise AttributeError("there needs to be at least 1 narrowband and 1 science band prism frame in the dataset\
-                             to determine the wavelength zero point")
+        if "3D" not in band and "2C" not in band:
+            raise AttributeError("there needs to be at least 1 narrowband and 1 science band prism frame in the dataset\
+                                  to determine the wavelength zero point")
+        else:
+            with_science = False
+            print("No science frames found in input dataset")
         
     if "3D" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
-        sci_dataset = narrow_dataset[int(np.nonzero(band != "3D")[0].item())]
+        if with_science:
+            sci_dataset = narrow_dataset[int(np.nonzero(band != "3D")[0].item())]
     elif "2C" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
-        sci_dataset = narrow_dataset[int(np.nonzero(band != "2C")[0].item())]
+        if with_science:
+            sci_dataset = narrow_dataset[int(np.nonzero(band != "2C")[0].item())]
     else:
         raise AttributeError("No narrowband frames found in input dataset")
-    
-    if len(sci_dataset) == 0:
-        raise AttributeError("No science frames found in input dataset")
     
     if xcent_guess is not None and ycent_guess is not None:
         n = len(sat_dataset)
@@ -810,7 +814,7 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
         y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
     x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
     y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
-    if return_all:
+    if return_all or with_science == False:
         sci_dataset = dataset
 
     for frame in sci_dataset:
