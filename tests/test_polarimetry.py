@@ -5,7 +5,10 @@ from corgidrp.data import Dataset, Image
 import pytest
 import corgidrp.mocks as mocks
 import corgidrp.l2b_to_l3 as l2b_to_l3
+import corgidrp.l3_to_l4 as l3_to_l4
+
 import corgidrp.data as data
+from corgidrp import star_center
 from corgidrp.pol import calc_stokes_unocculted
 
 def test_image_splitting():
@@ -92,7 +95,85 @@ def test_image_splitting():
     with pytest.raises(ValueError):
         invalid_output = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=682)
 
-        
+def test_align_frames():
+    """
+    Test that polarimetric images are align correctly on the POL 0 subdataset
+    """
+    # Generate mock data
+    injected_position_pol0 = [(2, - 1), (-2, 1)]
+    injected_position_pol45 = [(1, - 2), (2, -1)]
+
+    image_WP1_nfov_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(dpamname='POL0',
+     observing_mode='NFOV',
+     left_image_value=1,
+     right_image_value=2,
+     star_center=injected_position_pol0,
+     amplitude_multiplier=1000)
+    image_WP1_nfov= mocks.create_mock_l2b_polarimetric_image(dpamname='POL0',
+     observing_mode='NFOV',
+     left_image_value=1,
+     right_image_value=2)
+
+    image_WP2_nfov_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(dpamname='POL45',
+     observing_mode='NFOV',
+     left_image_value=1,
+     right_image_value=2,
+     star_center=injected_position_pol45,
+     amplitude_multiplier=1000)
+    image_WP2_nfov = mocks.create_mock_l2b_polarimetric_image(dpamname='POL45',
+     observing_mode='NFOV',
+     left_image_value=1,
+     right_image_value=2)
+    input_dataset_nfov = data.Dataset([image_WP1_nfov_sp, image_WP1_nfov, image_WP2_nfov_sp, image_WP2_nfov])
+    input_dataset_autocrop_nfov = l2b_to_l3.split_image_by_polarization_state(input_dataset_nfov)
+    
+    # Find the star
+    # Checks on finding the star are done in test_find_star.py
+    dataset_with_center = l3_to_l4.find_star(input_dataset_autocrop_nfov, drop_satspots_frames=False)
+
+    starloc_pol0 = (dataset_with_center.frames[0].ext_hdr['STARLOCX'], dataset_with_center.frames[0].ext_hdr['STARLOCY'])
+    starloc_pol45 = (dataset_with_center.frames[2].ext_hdr['STARLOCX'], dataset_with_center.frames[2].ext_hdr['STARLOCY'])
+    
+                                              
+    injected_x_slice_0, injected_y_slice_0 = (dataset_with_center.frames[0].data[0].shape[0]//2 + injected_position_pol0[0][0],
+                                            dataset_with_center.frames[0].data[0].shape[1]//2 + injected_position_pol0[0][1])   
+    
+    injected_x_slice_45, injected_y_slice_45 = (dataset_with_center.frames[1].data[0].shape[0]//2 + injected_position_pol45[0][0],
+                                                dataset_with_center.frames[1].data[0].shape[1]//2 + injected_position_pol45[0][1])
+
+    assert np.isclose(injected_x_slice_45, starloc_pol45[0], atol=0.1), \
+        f"Expected {injected_x_slice_45}, got {starloc_pol45[0]}"
+    assert np.isclose(injected_y_slice_45, starloc_pol45[1], atol=0.1), \
+        f"Expected {injected_y_slice_45}, got {starloc_pol45[1]}"
+
+    # Test that the difference between the measured stars is the difference between the injected positions. 
+    assert np.isclose( starloc_pol0[0] - starloc_pol45[0], injected_x_slice_0 - injected_x_slice_45, atol=0.1)
+    assert np.isclose( starloc_pol0[1] - starloc_pol45[1], injected_y_slice_0 - injected_y_slice_45, atol=0.1)
+    # Align the pol 45 data with the pol 0 data 
+    output_dataset_aligned= l3_to_l4.align_polarimetry_frames(dataset_with_center)
+    
+    # Check that the pol 45 frames are now aligned on the pol 0 frames
+    star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+        img_ref=output_dataset_aligned.frames[3].data[0],
+        img_sat_spot=output_dataset_aligned.frames[2].data[0],
+        star_coordinate_guess=(output_dataset_aligned.frames[3].data[0].shape[1]//2, output_dataset_aligned.frames[3].data[0].shape[0]//2),
+        thetaOffsetGuess=0,
+        satellite_spot_parameters=star_center.satellite_spot_parameters_defaults['NFOV']
+    )       
+    assert np.isclose(star_xy[0], starloc_pol0[0], atol=0.1), \
+            f" Expected {starloc_pol0[0]}, got {star_xy[0]}"
+    assert np.isclose(star_xy[1], starloc_pol0[1], atol=0.1), \
+            f" Expected {starloc_pol0[1]}, got {star_xy[1]}"
+
+    # Check that every frame is aligned on the same  on STARLOC
+    starloc = []
+
+    for frame in output_dataset_aligned.frames:
+        starloc.append((frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']))
+
+    assert all(location == starloc_pol0 for location in starloc), \
+        "All frames should have the same star location."
+
 def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
     """
     Test the `calc_stokes_unocculted` function using synthetic L3 polarimetric datasets.
@@ -178,4 +259,5 @@ def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
 
 if __name__ == "__main__":
     test_image_splitting()
+    test_align_frames()
     test_calc_stokes_unocculted()
