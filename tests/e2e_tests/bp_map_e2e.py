@@ -30,7 +30,7 @@ def fix_str_for_tvac(
     for file in list_of_fits:
         fits_file = fits.open(file)
         exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] > 0:
+        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         if type(exthdr['EMGAIN_C']) is str:
             exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
@@ -393,7 +393,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
     # e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Downloads/DRP E2E Test Files v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     # Argument parser setup

@@ -1042,7 +1042,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2' #'/Users/kevinludwick/Documents/ssc_tvac_test/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
@@ -1053,6 +1053,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
+    test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
     test_l2bpc_dataformat_e2e(e2edata_dir, outputdir)
     test_dark_dataformat_e2e(e2edata_dir, outputdir)
     test_l2a_dataformat_e2e(e2edata_dir, outputdir)
@@ -1061,7 +1062,6 @@ if __name__ == "__main__":
     test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
     test_astrom_dataformat_e2e(e2edata_dir, outputdir)
-    test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
     test_flat_dataformat_e2e(e2edata_dir, outputdir)
     test_ct_dataformat_e2e(e2edata_dir, outputdir)
     test_ctmap_dataformat_e2e(e2edata_dir, outputdir)

@@ -29,7 +29,7 @@ def fix_str_for_tvac(
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] > 0:
+        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         if type(exthdr['EMGAIN_C']) is str:
             exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
