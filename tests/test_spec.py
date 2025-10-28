@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 import logging
 import warnings
+import sys
 from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
@@ -414,7 +415,7 @@ def test_add_wavelength_map():
     pos_lookup = Table(out_im.hdu_list["poslookup"].data)
     assert len(pos_lookup.colnames) == 5
     assert np.allclose(pos_lookup.columns[0].data, ref_wavlen, atol = 65)
-    
+
 def test_determine_zeropoint():
     """
     test the calculation of the wavelength zeropoint position of narrowband/satspot data
@@ -517,10 +518,10 @@ def test_determine_zeropoint():
         )
         psf_images.append(image)
 
-    #test it as non-coronagraphic observation of only psf narrowband, so no science frames, a warning should be raised
+    #test it as non-coronagraphic observation of only psf narrowband, so no science frames, a print statement should be raised
     input_dataset2 = Dataset(psf_images)
-    with pytest.warns(UserWarning):
-        dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2)
+    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2)
+    assert len(dataset) > 0
     
     #only 1 fake science dataset frame
     input_dataset2.frames[0].ext_hdr['CFAMNAME'] = '3'

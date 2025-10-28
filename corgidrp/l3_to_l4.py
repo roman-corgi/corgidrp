@@ -777,7 +777,7 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
                                   to determine the wavelength zero point")
         else:
             with_science = False
-            warnings.warn("No science frames found in input dataset")
+            print("No science frames found in input dataset")
         
     if "3D" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
