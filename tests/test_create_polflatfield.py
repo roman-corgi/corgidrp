@@ -42,14 +42,15 @@ def test_create_polflatfield_pol0_neptune():
 
     # creating flatfield for neptune for band 1
     planet='neptune'; band='1'
-    #creates a planet image with spatial variation of polarization for POL0 or POL45
-    pol_vardataset=pol_vardataset=mocks.create_spatial_pol(data_set,nr=60,pfov_size=120,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet='neptune',band='1',prism='POL0')
-    #creates raster scanned images for POL0 or POL45
-    polflat_dataset = mocks.create_onsky_rasterscans(pol_vardataset,filedir=file_dir,planet='neptune',band='1',im_size=800,d=50, n_dith=2,radius=55,snr=250,snr_constant=4.55,flat_map=None, raster_radius=40, raster_subexps=1)
-     #creates flatfield for POL0 or POL45
-    polflatfield_pol0=polflat.create_onsky_pol_flatfield(polflat_dataset,planet='neptune',band='1',up_radius=55,im_size=1024,N=1,rad_mask=1.26, planet_rad=50, n_pix=174, n_pad=0, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,prism='POL0')
+    #creates a planet image with spatial variation of polarization for POL0 
+    pol_image=mocks.create_spatial_pol(data_set,nr=60,pfov_size=140,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet='neptune',band='1',dpamname='POL0')
+    #creates raster scanned images for POL0 
+    polraster_dataset = mocks.create_onsky_rasterscans(pol_image,filedir=file_dir,planet='neptune',band='1',im_size=800,d=50, n_dith=2,radius=55,snr=250,snr_constant=4.55,flat_map=None, raster_radius=40, raster_subexps=1)
+     #creates flatfield for POL0 
+    polflatfield_pol0=polflat.create_onsky_pol_flatfield(polraster_dataset,planet='neptune',band='1',up_radius=55,im_size=1024,N=1,rad_mask=1.26, planet_rad=50, n_pix=174, n_pad=0,fwhm_guess=20, sky_annulus_rin=2, sky_annulus_rout=4,plate_scale=0.0218,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,dpamname='POL0')
 
     assert np.nanmean(polflatfield_pol0.data) == pytest.approx(1, abs=1e-2)
+    print(np.size(np.where(np.isnan(polflatfield_pol0.data))))
     assert np.size(np.where(np.isnan(polflatfield_pol0.data))) == 0 # no bad pixels
     
     # check the flat can be pickled (for CTC operations)
@@ -66,7 +67,7 @@ def test_create_polflatfield_pol0_neptune():
     ###### perform flat division
     # load in the flatfield
     # check that the filename is what we expect
-    flat_filename = polflat_dataset[-1].filename.replace("_l2a", "_flt_cal")
+    flat_filename = polraster_dataset[-1].filename.replace("_l2a", "_flt_cal")
     flat_filepath = os.path.join(calibdir, flat_filename)
     polflatfield_pol0 = data.FlatField(flat_filepath)
 
@@ -127,12 +128,14 @@ def test_create_polflatfield_pol45_neptune():
     filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
     data_set = data.Dataset(filenames)
 
-    # creating flatfield for neptune for band 1
+   # creating flatfield for neptune for band 1
     planet='neptune'; band='1'
-    pol_vardataset=pol_vardataset=mocks.create_spatial_pol(data_set,nr=60,pfov_size=120,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet='neptune',band='1',prism='POL45')
-    polflat_dataset = mocks.create_onsky_rasterscans(pol_vardataset,filedir=file_dir,planet='neptune',band='1',im_size=800,d=50, n_dith=2,radius=55,snr=250,snr_constant=4.55,flat_map=None, raster_radius=40, raster_subexps=1)
-    polflatfield_pol45=polflat.create_onsky_pol_flatfield(polflat_dataset,planet='neptune',band='1',up_radius=55,im_size=1024,N=1,rad_mask=1.26, planet_rad=50, n_pix=174, n_pad=0, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,prism='POL45')
-
+    #creates a planet image with spatial variation of polarization for POL45
+    pol_image=mocks.create_spatial_pol(data_set,nr=60,pfov_size=140,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet='neptune',band='1',dpamname='POL45')
+    #creates raster scanned images for POL45
+    polraster_dataset = mocks.create_onsky_rasterscans(pol_image,filedir=file_dir,planet='neptune',band='1',im_size=800,d=50, n_dith=2,radius=55,snr=250,snr_constant=4.55,flat_map=None, raster_radius=40, raster_subexps=1)
+     #creates flatfield for  POL45
+    polflatfield_pol45=polflat.create_onsky_pol_flatfield(polraster_dataset,planet='neptune',band='1',up_radius=55,im_size=1024,N=1,rad_mask=1.26, planet_rad=50, n_pix=174, n_pad=0,fwhm_guess=20, sky_annulus_rin=2, sky_annulus_rout=4,plate_scale=0.0218,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,dpamname='POL45')
     assert np.nanmean(polflatfield_pol45.data) == pytest.approx(1, abs=1e-2)
     assert np.size(np.where(np.isnan(polflatfield_pol45.data))) == 0 # no bad pixels
     
@@ -150,7 +153,7 @@ def test_create_polflatfield_pol45_neptune():
     ###### perform flat division
     # load in the flatfield
     # check that the filename is what we expect
-    flat_filename = polflat_dataset[-1].filename.replace("_l2a", "_flt_cal")
+    flat_filename = polraster_dataset[-1].filename.replace("_l2a", "_flt_cal")
     flat_filepath = os.path.join(calibdir, flat_filename)
     polflatfield_pol45 = data.FlatField(flat_filepath)
 
@@ -164,8 +167,6 @@ def test_create_polflatfield_pol45_neptune():
     
     # perform checks after the flat divison for one of the dataset
     assert(flat_filename in "".join(polflatdivided_dataset[0].ext_hdr["HISTORY"]))
-
-
     
     # check the propagated errors for one of the dataset
     assert polflatdivided_dataset[0].err_hdr["Layer_2"] == "FlatField_error"
@@ -209,9 +210,9 @@ def test_create_polflatfield_pol0_uranus():
     filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
     data_set = data.Dataset(filenames)
     planet='uranus'; band='1'
-    pol_vardataset=mocks.create_spatial_pol(data_set,nr=90,pfov_size=200,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet='uranus',band='1',prism='POL0')
-    polflat_dataset = mocks.create_onsky_rasterscans(pol_vardataset,filedir=file_dir,planet='uranus',band='1',im_size=900,d=65, n_dith=2,radius=90,snr=250,snr_constant=9.66,flat_map=None, raster_radius=40, raster_subexps=1)
-    polflatfield_pol0=polflat.create_onsky_pol_flatfield(polflat_dataset,planet='uranus',band='1',up_radius=55,im_size=1024,N=1,rad_mask=1.26, planet_rad=50, n_pix=174, n_pad=0, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,prism='POL0')
+    pol_image=mocks.create_spatial_pol(data_set,nr=90,pfov_size=200,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet='uranus',band='1',dpamname='POL0')
+    polraster_dataset = mocks.create_onsky_rasterscans(pol_image,filedir=file_dir,planet='uranus',band='1',im_size=900,d=65, n_dith=2,radius=90,snr=250,snr_constant=9.66,flat_map=None, raster_radius=40, raster_subexps=1)
+    polflatfield_pol0=polflat.create_onsky_pol_flatfield(polraster_dataset,planet='uranus',band='1',up_radius=55,im_size=1024,N=1,rad_mask=1.26, planet_rad=50, n_pix=174, n_pad=0, fwhm_guess=25,sky_annulus_rin=2, sky_annulus_rout=4,plate_scale=0.0218,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,dpamname='POL0')
 
     assert np.nanmean(polflatfield_pol0.data) == pytest.approx(1, abs=1e-2)
     assert np.size(np.where(np.isnan(polflatfield_pol0.data))) == 0 # no bad pixels
@@ -230,7 +231,7 @@ def test_create_polflatfield_pol0_uranus():
     ###### perform flat division
     # load in the flatfield
     # check that the filename is what we expect
-    flat_filename = polflat_dataset[-1].filename.replace("_l2a", "_flt_cal")
+    flat_filename = polraster_dataset[-1].filename.replace("_l2a", "_flt_cal")
     flat_filepath = os.path.join(calibdir, flat_filename)
     polflatfield_pol0 = data.FlatField(flat_filepath)
 
@@ -289,9 +290,9 @@ def test_create_polflatfield_pol45_uranus():
     filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
     data_set = data.Dataset(filenames)
     planet='uranus'; band='1'
-    pol_vardataset=mocks.create_spatial_pol(data_set,nr=90,pfov_size=200,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet='uranus',band='1',prism='POL45')
-    polflat_dataset = mocks.create_onsky_rasterscans(pol_vardataset,filedir=file_dir,planet='uranus',band='1',im_size=900,d=65, n_dith=2,radius=90,snr=250,snr_constant=9.66,flat_map=None, raster_radius=40, raster_subexps=1)
-    polflatfield_pol45=polflat.create_onsky_pol_flatfield(polflat_dataset,planet='uranus',band='1',up_radius=55,im_size=1024,N=1,rad_mask=1.26, planet_rad=50, n_pix=174, n_pad=0, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,prism='POL45')
+    pol_image=mocks.create_spatial_pol(data_set,nr=90,pfov_size=200,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet='uranus',band='1',dpamname='POL45')
+    polraster_dataset = mocks.create_onsky_rasterscans(pol_image,filedir=file_dir,planet='uranus',band='1',im_size=900,d=65, n_dith=2,radius=90,snr=250,snr_constant=9.66,flat_map=None, raster_radius=40, raster_subexps=1)
+    polflatfield_pol45=polflat.create_onsky_pol_flatfield(polraster_dataset,planet='uranus',band='1',up_radius=55,im_size=1024,N=1,rad_mask=1.26, planet_rad=50, n_pix=174, n_pad=0,fwhm_guess=25, sky_annulus_rin=2, sky_annulus_rout=4,plate_scale=0.021,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,dpamname='POL45')
 
     assert np.nanmean(polflatfield_pol45.data) == pytest.approx(1, abs=1e-2)
     assert np.size(np.where(np.isnan(polflatfield_pol45.data))) == 0 # no bad pixels
@@ -310,7 +311,7 @@ def test_create_polflatfield_pol45_uranus():
     ###### perform flat division
     # load in the flatfield
     # check that the filename is what we expect
-    flat_filename = polflat_dataset[-1].filename.replace("_l2a", "_flt_cal")
+    flat_filename = polraster_dataset[-1].filename.replace("_l2a", "_flt_cal")
     flat_filepath = os.path.join(calibdir, flat_filename)
     polflatfield_pol45 = data.FlatField(flat_filepath)
 
