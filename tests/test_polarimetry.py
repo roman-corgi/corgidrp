@@ -207,12 +207,11 @@ def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
     
     # prisms and rolls
     prisms = np.append(np.tile('POL0', n_repeat//2), np.tile('POL45', n_repeat//2))
-    #rolls = np.append(np.tile([-15, 15], n_repeat//4), np.tile([-15, 15], n_repeat//4)) ; onskystokes = True
-    rolls = np.full(n_repeat, 0) ; onskystokes = False
+    rolls = np.full(n_repeat, 0)
 
     for p, theta in zip(p_input, theta_input):
         # --- Generate mock L2b image ---
-        dataset_polmock = mocks.create_mock_stokes_image_l3(
+        dataset_polmock = mocks.create_mock_polarization_l3_dataset(
             I0=1e10,
             p=p,
             theta_deg=theta,
@@ -221,7 +220,7 @@ def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
         )
 
         # --- Compute unocculted Stokes ---
-        Image_stokes_unocculted = calc_stokes_unocculted(dataset_polmock, onskystokes=onskystokes)
+        Image_stokes_unocculted = calc_stokes_unocculted(dataset_polmock)
 
         Q_obs = Image_stokes_unocculted.data[1]
         U_obs = Image_stokes_unocculted.data[2]

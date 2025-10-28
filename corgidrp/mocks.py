@@ -4634,8 +4634,8 @@ def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
         dq_hdr=Header(),
     )
 
-def create_mock_stokes_image_l3(
-        image_size=256,
+def create_mock_polarization_l3_dataset(
+        image_size=1024,
         fwhm=100.0,
         I0=1e4,
         badpixel_fraction=1e-3,
