@@ -315,7 +315,7 @@ def test_prop_err_dq_rdi():
     rolls = [0,0,0]
     mode = 'RDI'
     dq_thresh = 1
-    mock_sci,mock_ref = create_psfsub_dataset(1,2,rolls)
+    mock_sci,mock_ref = create_psfsub_dataset(1,2,rolls,data_shape=[101,101])
 
     mock_ref.all_dq[:,1,1] = 1      # This should become flagged bc all ref data will be flagged
     mock_ref.all_dq[0,55,55] = 1    # This should not become flagged
@@ -336,6 +336,7 @@ def test_prop_err_dq_rdi():
     assert dqs == pytest.approx(expected_dqs)
     assert np.all(np.isnan(errs))
 
+
 def test_prop_err_dq_adi():
     """
     Test that the expected dq and err arrays are produced in ADI.
@@ -344,19 +345,19 @@ def test_prop_err_dq_adi():
     rolls = [0,90]
     mode = 'ADI'
     dq_thresh = 4
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls)
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,data_shape=[101,101])
 
     mock_sci.all_dq[:,5,5] = 4     # This should become flagged bc all science data after derotation will be flagged
-    mock_sci.all_dq[:,94,5] = 4    # This should become flagged bc all science data after derotation will be flagged
-    mock_sci.all_dq[:,94,94] = 4    # This should not become flagged
+    mock_sci.all_dq[:,95,5] = 4    # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[:,95,95] = 4    # This should not become flagged
     mock_sci.all_dq[:,18,30] = 4   # This should not become flagged
     mock_sci.all_dq[0,98,1] = 4    # This should not become flagged
-    mock_sci.all_dq[:,44,45] = 1   # This should not become flagged
+    mock_sci.all_dq[:,44:55,44:55] = 1   # This should not become flagged
     mock_sci.all_dq[1,98,98] = 4   # This should not become flagged
     
     expected_dqs = np.zeros_like(mock_sci.all_dq[0])
     expected_dqs[5,5] = 1
-    expected_dqs[94,5] = 1
+    expected_dqs[95,5] = 1
 
     dqs, errs = combine.prop_err_dq(mock_sci,mock_ref,mode,dq_thresh)
 
@@ -367,6 +368,7 @@ def test_prop_err_dq_adi():
     # Check values of output dq & error arrays
     assert dqs == pytest.approx(expected_dqs)
     assert np.all(np.isnan(errs))
+
 
 def test_prop_err_dq_adirdi():
     """
@@ -376,27 +378,27 @@ def test_prop_err_dq_adirdi():
     rolls = [0,90,0,0]
     mode = 'ADI+RDI'
     dq_thresh = 4
-    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls)
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,data_shape=[101,101])
 
     mock_sci.all_dq[:,5,5] = 4     # This should become flagged bc all science data after derotation will be flagged
-    mock_sci.all_dq[:,94,5] = 4    # This should become flagged bc all science data after derotation will be flagged
-    mock_sci.all_dq[:,94,94] = 4    # This should not become flagged
+    mock_sci.all_dq[:,95,5] = 4    # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[:,95,95] = 4    # This should not become flagged
     mock_sci.all_dq[:,18,30] = 4   # This should not become flagged
     mock_sci.all_dq[0,98,1] = 4    # This should not become flagged
-    mock_sci.all_dq[:,44,45] = 1   # This should not become flagged
+    mock_sci.all_dq[:,44:55,44:55] = 1   # This should not become flagged (below threshold)
     mock_sci.all_dq[1,98,98] = 4   # This should not become flagged
     
     mock_ref.all_dq[:,1,1] = 4  # This should become flagged bc all ref data after derotation will be flagged
-    mock_ref.all_dq[:,98,1] = 4  # This should become flagged bc all ref data after derotation will be flagged
-    mock_ref.all_dq[:,98,98] = 4  # This should not become flagged
-    mock_ref.all_dq[:,7,9] = 1  # This should not become flagged
+    mock_ref.all_dq[:,99,1] = 4  # This should become flagged bc all ref data after derotation will be flagged
+    mock_ref.all_dq[:,99,99] = 4  # This should not become flagged
+    mock_ref.all_dq[:,7,9] = 1  # This should not become flagged (below threshold)
     mock_ref.all_dq[0,3,9] = 4  # This should not become flagged
 
     expected_dqs = np.zeros_like(mock_sci.all_dq[0])
     expected_dqs[5,5] = 1
-    expected_dqs[94,5] = 1
+    expected_dqs[95,5] = 1
     expected_dqs[1,1] = 1
-    expected_dqs[98,1] = 1
+    expected_dqs[99,1] = 1
 
     dqs, errs = combine.prop_err_dq(mock_sci,mock_ref,mode,dq_thresh)
 
@@ -408,40 +410,43 @@ def test_prop_err_dq_adirdi():
     assert dqs == pytest.approx(expected_dqs)
     assert np.all(np.isnan(errs))
 
+
 def test_prop_err_dq_misaligned():
 
     rolls = [0,90,0,0]
     mode = 'ADI+RDI'
     dq_thresh = 4
-    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls)
-    mock_sci[1].ext_hdr['STARLOCX'], mock_sci[1].ext_hdr['STARLOCY'] = mock_sci[0].ext_hdr['STARLOCX']+1, mock_sci[0].ext_hdr['STARLOCY']+1
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,data_shape=[101,101])
+
+    # Make the center of science frame 0 and reference frame 1 slightly offset from the image center
+    mock_sci[0].ext_hdr['STARLOCX'], mock_sci[0].ext_hdr['STARLOCY'] = mock_sci[1].ext_hdr['STARLOCX']+1, mock_sci[1].ext_hdr['STARLOCY']+1
     mock_ref[1].ext_hdr['STARLOCX'], mock_ref[1].ext_hdr['STARLOCY'] = mock_ref[0].ext_hdr['STARLOCX']+2, mock_ref[0].ext_hdr['STARLOCY']+2
 
-    mock_sci.all_dq[0,5,5] = 4     # This should become flagged bc all science data after derotation will be flagged
-    mock_sci.all_dq[0,94,5] = 4    # This should become flagged bc all science data after derotation will be flagged
-    mock_sci.all_dq[0,94,94] = 4    # This should not become flagged
-    mock_sci.all_dq[1,6,6] = 4     # This should become flagged bc all science data after derotation will be flagged
-    mock_sci.all_dq[1,95,6] = 4    # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[1,5,5] = 4     # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[1,95,5] = 4    # This should become flagged bc all science data after derotation will be flagged
     mock_sci.all_dq[1,95,95] = 4    # This should not become flagged
+    mock_sci.all_dq[0,6,6] = 4     # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[0,96,6] = 4    # This should become flagged bc all science data after derotation will be flagged
+    mock_sci.all_dq[0,96,96] = 4    # This should not become flagged
     mock_sci.all_dq[:,18,30] = 4   # This should not become flagged
-    mock_sci.all_dq[0,98,1] = 4    # This should not become flagged
-    mock_sci.all_dq[:,44,45] = 1   # This should not become flagged
-    mock_sci.all_dq[1,98,98] = 4   # This should not become flagged
+    mock_sci.all_dq[1,98,1] = 4    # This should not become flagged
+    mock_sci.all_dq[:,44:55,44:55] = 1   # This should not become flagged
+    mock_sci.all_dq[0,98,98] = 4   # This should not become flagged
     
     mock_ref.all_dq[0,2,2] = 4  # This should become flagged bc all ref data after derotation will be flagged
-    mock_ref.all_dq[0,97,2] = 4  # This should become flagged bc all ref data after derotation will be flagged
-    mock_ref.all_dq[0,97,97] = 4  # This should not become flagged
+    mock_ref.all_dq[0,98,2] = 4  # This should become flagged bc all ref data after derotation will be flagged
+    mock_ref.all_dq[0,98,98] = 4  # This should not become flagged
     mock_ref.all_dq[1,4,4] = 4  # This should become flagged bc all ref data after derotation will be flagged
-    mock_ref.all_dq[1,99,4] = 4  # This should become flagged bc all ref data after derotation will be flagged
-    mock_ref.all_dq[1,99,99] = 4  # This should not become flagged
+    mock_ref.all_dq[1,100,4] = 4  # This should become flagged bc all ref data after derotation will be flagged
+    mock_ref.all_dq[1,100,100] = 4  # This should not become flagged
     mock_ref.all_dq[:,7,9] = 1  # This should not become flagged
     mock_ref.all_dq[0,3,9] = 4  # This should not become flagged
 
     expected_dqs = np.zeros_like(mock_sci.all_dq[0])
     expected_dqs[5,5] = 1
-    expected_dqs[94,5] = 1
+    expected_dqs[95,5] = 1
     expected_dqs[2,2] = 1
-    expected_dqs[97,2] = 1
+    expected_dqs[98,2] = 1
 
     dqs, errs = combine.prop_err_dq(mock_sci,mock_ref,mode,dq_thresh)
 
@@ -459,13 +464,13 @@ def test_derotate_arr_2d():
     tests that the array remains unchanged when rotating by 0 degrees,
     tests that the array can be rotated around positions other than the center.
     """
-    test_arr = np.full((10,10),1.)
+    test_arr = np.full((11,11),1.)
     test_arr[1,1] = 10.
-    test_arr[5,5] = 10.
+    test_arr[5,4] = 10.
     test_arr[9,9] = np.nan
 
     # Check that the array stays the same if roll angle is 0
-    xcen, ycen = 4.5, 4.5
+    xcen, ycen = 5, 5
     roll_angle = 0
     derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     
@@ -475,30 +480,31 @@ def test_derotate_arr_2d():
     roll_angle = 90
     derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     expected_arr = np.ones_like(test_arr)
-    expected_arr[1,8] = 10.
-    expected_arr[5,4] = 10.
-    expected_arr[9,0] = np.nan
+    expected_arr[1,9] = 10.
+    expected_arr[4,5] = 10.
+    expected_arr[9,1] = np.nan
     assert derotated_arr[~np.isnan(derotated_arr)] == pytest.approx(expected_arr[~np.isnan(expected_arr)])
 
     # Check shifting to new center
-    new_center = (5.5,5.5)
+    new_center = (6,6)
     derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen,new_center=new_center)
     expected_arr = np.ones_like(test_arr)
-    expected_arr[2,9] = 10.
-    expected_arr[6,5] = 10.
+    expected_arr[2,10] = 10.
+    expected_arr[5,6] = 10.
+    expected_arr[10,2] = np.nan
     expected_arr[0,:] = np.nan
     expected_arr[:,0] = np.nan
     assert derotated_arr[~np.isnan(derotated_arr)] == pytest.approx(expected_arr[~np.isnan(expected_arr)])
     
 
     # Check that rotating around a location other than the array center works
-    xcen, ycen = 3.5, 3.5
+    xcen, ycen = 4, 4
     roll_angle = 90
     derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     expected_arr = np.ones_like(test_arr)
-    expected_arr[1,6] = 10.
-    expected_arr[5,2] = 10.
-    expected_arr[:,8:] = np.nan
+    expected_arr[1,7] = 10.
+    expected_arr[4,3] = 10.
+    expected_arr[:,9:] = np.nan
     assert derotated_arr[~np.isnan(derotated_arr)] == pytest.approx(expected_arr[~np.isnan(expected_arr)])
     
     pass
@@ -507,36 +513,36 @@ def test_derotate_arr_2d():
 def test_derotate_arr_nd():
     """Tests that 3D arrays can be derotated, and that dq arrays are treated correctly.
     """
-    test_arr = np.full((2,10,10),1.)
+    test_arr = np.full((2,11,11),1.)
     test_arr[:,1,1] = 10.
-    test_arr[1,5,5] = 10.
+    test_arr[1,4,5] = 10.
     test_arr[:,9,9] = np.nan
 
     # Check usual usage
-    xcen, ycen = 4.5, 4.5
+    xcen, ycen = 5, 5
     roll_angle = 90
     
     expected_arr = np.ones_like(test_arr)
-    expected_arr[:,1,8] = 10.
-    expected_arr[1,5,4] = 10.
-    expected_arr[:,9,0] = np.nan
+    expected_arr[:,1,9] = 10.
+    expected_arr[1,5,6] = 10.
+    expected_arr[:,9,1] = np.nan
 
     derotated_arr = combine.derotate_arr(test_arr,roll_angle, xcen,ycen)
     assert derotated_arr[~np.isnan(derotated_arr)] == pytest.approx(expected_arr[~np.isnan(expected_arr)])
 
     # Test dq array
-    test_dq = np.full((2,10,10),0.)
+    test_dq = np.full((2,11,11),0.)
     test_dq[:,1,1] = 1.
-    test_dq[1,5,5] = 1.
+    test_dq[1,4,5] = 1.
     test_dq = test_dq.astype(np.int64)
     
     # Check usual usage
-    xcen, ycen = 4.5, 4.5
+    xcen, ycen = 5, 5
     roll_angle = 90
     
     expected_dq = np.zeros_like(test_arr)
-    expected_dq[:,1,8] = 1.
-    expected_dq[1,5,4] = 1.
+    expected_dq[:,1,9] = 1.
+    expected_dq[1,5,6] = 1.
     expected_dq = expected_dq.astype(int)
     
     derotated_dq = combine.derotate_arr(test_dq,roll_angle, xcen,ycen,
@@ -548,9 +554,9 @@ def test_derotate_arr_nd():
 
 
 if __name__ == "__main__":
-    test_derotate_arr_2d()
-    test_derotate_arr_nd()
-    test_prop_err_dq_rdi()
-    test_prop_err_dq_adi()
-    test_prop_err_dq_adirdi()
+    # test_derotate_arr_2d()
+    # test_derotate_arr_nd()
+    # test_prop_err_dq_rdi()
+    # test_prop_err_dq_adi()
+    # test_prop_err_dq_adirdi()
     test_prop_err_dq_misaligned()

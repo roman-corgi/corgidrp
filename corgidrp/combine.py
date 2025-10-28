@@ -187,7 +187,7 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,new_center=None,astr_hdr=None,
     return derotated_arr
 
 
-def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1):
+def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1,new_center=None):
     """Applies logic to propagate the dq arrays and error arrays 
     in a dataset through PSF subtraction.
 
@@ -196,6 +196,7 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1):
         ref_dataset (corgidrp.data.Dataset): The input reference dataset (or None if ADI only).
         mode (str): The PSF subtraction mode, e.g. "ADI", "RDI", "ADI+RDI".
         dq_thresh (int): Minimum dq flag value to be considered a bad pixel. Defaults to 1.
+        new_center (tuple): New center (xy) to align all frames. Defaults to pixel closest to array center.
 
     Returns:
         tuple of np.array: the dq array and err array which should apply to the PSF subtraction output dataset.
@@ -205,20 +206,21 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1):
     # dq shape = (n_rolls, n_wls(optional), y, x)
     sci_input_dqs = sci_dataset.all_dq >= dq_thresh
     sci_input_errs = np.full_like(sci_dataset.all_err,np.nan) # Set errors to np.nan for now
-    
+
+    if new_center is None:
+        new_center = [int(sci_dataset.all_data.shape[-1]//2), int(sci_dataset.all_data.shape[-2]//2)]
+
     # Align frames
     aligned_sci_dq_arr = []
     aligned_sci_err_arr = []
     for i,frame in enumerate(sci_dataset):
         xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
-        if i == 0:
-            xcen0, ycen0 = xcen, ycen
-        frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY'] = xcen0, ycen0
+        frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY'] = new_center
         
         aligned_sci_dq = derotate_arr(sci_input_dqs[i],0, xcen,ycen,
-                                      new_center=(xcen0,ycen0),is_dq=True)
+                                      new_center=new_center,is_dq=True)
         aligned_sci_err = derotate_arr(sci_input_errs[i],0, xcen,ycen,
-                                      new_center=(xcen0,ycen0))
+                                      new_center=new_center)
         
         aligned_sci_dq_arr.append(aligned_sci_dq)
         aligned_sci_err_arr.append(aligned_sci_err)
@@ -234,14 +236,13 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1):
         aligned_ref_err_arr = []
         for i,frame in enumerate(ref_dataset):
             xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
-            if i == 0:
-                xcen0, ycen0 = xcen, ycen
-            frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY'] = xcen0, ycen0
+
+            frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY'] = new_center
             
             aligned_ref_dq = derotate_arr(ref_input_dqs[i],0, xcen,ycen,
-                                        new_center=(xcen0,ycen0),is_dq=True)
+                                        new_center=new_center,is_dq=True)
             aligned_ref_err = derotate_arr(ref_input_errs[i],0, xcen,ycen,
-                                        new_center=(xcen0,ycen0))
+                                        new_center=new_center)
             
             aligned_ref_dq_arr.append(aligned_ref_dq)
             aligned_ref_err_arr.append(aligned_ref_err)
