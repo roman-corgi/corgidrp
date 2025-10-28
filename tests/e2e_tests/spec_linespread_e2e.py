@@ -59,43 +59,33 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         
         # Load test data
         datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
-        file_path_science = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits")
         file_path_spot = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
 
-        assert os.path.exists(file_path_science), f'Test file not found: {file_path_science}'
         assert os.path.exists(file_path_spot), f'Test file not found: {file_path_spot}'
 
-        psf_array_science = fits.getdata(file_path_science, ext=0)
-        psf_array_spot = fits.getdata(file_path_spot, ext=0)[12]
-        
+        psf_array_spot = fits.getdata(file_path_spot, ext=0)
         # Create dataset with mock headers and noise
         pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
-        # add a fake satellite spot image from a small band simulation
-        image_spot = Image(psf_array_spot, pri_hdr = pri_hdr.copy(), ext_hdr = ext_hdr.copy(),
-                           err =np.zeros_like(psf_array_spot),
-                           dq=np.zeros_like(psf_array_spot, dtype=int))
-        image_spot.ext_hdr["CFAMNAME"] = "3D"
         # Add random noise for reproducibility
         np.random.seed(5)
         read_noise = 200
-        noisy_data_array = (np.random.poisson(np.abs(psf_array_science) / 2) + 
-                            np.random.normal(loc=0, scale=read_noise, size=psf_array_science.shape))
+        noisy_data_array = (np.random.poisson(np.abs(psf_array_spot) / 2) + 
+                            np.random.normal(loc=0, scale=read_noise, size=psf_array_spot.shape))
         
         # Create Image objects
         psf_images = []
-        for i in range(2):
-            image = Image(
+        for i in range(int(len(psf_array_spot)/2)):
+            image_spot = Image(
                 data_or_filepath=np.copy(noisy_data_array[i]),
                 pri_hdr=pri_hdr.copy(),
                 ext_hdr=ext_hdr.copy(),
                 err=np.zeros_like(noisy_data_array[i]),
                 dq=np.zeros_like(noisy_data_array[i], dtype=int)
             )
-            image.ext_hdr["CFAMNAME"] = "3"
-            psf_images.append(image)
-        psf_images.append(image_spot)
+            image_spot.ext_hdr["CFAMNAME"] = "3D"
+            psf_images.append(image_spot)
         
         # Save images to disk with timestamped filenames
         def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
