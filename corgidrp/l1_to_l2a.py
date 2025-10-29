@@ -158,7 +158,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image', detector_regions=None):
+                       mode='image', detector_regions=None, frac_frame_oversat=0.7):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -198,6 +198,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         detector_regions: (dict):  
             A dictionary of detector geometry properties.  Keys should be as 
             found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
+        frac_frame_oversat: (float):
+            Fraction of frame over sat_thresh at which we determine the frame is oversaturated
+            and will be discarded.
 
     Returns:
         corgidrp.data.Dataset:
@@ -210,7 +213,10 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         detector_regions = detector_areas
 
     # you should make a copy the dataset to start
-    crmasked_dataset = input_dataset.copy()
+    initial_dataset = input_dataset.copy()
+
+    # Remove images that are too saturated to remove cosmics on
+    crmasked_dataset = remove_sat_images(initial_dataset, sat_thresh, frac_frame_oversat)
 
     crmasked_cube = crmasked_dataset.all_data
 
@@ -361,3 +367,52 @@ def update_to_l2a(input_dataset):
     updated_dataset.update_after_processing_step(history_msg)
 
     return updated_dataset
+
+def remove_sat_images(input_dataset, sat_thresh, frac_frame_sat_limit):
+    """
+    Discards images from the dataset that have more than a frac_frame_sat_limit fraction of values
+    over the sat_thresh limit.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L1-level)
+        sat_thresh (float):
+            Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
+            pixels. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging saturation.
+        frac_frame_sat_limit: (float):
+            Fraction of frame over sat_thresh at which we determine the frame is oversaturated
+            and will be discarded.
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
+    """
+    pruned_dataset = input_dataset.copy()
+    reject_flag = np.zeros(len(input_dataset))
+    reject_reason = {}
+
+    for i, frame in enumerate(pruned_dataset.frames):
+        frac_frame_sat = (frame.data > sat_thresh).sum() / frame.data.size
+        if frac_frame_sat > frac_frame_sat_limit:
+            reject_flag[i] = True
+            reject_reason[i] = "oversat frame frac {0:.5f} > {1:.5f}".format(frac_frame_sat, frac_frame_sat_limit)
+
+    good_frames = np.where(reject_flag == False)
+    bad_frames = np.where(reject_flag == True)
+    # check that we didn't remove all of the good frames
+    if np.size(good_frames) == 0:
+        raise ValueError("No good frames were selected. Unable to continue")
+
+    pruned_frames = pruned_dataset.frames[good_frames]
+    pruned_dataset = data.Dataset(pruned_frames)
+    
+    # history message of which frames were removed and why
+    history_msg = "Removed {0} frames as bad:".format(np.size(bad_frames))
+
+    for bad_index in bad_frames[0]:
+        bad_frame = input_dataset.frames[bad_index]
+        history_msg += " {0} ({1}),".format(bad_frame.filename, reject_reason[bad_index])
+    history_msg = history_msg[:-1] # remove last comma or :
+    print(history_msg)
+
+    pruned_dataset.update_after_processing_step(history_msg)
+
+    return pruned_dataset
