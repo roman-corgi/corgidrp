@@ -315,7 +315,8 @@ def test_mueller_matrix_cal():
     
     #Get path to this file
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    path_to_pol_ref_file = os.path.join(current_file_path, "test_data/stellar_polarization_database.csv")
+    #To test this we need this catalog with the same values as the test data also in corgidrp/data/stellar_polarization_database.csv
+    path_to_pol_ref_file = os.path.join(current_file_path, "test_data","stellar_polarization_database.csv")
 
     q_instrumental_polarization = 0.5  # in percent
     u_instrumental_polarization = -0.1  # in percent
@@ -324,7 +325,7 @@ def test_mueller_matrix_cal():
     uq_cross_talk = 0.05
     qu_cross_talk = 0.03
 
-    mock_dataset = mocks.generate_polcal_dataset(path_to_pol_ref_file,
+    mock_dataset = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file,
                                            q_inst=q_instrumental_polarization,
                                            u_inst=u_instrumental_polarization,
                                            q_eff=q_efficiency,
@@ -339,12 +340,12 @@ def test_mueller_matrix_cal():
     mueller_matrix = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
     #Check that the measured mueller matrix is close to the input values
-    assert mueller_matrix.data[1,0] == pytest.approx(q_instrumental_polarization/100.0, abs=1e-2)
-    assert mueller_matrix.data[2,0] == pytest.approx(u_instrumental_polarization/100.0, abs=1e-2)
-    assert mueller_matrix.data[1,1] == pytest.approx(q_efficiency, abs=1e-2)
-    assert mueller_matrix.data[2,2] == pytest.approx(u_efficiency, abs=1e-2)
-    assert mueller_matrix.data[1,2] == pytest.approx(uq_cross_talk, abs=1e-2)
-    assert mueller_matrix.data[2,1] == pytest.approx(qu_cross_talk, abs=1e-2)
+    assert mueller_matrix.data[1,0] == pytest.approx(q_instrumental_polarization/100.0, abs=1e-3)
+    assert mueller_matrix.data[2,0] == pytest.approx(u_instrumental_polarization/100.0, abs=1e-3)
+    assert mueller_matrix.data[1,1] == pytest.approx(q_efficiency, abs=1e-3)
+    assert mueller_matrix.data[2,2] == pytest.approx(u_efficiency, abs=1e-3)
+    assert mueller_matrix.data[1,2] == pytest.approx(uq_cross_talk, abs=1e-3)
+    assert mueller_matrix.data[2,1] == pytest.approx(qu_cross_talk, abs=1e-3)
 
     #Check that the type of mueller_matrix is correct
     assert isinstance(mueller_matrix, pol.MuellerMatrix)
