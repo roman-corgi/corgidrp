@@ -87,8 +87,6 @@ def calc_stokes_unocculted(input_dataset,
 
     prism_map = {'POL0': [0., 90.], 'POL45': [45., 135.]}
 
-    fluxes, flux_errs, thetas = [], [], []
-
     #split datasets by target if there are multiple targets
     # targets = []
     datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
@@ -97,6 +95,7 @@ def calc_stokes_unocculted(input_dataset,
 
 
     for dataset in datasets:
+        fluxes, flux_errs, thetas = [], [], []
         # --- Photometry loop ---
         for ds in dataset:
             prism = ds.ext_hdr.get('DPAMNAME')
