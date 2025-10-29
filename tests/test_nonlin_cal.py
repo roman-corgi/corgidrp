@@ -188,15 +188,15 @@ def test_expected_results_nom_sub():
     assert np.less(rms3,rms_test)
     assert np.less(rms4,rms_test)
     # check that the first element in the first column is equal to min_write
-    assert np.equal(nonlin_out.data[1,0], min_write)
+    assert nonlin_out.data[1,0] == min_write
     # check that the last element in the first column is equal to max_write
-    assert np.equal(nonlin_out.data[-1,0], max_write)
+    assert nonlin_out.data[-1,0] == max_write
     # check that the unity value is in the correct row
-    norm_ind = np.where(nonlin_out.data[1:, 1] == 1)[0]
-    assert np.equal(nonlin_out.data[norm_ind+1,1], 1)
-    assert np.equal(nonlin_out.data[norm_ind+1,-1], 1)
+    norm_ind = np.where(nonlin_out.data[1:, 1] == 1)[0][0]
+    assert nonlin_out.data[norm_ind+1,1] == 1
+    assert nonlin_out.data[norm_ind+1,-1] == 1
     # check that norm_val is correct
-    assert np.equal(nonlin_out.data[norm_ind+1,0], norm_val)
+    assert nonlin_out.data[norm_ind+1,0] == norm_val
 
     # Test filename follows convention (as of R3.0.2)
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
