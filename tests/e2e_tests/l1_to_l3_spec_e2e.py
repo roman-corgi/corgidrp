@@ -372,13 +372,21 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         e2eoutput_path (str): Output directory path for results and logs
     """
     # Set up output directory
-    l1_datadir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1")
+    analog_datadir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1", "analog")
+    pc_datadir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1", "pc")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     
     l3_outputdir = os.path.join(e2eoutput_path, "l1_to_l3_spec_e2e")
     if os.path.exists(l3_outputdir):
         shutil.rmtree(l3_outputdir)
     os.makedirs(l3_outputdir)
+
+    analog_outputdir = os.path.join(l3_outputdir, "analog")
+    pc_outputdir = os.path.join(l3_outputdir, "pc")
+    if not os.path.exists(analog_outputdir):
+        os.makedirs(analog_outputdir)
+    if not os.path.exists(pc_outputdir):
+        os.makedirs(pc_outputdir)
     
     log_file = os.path.join(l3_outputdir, 'l1_to_l3_spec_e2e.log')
     
@@ -414,7 +422,15 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     
     # Run the complete end-to-end test
     try:
-        new_l3_filenames = run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger)
+        logger.info('='*80)
+        logger.info('ANALOG SPECTROSCOPY DATA TEST')
+        logger.info('='*80)
+        new_l3_filenames = run_l1_to_l3_e2e_test(analog_datadir, analog_outputdir, processed_cal_path, logger)
+
+        logger.info('='*80)
+        logger.info('PC SPECTROSCOPY DATA TEST')
+        logger.info('='*80)
+        new_l3_filenames = run_l1_to_l3_e2e_test(pc_datadir, pc_outputdir, processed_cal_path, logger)
         
         logger.info('='*80)
         logger.info('END-TO-END TEST COMPLETE')
