@@ -2929,7 +2929,7 @@ class MuellerMatrix(Image):
             self.ext_hdr['HISTORY'] = "Mueller Matrix created"
 
             # set the filename
-            self.filename = re.sub('_l[0-9].', '_mmx_cal', input_dataset[-1].filename)
+            self.filename = re.sub('_l[0-9].', '_mmx_cal', input_dataset[-1].pri_hdr['FILENAME'])
             self.pri_hdr['FILENAME'] = self.filename          
             
             # Enforce data level = CAL
@@ -2978,7 +2978,7 @@ class NDMuellerMatrix(Image):
             self.ext_hdr['HISTORY'] = "Mueller Matrix created"
 
             # set the filename
-            self.filename = re.sub('_l[0-9].', '_ndm_cal', input_dataset[-1].filename)
+            self.filename = re.sub('_l[0-9].', '_ndm_cal', input_dataset[-1].pri_hdr['FILENAME'])
             self.pri_hdr['FILENAME'] = self.filename          
             
             # Enforce data level = CAL
