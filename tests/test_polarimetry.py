@@ -378,9 +378,12 @@ def test_mueller_matrix_cal():
         image_list.append(pol45)
     mock_dataset = data.Dataset(image_list)
     mock_dataset = l2b_to_l3.divide_by_exptime(mock_dataset)
+    mock_dataset = l2b_to_l3.split_image_by_polarization_state(mock_dataset)
+
+    stokes_dataset = pol.calc_stokes_unocculted(mock_dataset)
 
     #Run the Mueller matrix calibration function
-    mueller_matrix = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
+    mueller_matrix = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
     #Check that the measured mueller matrix is close to the input values
     assert mueller_matrix.data[1,0] == pytest.approx(q_instrumental_polarization/100.0, abs=1e-2)
@@ -396,13 +399,13 @@ def test_mueller_matrix_cal():
     #Put in the ND filter and make sure the type is correct. 
     for framm in mock_dataset.frames:
         framm.ext_hdr["FPAMNAME"] = "ND225"
-    mueller_matrix_nd = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
+    mueller_matrix_nd = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
     assert isinstance(mueller_matrix_nd, pol.NDMuellerMatrix)
 
     #Make sure that if the dataset is mixed ND and non-ND an error is raised
     mock_dataset.frames[0].ext_hdr["FPAMNAME"] = "CLEAR"
     with pytest.raises(ValueError):
-        mueller_matrix_mixed = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
+        mueller_matrix_mixed = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
 def test_subtract_stellar_polarization():
     """
@@ -644,7 +647,6 @@ def test_combine_polarization_states():
     assert np.allclose(target_stokes_vector[2] * (target_total_intensity), stokes_datacube[2], atol=0.05)
     assert np.allclose(target_stokes_vector[3] * (target_total_intensity), stokes_datacube[3], atol=0.05)
     
-
 def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
     """
     Test the `calc_stokes_unocculted` function using synthetic L3 polarimetric datasets.
@@ -870,10 +872,10 @@ def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
     return
 
 if __name__ == "__main__":
-    test_image_splitting()
-    test_calc_pol_p_and_pa_image()
-    test_subtract_stellar_polarization()
+    # test_image_splitting()
+    # test_calc_pol_p_and_pa_image()
+    # test_subtract_stellar_polarization()
     test_mueller_matrix_cal()
-    test_combine_polarization_states()
-    test_align_frames()
-    test_calc_stokes_unocculted()
+    # test_combine_polarization_states()
+    # test_align_frames()
+    # test_calc_stokes_unocculted()
