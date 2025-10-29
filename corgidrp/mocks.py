@@ -4375,13 +4375,14 @@ def get_formatted_filename(dt, visitid):
     timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
     return f"cgi_{visitid}_{timestamp}_l2b.fits"
 
-def create_spatial_pol(dataset,nr=None,pfov_size=174,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet=None,band=None,dpamname='POL0'):
+def create_spatial_pol(dataset,filedir=None,nr=None,pfov_size=174,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet=None,band=None,dpamname='POL0'):
     """Turns a dataset of neptune or uranus images with single planet images into the images observed through the wollaston prisms also incorporates the spatial variation of polarization on the 
         surface of the planet
 
     
         Args:
             dataset (corgidrp.data.Dataset): a dataset of image frames that are raster scanned (L2a-level)
+            filedir (str): Full path to directory to save the raster scanned images.
             nr (int): planet radius
             pfov_size (int): size of the image created for the polarization variation, typically ~ 2 x nr
             image_center_x (int): x coordinate of the center pixel of the final image with two orthogonal pol components
@@ -4485,12 +4486,21 @@ def create_spatial_pol(dataset,nr=None,pfov_size=174,image_center_x=512,image_ce
     WP_pol[start_right[1]:start_right[1]+pfov, start_right[0]:start_right[0]+pfov]=I_2[yc_init - (pfov//2):yc_init + (pfov//2),xc_init - (pfov//2):xc_init + (pfov//2)]* 0.5 * (1-(2*r_xy))
 
     # create the default headers and modify the header keywords
+    filepattern = "cgi_pppppccaaasssooovvv_yyyymmddt{0:02d}00_l2a.fits"
     prihdr, exthdr = create_default_L1_headers()
     prihdr['TARGET']=planet
     exthdr['DPAMNAME'] = dpamname
     image = data.Image(WP_pol, pri_hdr=prihdr, ext_hdr=exthdr)
     image.pri_hdr.append(('FILTER',band), end=True)
     pol_image=data.Dataset([image])
+    i=0
+    if filedir is not None:
+            image.save(filedir=filedir, filename=filepattern.format(i))
+    else:
+        # fake filenumber as hours and minutes
+            hours = i // 60
+            minutes = i % 60
+            image.filename = filepattern.format(hours, minutes)
     
     return (pol_image) 
 
