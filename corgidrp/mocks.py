@@ -4492,8 +4492,7 @@ def create_spatial_pol(dataset,filedir=None,nr=None,pfov_size=174,image_center_x
     exthdr['DPAMNAME'] = dpamname
     image = data.Image(WP_pol, pri_hdr=prihdr, ext_hdr=exthdr)
     image.pri_hdr.append(('FILTER',band), end=True)
-    pol_image=data.Dataset([image])
-    i=0
+    i=len(image.data)
     if filedir is not None:
             image.save(filedir=filedir, filename=filepattern.format(i))
     else:
@@ -4501,7 +4500,7 @@ def create_spatial_pol(dataset,filedir=None,nr=None,pfov_size=174,image_center_x
             hours = i // 60
             minutes = i % 60
             image.filename = filepattern.format(hours, minutes)
-    
+    pol_image=data.Dataset([image])
     return (pol_image) 
 
 def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
