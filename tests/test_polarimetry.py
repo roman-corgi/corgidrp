@@ -703,6 +703,9 @@ def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
     roughly to a 3-sigma limit on expected statistical deviations.
     """
 
+    # Set the random seed for reproducibility
+    np.random.seed(42) 
+
     # --- Simulate varying polarization fractions ---
     p_input = 0.1 + 0.2 * np.random.rand(n_sim)
     theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
@@ -829,7 +832,7 @@ if __name__ == "__main__":
     # test_image_splitting()
     # test_calc_pol_p_and_pa_image()
     # test_subtract_stellar_polarization()
-    test_mueller_matrix_cal()
+    # test_mueller_matrix_cal()
     # test_combine_polarization_states()
     # test_align_frames()
-    # test_calc_stokes_unocculted()
+    test_calc_stokes_unocculted()
