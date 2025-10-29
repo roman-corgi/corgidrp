@@ -1,19 +1,21 @@
 # Place to put flatfield-related utility functions
-
+import warnings
 import numpy as np
 from scipy import interpolate
 from scipy.ndimage import median_filter
 from scipy.ndimage import gaussian_filter as gauss
 from scipy import ndimage
 from scipy.signal import convolve2d
+from scipy.ndimage import zoom
 import astropy.io.fits as fits
 from astropy.convolution import convolve_fft
+from astropy.utils.exceptions import AstropyUserWarning
 import photutils.centroids as centr
 from photutils.aperture import CircularAperture
-import corgidrp.mocks as mocks
 from photutils.detection import DAOStarFinder
 import corgidrp.data as data
-from scipy.ndimage import zoom
+import corgidrp.mocks as mocks
+
 
 def create_flatfield(flat_dataset):
 
@@ -223,7 +225,9 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
     nx = np.arange(0,full_residuals_resel.shape[1])
     ny = np.arange(0,full_residuals_resel.shape[0])
     nxx,nyy = np.meshgrid(ny,nx)
-    cent_n=centr.centroid_com(p_flat)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=AstropyUserWarning) 
+        cent_n=centr.centroid_com(p_flat)
     nrr = np.sqrt((nxx-cent_n[0])**2 + (nyy-cent_n[1])**2)
     p_flat[nrr>n_pix//2]= 1
     p_flat_err[nrr>n_pix//2]=0
