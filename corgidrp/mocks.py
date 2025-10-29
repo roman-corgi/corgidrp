@@ -5051,7 +5051,8 @@ def create_mock_polarization_l3_dataset(
         theta_deg=20.0,
         roll_angles=None,
         prisms=None,
-        seed=None
+        seed=None,
+        return_image_list=False
 ):
     """
     Generate mock L3 polarimetric datasets with controlled fractional polarization
@@ -5074,6 +5075,7 @@ def create_mock_polarization_l3_dataset(
         roll_angles (list of float, optional): Roll angles per prism. Defaults to [-15, 15, -15, 15].
         prisms (list of str, optional): Prism orientations ('POL0', 'POL45'). Defaults to ['POL0','POL0','POL45','POL45'].
         seed (int, optional): Random seed.
+        return_image_list (bool): If True, return list of Image objects instead of Dataset.
 
     Returns:
         Dataset: Synthetic Dataset object containing Image objects with data, error maps,
@@ -5168,11 +5170,13 @@ def create_mock_polarization_l3_dataset(
                 dq_hdr=dqhdr
             )
         )
-        
-    Dataset_out = Dataset(Image_out)
+    
+    if return_image_list:
+        return Image_out
+    else: 
+        Dataset_out = Dataset(Image_out)
+        return Dataset_out
 
-    # --- create Image object ---
-    return Dataset_out
 def get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale = 0.0218, image_center=(512, 512)):
     """
     Calculate the centers of the two polarized images based on the separation and alignment angle.
