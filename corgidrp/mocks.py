@@ -5203,6 +5203,17 @@ def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
                             q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03):
     '''
     Generate a mock L2b polarimetric dataset for polcal testing
+
+    Args:
+        path_to_pol_ref_file (str): Path to the CSV file containing the reference polarization values
+        read_noise (float): Read noise to be added to the images
+        image_separation_arcsec (float): Separation between the two polarized images in arcseconds
+        q_inst (float): Instrumental Q polarization in percentage
+        u_inst (float): Instrumental U polarization in percentage
+        q_eff (float): Q efficiency
+        uq_ct (float): U to Q crosstalk
+        u_eff (float): U efficiency
+        qu_ct (float): Q to U crosstalk 
     '''
     
     #Read in the test polarization stellar database from test_data/
