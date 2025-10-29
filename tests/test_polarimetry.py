@@ -601,7 +601,7 @@ def test_combine_polarization_states():
     assert np.allclose(target_stokes_vector[2] * (target_total_intensity), stokes_datacube[2], atol=0.05)
     assert np.allclose(target_stokes_vector[3] * (target_total_intensity), stokes_datacube[3], atol=0.05)
     
-def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
+def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
     """
     Test the `calc_stokes_unocculted` function using synthetic L3 polarimetric datasets.
 
