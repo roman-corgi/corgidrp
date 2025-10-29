@@ -68,7 +68,7 @@ def fix_str_for_tvac(
             if 'ISPC' in exthdr:
                 exthdr['ISPC'] = False
 
-def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, use_custom_data, logger):
+def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, logger):
     """Run the complete L1 to L2b end-to-end test.
     
     Args:
@@ -126,23 +126,13 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, use_custom_data
     # Build calibration file paths
     processed_cal_path = cals_dir
     
-    # Try default filenames first, otherwise search by pattern
-    if os.path.exists(os.path.join(processed_cal_path, "nonlin_table_240322.txt")):
-        # Use default filenames
-        nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
-        dark_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
-        flat_path = os.path.join(processed_cal_path, "flat.fits")
-        fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
-        cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
-        bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
-    else:
-        # Search for calibration files by pattern
-        nonlin_path = find_calibration_file(processed_cal_path, 'nln', 'nonlinearity')
-        dark_path = find_calibration_file(processed_cal_path, 'drk', 'dark current')
-        flat_path = find_calibration_file(processed_cal_path, ['flat', 'flt'], 'flat field')
-        fpn_path = find_calibration_file(processed_cal_path, 'fpn', 'FPN')
-        cic_path = find_calibration_file(processed_cal_path, 'cic', 'CIC')
-        bp_path = find_calibration_file(processed_cal_path, ['bad', 'bp', 'bpm'], 'bad pixel map')
+    nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
+    dark_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
+    flat_path = os.path.join(processed_cal_path, "flat.fits")
+    fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
+    cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
+    bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
+
     
     # Filter to only include L1 files for mock calibration
     all_files = os.listdir(l1_datadir)
@@ -255,12 +245,8 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, use_custom_data
     logger.info('='*80)
 
     # define the raw science data to process
-    if not use_custom_data:
-        # Default behavior: select just the first two files for testing
-        l1_data_filelist = [os.path.join(l1_datadir, l1_files_only[i]) for i in [0,1]] # grab the first two L1 files
-    else:
-        # Custom directory: process all L1 files
-        l1_data_filelist = [os.path.join(l1_datadir, f) for f in l1_files_only]
+    l1_data_filelist = [os.path.join(l1_datadir, l1_files_only[i]) for i in [0,1]] # grab the first two L1 files
+
 
     # Copy files to input_data directory and update file list
     l1_data_filelist = [
@@ -432,76 +418,71 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, use_custom_data
     # ================================================================================
     # (7) Compare Against TVAC Reference Data (only for default data where TVAC reference exists)
     # ================================================================================
-    if not use_custom_data and len(tvac_l2a_filelist) > 0:
-        logger.info('='*80)
-        logger.info('Test Case 4: TVAC Reference Data Comparison')
-        logger.info('='*80)
-        logger.info('Comparing against TVAC reference data...')
+
+    logger.info('='*80)
+    logger.info('Test Case 4: TVAC Reference Data Comparison')
+    logger.info('='*80)
+    logger.info('Comparing against TVAC reference data...')
+    
+    # l2a data comparison
+    for new_filename, tvac_filename in zip(sorted(new_l2a_filenames), sorted(tvac_l2a_filelist)):
+        img = data.Image(new_filename)
+        with fits.open(tvac_filename) as hdulist:
+            tvac_dat = hdulist[1].data
+        diff = img.data - tvac_dat
+        if np.all(np.abs(diff) < 1e-5):
+            logger.info(f"L2a TVAC comparison: {os.path.basename(new_filename)} matches reference. PASS")
+        else:
+            logger.info(f"L2a TVAC comparison: {os.path.basename(new_filename)} differs from reference. FAIL")
+
+    # l2b data comparison
+    for new_filename, tvac_filename in zip(sorted(new_l2b_filenames), sorted(tvac_l2b_filelist)):
+        img = data.Image(new_filename)
+        with fits.open(tvac_filename) as hdulist:
+            tvac_dat = hdulist[1].data
         
-        # l2a data comparison
-        for new_filename, tvac_filename in zip(sorted(new_l2a_filenames), sorted(tvac_l2a_filelist)):
-            img = data.Image(new_filename)
-            with fits.open(tvac_filename) as hdulist:
-                tvac_dat = hdulist[1].data
-            diff = img.data - tvac_dat
-            if np.all(np.abs(diff) < 1e-5):
-                logger.info(f"L2a TVAC comparison: {os.path.basename(new_filename)} matches reference. PASS")
-            else:
-                logger.info(f"L2a TVAC comparison: {os.path.basename(new_filename)} differs from reference. FAIL")
-
-        # l2b data comparison
-        for new_filename, tvac_filename in zip(sorted(new_l2b_filenames), sorted(tvac_l2b_filelist)):
-            img = data.Image(new_filename)
-            with fits.open(tvac_filename) as hdulist:
-                tvac_dat = hdulist[1].data
-            
-            # make sure the NaNs from cosmic rays are in the same place
-            e2e_nans = np.where(np.isnan(img.data))
-            tvac_nans = np.where(np.isnan(tvac_dat))
-            if np.array_equal(e2e_nans, tvac_nans):
-                logger.info(f"L2b TVAC NaN comparison: {os.path.basename(new_filename)} NaN positions match. PASS")
-            else:
-                logger.info(f"L2b TVAC NaN comparison: {os.path.basename(new_filename)} NaN positions differ. FAIL")
-            
-            # compare the rest of the data
-            img.data[e2e_nans] = 0.0
-            tvac_dat[tvac_nans] = 0.0
-            diff = img.data - tvac_dat
-            if np.all(np.abs(diff) < 1e-5):
-                logger.info(f"L2b TVAC data comparison: {os.path.basename(new_filename)} matches reference. PASS")
-            else:
-                logger.info(f"L2b TVAC data comparison: {os.path.basename(new_filename)} differs from reference. FAIL")
+        # make sure the NaNs from cosmic rays are in the same place
+        e2e_nans = np.where(np.isnan(img.data))
+        tvac_nans = np.where(np.isnan(tvac_dat))
+        if np.array_equal(e2e_nans, tvac_nans):
+            logger.info(f"L2b TVAC NaN comparison: {os.path.basename(new_filename)} NaN positions match. PASS")
+        else:
+            logger.info(f"L2b TVAC NaN comparison: {os.path.basename(new_filename)} NaN positions differ. FAIL")
         
-        logger.info('')
-    elif use_custom_data:
-        logger.info('='*80)
-        logger.info('Test Case 4: TVAC Reference Data Comparison - SKIPPED')
-        logger.info('='*80)
-        logger.info('TVAC comparison skipped (custom input_datadir provided)')
-        logger.info('')
+        # compare the rest of the data
+        img.data[e2e_nans] = 0.0
+        tvac_dat[tvac_nans] = 0.0
+        diff = img.data - tvac_dat
+        if np.all(np.abs(diff) < 1e-5):
+            logger.info(f"L2b TVAC data comparison: {os.path.basename(new_filename)} matches reference. PASS")
+        else:
+            logger.info(f"L2b TVAC data comparison: {os.path.basename(new_filename)} differs from reference. FAIL")
+    
+    logger.info('')
 
-        # plotting script for debugging
-        # import matplotlib.pylab as plt
-        # fig = plt.figure(figsize=(10,3.5))
-        # fig.add_subplot(131)
-        # plt.imshow(img.data, vmin=-0.01, vmax=45, cmap="viridis")
-        # plt.title("corgidrp")
-        # plt.xlim([500, 560])
-        # plt.ylim([475, 535])
 
-        # fig.add_subplot(132)
-        # plt.imshow(tvac_dat, vmin=-0.01, vmax=45, cmap="viridis")
-        # plt.title("TVAC")
-        # plt.xlim([500, 560])
-        # plt.ylim([475, 535])
+    # plotting script for debugging
+    # import matplotlib.pylab as plt
+    # fig = plt.figure(figsize=(10,3.5))
+    # fig.add_subplot(131)
+    # plt.imshow(img.data, vmin=-0.01, vmax=45, cmap="viridis")
+    # plt.title("corgidrp")
+    # plt.xlim([500, 560])
+    # plt.ylim([475, 535])
 
-        # fig.add_subplot(133)
-        # plt.imshow(diff, vmin=-0.01, vmax=0.01, cmap="inferno")
-        # plt.title("difference")
-        # plt.xlim([500, 560])
-        # plt.ylim([475, 535])
+    # fig.add_subplot(132)
+    # plt.imshow(tvac_dat, vmin=-0.01, vmax=45, cmap="viridis")
+    # plt.title("TVAC")
+    # plt.xlim([500, 560])
+    # plt.ylim([475, 535])
 
-        # plt.show()
+    # fig.add_subplot(133)
+    # plt.imshow(diff, vmin=-0.01, vmax=0.01, cmap="inferno")
+    # plt.title("difference")
+    # plt.xlim([500, 560])
+    # plt.ylim([475, 535])
+
+    # plt.show()
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
     
@@ -509,7 +490,7 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, use_custom_data
 
 
 @pytest.mark.e2e
-def test_l1_to_l2b(e2edata_path, e2eoutput_path, input_datadir, cals_dir):
+def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     """Run the complete L1 to L2b end-to-end test.
     
     Args:
@@ -522,15 +503,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path, input_datadir, cals_dir):
     global logger
     
     # Use custom paths if provided, otherwise fall back to defaults from e2edata_path
-    if input_datadir is None:
-        l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
-    else:
-        l1_datadir = input_datadir
-    
-    if cals_dir is None:
-        processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
-    else:
-        processed_cal_path = cals_dir
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
     test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_e2e")
@@ -571,8 +545,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path, input_datadir, cals_dir):
     
     # Run the complete end-to-end test
     try:
-        use_custom_data = input_datadir is not None
-        new_l2a_filenames, new_l2b_filenames = run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, processed_cal_path, use_custom_data, logger)
+        new_l2a_filenames, new_l2b_filenames = run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, processed_cal_path, logger)
         
         logger.info('='*80)
         logger.info('END-TO-END TEST COMPLETE - ALL TESTS PASSED')
@@ -601,7 +574,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b end-to-end test")
@@ -609,13 +582,9 @@ if __name__ == "__main__":
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
-    ap.add_argument("--input_datadir", default=None,
-                    help="Optional: Override input data directory [%(default)s]")
-    ap.add_argument("--cals_dir", default=None,
-                    help="Optional: Override calibration directory [%(default)s]")
+
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    input_datadir = args.input_datadir
-    cals_dir = args.cals_dir
-    test_l1_to_l2b(e2edata_dir, outputdir, input_datadir, cals_dir)
+
+    test_l1_to_l2b(e2edata_dir, outputdir)
