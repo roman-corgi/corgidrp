@@ -53,6 +53,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     Args:
         l1_datadir (str): Path to L1 input data directory
         l3_outputdir (str): Path to output directory
+        processed_cal_path (str): Path to processed calibration files directory
         logger (logging.Logger): Logger instance for output
         
     Returns:
