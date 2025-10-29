@@ -185,6 +185,7 @@ def calc_stokes_unocculted(input_dataset,
             err_hdr=err_hdr,
             dq_hdr=dq_hdr
         )
+        stokes_vector.filename = os.path.basename(dataset[0].filename).replace("l3", "stokes")
 
         stokes_vectors.append(stokes_vector)
 
