@@ -272,13 +272,17 @@ def generate_mueller_matrix_cal(input_dataset,
 
     # invert the stokes matrix using SVD and multiply the the normalized differences to get the mueller matrix elements
     u,s,v=np.linalg.svd(stokes_matrix)
+    #SVD of non-square matrices needs array re-shaping
+    rank = s.size
+    u = u[:, :rank]
+    v = v[:rank, :]
     # limit the singular values to improve the conditioning of the inversion
     s[s < svd_threshold] = svd_threshold
     stokes_matrix_inv=np.dot(v.transpose(),np.dot(np.diag(s**-1),u.transpose()))
     mueller_elements = np.dot(stokes_matrix_inv, np.array(stokes_vectors))
     mueller_elements_covar = np.matmul(stokes_matrix_inv,stokes_matrix_inv.T)
     mueller_elements_covar[mueller_elements_covar <0] = 0
-    mueller_elements_err = np.diag(np.matmul(stokes_matrix_inv,stokes_matrix_inv.T)*(stokes_vector_errs**2))**0.5
+    mueller_elements_err = np.diag(np.matmul(stokes_matrix_inv.T,stokes_matrix_inv)*(stokes_vector_errs**2))**0.5
 
     #Fill in the mueller matrix
     mueller_matrix = np.zeros((4,4))
