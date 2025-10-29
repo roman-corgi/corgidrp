@@ -51,9 +51,8 @@ def calc_stokes_unocculted(input_dataset,
     parameters in the instrument frame.
 
     Args:
-        dataset (list of Image):
-            List of L3 polarimetric images, each containing `.data`, `.err`, `.dq`, and FITS headers
-            with keywords 'ROLL' and 'DPAMNAME'.
+        input_dataset (corgidrp.data.Dataset):
+            A corgidrp dataset of L3 polarimetric images
         phot_kwargs (dict, optional):
             Keyword arguments passed to `aper_phot`. If not provided, a default aperture setup is used.
         image_center_x (float, optional):
