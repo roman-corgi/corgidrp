@@ -5214,6 +5214,9 @@ def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
         uq_ct (float): U to Q crosstalk
         u_eff (float): U efficiency
         qu_ct (float): Q to U crosstalk 
+
+    Returns:
+        corgidrp.data.Dataset: The simulated L2b polarimetric dataset for polcal testing
     '''
     
     #Read in the test polarization stellar database from test_data/
