@@ -1,0 +1,26 @@
+{
+    "name" : "l2b_to_polcal",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name": "divide_by_exptime"
+        },
+        {
+            "name" : "split_image_by_polarization_state"
+        },
+        {
+            "name" : "calc_stokes_unocculted"
+        },
+        {
+            "name" : "generate_mueller_matrix_cal"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

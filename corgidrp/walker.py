@@ -70,6 +70,9 @@ all_steps = {
     "compute_psf_centroid": corgidrp.spec.compute_psf_centroid,
     "calibrate_dispersion_model": corgidrp.spec.calibrate_dispersion_model,
     "fit_line_spread_function": corgidrp.spec.fit_line_spread_function,
+    "split_image_by_polarization_state": corgidrp.l2b_to_l3.split_image_by_polarization_state,
+    "calc_stokes_unocculted": corgidrp.pol.calc_stokes_unocculted,
+    "generate_mueller_matrix_cal": corgidrp.pol.generate_mueller_matrix_cal,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -335,6 +338,8 @@ def guess_template(dataset):
                     recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POLIMETRY":
+            recipe_filename = "l2b_to_polcal.json"
         else:
             recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
@@ -447,7 +452,7 @@ def run_recipe(recipe, save_recipe_file=True):
                 suffix =  step["keywords"]["suffix"]
             else:
                 suffix = ''
-                
+            
             save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
             save_step = True
 
