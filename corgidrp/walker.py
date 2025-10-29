@@ -71,6 +71,8 @@ all_steps = {
     "calibrate_dispersion_model": corgidrp.spec.calibrate_dispersion_model,
     "fit_line_spread_function": corgidrp.spec.fit_line_spread_function,
     "split_image_by_polarization_state": corgidrp.l2b_to_l3.split_image_by_polarization_state,
+    "calc_stokes_unocculted": corgidrp.pol.calc_stokes_unocculted,
+    "generate_mueller_matrix_cal": corgidrp.pol.generate_mueller_matrix_cal,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -346,14 +348,10 @@ def guess_template(dataset):
                     recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
+            recipe_filename = "l2b_to_polcal.json"
         else:
-            # Check if this is polarimetry data (POL0 or POL45 - not sure of VISTYPE yet)
-            is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45')
-            
-            if is_polarimetry:
-                recipe_filename = "l2b_to_l3_pol.json"
-            else:
-                recipe_filename = "l2b_to_l3.json"
+            recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
     elif image.ext_hdr['DATALVL'] == "L3":
         if image.ext_hdr['FSMLOS'] == 1:
@@ -464,7 +462,7 @@ def run_recipe(recipe, save_recipe_file=True):
                 suffix =  step["keywords"]["suffix"]
             else:
                 suffix = ''
-                
+            
             save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
             save_step = True
 

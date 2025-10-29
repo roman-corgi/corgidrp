@@ -426,6 +426,10 @@ def check_filename_convention(filename, expected_pattern, frame_info="",
         valid = filename.startswith('cgi_') and '_dpm_cal.fits' in filename
     elif expected_pattern == 'cgi_*_line_spread.fits':
         valid = filename.startswith('cgi_') and '_line_spread.fits' in filename
+    elif expected_pattern == 'cgi_*_mmx_cal.fits':
+        valid = filename.startswith('cgi_') and '_mmx_cal.fits' in filename
+    elif expected_pattern == 'cgi_*_ndm_cal.fits':
+        valid = filename.startswith('cgi_') and '_ndm_cal.fits' in filename
     else:
         valid = expected_pattern in filename
     

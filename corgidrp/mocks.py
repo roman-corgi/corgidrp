@@ -9,7 +9,9 @@ import datetime
 import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
+from astropy.io.fits import Header
 from astropy.time import Time
+from astropy.io.fits import Header
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
@@ -32,7 +34,7 @@ from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy
 import datetime
 import glob
 import shutil
-
+from corgidrp import pol
 
 from emccd_detect.emccd_detect import EMCCDDetect
 from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
@@ -4704,7 +4706,7 @@ def get_formatted_filename(dt, visitid):
     return f"cgi_{visitid}_{timestamp}_l2b.fits"
 
 def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
-                                       left_image_value=1, right_image_value=1, alignment_angle=None):
+                                       left_image_value=1, right_image_value=1, image_separation_arcsec=7.5, alignment_angle=None):
     """
     Creates mock L2b polarimetric data with two polarized images placed on the larger
     detector frame. Image size and placement depends on the wollaston used and the observing mode.
@@ -4715,6 +4717,7 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
         observing_mode (optional, string): observing mode of the coronagraph
         left_image_value (optional, int): value to fill inside the radius of the left image, corresponding to 0 or 45 degree polarization
         right_image_value (optional, int): value to fill inside the radius of the right image, corresponding to 90 or 135 degree polarization
+        image_separation_arcsec (optional, float): Separation between the two polarized images in arcseconds.        
         alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
             defaults to 0 for WP1 and 45 for WP2
     
@@ -4769,9 +4772,410 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     exthdr['CFAMNAME'] = cfamname
     exthdr['DPAMNAME'] = dpamname
     exthdr['LSAMNAME'] = observing_mode
+    exthdr['FSMPRFL'] = observing_mode
+
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
     return image
+
+def create_mock_l2b_polarimetric_image_with_satellite_spots(
+    image_center=(512, 512), 
+    dpamname='POL0', 
+    observing_mode='NFOV',
+    left_image_value=1, 
+    right_image_value=1,
+    image_separation_arcsec = 7.5,
+    alignment_angle=None,
+    image_shape =(1024,1024),
+    star_center = None, 
+    bg_sigma = 1e-4,  #Default values from test_l2b_to_l3
+    bg_offset = 0,  #Default values from test_l2b_to_l3
+    gaussian_fwhm = 2,  #Default values from test_l2b_to_l3
+    separation = 14.79,  #Default values from test_l2b_to_l3
+    angle_offset=0, #Default values from test_l2b_to_l3
+    amplitude_multiplier=10):
+    """
+    Creates a mock L2b polarimetric image with two separated polarized channels (left and right), 
+    where each channel contains four synthetic Gaussian satellite spots.
+
+    The function first establishes the geometry and background of the dual-channel image
+    and then overlays the satellite spot pattern, centered on the middle of each channel.
+
+    Args:
+        image_center (optional, tuple(int, int)): Pixel location (x, y) where the two images 
+            are centered on the larger detector frame.
+        dpamname (optional, string): Name of the Wollaston prism used, accepted values are 
+            'POL0' and 'POL45'.
+        observing_mode (optional, string): Observing mode of the coronagraph.
+        left_image_value (optional, int): Constant value to fill inside the radius of the left 
+            polarized image (0 or 45 degree polarization), before adding spots.
+        right_image_value (optional, int): Constant value to fill inside the radius of the right 
+            polarized image (90 or 135 degree polarization), before adding spots.
+        image_separation_arcsec (optional, float): Separation between the two polarized images in arcseconds.        
+        alignment_angle (optional, float): The angle in degrees of how the two polarized images 
+            are aligned with respect to the horizontal. Defaults to 0 for POL0 and 45 for POL45.
+        image_shape (tuple of int, optional): The (ny, nx) shape of the detector array.
+        star_center (list of tuple of float, optional):  
+            displacement (dx, dy) from the center of each channel at which the four Gaussians will be centered for each slice.
+            If None, defaults to the center of each channel.
+        bg_sigma (float, optional): Standard deviation of the background Gaussian noise applied 
+            to the entire image.
+        bg_offset (float, optional): Constant background level added to the entire image.
+        gaussian_fwhm (float, optional): Full width at half maximum (FWHM, in pixels) for the 
+            2D Gaussian satellite spots.
+        separation (float, optional): Radial separation (in pixels) of each satellite spot 
+            from the center of its respective polarized image.
+        angle_offset (float, optional): An additional angle (in degrees) to rotate the four 
+            satellite spots in each channel (counterclockwise).
+        amplitude_multiplier (float, optional): Multiplier for the amplitude of the Gaussians 
+            relative to `bg_sigma`. By default, amplitude is 10 * `bg_sigma`.
+    
+    Returns:
+        corgidrp.data.Image: The simulated L2b polarimetric image containing satellite spots.
+    """
+
+    # Create polarimetric image
+    # Adapted from create_mock_l2b_polarimetric_image
+    assert dpamname in ['POL0', 'POL45'], \
+    "Invalid prism selected, must be 'POL0' or 'POL45'"
+    
+    # create initial frame
+    image_data = np.random.normal(loc=0, scale=bg_sigma, size=image_shape) + bg_offset
+
+    pixel_scale = 0.0218 #arcsec/pixel
+    primary_d = 2.363114 #meters
+    arcseconds_per_radian = 180 * 3600 / np.pi
+    #determine radius of the images
+    if observing_mode == 'NFOV':
+        cfamname = '1F'
+        outer_radius_lambda_over_d = 9.7
+        central_wavelength =0.5738 * 1e-6
+        radius = int(round((outer_radius_lambda_over_d * (central_wavelength / primary_d) * arcseconds_per_radian) / pixel_scale))
+    elif observing_mode == 'WFOV':
+        cfamname = '4F'
+        outer_radius_lambda_over_d = 20.1
+        central_wavelength = 0.8255e-6 #meters
+        radius = int(round((outer_radius_lambda_over_d * ((central_wavelength) / primary_d) * arcseconds_per_radian) / pixel_scale))
+    else:
+        cfamname = '1F'
+        radius = int(round(1.9 / pixel_scale))
+    
+    #determine the center of the two images
+    if alignment_angle is None:
+        if dpamname == 'POL0':
+            alignment_angle = 0
+        else:
+            alignment_angle = 45
+    angle_rad = alignment_angle * (np.pi / 180)
+    displacement_x = int(round((image_separation_arcsec * np.cos(angle_rad)) / (2 * pixel_scale)))
+    displacement_y = int(round((image_separation_arcsec * np.sin(angle_rad)) / (2 * pixel_scale)))
+    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+
+    #fill the location where the images are with 1s
+    y, x = np.indices(image_shape)
+    image_data[((x - center_left[0])**2) + ((y - center_left[1])**2) <= radius**2] = left_image_value
+    image_data[((x - center_right[0])**2) + ((y - center_right[1])**2) <= radius**2] = right_image_value
+    
+    # Add satellite spots in each image
+    # Adapted from create_synthetic_satellite_spot_image
+
+    # Define the default position angles (in degrees) and add any additional angle offset.
+    default_angles_deg = np.array([0, 90, 180, 270])
+    angles_rad = np.deg2rad(default_angles_deg + angle_offset)
+
+    # Compute the amplitude and convert FWHM to standard deviation.
+    amplitude = amplitude_multiplier * bg_sigma
+    # FWHM = 2 * sqrt(2 * ln(2)) * stddev  --> stddev = FWHM / (2*sqrt(2*ln(2)))
+    stddev = gaussian_fwhm / (2 * np.sqrt(2 * np.log(2)))
+    y_indices, x_indices = np.indices(image_shape)
+
+    for idx, center in enumerate([center_left, center_right]):
+        center_x, center_y = center
+        if star_center is not None:
+            center_x  = center_x + star_center [idx][0]
+            center_y = center_y + star_center[idx][1]
+
+        for angle in angles_rad:
+            dx = separation * np.cos(angle)
+            dy = separation * np.sin(angle)
+            gauss_center_x = center_x + dx
+            gauss_center_y = center_y + dy
+
+            gauss = Gaussian2D(
+                amplitude=amplitude,
+                x_mean=gauss_center_x,
+                y_mean=gauss_center_y,
+                x_stddev=stddev,
+                y_stddev=stddev,
+                theta=0,
+            )
+            image_data += gauss(x_indices, y_indices)
+
+    #create L2b headers
+    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    #define necessary header keywords
+    exthdr['CFAMNAME'] = cfamname
+    exthdr['DPAMNAME'] = dpamname
+    exthdr['LSAMNAME'] = observing_mode
+    exthdr['FSMPRFL'] = observing_mode
+    prihdr["SATSPOTS"] = 1
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+    return image
+    
+def create_mock_stokes_image_l4(
+        image_size=256,
+        fwhm=3,
+        I0=1e4,
+        badpixel_fraction=1e-3,
+        p=0.1,
+        theta_deg=20.0,
+        seed=None
+):
+    """
+    Generate mock L4 Stokes cube with Gaussian source and controlled polarization.
+
+    Args:
+        image_size (int): H x W size
+        fwhm (float): Gaussian FWHM in pixels
+        I0 (float): Peak intensity
+        badpixel_fraction (float): Fraction of bad pixels
+        p (float): Fractional polarization
+        theta_deg (float): Polarization angle in degrees
+        seed (int, optional): Random seed
+
+    Returns:
+        Image: Stokes cube Image object with data, err, dq, and headers
+    """
+    rng = np.random.default_rng(seed)
+
+    # Gaussian source
+    y, x = np.mgrid[0:image_size, 0:image_size]
+    x0 = y0 = image_size / 2.0
+    sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2)))
+    I_map = I0 * np.exp(-((x - x0)**2 + (y - y0)**2) / (2.0 * sigma**2))
+    I_map_err = np.sqrt(I_map)  # simple photon noise
+
+    # bad pixels
+    n_pixels = I_map.size
+    n_bad = int(n_pixels * badpixel_fraction)
+    dq = np.zeros_like(I_map, dtype=int)
+    if n_bad > 0:
+        idx_bad = rng.choice(n_pixels, size=n_bad, replace=False)
+        dq.flat[idx_bad] = 1
+        I_map.flat[idx_bad] *= -1
+
+    theta_obs = np.radians(theta_deg)
+    Q_map = I_map * p * np.cos(2 * theta_obs)
+    U_map = I_map * p * np.sin(2 * theta_obs)
+    stokes_cube = np.stack([I_map, Q_map, U_map])
+
+    stokes_err = np.stack([
+        I_map_err,
+        I_map_err,
+        I_map_err
+    ])
+    stokes_cube += rng.normal(0.0, stokes_err)
+
+    # headers
+    try:
+        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L4_headers()
+    except:
+        prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
+
+    dq_out = np.broadcast_to(dq, stokes_cube.shape).copy()
+
+    return Image(
+        stokes_cube,
+        pri_hdr=prihdr,
+        ext_hdr=exthdr,
+        err=stokes_err,
+        dq=dq_out,
+        err_hdr=errhdr,
+        dq_hdr=dqhdr
+    )
+def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
+    """
+    Create a mock Image with [I, Q, U, V] planes for testing.
+
+    Args:
+        n (int): Image height (pixels).
+        m (int): Image width (pixels).
+        fwhm (float): FWHM of the Gaussian PSF used for I.
+        amp (float): Peak amplitude of the Gaussian PSF.
+        pfrac (float): Polarization fraction. Q, U are scaled by this fraction.
+        bg (float): Background level added to the image.
+
+    Returns:
+        Image: Mock Image object with data of shape [4, n, m], err and dq arrays included.
+    """
+
+
+    y, x = np.mgrid[0:n, 0:m]
+    x0, y0 = 0.5*(m-1), 0.5*(n-1)
+
+    sigma = fwhm / (2*np.sqrt(2*np.log(2)))
+    r2 = (x-x0)**2 + (y-y0)**2
+    I = bg + amp * np.exp(-0.5*r2/sigma**2)
+
+    phi = np.arctan2(y-y0, x-x0)
+    Q = -pfrac * I * np.cos(2*phi)
+    U = -pfrac * I * np.sin(2*phi)
+    V = np.zeros_like(I)
+
+    cube = np.stack([I, Q, U, V], axis=0)
+
+    pri_hdr = Header()
+    ext_hdr = Header()
+    ext_hdr["STARLOCX"] = float(x0)
+    ext_hdr["STARLOCY"] = float(y0)
+
+    return Image(
+        cube,
+        pri_hdr=pri_hdr,
+        ext_hdr=ext_hdr,
+        err=np.zeros_like(cube),
+        dq=np.zeros(cube.shape, dtype=np.uint16),
+        err_hdr=Header(),
+        dq_hdr=Header(),
+    )
+
+def create_mock_polarization_l3_dataset(
+        image_size=1024,
+        fwhm=100.0,
+        I0=1e4,
+        badpixel_fraction=1e-3,
+        fractional_error=None,
+        p=0.1,
+        theta_deg=20.0,
+        roll_angles=None,
+        prisms=None,
+        seed=None,
+        return_image_list=False
+):
+    """
+    Generate mock L3 polarimetric datasets with controlled fractional polarization
+    and polarization angles, including optional bad pixels and configurable intensity.
+
+    Each dataset can contain multiple images corresponding to different Wollaston
+    prisms and roll angles. For each image, a dual-beam simulation is performed
+    to produce the two analyzer channels (e.g., 0/90 deg for POL0, 45/135 deg for POL45),
+    and observational noise is applied according to the specified fractional error
+    or photon noise.
+
+    Args:
+        image_size (int): Size of the square image (H x W).
+        fwhm (float): Full width at half maximum of the Gaussian source in pixels.
+        I0 (float): Peak intensity of the Gaussian source.
+        badpixel_fraction (float): Fraction of randomly placed bad pixels (0-1).
+        fractional_error (float or None): Fractional Gaussian noise; if None, photon noise is used.
+        p (float): Fractional polarization (0-1).
+        theta_deg (float): Polarization angle in degrees.
+        roll_angles (list of float, optional): Roll angles per prism. Defaults to [-15, 15, -15, 15].
+        prisms (list of str, optional): Prism orientations ('POL0', 'POL45'). Defaults to ['POL0','POL0','POL45','POL45'].
+        seed (int, optional): Random seed.
+        return_image_list (bool): If True, return list of Image objects instead of Dataset.
+
+    Returns:
+        Dataset: Synthetic Dataset object containing Image objects with data, error maps,
+                 and data quality arrays.
+
+    Raises:
+        ValueError: If roll_angles and prisms lengths mismatch or prism name is invalid.
+    """
+
+    # --- defaults ---
+    if roll_angles is None:
+        roll_angles = [-15, 15, -15, 15]
+    if prisms is None:
+        prisms = ['POL0', 'POL0', 'POL45', 'POL45']
+
+    if len(roll_angles) != len(prisms):
+        raise ValueError("roll_angles and prisms must have the same length")
+
+    rng = np.random.default_rng(seed)
+
+    # --- Gaussian source ---
+    y, x = np.mgrid[0:image_size, 0:image_size]
+    x0 = y0 = image_size / 2.0
+    sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2)))
+    I_map = I0 * np.exp(-((x - x0)**2 + (y - y0)**2) / (2.0 * sigma**2))
+
+    # --- bad pixels ---
+    n_pixels = I_map.size
+    n_bad = int(n_pixels * badpixel_fraction)
+    dq = np.zeros_like(I_map, dtype=int)
+    if n_bad > 0:
+        idx_bad = rng.choice(n_pixels, size=n_bad, replace=False)
+        dq.flat[idx_bad] = 1
+        I_map.flat[idx_bad] *= -1
+
+    cubes_out = []
+    cubes_out_err = []
+
+    for roll, prism in zip(roll_angles, prisms):
+        theta_obs = np.radians(theta_deg + roll)
+        Q_map = I_map * p * np.cos(2 * theta_obs)
+        U_map = I_map * p * np.sin(2 * theta_obs)
+
+        # dual-beam prism simulation
+        if prism == 'POL0':
+            pair_cube = np.stack([0.5 * (I_map + Q_map),
+                                  0.5 * (I_map - Q_map)])
+        elif prism == 'POL45':
+            pair_cube = np.stack([0.5 * (I_map + U_map),
+                                  0.5 * (I_map - U_map)])
+        else:
+            raise ValueError(f"Invalid prism name: {prism}")
+
+        # error map
+        if fractional_error is not None:
+            pair_err = abs(pair_cube) * fractional_error
+        else:
+            pair_err = np.sqrt(abs(pair_cube))
+
+        pair_cube += rng.normal(loc=0.0, scale=pair_err)
+
+        cubes_out.append(pair_cube)
+        cubes_out_err.append(pair_err)
+
+    # convert to arrays
+    cubes_out = np.array(cubes_out)
+    cubes_out_err = np.array(cubes_out_err)
+
+    # --- headers ---
+    try:
+        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    except:
+        prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
+
+    # --- broadcast dq ---
+    dq_out = np.broadcast_to(dq, cubes_out.shape).copy()
+
+    Image_out = []
+    for i, (roll, prism) in enumerate(zip(roll_angles, prisms)):
+        prihdr_i = prihdr.copy()
+        exthdr_i = exthdr.copy()
+        prihdr_i['ROLL'] = roll
+        exthdr_i['DPAMNAME'] = prism
+        Image_out.append(
+            Image(
+                cubes_out[i],
+                pri_hdr=prihdr_i,
+                ext_hdr=exthdr_i,
+                err=cubes_out_err[i],
+                dq=dq_out[i],
+                err_hdr=errhdr,
+                dq_hdr=dqhdr
+            )
+        )
+    
+    if return_image_list:
+        return Image_out
+    else: 
+        Dataset_out = Dataset(Image_out)
+        return Dataset_out
 
 def get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale = 0.0218, image_center=(512, 512)):
     """
@@ -4793,3 +5197,81 @@ def get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale 
     center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
 
     return center_left, center_right
+
+def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
+                            image_separation_arcsec=7.5, q_inst=0.5,u_inst=-0.1,
+                            q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03):
+    '''
+    Generate a mock L2b polarimetric dataset for polcal testing
+
+    Args:
+        path_to_pol_ref_file (str): Path to the CSV file containing the reference polarization values
+        read_noise (float): Read noise to be added to the images
+        image_separation_arcsec (float): Separation between the two polarized images in arcseconds
+        q_inst (float): Instrumental Q polarization in percentage
+        u_inst (float): Instrumental U polarization in percentage
+        q_eff (float): Q efficiency
+        uq_ct (float): U to Q crosstalk
+        u_eff (float): U efficiency
+        qu_ct (float): Q to U crosstalk 
+
+    Returns:
+        corgidrp.data.Dataset: The simulated L2b polarimetric dataset for polcal testing
+    '''
+    
+    #Read in the test polarization stellar database from test_data/
+    pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
+    pol_ref_targets = pol_ref["TARGET"].tolist()
+    #Create mock data for three targets in the database - for each target inject known polarization
+    image_list = []
+    for i, target in enumerate(pol_ref_targets):
+        #create two mock L2b polarimetric images for each target, one for each Wollaston prism angle
+        #set left and right image values to zero so that only injected polarization is measured
+        pol0 = create_mock_l2b_polarimetric_image(dpamname='POL0', 
+                                                        observing_mode='NFOV', left_image_value=0, right_image_value=0)
+        pol0.pri_hdr['TARGET'] = target
+        pol45 = create_mock_l2b_polarimetric_image(dpamname='POL45', 
+observing_mode='NFOV', left_image_value=0, right_image_value=0)
+        pol45.pri_hdr['TARGET'] = target
+
+        pol0.err = (np.ones_like(pol0.data) * 1)[None,:]
+        pol45.err = (np.ones_like(pol45.data) * 1)[None,:]
+
+        #Add Random Roll - This should still work everywhere. 
+        random_roll = np.random.randint(0,360)
+        pol0.pri_hdr['ROLL'] = random_roll
+        pol45.pri_hdr['ROLL'] = random_roll
+
+        #get the q and u values from the reference polarization degree and angle
+        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_roll)
+        q_meas = q * q_eff + u * uq_ct + q_inst/100.0
+        u_meas = u * u_eff + q * qu_ct + u_inst/100.0
+        # generate four gaussians scaled appropriately for the target's polarization
+        gauss_array_shape = [26,26]
+        gauss1 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + q_meas)/2 #left image, POL0
+        gauss2 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - q_meas)/2 #right image, POL0
+        gauss3 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + u_meas)/2 #left image, POL45
+        gauss4 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - u_meas)/2 #right image, POL45
+        #add the gaussians to the mock images
+        center_left0, center_right0 = get_pol_image_centers(image_separation_arcsec, 0)
+        center_left45, center_right45 = get_pol_image_centers(image_separation_arcsec, 45)
+        pol0.data[center_left0[1]-gauss_array_shape[1]//2:center_left0[1]+gauss_array_shape[1]//2,
+                  center_left0[0]-gauss_array_shape[0]//2:center_left0[0]+gauss_array_shape[0]//2] += gauss1
+        pol0.data[center_right0[1]-gauss_array_shape[1]//2:center_right0[1]+gauss_array_shape[1]//2,
+                  center_right0[0]-gauss_array_shape[0]//2:center_right0[0]+gauss_array_shape[0]//2] += gauss2
+        pol45.data[center_left45[1]-gauss_array_shape[1]//2:center_left45[1]+gauss_array_shape[1]//2,
+                   center_left45[0]-gauss_array_shape[0]//2:center_left45[0]+gauss_array_shape[0]//2] += gauss3
+        pol45.data[center_right45[1]-gauss_array_shape[1]//2:center_right45[1]+gauss_array_shape[1]//2,
+                   center_right45[0]-gauss_array_shape[0]//2:center_right45[0]+gauss_array_shape[0]//2] += gauss4
+        
+        pol0.err = (np.sqrt(pol0.data+read_noise**2))[None,:]
+        pol45.err = (np.sqrt(pol45.data+read_noise**2))[None,:]
+
+        image_list.append(pol0)
+        image_list.append(pol45)
+
+    mock_dataset = data.Dataset(image_list)
+    for frame in mock_dataset.frames: 
+        frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_POLIMETRY"
+
+    return mock_dataset
