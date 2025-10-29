@@ -186,10 +186,10 @@ def test_polcal_e2e(e2edata_path, e2eoutput_path,
                     u_efficiency = 0.85,
                     uq_cross_talk = 0.05,
                     qu_cross_talk = 0.03):
-    '''
-    Common functiont that runs the test for both NDMuellerMatrix and MuellerMatrix
-    calibration products.   
-    '''
+
+    #################################################################
+    ### First do a bunch of setup, then run the test w and w/o ND ###
+    #################################################################
 
     # create output dir first
     output_dir = os.path.join(e2eoutput_path, 'polcal_e2e')
