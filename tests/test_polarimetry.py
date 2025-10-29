@@ -378,9 +378,12 @@ def test_mueller_matrix_cal():
         image_list.append(pol45)
     mock_dataset = data.Dataset(image_list)
     mock_dataset = l2b_to_l3.divide_by_exptime(mock_dataset)
+    mock_dataset = l2b_to_l3.split_image_by_polarization_state(mock_dataset)
+
+    stokes_dataset = pol.calc_stokes_unocculted(mock_dataset)
 
     #Run the Mueller matrix calibration function
-    mueller_matrix = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
+    mueller_matrix = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
     #Check that the measured mueller matrix is close to the input values
     assert mueller_matrix.data[1,0] == pytest.approx(q_instrumental_polarization/100.0, abs=1e-2)
@@ -396,13 +399,13 @@ def test_mueller_matrix_cal():
     #Put in the ND filter and make sure the type is correct. 
     for framm in mock_dataset.frames:
         framm.ext_hdr["FPAMNAME"] = "ND225"
-    mueller_matrix_nd = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
+    mueller_matrix_nd = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
     assert isinstance(mueller_matrix_nd, pol.NDMuellerMatrix)
 
     #Make sure that if the dataset is mixed ND and non-ND an error is raised
     mock_dataset.frames[0].ext_hdr["FPAMNAME"] = "CLEAR"
     with pytest.raises(ValueError):
-        mueller_matrix_mixed = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
+        mueller_matrix_mixed = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
 def test_subtract_stellar_polarization():
     """
@@ -644,7 +647,6 @@ def test_combine_polarization_states():
     assert np.allclose(target_stokes_vector[2] * (target_total_intensity), stokes_datacube[2], atol=0.05)
     assert np.allclose(target_stokes_vector[3] * (target_total_intensity), stokes_datacube[3], atol=0.05)
     
-
 def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
     """
     Test the `calc_stokes_unocculted` function using synthetic L3 polarimetric datasets.
@@ -773,7 +775,7 @@ def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
         )
 
         # --- Compute unocculted Stokes ---
-        Image_stokes_unocculted = calc_stokes_unocculted(dataset_polmock)
+        Image_stokes_unocculted = calc_stokes_unocculted(dataset_polmock)[0]
 
         Q_obs = Image_stokes_unocculted.data[1]
         U_obs = Image_stokes_unocculted.data[2]
@@ -806,14 +808,74 @@ def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
     assert np.std(Q_chi) == pytest.approx(1, abs=tol_std)
     assert np.median(U_chi) == pytest.approx(0, abs=tol_mean)
     assert np.std(U_chi) == pytest.approx(1, abs=tol_std)
+
+    ## Test that passingin multiple targets in a single dataset behaves as expected. 
+    # Create a dataset with two targets, each with different known polarization
+    p_target1 = 0.15
+    theta_target1 = 20.0
+    p_target2 = 0.25
+    theta_target2 = 40.0
+    prisms = np.array(['POL0', 'POL45']*4)
+    rolls = np.array([0,0,0,0,0,0,0,0])
+
+    dataset1_polmock_list = mocks.create_mock_polarization_l3_dataset(
+        I0=1e10,
+        p=p_target1,
+        theta_deg=theta_target1,
+        roll_angles=rolls,
+        prisms=prisms, 
+        return_image_list=True
+    )
+    for img in dataset1_polmock_list:
+        img.pri_hdr['TARGET'] = '1'
+
+    for img in dataset1_polmock_list:
+        img.pri_hdr['TARGET'] = '2'
+
+
+    dataset2_polmock_list = mocks.create_mock_polarization_l3_dataset(
+        I0=1e10,
+        p=p_target2,
+        theta_deg=theta_target2,
+        roll_angles=rolls,
+        prisms=prisms, 
+        return_image_list=True
+    )
+
+    #concatenate the lists
+    combined_image_list = dataset1_polmock_list + dataset2_polmock_list
+    combined_dataset = data.Dataset(combined_image_list)
+
+    # Compute unocculted Stokes for combined dataset
+    combined_stokes_dataset = calc_stokes_unocculted(combined_dataset)
+    # Separate the results for each target
+    stokes_target1 = combined_stokes_dataset[0]
+    stokes_target2 = combined_stokes_dataset[1]
+
+    #assert check that we get what is expceted for target 1
+    Q1_obs = stokes_target1.data[1]
+    U1_obs = stokes_target1.data[2]
+    Q2_obs = stokes_target2.data[1]
+    U2_obs = stokes_target2.data[2]
+
+    Q1_input = p_target1 * np.cos(2 * np.radians(theta_target1))
+    U1_input = p_target1 * np.sin(2 * np.radians(theta_target1))
+    Q2_input = p_target2 * np.cos(2 * np.radians(theta_target2))
+    U2_input = p_target2 * np.sin(2 * np.radians(theta_target2))
+
+    #should be at least 0.03
+    assert Q1_obs == pytest.approx(Q1_input, abs=0.03)
+    assert U1_obs == pytest.approx(U1_input, abs=0.03)
+    assert Q2_obs == pytest.approx(Q2_input, abs=0.03)
+    assert U2_obs == pytest.approx(U2_input, abs=0.03)
 
     return
 
 if __name__ == "__main__":
-    test_image_splitting()
-    test_calc_pol_p_and_pa_image()
-    test_subtract_stellar_polarization()
+    # test_image_splitting()
+    # test_calc_pol_p_and_pa_image()
+    # test_subtract_stellar_polarization()
     test_mueller_matrix_cal()
-    test_combine_polarization_states()
-    test_align_frames()
-    test_calc_stokes_unocculted()
+    # test_combine_polarization_states()
+    # test_align_frames()
+    # test_calc_stokes_unocculted()
