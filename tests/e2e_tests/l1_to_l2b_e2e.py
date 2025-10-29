@@ -11,11 +11,7 @@ import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 import shutil
-import logging
-import traceback
 from corgidrp.darks import build_synthesized_dark
-from corgidrp.check import (check_filename_convention, check_dimensions, 
-                           verify_hdu_count, verify_header_keywords)
 
 try:
     from proc_cgi_frame.gsw_process import Process
@@ -24,70 +20,39 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-def find_calibration_file(cal_dir, patterns, cal_type):
-    """Find a calibration file by searching for patterns in filenames.
-    
-    Args:
-        cal_dir (str): Directory to search in
-        patterns (str or list): Pattern(s) to search for (e.g., 'nln' or ['flat', 'flt'])
-        cal_type (str): Type of calibration for error messages (e.g., 'nonlinearity')
-        
-    Returns:
-        str: Full path to the found calibration file
-    """
-    if isinstance(patterns, str):
-        patterns = [patterns]
-    
-    matching_files = [f for f in os.listdir(cal_dir) if any(p in f.lower() for p in patterns)]
-    if not matching_files:
-        patterns_str = "' or '".join(patterns)
-        raise FileNotFoundError(f"No file containing '{patterns_str}' found in {cal_dir}")
-    return os.path.join(cal_dir, matching_files[0])
-
 def fix_str_for_tvac(
     list_of_fits,
     ):
     """ 
-    Gets around EMGAIN_A being set to 1 in TVAC data and fixes string header values.
+    Gets around EMGAIN_A being set to 1 in TVAC data.
     
     Args:
         list_of_fits (list): list of FITS files that need to be updated.
     """
     for file in list_of_fits:
-        with fits.open(file, mode='update') as fits_file:
-            exthdr = fits_file[1].header
-            if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
-                exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-            if type(exthdr['EMGAIN_C']) is str:
-                exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-            if 'RN' in exthdr and type(exthdr['RN']) is str:
-                exthdr['RN'] = float(exthdr['RN'])
-            
-            # TEMPORARY FIX: Set ISPC=False to disable photon counting
-            # TODO: Fix ISPC in source L1 files instead of modifying copies here
-            if 'ISPC' in exthdr:
-                exthdr['ISPC'] = False
+        fits_file = fits.open(file)
+        exthdr = fits_file[1].header
+        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        if type(exthdr['EMGAIN_C']) is str:
+            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
 
-def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, logger):
-    """Run the complete L1 to L2b end-to-end test.
-    
-    Args:
-        l1_datadir (str): Path to L1 input data directory
-        test_outputdir (str): Path to output directory
-        cals_dir (str): Path to calibrations directory
-        use_custom_data (bool): True if using custom input_datadir (process all files, skip TVAC comparison)
-        logger (logging.Logger): Logger instance for output
-        
-    Returns:
-        tuple: (new_l2a_filenames, new_l2b_filenames) - lists of output files
-    """
-    
-    # ================================================================================
-    # (1) Setup Output Directories
-    # ================================================================================
-    logger.info('='*80)
-    logger.info('Pre-test: Set up output directories and calibrations')
-    logger.info('='*80)
+
+@pytest.mark.e2e
+def test_l1_to_l2b(e2edata_path, e2eoutput_path):
+    # figure out paths, assuming everything is located in the same relative location
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    # l2a_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L2a")
+    # l2b_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L2b")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
+
+    # make output directory if needed
+    test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_e2e")
+    if os.path.exists(test_outputdir):
+        shutil.rmtree(test_outputdir)
+    os.makedirs(test_outputdir)
 
     # Create input_data subfolder
     input_data_dir = os.path.join(test_outputdir, 'input_l1')
@@ -115,31 +80,15 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, logger):
     # clean up by removing old files
     for file in os.listdir(l2a_outputdir):
         os.remove(os.path.join(l2a_outputdir, file))
-    
-    logger.info(f"Created output directories:")
-    logger.info(f"  - {input_data_dir}")
-    logger.info(f"  - {calibrations_dir}")
-    logger.info(f"  - {l2a_outputdir}")
-    logger.info(f"  - {test_outputdir}")
-    logger.info('')
 
-    # Build calibration file paths
-    processed_cal_path = cals_dir
-    
+    # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     dark_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
     flat_path = os.path.join(processed_cal_path, "flat.fits")
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
-
-    
-    # Filter to only include L1 files for mock calibration
-    all_files = os.listdir(l1_datadir)
-    l1_files_only = [f for f in all_files if f.endswith('l1_.fits')]
-    if not l1_files_only:
-        raise FileNotFoundError(f"No files ending in 'l1_.fits' found in {l1_datadir}")
-    mock_cal_filelist = [os.path.join(l1_datadir, l1_files_only[i]) for i in [-2,-1]] # grab the last two L1 files to mock the calibration 
+    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make calibration files using
@@ -165,7 +114,7 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, logger):
     mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(nonlinear_cal)
 
-    # KGain (with read noise)
+    # KGain
     kgain_val = 8.7 # 8.7 is what is in the TVAC headers
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
@@ -198,22 +147,6 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, logger):
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
-    # Dark calibration - use build_synthesized_dark to match the exposure time and emgain of the input data
-    sample_l1_file = os.path.join(l1_datadir, l1_files_only[0])
-    sample_hdr = fits.getheader(sample_l1_file, ext=1)
-    data_exptime = sample_hdr['EXPTIME']
-    data_emgain = float(sample_hdr['EMGAIN_C'])
-    
-    # Create a temporary dataset with the correct header values
-    temp_dataset = data.Dataset(mock_cal_filelist[:1])
-    temp_dataset.frames[0].ext_hdr['EXPTIME'] = data_exptime
-    temp_dataset.frames[0].ext_hdr['EMGAIN_C'] = data_emgain
-    
-    # Build a synthesized dark with the correct exposure time and EM gain
-    dark_cal = build_synthesized_dark(temp_dataset, noise_map)
-    mocks.rename_files_to_cgi_format(list_of_fits=[dark_cal], output_dir=calibrations_dir, level_suffix="drk_cal")
-    this_caldb.create_entry(dark_cal)
-
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
@@ -227,54 +160,16 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, logger):
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     this_caldb.create_entry(bp_map)
-    
-    logger.info("Created calibration products:")
-    logger.info(f"  - NonLinearityCalibration: {nonlinear_cal.filename}")
-    logger.info(f"  - KGain: {kgain.filename}")
-    logger.info(f"  - DetectorNoiseMaps: {noise_map.filename}")
-    logger.info(f"  - Dark: {dark_cal.filename}")
-    logger.info(f"  - FlatField: {flat.filename}")
-    logger.info(f"  - BadPixelMap: {bp_map.filename}")
-    logger.info('')
-
-    # ================================================================================
-    # (2) Validate Input L1 Images
-    # ================================================================================
-    logger.info('='*80)
-    logger.info('Test Case 1: Input L1 Image Data Format and Content')
-    logger.info('='*80)
 
     # define the raw science data to process
-    l1_data_filelist = [os.path.join(l1_datadir, l1_files_only[i]) for i in [0,1]] # grab the first two L1 files
 
+    l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
 
     # Copy files to input_data directory and update file list
     l1_data_filelist = [
         shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
         for file_path in l1_data_filelist
     ] 
-    
-    # Validate L1 input files
-    l1_dataset = data.Dataset(l1_data_filelist)
-    for i, (frame, filepath) in enumerate(zip(l1_dataset, l1_data_filelist)):
-        frame_info = f"L1 Input Frame {i}"
-        
-        check_filename_convention(os.path.basename(filepath), 'cgi_*_l1_.fits', frame_info, logger, data_level='l1_')
-        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L1'}, frame_info, logger)
-        
-        # Verify HDU count
-        try:
-            with fits.open(filepath) as hdul:
-                verify_hdu_count(hdul, 5, frame_info, logger)  # L1 should have 5 HDUs
-        except Exception as e:
-            logger.info(f"{frame_info}: HDU count verification failed. Error: {str(e)}. FAIL")
-        
-        # Check dimensions
-        logger.info(f"{frame_info}: Data shape {frame.data.shape}")
-        logger.info("")
-    
-    logger.info(f"Total input L1 images validated: {len(l1_dataset)}")
-    logger.info('')
 
     # tvac_l2a_filelist = [os.path.join(l2a_datadir, os.listdir(l2a_datadir)[i]) for i in [0,1]] #[os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
     # tvac_l2b_filelist = [os.path.join(l2b_datadir, os.listdir(l2b_datadir)[i]) for i in [0,1]] #[os.path.join(l2b_datadir, "{0}.fits".format(i)) for i in [90529, 90531]] # just grab the first two files
@@ -318,254 +213,74 @@ def run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, cals_dir, logger):
             hdul_copy.writeto(os.path.join(l2b_tvac_outputdir, l2b_tvac_filename), overwrite=True)
         tvac_l2b_filelist.append(os.path.join(l2b_tvac_outputdir, l2b_tvac_filename))
 
-    # modify TVAC headers
+    # modify TVAC headers for produciton
     #fix_headers_for_tvac(l1_data_filelist)
     fix_str_for_tvac(l1_data_filelist)
 
-    # ================================================================================
-    # (3) Run L1 -> L2a Processing Pipeline
-    # ================================================================================
-    logger.info('='*80)
-    logger.info('Running L1 -> L2a processing pipeline')
-    logger.info('='*80)
+    ####### Run the walker on some test_data
 
-    logger.info('Running L1 to L2a recipe...')
+    # l1 -> l2a processing
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir)
-    logger.info('')
 
-    # ================================================================================
-    # (4) Validate Intermediate L2a Images
-    # ================================================================================
-    logger.info('='*80)
-    logger.info('Test Case 2: Intermediate L2a Image Data Format and Content')
-    logger.info('='*80)
-    
+    # l2a -> l2b processing
     new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')] #[os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
-    logger.info(f"Found {len(new_l2a_filenames)} L2a output files")
-    
-    # Validate L2a files
-    l2a_dataset = data.Dataset(new_l2a_filenames)
-    for i, (frame, filepath) in enumerate(zip(l2a_dataset, new_l2a_filenames)):
-        frame_info = f"L2a Intermediate Frame {i}"
-        
-        check_filename_convention(os.path.basename(filepath), 'cgi_*_l2a.fits', frame_info, logger, data_level='l2a')
-        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2a'}, frame_info, logger)
-        
-        try:
-            with fits.open(filepath) as hdul:
-                verify_hdu_count(hdul, 5, frame_info, logger)
-        except Exception as e:
-            logger.info(f"{frame_info}: HDU count verification failed. Error: {str(e)}. FAIL")
-        
-        logger.info(f"{frame_info}: Data shape {frame.data.shape}")
-        logger.info("")
-    
-    logger.info(f"Total intermediate L2a images validated: {len(l2a_dataset)}")
-    logger.info('')
-    
-    # ================================================================================
-    # (5) Run L2a -> L2b Processing Pipeline
-    # ================================================================================
-    logger.info('='*80)
-    logger.info('Running L2a -> L2b processing pipeline')
-    logger.info('='*80)
-    
-    logger.info('Running L2a to L2b recipe...')
     walker.walk_corgidrp(new_l2a_filenames, "", test_outputdir)
-    logger.info('')
 
-    # ================================================================================
-    # (6) Validate Output L2b Images
-    # ================================================================================
-    logger.info('='*80)
-    logger.info('Test Case 3: Output L2b Image Data Format and Content')
-    logger.info('='*80)
-    
-    new_l2b_filenames = [os.path.join(test_outputdir, f) for f in os.listdir(test_outputdir) if f.endswith('l2b.fits')]
-    logger.info(f"Found {len(new_l2b_filenames)} L2b output files")
-    
-    # Validate L2b files
-    l2b_dataset = data.Dataset(new_l2b_filenames)
-    for i, (frame, filepath) in enumerate(zip(l2b_dataset, new_l2b_filenames)):
-        frame_info = f"L2b Output Frame {i}"
-        
-        try:
-            check_filename_convention(os.path.basename(filepath), 'cgi_*_l2b.fits', frame_info, logger, data_level='l2b')
-            verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info, logger)
-            
-            # Verify HDU count
-            with fits.open(filepath) as hdul:
-                verify_hdu_count(hdul, 5, frame_info, logger)
-            
-            # Check dimensions
-            logger.info(f"{frame_info}: Data shape {frame.data.shape}")
-            
-            # Verify units
-            if frame.ext_hdr['BUNIT'] == 'photoelectron':
-                logger.info(f"{frame_info}: BUNIT = 'photoelectron'. PASS")
-            else:
-                logger.info(f"{frame_info}: BUNIT = '{frame.ext_hdr['BUNIT']}'. Expected: 'photoelectron'. FAIL")
-            
-        except Exception as e:
-            logger.info(f"{frame_info}: Validation failed with error: {str(e)}. FAIL")
-            raise
-        
-        logger.info("")
-    
-    logger.info(f"Total output L2b images validated: {len(l2b_dataset)}")
-    logger.info('')
-    
-    # ================================================================================
-    # (7) Compare Against TVAC Reference Data (only for default data where TVAC reference exists)
-    # ================================================================================
-
-    logger.info('='*80)
-    logger.info('Test Case 4: TVAC Reference Data Comparison')
-    logger.info('='*80)
-    logger.info('Comparing against TVAC reference data...')
-    
-    # l2a data comparison
+    ##### Check against TVAC data
+    # l2a data
     for new_filename, tvac_filename in zip(sorted(new_l2a_filenames), sorted(tvac_l2a_filelist)):
         img = data.Image(new_filename)
-        with fits.open(tvac_filename) as hdulist:
-            tvac_dat = hdulist[1].data
-        diff = img.data - tvac_dat
-        if np.all(np.abs(diff) < 1e-5):
-            logger.info(f"L2a TVAC comparison: {os.path.basename(new_filename)} matches reference. PASS")
-        else:
-            logger.info(f"L2a TVAC comparison: {os.path.basename(new_filename)} differs from reference. FAIL")
 
-    # l2b data comparison
-    for new_filename, tvac_filename in zip(sorted(new_l2b_filenames), sorted(tvac_l2b_filelist)):
-        img = data.Image(new_filename)
         with fits.open(tvac_filename) as hdulist:
             tvac_dat = hdulist[1].data
         
+        diff = img.data - tvac_dat
+
+        assert np.all(np.abs(diff) < 1e-5)
+
+    # l2b data
+    new_l2b_filenames = [os.path.join(test_outputdir, f) for f in os.listdir(test_outputdir) if f.endswith('l2b.fits') ] #[os.path.join(l2b_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
+
+    for new_filename, tvac_filename in zip(sorted(new_l2b_filenames), sorted(tvac_l2b_filelist)):
+        img = data.Image(new_filename)
+
+        with fits.open(tvac_filename) as hdulist:
+            tvac_dat = hdulist[1].data
+    
         # make sure the NaNs from cosmic rays are in the same place
         e2e_nans = np.where(np.isnan(img.data))
         tvac_nans = np.where(np.isnan(tvac_dat))
-        if np.array_equal(e2e_nans, tvac_nans):
-            logger.info(f"L2b TVAC NaN comparison: {os.path.basename(new_filename)} NaN positions match. PASS")
-        else:
-            logger.info(f"L2b TVAC NaN comparison: {os.path.basename(new_filename)} NaN positions differ. FAIL")
-        
-        # compare the rest of the data
+        assert np.array_equal(e2e_nans,tvac_nans)
+        # now compare the rest of the data
         img.data[e2e_nans] = 0.0
         tvac_dat[tvac_nans] = 0.0
         diff = img.data - tvac_dat
-        if np.all(np.abs(diff) < 1e-5):
-            logger.info(f"L2b TVAC data comparison: {os.path.basename(new_filename)} matches reference. PASS")
-        else:
-            logger.info(f"L2b TVAC data comparison: {os.path.basename(new_filename)} differs from reference. FAIL")
-    
-    logger.info('')
+        assert np.all(np.abs(diff) < 1e-5)
 
+        # plotting script for debugging
+        # import matplotlib.pylab as plt
+        # fig = plt.figure(figsize=(10,3.5))
+        # fig.add_subplot(131)
+        # plt.imshow(img.data, vmin=-0.01, vmax=45, cmap="viridis")
+        # plt.title("corgidrp")
+        # plt.xlim([500, 560])
+        # plt.ylim([475, 535])
 
-    # plotting script for debugging
-    # import matplotlib.pylab as plt
-    # fig = plt.figure(figsize=(10,3.5))
-    # fig.add_subplot(131)
-    # plt.imshow(img.data, vmin=-0.01, vmax=45, cmap="viridis")
-    # plt.title("corgidrp")
-    # plt.xlim([500, 560])
-    # plt.ylim([475, 535])
+        # fig.add_subplot(132)
+        # plt.imshow(tvac_dat, vmin=-0.01, vmax=45, cmap="viridis")
+        # plt.title("TVAC")
+        # plt.xlim([500, 560])
+        # plt.ylim([475, 535])
 
-    # fig.add_subplot(132)
-    # plt.imshow(tvac_dat, vmin=-0.01, vmax=45, cmap="viridis")
-    # plt.title("TVAC")
-    # plt.xlim([500, 560])
-    # plt.ylim([475, 535])
+        # fig.add_subplot(133)
+        # plt.imshow(diff, vmin=-0.01, vmax=0.01, cmap="inferno")
+        # plt.title("difference")
+        # plt.xlim([500, 560])
+        # plt.ylim([475, 535])
 
-    # fig.add_subplot(133)
-    # plt.imshow(diff, vmin=-0.01, vmax=0.01, cmap="inferno")
-    # plt.title("difference")
-    # plt.xlim([500, 560])
-    # plt.ylim([475, 535])
-
-    # plt.show()
+        # plt.show()
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
-    
-    return new_l2a_filenames, new_l2b_filenames
-
-
-@pytest.mark.e2e
-def test_l1_to_l2b(e2edata_path, e2eoutput_path):
-    """Run the complete L1 to L2b end-to-end test.
-    
-    Args:
-        e2edata_path (str): Path to test data
-        e2eoutput_path (str): Output directory path for results and logs
-        input_datadir (str or None): Custom input data directory
-        cals_dir (str or None): Custom calibration directory
-    """
-    # Set up output directory and logging
-    global logger
-    
-    # Use custom paths if provided, otherwise fall back to defaults from e2edata_path
-    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
-    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
-
-    # make output directory if needed
-    test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_e2e")
-    if os.path.exists(test_outputdir):
-        shutil.rmtree(test_outputdir)
-    os.makedirs(test_outputdir)
-    
-    log_file = os.path.join(test_outputdir, 'l1_to_l2b_e2e.log')
-    
-    # Create a new logger specifically for this test
-    logger = logging.getLogger('l1_to_l2b_e2e')
-    logger.setLevel(logging.INFO)
-    
-    # Clear any existing handlers to avoid duplicates
-    logger.handlers.clear()
-    
-    # Create file handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-    
-    # Create console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    
-    # Create formatter
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-    
-    # Add handlers to logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    
-    logger.info('='*80)
-    logger.info('L1 TO L2B END-TO-END TEST')
-    logger.info('='*80)
-    logger.info("")
-    
-    # Run the complete end-to-end test
-    try:
-        new_l2a_filenames, new_l2b_filenames = run_l1_to_l2b_e2e_test(l1_datadir, test_outputdir, processed_cal_path, logger)
-        
-        logger.info('='*80)
-        logger.info('END-TO-END TEST COMPLETE - ALL TESTS PASSED')
-        logger.info('='*80)
-        
-        print('e2e test for L1 to L2b passed')
-    except Exception as e:
-        logger.error('='*80)
-        logger.error('END-TO-END TEST FAILED')
-        logger.error('='*80)
-        logger.error(f"Error: {str(e)}")
-        logger.error(f"Error type: {type(e).__name__}")
-        
-        # Print traceback to log
-        logger.error("Full traceback:")
-        logger.error(traceback.format_exc())
-        
-        print(f'e2e test for L1 to L2b FAILED: {str(e)}')
-        raise
-
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -574,17 +289,15 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
-    ap = argparse.ArgumentParser(description="run the l1->l2b end-to-end test")
+    ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
-
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-
     test_l1_to_l2b(e2edata_dir, outputdir)
