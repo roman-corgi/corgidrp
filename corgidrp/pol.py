@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from corgidrp.data import Image, NDMuellerMatrix, MuellerMatrix
+from corgidrp.data import Image, NDMuellerMatrix, MuellerMatrix, Dataset
 from corgidrp.fluxcal import aper_phot, measure_aper_flux_pol
 
 def aper_phot_pol(image, phot_kwargs):
@@ -37,7 +37,7 @@ def aper_phot_pol(image, phot_kwargs):
 
     return flux, flux_err
 
-def calc_stokes_unocculted(dataset,
+def calc_stokes_unocculted(input_dataset,
                            phot_kwargs=None,
                            image_center_x=512, image_center_y=512):
     """
@@ -89,85 +89,99 @@ def calc_stokes_unocculted(dataset,
 
     fluxes, flux_errs, thetas = [], [], []
 
-    # --- Photometry loop ---
-    for ds in dataset:
-        prism = ds.ext_hdr.get('DPAMNAME')
-        if prism not in prism_map:
-            raise ValueError(f"Unknown prism: {prism}")
-        
-        flux, flux_err = aper_phot_pol(ds, phot_kwargs)
-        fluxes.append(flux)
-        flux_errs.append(flux_err)
-        
-        for phi in prism_map[prism]:
-            thetas.append(np.radians(phi))
+    #split datasets by target if there are multiple targets
+    # targets = []
+    datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
 
-    fluxes = np.array(fluxes)
-    flux_errs = np.array(flux_errs)
-    thetas = np.array(thetas)
+    stokes_vectors = []
 
-    # Prevent division by zero
-    flux_errs[flux_errs == 0] = np.min(flux_errs[flux_errs > 0])
 
-    # --- Instrument coordinates: left - right ---
-    n_images = len(dataset)
-    fluxes = fluxes.reshape([n_images, 2])
-    flux_errs = flux_errs.reshape([n_images, 2])
-    thetas = thetas.reshape([n_images, 2])
-    I_vals = np.sum(fluxes, axis=1)
-    I_errs = np.sqrt(np.sum(flux_errs**2, axis=1))
-        
-    QU_vals = fluxes[:,0] - fluxes[:,1]  # left - right
-        
-    # Weighted means across all prisms
-    wI = 1.0 / I_errs**2
-    I_val = np.sum(I_vals * wI) / np.sum(wI)
-    I_err = 1.0 / np.sqrt(np.sum(wI))
+    for dataset in datasets:
+        # --- Photometry loop ---
+        for ds in dataset:
+            prism = ds.ext_hdr.get('DPAMNAME')
+            if prism not in prism_map:
+                raise ValueError(f"Unknown prism: {prism}")
+            
+            flux, flux_err = aper_phot_pol(ds, phot_kwargs)
+            fluxes.append(flux)
+            flux_errs.append(flux_err)
+            
+            for phi in prism_map[prism]:
+                thetas.append(np.radians(phi))
 
-    idx_0 = np.where(np.degrees(thetas[:,0]) == 0)[0]
-    if idx_0.size > 0:
-        Q_vals = QU_vals[idx_0]
-        Q_val = np.sum(Q_vals * wI[idx_0]) / np.sum(wI[idx_0])
-        Q_err = 1.0 / np.sqrt(np.sum(wI[idx_0]))
-    else:
-        Q_val = 0.
-        Q_err = 0.
+        fluxes = np.array(fluxes)
+        flux_errs = np.array(flux_errs)
+        thetas = np.array(thetas)
 
-    idx_45 = np.where(np.degrees(thetas[:,0]) == 45)[0]
-    if idx_45.size > 0:
-        U_vals = QU_vals[idx_45]
-        U_val = np.sum(U_vals * wI[idx_45]) / np.sum(wI[idx_45])
-        U_err = 1.0 / np.sqrt(np.sum(wI[idx_45]))
-    else:
-        U_val = 0.
-        U_err = 0.
+        # Prevent division by zero
+        flux_errs[flux_errs == 0] = np.min(flux_errs[flux_errs > 0])
 
-    # Fractional polarization
-    Q_frac = Q_val / I_val
-    U_frac = U_val / I_val
-    Q_frac_err = np.sqrt((Q_err/I_val)**2 + (Q_val*I_err/I_val**2)**2)
-    U_frac_err = np.sqrt((U_err/I_val)**2 + (U_val*I_err/I_val**2)**2)
+        # --- Instrument coordinates: left - right ---
+        n_images = len(dataset)
+        fluxes = fluxes.reshape([n_images, 2])
+        flux_errs = flux_errs.reshape([n_images, 2])
+        thetas = thetas.reshape([n_images, 2])
+        I_vals = np.sum(fluxes, axis=1)
+        I_errs = np.sqrt(np.sum(flux_errs**2, axis=1))
+            
+        QU_vals = fluxes[:,0] - fluxes[:,1]  # left - right
+            
+        # Weighted means across all prisms
+        wI = 1.0 / I_errs**2
+        I_val = np.sum(I_vals * wI) / np.sum(wI)
+        I_err = 1.0 / np.sqrt(np.sum(wI))
 
-    data_out = np.array([I_val, Q_frac, U_frac])
-    err_out = np.array([I_err, Q_frac_err, U_frac_err])
-    dq_out = np.zeros_like(data_out, dtype=int)
+        idx_0 = np.where(np.degrees(thetas[:,0]) == 0)[0]
+        if idx_0.size > 0:
+            Q_vals = QU_vals[idx_0]
+            Q_val = np.sum(Q_vals * wI[idx_0]) / np.sum(wI[idx_0])
+            Q_err = 1.0 / np.sqrt(np.sum(wI[idx_0]))
+        else:
+            Q_val = 0.
+            Q_err = 0.
 
-    # --- Headers ---
-    pri_hdr = dataset[0].pri_hdr
-    ext_hdr = dataset[0].ext_hdr
-    ext_hdr.add_history("Computed uncalibrated Stokes parameters: data=[I, Q/I, U/I]")
-    err_hdr = dataset[0].err_hdr
-    dq_hdr = dataset[0].dq_hdr
+        idx_45 = np.where(np.degrees(thetas[:,0]) == 45)[0]
+        if idx_45.size > 0:
+            U_vals = QU_vals[idx_45]
+            U_val = np.sum(U_vals * wI[idx_45]) / np.sum(wI[idx_45])
+            U_err = 1.0 / np.sqrt(np.sum(wI[idx_45]))
+        else:
+            U_val = 0.
+            U_err = 0.
 
-    return Image(
-        data_out,
-        pri_hdr=pri_hdr,
-        ext_hdr=ext_hdr,
-        err=err_out,
-        dq=dq_out,
-        err_hdr=err_hdr,
-        dq_hdr=dq_hdr
-    )
+        # Fractional polarization
+        Q_frac = Q_val / I_val
+        U_frac = U_val / I_val
+        Q_frac_err = np.sqrt((Q_err/I_val)**2 + (Q_val*I_err/I_val**2)**2)
+        U_frac_err = np.sqrt((U_err/I_val)**2 + (U_val*I_err/I_val**2)**2)
+
+        data_out = np.array([I_val, Q_frac, U_frac])
+        err_out = np.array([I_err, Q_frac_err, U_frac_err])
+        dq_out = np.zeros_like(data_out, dtype=int)
+
+        # --- Headers ---
+        pri_hdr = dataset[0].pri_hdr
+        ext_hdr = dataset[0].ext_hdr
+        ext_hdr.add_history("Computed uncalibrated Stokes parameters: data=[I, Q/I, U/I]")
+        err_hdr = dataset[0].err_hdr
+        dq_hdr = dataset[0].dq_hdr
+
+        stokes_vector = Image(
+            data_out,
+            pri_hdr=pri_hdr,
+            ext_hdr=ext_hdr,
+            err=err_out,
+            dq=dq_out,
+            err_hdr=err_hdr,
+            dq_hdr=dq_hdr
+        )
+
+        stokes_vectors.append(stokes_vector)
+
+    stokes_dataset = Dataset(stokes_vectors)
+
+    return stokes_dataset
 
 def generate_mueller_matrix_cal(input_dataset, image_center_x=512, image_center_y=512, separation_diameter_arcsec=7.5, 
                                 alignment_angles=[0,45], phot_kwargs=None,
