@@ -165,8 +165,8 @@ def calc_stokes_unocculted(input_dataset,
         Q_frac_err = np.sqrt((Q_err/I_val)**2 + (Q_val*I_err/I_val**2)**2)
         U_frac_err = np.sqrt((U_err/I_val)**2 + (U_val*I_err/I_val**2)**2)
 
-        data_out = np.array([I_val, Q_frac, U_frac])
-        err_out = np.array([I_err, Q_frac_err, U_frac_err])
+        data_out = np.array([I_val, Q_frac, U_frac, 0.])
+        err_out = np.array([I_err, Q_frac_err, U_frac_err, np.inf])
         dq_out = np.zeros_like(data_out, dtype=int)
 
         # --- Headers ---
