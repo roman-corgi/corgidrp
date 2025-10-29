@@ -34,7 +34,7 @@ from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy
 import datetime
 import glob
 import shutil
-
+from corgidrp import pol
 
 from emccd_detect.emccd_detect import EMCCDDetect
 from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
@@ -5197,3 +5197,81 @@ def get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale 
     center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
 
     return center_left, center_right
+
+def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
+                            image_separation_arcsec=7.5, q_inst=0.5,u_inst=-0.1,
+                            q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03):
+    '''
+    Generate a mock L2b polarimetric dataset for polcal testing
+
+    Args:
+        path_to_pol_ref_file (str): Path to the CSV file containing the reference polarization values
+        read_noise (float): Read noise to be added to the images
+        image_separation_arcsec (float): Separation between the two polarized images in arcseconds
+        q_inst (float): Instrumental Q polarization in percentage
+        u_inst (float): Instrumental U polarization in percentage
+        q_eff (float): Q efficiency
+        uq_ct (float): U to Q crosstalk
+        u_eff (float): U efficiency
+        qu_ct (float): Q to U crosstalk 
+
+    Returns:
+        corgidrp.data.Dataset: The simulated L2b polarimetric dataset for polcal testing
+    '''
+    
+    #Read in the test polarization stellar database from test_data/
+    pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
+    pol_ref_targets = pol_ref["TARGET"].tolist()
+    #Create mock data for three targets in the database - for each target inject known polarization
+    image_list = []
+    for i, target in enumerate(pol_ref_targets):
+        #create two mock L2b polarimetric images for each target, one for each Wollaston prism angle
+        #set left and right image values to zero so that only injected polarization is measured
+        pol0 = create_mock_l2b_polarimetric_image(dpamname='POL0', 
+                                                        observing_mode='NFOV', left_image_value=0, right_image_value=0)
+        pol0.pri_hdr['TARGET'] = target
+        pol45 = create_mock_l2b_polarimetric_image(dpamname='POL45', 
+observing_mode='NFOV', left_image_value=0, right_image_value=0)
+        pol45.pri_hdr['TARGET'] = target
+
+        pol0.err = (np.ones_like(pol0.data) * 1)[None,:]
+        pol45.err = (np.ones_like(pol45.data) * 1)[None,:]
+
+        #Add Random Roll - This should still work everywhere. 
+        random_roll = np.random.randint(0,360)
+        pol0.pri_hdr['ROLL'] = random_roll
+        pol45.pri_hdr['ROLL'] = random_roll
+
+        #get the q and u values from the reference polarization degree and angle
+        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_roll)
+        q_meas = q * q_eff + u * uq_ct + q_inst/100.0
+        u_meas = u * u_eff + q * qu_ct + u_inst/100.0
+        # generate four gaussians scaled appropriately for the target's polarization
+        gauss_array_shape = [26,26]
+        gauss1 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + q_meas)/2 #left image, POL0
+        gauss2 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - q_meas)/2 #right image, POL0
+        gauss3 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + u_meas)/2 #left image, POL45
+        gauss4 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - u_meas)/2 #right image, POL45
+        #add the gaussians to the mock images
+        center_left0, center_right0 = get_pol_image_centers(image_separation_arcsec, 0)
+        center_left45, center_right45 = get_pol_image_centers(image_separation_arcsec, 45)
+        pol0.data[center_left0[1]-gauss_array_shape[1]//2:center_left0[1]+gauss_array_shape[1]//2,
+                  center_left0[0]-gauss_array_shape[0]//2:center_left0[0]+gauss_array_shape[0]//2] += gauss1
+        pol0.data[center_right0[1]-gauss_array_shape[1]//2:center_right0[1]+gauss_array_shape[1]//2,
+                  center_right0[0]-gauss_array_shape[0]//2:center_right0[0]+gauss_array_shape[0]//2] += gauss2
+        pol45.data[center_left45[1]-gauss_array_shape[1]//2:center_left45[1]+gauss_array_shape[1]//2,
+                   center_left45[0]-gauss_array_shape[0]//2:center_left45[0]+gauss_array_shape[0]//2] += gauss3
+        pol45.data[center_right45[1]-gauss_array_shape[1]//2:center_right45[1]+gauss_array_shape[1]//2,
+                   center_right45[0]-gauss_array_shape[0]//2:center_right45[0]+gauss_array_shape[0]//2] += gauss4
+        
+        pol0.err = (np.sqrt(pol0.data+read_noise**2))[None,:]
+        pol45.err = (np.sqrt(pol45.data+read_noise**2))[None,:]
+
+        image_list.append(pol0)
+        image_list.append(pol45)
+
+    mock_dataset = data.Dataset(image_list)
+    for frame in mock_dataset.frames: 
+        frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_POLIMETRY"
+
+    return mock_dataset

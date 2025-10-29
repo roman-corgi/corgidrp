@@ -1,4 +1,5 @@
 # A file that holds the functions to handle polarimetry data 
+import os
 import numpy as np
 import pandas as pd
 
@@ -192,7 +193,7 @@ def calc_stokes_unocculted(input_dataset,
     return stokes_dataset
 
 def generate_mueller_matrix_cal(input_dataset, 
-                                path_to_pol_ref_file="./data/stellar_polarization_database.csv",
+                                path_to_pol_ref_file=None,
                                 svd_threshold=1e-5):
     '''
     Calculates the Mueller Matrix calibration for a given dataset of polarimetric observations.
@@ -221,6 +222,9 @@ def generate_mueller_matrix_cal(input_dataset,
     '''
 
     dataset = input_dataset.copy()
+
+    if path_to_pol_ref_file is None:
+        path_to_pol_ref_file = os.path.join(os.path.dirname(__file__), "data", "stellar_polarization_database.csv")
 
     # check that all the data in the dataset is either ND or non-ND, by looking for ND in the FPAMNAME keyword
     nd_flags = [("ND" in data.ext_hdr["FPAMNAME"]) for data in dataset]
@@ -272,13 +276,17 @@ def generate_mueller_matrix_cal(input_dataset,
 
     # invert the stokes matrix using SVD and multiply the the normalized differences to get the mueller matrix elements
     u,s,v=np.linalg.svd(stokes_matrix)
+    #SVD of non-square matrices needs array re-shaping
+    rank = s.size
+    u = u[:, :rank]
+    v = v[:rank, :]
     # limit the singular values to improve the conditioning of the inversion
     s[s < svd_threshold] = svd_threshold
     stokes_matrix_inv=np.dot(v.transpose(),np.dot(np.diag(s**-1),u.transpose()))
     mueller_elements = np.dot(stokes_matrix_inv, np.array(stokes_vectors))
     mueller_elements_covar = np.matmul(stokes_matrix_inv,stokes_matrix_inv.T)
     mueller_elements_covar[mueller_elements_covar <0] = 0
-    mueller_elements_err = np.diag(np.matmul(stokes_matrix_inv,stokes_matrix_inv.T)*(stokes_vector_errs**2))**0.5
+    mueller_elements_err = np.diag(np.matmul(stokes_matrix_inv.T,stokes_matrix_inv)*(stokes_vector_errs**2))**0.5
 
     #Fill in the mueller matrix
     mueller_matrix = np.zeros((4,4))

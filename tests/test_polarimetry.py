@@ -23,6 +23,8 @@ from astropy.io.fits.verify import VerifyWarning
 from astropy.wcs import FITSFixedWarning
 from pyklip.klip import rotate
 
+
+
 def test_image_splitting():
     """
     Create mock L2b polarimetric images, check that it is split correctly
@@ -311,87 +313,39 @@ def test_mueller_matrix_cal():
     Tests the creation of a Mueller Matrix calibration file from a mock dataset.
     '''
     
-    read_noise = 200
-    
-    image_separation_arcsec = 7.5
-
-    #Build an instrumental polarization matrix to inject into the mock data
-    q_instrumental_polarization = 0.5 #assumed instrumental polarization in percent
-    u_instrumental_polarization = -0.1 #assumed instrumental polarization in percent
-    q_efficiency = 0.8
-    uq_cross_talk = 0.05
-    u_efficiency = 0.7
-    qu_cross_talk = 0.03
-
     #Get path to this file
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    path_to_pol_ref_file = os.path.join(current_file_path, "test_data/stellar_polarization_database.csv")
-    #Read in the test polarization stellar database from test_data/
-    pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
-    pol_ref_targets = pol_ref["TARGET"].tolist()
-    #Create mock data for three targets in the database - for each target inject known polarization
-    image_list = []
-    for i, target in enumerate(pol_ref_targets):
-        #create two mock L2b polarimetric images for each target, one for each Wollaston prism angle
-        #set left and right image values to zero so that only injected polarization is measured
-        pol0 = mocks.create_mock_l2b_polarimetric_image(dpamname='POL0', 
-                                                        observing_mode='NFOV', left_image_value=0, right_image_value=0)
-        pol0.pri_hdr['TARGET'] = target
-        pol45 = mocks.create_mock_l2b_polarimetric_image(dpamname='POL45', 
-                                                        observing_mode='NFOV', left_image_value=0, right_image_value=0)
-        pol45.pri_hdr['TARGET'] = target
+    #To test this we need this catalog with the same values as the test data also in corgidrp/data/stellar_polarization_database.csv
+    path_to_pol_ref_file = os.path.join(current_file_path, "test_data","stellar_polarization_database.csv")
 
-        pol0.err = (np.ones_like(pol0.data) * 1)[None,:]
-        pol45.err = (np.ones_like(pol45.data) * 1)[None,:]
+    q_instrumental_polarization = 0.5  # in percent
+    u_instrumental_polarization = -0.1  # in percent
+    q_efficiency = 0.8
+    u_efficiency = 0.7
+    uq_cross_talk = 0.05
+    qu_cross_talk = 0.03
 
-        #Add Random Roll - This should still work everywhere. 
-        random_roll = np.random.randint(0,360)
-        pol0.pri_hdr['ROLL'] = random_roll
-        pol45.pri_hdr['ROLL'] = random_roll
-
-        #get the q and u values from the reference polarization degree and angle
-        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_roll)
-        q_meas = q * q_efficiency + u * uq_cross_talk + q_instrumental_polarization/100.0
-        u_meas = u * u_efficiency + q * qu_cross_talk + u_instrumental_polarization/100.0
-        # generate four gaussians scaled appropriately for the target's polarization
-        gauss_array_shape = [26,26]
-        gauss1 = mocks.gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + q_meas)/2 #left image, POL0
-        gauss2 = mocks.gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - q_meas)/2 #right image, POL0
-        gauss3 = mocks.gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + u_meas)/2 #left image, POL45
-        gauss4 = mocks.gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - u_meas)/2 #right image, POL45
-        #add the gaussians to the mock images
-        center_left0, center_right0 = mocks.get_pol_image_centers(image_separation_arcsec, 0)
-        center_left45, center_right45 = mocks.get_pol_image_centers(image_separation_arcsec, 45)
-        pol0.data[center_left0[1]-gauss_array_shape[1]//2:center_left0[1]+gauss_array_shape[1]//2,
-                  center_left0[0]-gauss_array_shape[0]//2:center_left0[0]+gauss_array_shape[0]//2] += gauss1
-        pol0.data[center_right0[1]-gauss_array_shape[1]//2:center_right0[1]+gauss_array_shape[1]//2,
-                  center_right0[0]-gauss_array_shape[0]//2:center_right0[0]+gauss_array_shape[0]//2] += gauss2
-        pol45.data[center_left45[1]-gauss_array_shape[1]//2:center_left45[1]+gauss_array_shape[1]//2,
-                   center_left45[0]-gauss_array_shape[0]//2:center_left45[0]+gauss_array_shape[0]//2] += gauss3
-        pol45.data[center_right45[1]-gauss_array_shape[1]//2:center_right45[1]+gauss_array_shape[1]//2,
-                   center_right45[0]-gauss_array_shape[0]//2:center_right45[0]+gauss_array_shape[0]//2] += gauss4
-        
-        pol0.err = (np.sqrt(pol0.data+read_noise**2))[None,:]
-        pol45.err = (np.sqrt(pol45.data+read_noise**2))[None,:]
-
-        image_list.append(pol0)
-        image_list.append(pol45)
-    mock_dataset = data.Dataset(image_list)
+    mock_dataset = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file,
+                                           q_inst=q_instrumental_polarization,
+                                           u_inst=u_instrumental_polarization,
+                                           q_eff=q_efficiency,
+                                           u_eff=u_efficiency,
+                                           uq_ct=uq_cross_talk,
+                                           qu_ct=qu_cross_talk)
     mock_dataset = l2b_to_l3.divide_by_exptime(mock_dataset)
     mock_dataset = l2b_to_l3.split_image_by_polarization_state(mock_dataset)
-
     stokes_dataset = pol.calc_stokes_unocculted(mock_dataset)
 
     #Run the Mueller matrix calibration function
     mueller_matrix = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
     #Check that the measured mueller matrix is close to the input values
-    assert mueller_matrix.data[1,0] == pytest.approx(q_instrumental_polarization/100.0, abs=1e-2)
-    assert mueller_matrix.data[2,0] == pytest.approx(u_instrumental_polarization/100.0, abs=1e-2)
-    assert mueller_matrix.data[1,1] == pytest.approx(q_efficiency, abs=1e-2)
-    assert mueller_matrix.data[2,2] == pytest.approx(u_efficiency, abs=1e-2)
-    assert mueller_matrix.data[1,2] == pytest.approx(uq_cross_talk, abs=1e-2)
-    assert mueller_matrix.data[2,1] == pytest.approx(qu_cross_talk, abs=1e-2)
+    assert mueller_matrix.data[1,0] == pytest.approx(q_instrumental_polarization/100.0, abs=1e-3)
+    assert mueller_matrix.data[2,0] == pytest.approx(u_instrumental_polarization/100.0, abs=1e-3)
+    assert mueller_matrix.data[1,1] == pytest.approx(q_efficiency, abs=1e-3)
+    assert mueller_matrix.data[2,2] == pytest.approx(u_efficiency, abs=1e-3)
+    assert mueller_matrix.data[1,2] == pytest.approx(uq_cross_talk, abs=1e-3)
+    assert mueller_matrix.data[2,1] == pytest.approx(qu_cross_talk, abs=1e-3)
 
     #Check that the type of mueller_matrix is correct
     assert isinstance(mueller_matrix, pol.MuellerMatrix)
@@ -749,6 +703,9 @@ def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
     roughly to a 3-sigma limit on expected statistical deviations.
     """
 
+    # Set the random seed for reproducibility
+    np.random.seed(42) 
+
     # --- Simulate varying polarization fractions ---
     p_input = 0.1 + 0.2 * np.random.rand(n_sim)
     theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
@@ -875,7 +832,7 @@ if __name__ == "__main__":
     # test_image_splitting()
     # test_calc_pol_p_and_pa_image()
     # test_subtract_stellar_polarization()
-    test_mueller_matrix_cal()
+    # test_mueller_matrix_cal()
     # test_combine_polarization_states()
     # test_align_frames()
-    # test_calc_stokes_unocculted()
+    test_calc_stokes_unocculted()
