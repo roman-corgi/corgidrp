@@ -99,64 +99,88 @@ def distortion_correction(input_dataset, astrom_calibration):
 
         im_data = undistorted_data.data
         im_err = undistorted_data.err
-        imgsizeX, imgsizeY = im_data.shape
+        is_pol_data = len(im_data.shape) == 3 and im_data.shape[0] == 2
+        num_iterations = 2 if is_pol_data else 1 #handle pol Image (2,1024,1024) so loop twice to correct both frames
+        undistorted_image_list = []
+        undistorted_errors_list = []
 
-        # set image size to the largest axis if not square imagea
-        imgsize = np.max([imgsizeX,imgsizeY])
+        for pol_idx in range(num_iterations):
+            # extract appropriate data slice
+            if is_pol_data:
+                im_data_single = im_data[pol_idx]
+                im_err_single = im_err[:, pol_idx]
+            else:
+                im_data_single = im_data
+                im_err_single = im_err
 
-        yorig, xorig = np.indices(im_data.shape)
-        y0, x0 = imgsize//2, imgsize//2
-        yorig -= y0
-        xorig -= x0
+            imgsizeX, imgsizeY = im_data_single.shape
 
-        ### compute the distortion map based on the calibration file passed in
-        fitparams = (distortion_order + 1)**2
+            # set image size to the largest axis if not square image
+            imgsize = np.max([imgsizeX, imgsizeY])
 
-            # reshape the coefficient arrays
-        x_params = distortion_coeffs[:fitparams]
-        x_params = x_params.reshape(distortion_order+1, distortion_order+1)
+            yorig, xorig = np.indices(im_data_single.shape)
+            y0, x0 = imgsize // 2, imgsize // 2
+            yorig -= y0
+            xorig -= x0
+            ### compute the distortion map based on the calibration file passed in
+            fitparams = (distortion_order + 1)**2
 
-        total_orders = np.arange(distortion_order+1)[:,None] + np.arange(distortion_order+1)[None,:]
-        x_params = x_params / 500**(total_orders)
+                # reshape the coefficient arrays
+            x_params = distortion_coeffs[:fitparams]
+            x_params = x_params.reshape(distortion_order+1, distortion_order+1)
 
-            # evaluate the legendre polynomial at all pixel positions
-        x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), x_params)
-        x_corr = x_corr.reshape(xorig.shape)
+            total_orders = np.arange(distortion_order+1)[:,None] + np.arange(distortion_order+1)[None,:]
+            x_params = x_params / 500**(total_orders)
 
-        distmapX = x_corr - xorig
+                # evaluate the legendre polynomial at all pixel positions
+            x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), x_params)
+            x_corr = x_corr.reshape(xorig.shape)
 
-            # reshape and evaluate the same way for the y coordinates
-        y_params = distortion_coeffs[fitparams:]
-        y_params = y_params.reshape(distortion_order+1, distortion_order+1)
-        y_params = y_params /500**(total_orders)
+            distmapX = x_corr - xorig
 
-        y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), y_params)
-        y_corr = y_corr.reshape(yorig.shape)
-        distmapY = y_corr - yorig
+                # reshape and evaluate the same way for the y coordinates
+            y_params = distortion_coeffs[fitparams:]
+            y_params = y_params.reshape(distortion_order+1, distortion_order+1)
+            y_params = y_params /500**(total_orders)
 
-        # apply the distortion grid to the image indeces and map the image
-        gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
-        gridx = gridx - distmapX
-        gridy = gridy - distmapY
-        
-        undistorted_image = scipy.ndimage.map_coordinates(im_data, [gridy, gridx])
-        
-        # undistort the errors
-        if len(im_err.shape) == 2:
-            undistorted_errors = scipy.ndimage.map_coordinates(im_err, [gridy, gridx])
+            y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), y_params)
+            y_corr = y_corr.reshape(yorig.shape)
+            distmapY = y_corr - yorig
+
+            # apply the distortion grid to the image indeces and map the image
+            gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
+            gridx = gridx - distmapX
+            gridy = gridy - distmapY
+
+            undistorted_image = scipy.ndimage.map_coordinates(im_data_single, [gridy, gridx])
+
+            # undistort the errors
+            if len(im_err_single.shape) == 2:
+                undistorted_errors = scipy.ndimage.map_coordinates(im_err_single, [gridy, gridx])
+            else:
+                undistorted_errors = []
+                for err in im_err_single:
+                    und_err = scipy.ndimage.map_coordinates(err, [gridy, gridx])
+                    undistorted_errors.append(und_err)
+
+            undistorted_image_list.append(undistorted_image)
+            undistorted_errors_list.append(undistorted_errors)
+        # stack results back now that individual frames are undistorted
+        if is_pol_data:
+            undistorted_image = np.stack(undistorted_image_list)    #shape (2,1024,1024)
+            undistorted_errors = [np.stack([undistorted_errors_list[0][i],
+                                             undistorted_errors_list[1][i]])
+                                  for i in range(len(undistorted_errors_list[0]))]  #shape (1,2,1024,1024)
         else:
-            undistorted_errors = []
-            for err in im_err:
-                und_err = scipy.ndimage.map_coordinates(err, [gridy, gridx])
-                
-                undistorted_errors.append(und_err)
-        
+            undistorted_image = undistorted_image_list[0] #shape (1024,1024)
+            undistorted_errors = undistorted_errors_list[0] #shape (1,1024,1024)
         undistorted_ims.append(undistorted_image)
         undistorted_errs.append(undistorted_errors)
-
     history_msg = 'Distortion correction completed'
 
-    undistorted_dataset.update_after_processing_step(history_msg, new_all_data=np.array(undistorted_ims), new_all_err=np.array(undistorted_errs))
+    undistorted_dataset.update_after_processing_step(history_msg, new_all_data=np.array(undistorted_ims),
+                                                       new_all_err=np.array(undistorted_errs))
+
 
     return undistorted_dataset
 

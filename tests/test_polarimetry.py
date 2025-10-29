@@ -1,17 +1,24 @@
+import os, glob
 import numpy as np
+import pandas as pd
+import shutil
+import warnings
+
+from astropy.io.fits import Header
+
 import pytest
+
+from corgidrp.data import Dataset, Image
+import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.pol as pol
 import corgidrp.l2b_to_l3 as l2b_to_l3
 import corgidrp.l3_to_l4 as l3_to_l4
+import corgidrp.l4_to_tda as l4_to_tda
+from corgidrp.pol import calc_stokes_unocculted
 
 from corgidrp import star_center
-import corgidrp.data as data
-import pandas as pd
-import corgidrp.pol as pol
-import os
-import shutil
-import warnings
+
 from astropy.io.fits.verify import VerifyWarning
 from astropy.wcs import FITSFixedWarning
 from pyklip.klip import rotate
@@ -150,7 +157,75 @@ def test_image_splitting():
     # test that an error is raised if we set the image size too big
     with pytest.raises(ValueError):
         invalid_output = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=682)
+        
+def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3.):
+    """
+    Test `calc_pol_p_and_pa_image` using mock L4 Stokes cubes.
 
+    This test verifies that the recovered fractional polarization (p)
+    and electric-vector position angle (EVPA) are statistically consistent
+    with the true input values within their propagated uncertainties.
+
+    For each simulation, we compute normalized residuals:
+        chi = (measured - true) / sigma
+    for both p and EVPA. If the uncertainty propagation is correct,
+    the chi distribution should follow N(0, 1).
+
+    We then check that the median of the chi means is near zero,
+    and the median of the chi standard deviations is near one.
+
+    The tolerance (`nsigma_tol`) defines the acceptable deviation from
+    ideal statistics in units of standard errors. For `n_sim` simulations,
+    the expected fluctuations of the median and standard deviation of chi
+    are approximately 1/sqrt(n_sim) and 1/sqrt(2*(n_sim-1)), respectively.
+    Multiplying by `nsigma_tol` allows for a configurable confidence
+    interval, e.g., `nsigma_tol=3` corresponds roughly to a 3-sigma limit
+    on expected statistical deviations.
+    """
+    # --- Simulation parameters ---
+    p_input = 0.1 + 0.2 * np.random.rand(n_sim)
+    theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
+
+    # --- Containers for chi statistics ---
+    p_chi_mean, p_chi_std = [], []
+    evpa_chi_mean, evpa_chi_std = [], []
+
+    for p, theta in zip(p_input, theta_input):
+
+        # Generate mock Stokes cube
+        Image_polmock = mocks.create_mock_stokes_image_l4(
+            badpixel_fraction=0.0,
+            fwhm=1e2,
+            I0=1e10,
+            p=p,
+            theta_deg=theta
+        )
+
+        # Compute polarization products
+        Image_pol = l4_to_tda.calc_pol_p_and_pa_image(Image_polmock)
+
+        p_map = Image_pol.data[1]       # fractional polarization
+        evpa_map = Image_pol.data[2]    # EVPA
+        p_map_err = Image_pol.err[0][1]
+        evpa_map_err = Image_pol.err[0][2]
+
+        # Compute chi statistics
+        p_chi = (p_map - p) / p_map_err
+        evpa_chi = (evpa_map - theta) / evpa_map_err
+
+        p_chi_mean.append(np.nanmedian(p_chi))
+        p_chi_std.append(np.nanstd(p_chi))
+        evpa_chi_mean.append(np.nanmedian(evpa_chi))
+        evpa_chi_std.append(np.nanstd(evpa_chi))
+
+    #print(np.median(p_chi_mean), np.median(p_chi_std),
+    #      np.median(evpa_chi_mean), np.median(evpa_chi_std))
+    tol_mean = 1. / np.sqrt(n_sim) * nsigma_tol
+    tol_std = 1. / np.sqrt(2.*(n_sim-1.)) * nsigma_tol
+    assert np.median(p_chi_mean) == pytest.approx(0.0, abs=tol_mean)
+    assert np.median(p_chi_std) == pytest.approx(1.0, abs=tol_std)
+    assert np.median(evpa_chi_mean) == pytest.approx(0.0, abs=tol_mean)
+    assert np.median(evpa_chi_std) == pytest.approx(1.0, abs=tol_std)
 
 def test_align_frames():
     """
@@ -570,8 +645,175 @@ def test_combine_polarization_states():
     assert np.allclose(target_stokes_vector[3] * (target_total_intensity), stokes_datacube[3], atol=0.05)
     
 
+def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
+    """
+    Test the `calc_stokes_unocculted` function using synthetic L3 polarimetric datasets.
+
+    Each mock dataset contains multiple images corresponding to different Wollaston
+    prisms and roll angles. The test generates a variety of fractional polarization
+    values and polarization angles, computes the unocculted Stokes parameters, and
+    compares the recovered Q and U against the input values using their propagated
+    uncertainties. The comparison is performed in units of the standard errors (chi),
+    ensuring the function correctly handles multiple images per dataset and provides
+    statistically consistent results.
+
+    The tolerance (`nsigma_tol`) defines the acceptable deviation from ideal
+    statistics, expressed in units of standard errors. For `n_sim` simulations, the
+    expected fluctuations of the median and standard deviation of chi are approximately
+    1/sqrt(n_sim) and 1/sqrt(2*(n_sim-1)), respectively. Multiplying by `nsigma_tol`
+    allows for a configurable confidence interval, e.g., `nsigma_tol=3` corresponds
+    roughly to a 3-sigma limit on expected statistical deviations.
+    """
+
+    # --- Simulate varying polarization fractions ---
+    p_input = 0.1 + 0.2 * np.random.rand(n_sim)
+    theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
+
+    Q_recovered = []
+    Qerr_recovered = []
+    U_recovered = []
+    Uerr_recovered = []
+
+    n_repeat = 8
+    
+    # prisms and rolls
+    prisms = np.append(np.tile('POL0', n_repeat//2), np.tile('POL45', n_repeat//2))
+    rolls = np.full(n_repeat, 0)
+
+    for p, theta in zip(p_input, theta_input):
+        # --- Generate mock L2b image ---
+        dataset_polmock = mocks.create_mock_polarization_l3_dataset(
+            I0=1e10,
+            p=p,
+            theta_deg=theta,
+            roll_angles=rolls,
+            prisms=prisms
+        )
+
+        # --- Compute unocculted Stokes ---
+        Image_stokes_unocculted = calc_stokes_unocculted(dataset_polmock)
+
+        Q_obs = Image_stokes_unocculted.data[1]
+        U_obs = Image_stokes_unocculted.data[2]
+        Q_err = Image_stokes_unocculted.err[0][1]
+        U_err = Image_stokes_unocculted.err[0][2]
+
+        Q_recovered.append(Q_obs)
+        Qerr_recovered.append(Q_err)
+        U_recovered.append(U_obs)
+        Uerr_recovered.append(U_err)
+
+    # --- Convert lists to arrays ---
+    Q_recovered = np.array(Q_recovered)
+    Qerr_recovered = np.array(Qerr_recovered)
+    U_recovered = np.array(U_recovered)
+    Uerr_recovered = np.array(Uerr_recovered)
+
+    # --- Compute chi ---
+    theta_rad = np.radians(theta_input)
+    Q_input = p_input * np.cos(2 * theta_rad)
+    Q_chi = (Q_recovered - Q_input) / Qerr_recovered
+    U_input = p_input * np.sin(2 * theta_rad)
+    U_chi = (U_recovered - U_input) / Uerr_recovered
+
+    #print(np.median(Q_chi), np.std(Q_chi), np.median(U_chi), np.std(U_chi))
+    # --- Assertions ---
+    tol_mean = 1. / np.sqrt(n_sim) * nsigma_tol
+    tol_std = 1. / np.sqrt(2.*(n_sim-1.)) * nsigma_tol
+    assert np.median(Q_chi) == pytest.approx(0, abs=tol_mean)
+    assert np.std(Q_chi) == pytest.approx(1, abs=tol_std)
+    assert np.median(U_chi) == pytest.approx(0, abs=tol_mean)
+    assert np.std(U_chi) == pytest.approx(1, abs=tol_std)
+
+    return
+
+def test_calc_stokes_unocculted(n_sim=100, nsigma_tol=3.):
+    """
+    Test the `calc_stokes_unocculted` function using synthetic L3 polarimetric datasets.
+
+    Each mock dataset contains multiple images corresponding to different Wollaston
+    prisms and roll angles. The test generates a variety of fractional polarization
+    values and polarization angles, computes the unocculted Stokes parameters, and
+    compares the recovered Q and U against the input values using their propagated
+    uncertainties. The comparison is performed in units of the standard errors (chi),
+    ensuring the function correctly handles multiple images per dataset and provides
+    statistically consistent results.
+
+    The tolerance (`nsigma_tol`) defines the acceptable deviation from ideal
+    statistics, expressed in units of standard errors. For `n_sim` simulations, the
+    expected fluctuations of the median and standard deviation of chi are approximately
+    1/sqrt(n_sim) and 1/sqrt(2*(n_sim-1)), respectively. Multiplying by `nsigma_tol`
+    allows for a configurable confidence interval, e.g., `nsigma_tol=3` corresponds
+    roughly to a 3-sigma limit on expected statistical deviations.
+    """
+
+    # --- Simulate varying polarization fractions ---
+    p_input = 0.1 + 0.2 * np.random.rand(n_sim)
+    theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
+
+    Q_recovered = []
+    Qerr_recovered = []
+    U_recovered = []
+    Uerr_recovered = []
+
+    n_repeat = 8
+    
+    # prisms and rolls
+    prisms = np.append(np.tile('POL0', n_repeat//2), np.tile('POL45', n_repeat//2))
+    rolls = np.full(n_repeat, 0)
+
+    for p, theta in zip(p_input, theta_input):
+        # --- Generate mock L2b image ---
+        dataset_polmock = mocks.create_mock_polarization_l3_dataset(
+            I0=1e10,
+            p=p,
+            theta_deg=theta,
+            roll_angles=rolls,
+            prisms=prisms
+        )
+
+        # --- Compute unocculted Stokes ---
+        Image_stokes_unocculted = calc_stokes_unocculted(dataset_polmock)
+
+        Q_obs = Image_stokes_unocculted.data[1]
+        U_obs = Image_stokes_unocculted.data[2]
+        Q_err = Image_stokes_unocculted.err[0][1]
+        U_err = Image_stokes_unocculted.err[0][2]
+
+        Q_recovered.append(Q_obs)
+        Qerr_recovered.append(Q_err)
+        U_recovered.append(U_obs)
+        Uerr_recovered.append(U_err)
+
+    # --- Convert lists to arrays ---
+    Q_recovered = np.array(Q_recovered)
+    Qerr_recovered = np.array(Qerr_recovered)
+    U_recovered = np.array(U_recovered)
+    Uerr_recovered = np.array(Uerr_recovered)
+
+    # --- Compute chi ---
+    theta_rad = np.radians(theta_input)
+    Q_input = p_input * np.cos(2 * theta_rad)
+    Q_chi = (Q_recovered - Q_input) / Qerr_recovered
+    U_input = p_input * np.sin(2 * theta_rad)
+    U_chi = (U_recovered - U_input) / Uerr_recovered
+
+    #print(np.median(Q_chi), np.std(Q_chi), np.median(U_chi), np.std(U_chi))
+    # --- Assertions ---
+    tol_mean = 1. / np.sqrt(n_sim) * nsigma_tol
+    tol_std = 1. / np.sqrt(2.*(n_sim-1.)) * nsigma_tol
+    assert np.median(Q_chi) == pytest.approx(0, abs=tol_mean)
+    assert np.std(Q_chi) == pytest.approx(1, abs=tol_std)
+    assert np.median(U_chi) == pytest.approx(0, abs=tol_mean)
+    assert np.std(U_chi) == pytest.approx(1, abs=tol_std)
+
+    return
+
 if __name__ == "__main__":
     test_image_splitting()
+    test_calc_pol_p_and_pa_image()
     test_subtract_stellar_polarization()
     test_mueller_matrix_cal()
     test_combine_polarization_states()
+    test_align_frames()
+    test_calc_stokes_unocculted()

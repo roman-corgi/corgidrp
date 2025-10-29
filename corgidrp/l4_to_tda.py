@@ -6,7 +6,6 @@ from scipy.interpolate import interp1d
 import warnings
 from photutils.psf import fit_2dgaussian
 from corgidrp.data import Dataset, Image
-
 import corgidrp.fluxcal as fluxcal
 from corgidrp import check
 from corgidrp.klip_fm import measure_noise
@@ -542,6 +541,79 @@ def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
 
     return zp
 
+def calc_pol_p_and_pa_image(input_Image):
+    """Compute polarization intensity, fractional polarization, and EVPA from Stokes maps.
+
+    Args:
+        input_Image (Image): Object containing Stokes maps and uncertainties.
+
+    Returns:
+        Image: Image object containing
+            - data: stacked [P, p, evpa] (shape: 3 x H x W)
+            - ext_hdr: Header with updated HISTORY
+            - err, dq: arrays reflecting Perr, perr and evpa_err
+
+    Raises:
+        AttributeError: If `input_Image` is missing `data` or `err` attributes.
+        ValueError: If Stokes maps I, Q, U have inconsistent shapes or insufficient slices.
+    """
+    # --- Extract Stokes parameters ---
+    try:
+        I, Q, U = input_Image.data[0:3]
+        Ierr, Qerr, Uerr = input_Image.err[0][0:3]
+        Idq, Qdq, Udq = input_Image.dq[0:3]
+        # V, Qphi, Uphi = Image.data[3:6] # unused
+    except AttributeError as e:
+        raise AttributeError("Image object must have 'data' and 'err' attributes.") from e
+    except IndexError as e:
+        raise ValueError("Image.data and Image.err must have at least [0..2] slices.") from e
+
+    # --- Polarized intensity and error ---
+    P = np.sqrt(Q**2 + U**2)
+    Perr = np.sqrt((Q * Qerr)**2 + (U * Uerr)**2) / np.maximum(P, 1e-10)
+
+    # --- Fractional polarization and its error ---
+    p = P / np.maximum(I, 1e-10)
+    perr = np.sqrt((Perr / np.maximum(I, 1e-10))**2 +
+                   (P * Ierr / np.maximum(I, 1e-10)**2)**2)
+
+    # --- Polarization angle (EVPA) and uncertainty ---
+    evpa = 0.5 * np.arctan2(U, Q)  # radians
+    evpa_err = 0.5 * np.sqrt((Q * Uerr)**2 + (U * Qerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
+    evpa = np.degrees(evpa)
+    evpa_err = np.degrees(evpa_err)
+
+    # --- Data quality propagation ---
+    dq = np.bitwise_or(np.bitwise_or(Idq, Qdq), Udq)
+
+    # --- Stack results ---
+    data_out = np.stack([P, p, evpa], axis=0)
+    err_out = np.stack([Perr, perr, evpa_err], axis=0)
+    dq_out = np.stack([dq, dq, dq], axis=0)
+
+    # --- Headers ---
+    pri_hdr = input_Image.pri_hdr
+    ext_hdr = input_Image.ext_hdr
+    err_hdr = input_Image.err_hdr
+    dq_hdr = input_Image.dq_hdr
+
+    ext_hdr.add_history(
+        "Derived polarization products: data=[P, p, EVPA]; "
+        "err=[Perr, perr, EVPA_err]; dq propagated from I,Q,U."
+    )
+
+    # --- Construct output Image ---
+    Image_out = Image(
+        data_out,
+        pri_hdr=pri_hdr,
+        ext_hdr=ext_hdr,
+        err=err_out,
+        dq=dq_out,
+        err_hdr=err_hdr,
+        dq_hdr=dq_hdr
+    )
+
+    return Image_out
 def compute_QphiUphi(image, x_center=None, y_center=None):
     """
     Compute Q_phi and U_phi from Stokes Q and U, returning an Image with shape [6, n, m]:
