@@ -1,4 +1,5 @@
 # A file that holds the functions to handle polarimetry data 
+import os
 import numpy as np
 import pandas as pd
 
@@ -192,7 +193,7 @@ def calc_stokes_unocculted(input_dataset,
     return stokes_dataset
 
 def generate_mueller_matrix_cal(input_dataset, 
-                                path_to_pol_ref_file="./data/stellar_polarization_database.csv",
+                                path_to_pol_ref_file=None,
                                 svd_threshold=1e-5):
     '''
     Calculates the Mueller Matrix calibration for a given dataset of polarimetric observations.
@@ -221,6 +222,9 @@ def generate_mueller_matrix_cal(input_dataset,
     '''
 
     dataset = input_dataset.copy()
+
+    if path_to_pol_ref_file is None:
+        path_to_pol_ref_file = os.path.join(os.path.dirname(__file__), "data", "stellar_polarization_database.csv")
 
     # check that all the data in the dataset is either ND or non-ND, by looking for ND in the FPAMNAME keyword
     nd_flags = [("ND" in data.ext_hdr["FPAMNAME"]) for data in dataset]
