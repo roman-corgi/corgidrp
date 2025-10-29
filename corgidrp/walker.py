@@ -338,7 +338,7 @@ def guess_template(dataset):
                     recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
-        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POLIMETRY":
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
             recipe_filename = "l2b_to_polcal.json"
         else:
             recipe_filename = "l2b_to_l3.json"
