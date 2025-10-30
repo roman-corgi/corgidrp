@@ -117,8 +117,6 @@ def dark_subtraction(input_dataset, noisemaps=None, dark=None, detector_regions=
                 if input_dataset[0].ext_hdr['ISPC'] == 0: #i.e., analog
                     raise Exception('The input \'dark\' is a photon-counted master dark and cannot be used in the dark_subtraction step function with analog frames.')
                 else: #i.e., photon-counted
-                    msg = 'The input \'dark\' is a photon-counted dark and will be used for subtraction in the pc_mean function.'
-                    darksub_dataset.update_after_processing_step(history_entry=msg)
                     return darksub_dataset
             else: #traditional analog master dark
                 pass #proceed with dark subtraction here, whether frames input_dataset is PC or not 
