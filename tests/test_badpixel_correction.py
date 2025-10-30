@@ -249,7 +249,14 @@ import copy
 
 
 def create_pol_dataset(n_frames=1):
-    """Creates a dataset for pol data, of shape (n_frames, 2, 1024, 1024).
+    """
+    Creates a dataset for polarization data of shape (n_frames, 2, 1024, 1024).
+
+    Args:
+        n_frames (int): Number of frames to include in the dataset.
+
+    Returns:
+        np.ndarray: Polarization dataset with simulated error and DQ maps.
     """
     datashape = (2, 1024, 1024)  # pol frame shape
     bpixmap = np.zeros(datashape)
