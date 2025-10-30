@@ -18,7 +18,7 @@ import shutil
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
-    '''Checks that a photon-counted master dark works fine in the pipeline, for both cases of master dark (PC master dark or synthesized master dark).'''
+    #Checks that a photon-counted master dark works fine in the pipeline, for both cases of master dark (PC master dark or synthesized master dark)
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     flat_path = os.path.join(processed_cal_path, "flat.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
