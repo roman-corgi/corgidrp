@@ -351,10 +351,20 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
             recipe_filename = "l2b_to_polcal.json"
         else:
-            recipe_filename = "l2b_to_l3.json"
+            # Check if this is spectroscopy data (DPAMNAME == PRISM3)
+            # TO DO: update when VISTYPE is known for spectroscopy
+            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
+            if is_spectroscopy:
+                recipe_filename = "l2b_to_l3_spec.json"
+            else:
+                recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
     elif image.ext_hdr['DATALVL'] == "L3":
-        if image.ext_hdr['FSMLOS'] == 1:
+        # Check if this is polarimetry data (DPAMNAME == POL0 or POL45)
+        is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45')
+        if is_polarimetry:
+            recipe_filename = "l3_to_l4_pol.json"
+        elif image.ext_hdr['FSMLOS'] == 1:
             # coronagraphic obs - PSF subtraction
             recipe_filename = "l3_to_l4.json"
         else:
