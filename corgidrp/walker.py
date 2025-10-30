@@ -351,12 +351,7 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
             recipe_filename = "l2b_to_polcal.json"
         else:
-            # Check if this is spectroscopy data (DPAMNAME == PRISM3)
-            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
-            if is_spectroscopy:
-                recipe_filename = "l2b_to_l3_spec.json"
-            else:
-                recipe_filename = "l2b_to_l3.json"
+            recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
     elif image.ext_hdr['DATALVL'] == "L3":
         if image.ext_hdr['FSMLOS'] == 1:

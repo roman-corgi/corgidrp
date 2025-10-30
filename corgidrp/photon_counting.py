@@ -204,6 +204,14 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
 
         # now get threshold to use for photon-counting
         read_noise = test_dataset[0].frames[0].ext_hdr['RN']
+        # Ensure RN is numeric (FITS headers can sometimes preserve string values)
+        if isinstance(read_noise, str):
+            try:
+                read_noise = float(read_noise.strip()) if read_noise.strip() else 100.0
+            except (ValueError, TypeError, AttributeError):
+                read_noise = 100.0
+        else:
+            read_noise = float(read_noise)
         thresh = T_factor*read_noise
         if thresh < 0:
             raise PhotonCountException('thresh must be nonnegative')
@@ -332,6 +340,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             new_image.filename = dataset[-1].filename.replace("L2a", "L2b")
             new_image.ext_hdr['PCTHRESH'] = thresh
             new_image.ext_hdr['NUM_FR'] = len(sub_dataset) 
+            # Set BUNIT to photoelectron after dark subtraction (same as dark_subtraction function for analog data)
+            if dark_sub == "yes":
+                new_image.ext_hdr['BUNIT'] = 'photoelectron'
             new_image._record_parent_filenames(sub_dataset) 
             list_new_image.append(new_image)
         else:

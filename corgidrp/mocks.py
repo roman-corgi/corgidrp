@@ -5272,6 +5272,6 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
 
     mock_dataset = data.Dataset(image_list)
     for frame in mock_dataset.frames: 
-        frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_POLIMETRY"
+        frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_POL_SETUP"
 
     return mock_dataset
