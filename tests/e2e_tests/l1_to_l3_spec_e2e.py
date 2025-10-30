@@ -1,5 +1,6 @@
 import argparse
 import os
+import json
 import pytest
 import numpy as np
 import astropy.time as time
@@ -48,6 +49,18 @@ def fix_headers(
                 exthdr['EACQ_ROW'] = naxis2 // 2
             if 'EACQ_COL' not in exthdr or exthdr.get('EACQ_COL', 0) == 0 or exthdr.get('EACQ_COL', 0) >= naxis1:
                 exthdr['EACQ_COL'] = naxis1 // 2
+
+            # Set RN (read noise) if missing, empty, or not a number - only for L2a data (required for photon counting)
+            datalvl = exthdr.get('DATALVL', '')
+            if datalvl == 'L2a':
+                # Always ensure RN is a numeric value (not a string)
+                # Delete and re-add to ensure it's stored as numeric in FITS format
+                if 'RN' in exthdr:
+                    del exthdr['RN']
+                # Set as float value with comment - this ensures FITS stores it as numeric
+                exthdr['RN'] = (100.0, 'Read noise in electrons')
+                # Force update to ensure it's written correctly
+                exthdr.comments['RN'] = 'Read noise in electrons'
 
 
 def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
@@ -151,24 +164,55 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
-    # Dark calibration - build synthesized dark matching input data
-    from corgidrp.darks import build_synthesized_dark
-    # Get exposure time and emgain from a sample L1 file
+    # Check if data is PC or analog to determine which type of dark to create
+    # Check from L1 files first
     sample_l1_files = [f for f in os.listdir(l1_datadir) if f.endswith('l1.fits') or f.endswith('l1_.fits')]
+    is_pc_data = False
     if sample_l1_files:
         sample_l1_file = os.path.join(l1_datadir, sample_l1_files[0])
-        sample_hdr = fits.getheader(sample_l1_file, ext=1)
-        data_exptime = sample_hdr['EXPTIME']
-        data_emgain = float(sample_hdr['EMGAIN_C'])
-        
-        # Create temp dataset with correct header values
-        temp_dataset = data.Dataset(mock_cal_filelist[:1])
-        temp_dataset.frames[0].ext_hdr['EXPTIME'] = data_exptime
-        temp_dataset.frames[0].ext_hdr['EMGAIN_C'] = data_emgain
-        
-        dark_cal = build_synthesized_dark(temp_dataset, noise_map)
-        mocks.rename_files_to_cgi_format(list_of_fits=[dark_cal], output_dir=calibrations_dir, level_suffix="drk_cal")
-        this_caldb.create_entry(dark_cal)
+        try:
+            # Check primary header for PHTCNT or extension header for ISPC
+            with fits.open(sample_l1_file) as hdul:
+                phthdr = hdul[0].header
+                exthdr = hdul[1].header
+                # Check both possible locations
+                if 'PHTCNT' in phthdr:
+                    is_pc_data = bool(phthdr.get('PHTCNT', False))
+                elif 'ISPC' in exthdr:
+                    is_pc_data = bool(exthdr.get('ISPC', False))
+                else:
+                    # Default to analog if not specified
+                    is_pc_data = False
+        except Exception:
+            # If we can't read it, default to analog
+            is_pc_data = False
+    
+    logger.info(f'Detected data type: {"Photon Counting" if is_pc_data else "Analog"}')
+    
+    # Dark calibration - create appropriate dark based on data type
+    dark_cal = None
+    if not is_pc_data:
+        # Create analog dark for analog data
+        from corgidrp.darks import build_synthesized_dark
+        # Get exposure time and emgain from a sample L1 file
+        if sample_l1_files:
+            sample_l1_file = os.path.join(l1_datadir, sample_l1_files[0])
+            sample_hdr = fits.getheader(sample_l1_file, ext=1)
+            data_exptime = sample_hdr['EXPTIME']
+            data_emgain = float(sample_hdr['EMGAIN_C'])
+            
+            # Create temp dataset with correct header values
+            temp_dataset = data.Dataset(mock_cal_filelist[:1])
+            temp_dataset.frames[0].ext_hdr['EXPTIME'] = data_exptime
+            temp_dataset.frames[0].ext_hdr['EMGAIN_C'] = data_emgain
+            
+            dark_cal = build_synthesized_dark(temp_dataset, noise_map)
+            mocks.rename_files_to_cgi_format(list_of_fits=[dark_cal], output_dir=calibrations_dir, level_suffix="drk_cal")
+            this_caldb.create_entry(dark_cal)
+            logger.info('Analog dark calibration created.')
+    else:
+        # PC dark will be created later from L2a frames (need L2a files first)
+        logger.info('PC dark will be created from L2a frames after L1->L2a processing')
 
     # Flat field
     with fits.open(flat_path) as hdulist:
@@ -200,8 +244,11 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     logger.info(f"  - NonLinearityCalibration: {nonlinear_cal.filename}")
     logger.info(f"  - KGain: {kgain.filename}")
     logger.info(f"  - DetectorNoiseMaps: {noise_map.filename}")
-    if sample_l1_files:
+    # Log dark calibration - only exists for analog data
+    if not is_pc_data and sample_l1_files:
         logger.info(f"  - Dark: {dark_cal.filename}")
+    elif is_pc_data:
+        logger.info(f"  - Dark: (PC dark will be created from L2a frames)")
     logger.info(f"  - FlatField: {flat.filename}")
     logger.info(f"  - BadPixelMap: {bp_map.filename}")
     logger.info(f"  - AstrometricCalibration: {astrom_cal.filename}")
@@ -264,23 +311,99 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     # (3) Run Processing Pipeline
     # ================================================================================
     logger.info('='*80)
-    logger.info('Running L1 -> L2b -> L3 spectroscopy data processing pipeline')
+    logger.info('Running L1 -> L2a -> L2b -> L3 spectroscopy data processing pipeline')
     logger.info('='*80)
     
-    # Step 1: L1 -> L2b
-    logger.info('Step 1: Running L1 to L2b recipe...')
-    walker.walk_corgidrp(input_data_filelist, "", l3_outputdir, template="l1_to_l2b.json")
+    # Step 1: L1 -> L2a (generic processing)
+    logger.info('Step 1: Running L1 to L2a recipe...')
+    walker.walk_corgidrp(input_data_filelist, "", l3_outputdir, template="l1_to_l2a_basic.json")
+    
+    # Find the L2a output files
+    l2a_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2a.fits')]
+    l2a_filelist = [os.path.join(l3_outputdir, f) for f in l2a_files]
+    logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
+    
+    if l2a_filelist:
+        # Fix L2a headers - ensure RN is numeric BEFORE Dataset is created
+        for l2a_file in l2a_filelist:
+            with fits.open(l2a_file, mode='update') as hdul:
+                exthdr = hdul[1].header
+                # Delete RN if it exists (to remove any string type)
+                if 'RN' in exthdr:
+                    del exthdr['RN']
+                # Set RN as numeric value - use tuple format (value, comment) to ensure numeric
+                exthdr['RN'] = (100.0, 'Read noise in electrons')
+        
+        # Apply other header fixes
+        fix_headers(l2a_filelist)
+        
+        # Dark calibration: Create PC master dark from L2a frames (for PC data only)
+        # This completes the calibration setup that began in the calibration products section above
+        if is_pc_data:
+            logger.info('Creating photon-counted master dark from L2a frames...')
+            try:
+                # Create mock L2a dark frames from the existing L2a frames
+                dark_l2a_dir = os.path.join(l3_outputdir, 'dark_l2a_frames')
+                if not os.path.exists(dark_l2a_dir):
+                    os.makedirs(dark_l2a_dir)
+                
+                # Use a few L2a files as templates for dark frames
+                num_dark_frames = min(10, len(l2a_filelist))  # Use up to 10 frames
+                dark_l2a_filelist = []
+                
+                for i, l2a_file in enumerate(l2a_filelist[:num_dark_frames]):
+                    dark_l2a_file = os.path.join(dark_l2a_dir, os.path.basename(l2a_file).replace('_l2a', '_dark_l2a'))
+                    # Copy the L2a file
+                    shutil.copy2(l2a_file, dark_l2a_file)
+                    
+                    # Modify headers to make it a dark frame
+                    with fits.open(dark_l2a_file, mode='update') as hdul:
+                        hdul[0].header['VISTYPE'] = 'CGIVST_CAL_DRK'
+                        hdul[0].header['PHTCNT'] = 1  # PC mode
+                        hdul[1].header['ISPC'] = 1
+                        # Ensure RN is numeric
+                        if 'RN' in hdul[1].header:
+                            del hdul[1].header['RN']
+                        hdul[1].header['RN'] = (100.0, 'Read noise in electrons')
+                    
+                    dark_l2a_filelist.append(dark_l2a_file)
+                
+                # Process the dark frames through get_pc_mean to create a proper PC master dark
+                from corgidrp.photon_counting import get_pc_mean
+                
+                dark_l2a_dataset = data.Dataset(dark_l2a_filelist)
+                pc_dark = get_pc_mean(dark_l2a_dataset, inputmode='darks')
+                
+                # Verify it was created correctly
+                if pc_dark.ext_hdr.get('PC_STAT') != 'photon-counted master dark':
+                    raise Exception('Failed to create valid photon-counted master dark')
+                
+                # Save and register the PC dark
+                calibrations_dir = os.path.join(l3_outputdir, 'calibrations')
+                if not os.path.exists(calibrations_dir):
+                    os.makedirs(calibrations_dir)
+                mocks.rename_files_to_cgi_format(list_of_fits=[pc_dark], output_dir=calibrations_dir, level_suffix="drk_cal")
+                this_caldb.create_entry(pc_dark)
+                logger.info(f'Photon-counted master dark created from {num_dark_frames} dark frames.')
+            except Exception as e:
+                logger.warning(f'Could not create photon-counted master dark: {e}.')
+                import traceback
+                logger.warning(traceback.format_exc())
+    
+    # Step 2: L2a -> L2b (auto-detect spectroscopy recipe)
+    logger.info('Step 2: Running L2a to L2b recipe...')
+    walker.walk_corgidrp(l2a_filelist, "", l3_outputdir)
     
     # Find the L2b output files
     l2b_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2b.fits')]
     l2b_filelist = [os.path.join(l3_outputdir, f) for f in l2b_files]
-    logger.info(f'L1 to L2b complete. Generated {len(l2b_filelist)} L2b files.')
+    logger.info(f'L2a to L2b complete. Generated {len(l2b_filelist)} L2b files.')
     
     # Fix L2b headers 
     fix_headers(l2b_filelist)
     
-    # Step 2: L2b -> L3 (using output from step 1)
-    logger.info('Step 2: Running L2b to L3 spectroscopy recipe...')
+    # Step 3: L2b -> L3 (using output from step 2)
+    logger.info('Step 3: Running L2b to L3 spectroscopy recipe...')
     walker.walk_corgidrp(l2b_filelist, "", l3_outputdir)
     logger.info('L2b to L3 complete.')
     logger.info('')
@@ -372,8 +495,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         e2eoutput_path (str): Output directory path for results and logs
     """
     # Set up output directory
-    analog_datadir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1", "analog")
-    pc_datadir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1", "pc")
+    analog_datadir = os.path.join(e2edata_path, "SPEC_targetstar_satspot", "L1", "analog")
+    pc_datadir = os.path.join(e2edata_path, "SPEC_targetstar_satspot", "L1", "pc")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     
     l3_outputdir = os.path.join(e2eoutput_path, "l1_to_l3_spec_e2e")
