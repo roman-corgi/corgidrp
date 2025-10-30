@@ -62,21 +62,21 @@ def test_dark_sub():
     dark_dataset[0].data[0,0] = temp_store #reset to original value
 
     ###### create dark
-    dark_frame = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
+    dark_frame_full = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
 
     # check the level of dark current is approximately correct; leave off last row, telemetry row
-    assert np.mean(dark_frame.data[:-1]) == pytest.approx(150, abs=1e-2)
+    assert np.mean(dark_frame_full.data[:-1]) == pytest.approx(150, abs=1e-2)
 
     # leave out telemetry row of full frame
     dark_dataset_notelem = dark_dataset.all_data[:, 0:-1, :]
-    assert np.allclose(np.std(dark_dataset_notelem, axis = 0)/np.sqrt(len(dark_dataset_notelem)), dark_frame.err[0][0:-1, :], rtol=1e-6)
+    assert np.allclose(np.std(dark_dataset_notelem, axis = 0)/np.sqrt(len(dark_dataset_notelem)), dark_frame_full.err[0][0:-1, :], rtol=1e-6)
 
     # save dark
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     dark_filename = "sim_dark_calib.fits"
     if not os.path.exists(calibdir):
         os.mkdir(calibdir)
-    dark_frame.save(filedir=calibdir, filename=dark_filename)
+    dark_frame_full.save(filedir=calibdir, filename=dark_filename)
 
     ###### perform dark subtraction
     # load in the dark
@@ -162,14 +162,14 @@ def test_dark_sub():
     with pytest.raises(Exception):
         l2a_to_l2b.dark_subtraction(dataset_from_noisemap, None, None)
     # analog dark trumps noise maps if both provided
-    ignore_nm_dark = l2a_to_l2b.dark_subtraction(dark_dataset, noisemaps=noise_maps, dark=dark_frame)
+    ignore_nm_dark = l2a_to_l2b.dark_subtraction(dark_dataset, noisemaps=noise_maps, dark=dark_frame_full)
     # check the level of the dataset is now approximately 0, leaving off telemetry row, since master_dark was made from dark_dataset
     assert np.mean(ignore_nm_dark.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
     # if PC dark provided, no subtraction occurs at this step
-    dataset_from_noisemap[0].ext_hdr['ISPC'] = 1 # set to PC frame for test below
-    master_dark.ext_hdr['PC_STAT'] = 'photon-counted master dark' # set to PC dark for test below
-    pc_no_sub = l2a_to_l2b.dark_subtraction(dark_dataset, noisemaps=noise_maps, dark=dark_frame)
-    assert np.array_equal(pc_no_sub.all_data, dataset_from_noisemap.all_data)
+    dark_dataset[0].ext_hdr['ISPC'] = 1 # set to PC frame for test below
+    dark_frame_full.ext_hdr['PC_STAT'] = 'photon-counted master dark' # set to PC dark for test below
+    pc_no_sub = l2a_to_l2b.dark_subtraction(dark_dataset, noisemaps=noise_maps, dark=dark_frame_full)
+    assert np.array_equal(pc_no_sub.all_data, dark_dataset.all_data)
 
     corgidrp.track_individual_errors = old_err_tracking
 

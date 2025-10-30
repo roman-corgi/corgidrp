@@ -913,13 +913,13 @@ def test_spec_psf_subtraction():
     input_dset = Dataset([sci_filepath, ref_filepath]) 
     input_dset[0].pri_hdr['PSFREF'] = 0
     input_dset[1].pri_hdr['PSFREF'] = 1
-    for img in input_dset:
+    for i, img in enumerate(input_dset):
         img.data = img.data.astype(float)
         img.dq = np.zeros_like(img.data, dtype=int)
         # pick a location for this test, roughly center of imaged area
         img.ext_hdr['WV0_X'] = 1600
         img.ext_hdr['WV0_Y'] = 547
-        np.random.seed(1039)
+        np.random.seed(1039+i)
         img.err = np.random.randint(0,100, (1, img.data.shape[0],img.data.shape[1])).astype(float)
     input_dset[1].dq[533, 1600] = 1
     output = l3_to_l4.spec_psf_subtraction(input_dset)

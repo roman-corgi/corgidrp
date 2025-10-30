@@ -247,12 +247,15 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['NAXIS1'] = data.shape[1]
     exthdr['NAXIS2'] = data.shape[0]
     exthdr['DATATYPE'] = 'Dark'
-    exthdr['DRPNFILE'] = int(np.nanmean(unmasked_num))
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
+    master_dark.ext_hdr['DRPNFILE'] = int(np.round(np.nanmean(unmasked_num)))
     master_dark.ext_hdr['BUNIT'] = 'detected electron'
     master_dark.err_hdr['BUNIT'] = 'detected electron'
-    master_dark.ext_hdr['HISTORY'] = 'traditional master analog dark (not synthesized from detector noise maps)'
+
+    msg = 'traditional master analog dark (not synthesized from detector noise maps)'
+    master_dark.ext_hdr.add_history(msg)
+
     return master_dark
 
 
@@ -752,8 +755,6 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     exthdr['B_O_ERR'] = bo_err_bar
     exthdr['B_O_UNIT'] = 'DN'
 
-    exthdr['DRPNFILE'] = int(mean_num_good_fr)
-
     input_stack = np.stack([FPN_map, CIC_map, DC_map])
     input_err = np.stack([[FPN_std_map, CIC_std_map, DC_std_map]])
     input_dq = np.stack([output_dq, output_dq, output_dq])
@@ -761,6 +762,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
     
+    noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))
     l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
     noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
@@ -870,7 +872,6 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         exthdr['DATATYPE'] = 'Dark'
         exthdr['EMGAIN_C'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
         exthdr['EXPTIME'] = t
-        exthdr['DRPNFILE'] = noise_maps.ext_hdr['DRPNFILE']
         # one can check HISTORY to see that this Dark was synthesized from noise maps
         input_data = [noise_maps]
         md_data = Fd/g + t*Dd + Cd
@@ -881,5 +882,6 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
 
         master_dark = Dark(md_data, prihdr, exthdr, input_data, md_noise, FDCdq,
                         errhdr)
+        master_dark.ext_hdr['DRPNFILE'] = noise_maps.ext_hdr['DRPNFILE']
         
         return master_dark
