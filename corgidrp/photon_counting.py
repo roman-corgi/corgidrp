@@ -301,7 +301,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                 if pc_master_dark.ext_hdr['PCTHRESH'] != thresh:
                     raise PhotonCountException('Threshold used for photon-counted master dark should match the threshold to be used for the illuminated frames.')
                 if pc_master_dark.ext_hdr['NUM_FR'] < len(sub_dataset):
-                    raise PhotonCountException('Number of frames that created the photon-counted master dark must be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
+                    raise Warning('Number of frames that created the photon-counted master dark should be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
     
             # in case the number of subsets of darks < number of subsets of brights, which can happen since the number of darks within a subset can be bigger than the number in a bright subset
             j = np.mod(i, pc_master_dark.data.shape[0])
@@ -348,7 +348,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             list_dq.append(combined_dq)
     if val[0] != "CGIVST_CAL_DRK":
         pc_ill_dataset = data.Dataset(list_new_image)
-        pc_ill_dataset.update_after_processing_step("Photon-counted {0} illuminated frames for each PC frame of the output dataset.  Number of subsets: {1}.  Total number of frames in input dataset: {2}. Using T_factor={3} and niter={4}. Dark-subtracted: {5}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter, dark_sub))
+        pc_ill_dataset.update_after_processing_step("Photon-counted {0} illuminated frames for each PC frame of the output dataset.  Number of subsets: {1}.  Total number of frames in input dataset: {2}. Using T_factor={3} and niter={4}. Dark-subtracted with PC dark: {5}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter, dark_sub))
         
         return pc_ill_dataset
     else:

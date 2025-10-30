@@ -68,9 +68,11 @@ def test_pc():
         f.ext_hdr['RN'] = 100
         f.ext_hdr['KGAINPAR'] = 7
     # process the frames to make PC dark
+    dark_dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dark = get_pc_mean(dark_dataset_err, inputmode='darks')
     assert pc_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark'
     # now process illuminated frames and subtract the PC dark
+    dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dataset_err = get_pc_mean(dataset_err, pc_master_dark=pc_dark)
 
     assert pc_dataset_err.frames[-1].filename == dataset_err[-1].filename
@@ -78,7 +80,7 @@ def test_pc():
     history = ''
     for line in pc_dataset_err.frames[0].ext_hdr["HISTORY"]:
         history += line
-    assert "Dark-subtracted: yes" in history
+    assert "Dark-subtracted with PC dark: yes" in history
     assert np.isclose(pc_dataset_err.all_data.mean(), ill_mean - dark_mean, rtol=0.01) 
     # the DQ for that pixel should be 1
     assert pc_dataset_err[0].dq[2,2] == 1
@@ -97,7 +99,7 @@ def test_pc():
     # can't provide master dark while "VISTYPE" of input dataset is 'CGIVST_CAL_DRK'
     with pytest.raises(PhotonCountException):
         get_pc_mean(dark_dataset_err, pc_master_dark=pc_dark, inputmode='darks')
-    # must have same 'CMDGAIN' and other header values throughout input dataset
+    # must have same 'EMGAIN_C' and other header values throughout input dataset
     dark_dataset_err.frames[0].ext_hdr['EMGAIN_C'] = 4999
     with pytest.raises(PhotonCountException):
         get_pc_mean(dark_dataset_err, inputmode='dark')
@@ -138,7 +140,7 @@ def test_pc():
     history = ''
     for line in pc_dataset_err.frames[0].ext_hdr["HISTORY"]:
         history += line
-    assert "Dark-subtracted: no" in history
+    assert "Dark-subtracted with PC dark: no" in history
     assert np.isclose(np.nanmean(copy_pc), ill_mean, rtol=0.01) 
     # test safemode=False: should get warning instead of exception
     with pytest.warns(UserWarning):
@@ -170,17 +172,19 @@ def test_pc_subsets():
     dataset_bin.all_data = dataset_bin.all_data.astype(float)*7 - 20000.
     dark_dataset_bin.all_data = dark_dataset_bin.all_data.astype(float)*7 - 20000.
     # process darks and check NUM_FR
+    dark_dataset_bin[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dark = get_pc_mean(dark_dataset_bin, inputmode='darks', bin_size=40)
     assert pc_dark.ext_hdr['NUM_FR'] == 40 # The 2 remainder frames ignored for consistent statistics among the PC-averaged output frames
     assert 'Number of subsets: 4' in pc_dark.ext_hdr['HISTORY'][-4]
     # now process illuminated frames and subtract the PC dark
+    dataset_bin[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dataset = get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=40)
     # bigger rtol below since we have fewer frames averaged over in each of the 161//40 = 162//40 = 4 frames in the output
     assert np.isclose(pc_dataset.all_data.mean(), ill_mean - dark_mean, rtol=0.06) 
     assert pc_dataset.frames[0].ext_hdr['NUM_FR'] == 40
     assert pc_dataset.frames[-1].ext_hdr['NUM_FR'] == 40 # The 1 remainder frame ignored for consistent statistics among the PC-averaged output frames
     assert 'Number of subsets: 4' in pc_dataset.frames[0].ext_hdr['HISTORY'][-2]
-    with pytest.raises(PhotonCountException): #since number of frames in a dark subset would be less than that of a subset in illuminated
+    with pytest.raises(Warning): #since number of frames in a dark subset would be less than that of a subset in illuminated
         get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=51)
     # but this is fine:
     get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=38)

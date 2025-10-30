@@ -247,7 +247,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['NAXIS1'] = data.shape[1]
     exthdr['NAXIS2'] = data.shape[0]
     exthdr['DATATYPE'] = 'Dark'
-    exthdr['DRPNFILE'] = np.nanmean(unmasked_num)
+    exthdr['DRPNFILE'] = int(np.nanmean(unmasked_num))
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
     master_dark.ext_hdr['BUNIT'] = 'detected electron'
@@ -752,7 +752,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     exthdr['B_O_ERR'] = bo_err_bar
     exthdr['B_O_UNIT'] = 'DN'
 
-    exthdr['DRPNFILE'] = mean_num_good_fr
+    exthdr['DRPNFILE'] = int(mean_num_good_fr)
 
     input_stack = np.stack([FPN_map, CIC_map, DC_map])
     input_err = np.stack([[FPN_std_map, CIC_std_map, DC_std_map]])

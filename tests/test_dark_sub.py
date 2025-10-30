@@ -90,13 +90,13 @@ def test_dark_sub():
     assert np.all(new_dark.data == pickled_dark.data)
 
     # subtract darks from itself; also saves to testcalib folder
-    darkest_dataset = l2a_to_l2b.dark_subtraction(dark_dataset, new_dark, outputdir=calibdir)
+    darkest_dataset = l2a_to_l2b.dark_subtraction(dark_dataset, dark=new_dark, outputdir=calibdir)
     assert(dark_filename in str(darkest_dataset[0].ext_hdr["HISTORY"]))
 
     # PC dark cannot be used for this step function
     new_dark.ext_hdr['PC_STAT'] = 'photon-counted master dark'
     with pytest.raises(Exception):
-        l2a_to_l2b.dark_subtraction(dark_dataset, new_dark, outputdir=calibdir)
+        l2a_to_l2b.dark_subtraction(dark_dataset,dark=new_dark, outputdir=calibdir)
 
     # check the level of the dataset is now approximately 0, leaving off telemetry row
     assert np.mean(darkest_dataset.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
@@ -149,7 +149,7 @@ def test_dark_sub():
     image_frame.ext_hdr['KGAINPAR'] = 7.
     image_frame.ext_hdr['BUNIT'] = 'detected electron'
     dataset_from_noisemap = data.Dataset([image_frame])
-    nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noise_maps, outputdir=calibdir)
+    nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noisemaps=noise_maps, outputdir=calibdir)
     # check the level of the dataset is now approximately 0, leaving off telemetry row
     assert np.mean(nm_dataset0.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
 
@@ -157,6 +157,19 @@ def test_dark_sub():
     pickled = pickle.dumps(master_dark)
     pickled_dark = pickle.loads(pickled)
     assert np.all(master_dark.data == pickled_dark.data)
+
+    # must have a noisemaps or dark input
+    with pytest.raises(Exception):
+        l2a_to_l2b.dark_subtraction(dataset_from_noisemap, None, None)
+    # analog dark trumps noise maps if both provided
+    ignore_nm_dark = l2a_to_l2b.dark_subtraction(dark_dataset, noisemaps=noise_maps, dark=dark_frame)
+    # check the level of the dataset is now approximately 0, leaving off telemetry row, since master_dark was made from dark_dataset
+    assert np.mean(ignore_nm_dark.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
+    # if PC dark provided, no subtraction occurs at this step
+    dataset_from_noisemap[0].ext_hdr['ISPC'] = 1 # set to PC frame for test below
+    master_dark.ext_hdr['PC_STAT'] = 'photon-counted master dark' # set to PC dark for test below
+    pc_no_sub = l2a_to_l2b.dark_subtraction(dark_dataset, noisemaps=noise_maps, dark=dark_frame)
+    assert np.array_equal(pc_no_sub.all_data, dataset_from_noisemap.all_data)
 
     corgidrp.track_individual_errors = old_err_tracking
 
