@@ -462,7 +462,7 @@ def run_recipe(recipe, save_recipe_file=True):
                 suffix =  step["keywords"]["suffix"]
             else:
                 suffix = ''
-            
+
             save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
             save_step = True
 

@@ -167,16 +167,17 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if sample_l1_files:
         sample_l1_file = os.path.join(l1_datadir, sample_l1_files[0])
         with fits.open(sample_l1_file) as hdul:
-            phthdr = hdul[0].header
             exthdr = hdul[1].header
-            # Check both possible locations
-            if 'PHTCNT' in phthdr:
-                is_pc_data = bool(phthdr.get('PHTCNT', False))
-            elif 'ISPC' in exthdr:
-                is_pc_data = bool(exthdr.get('ISPC', False))
+            if 'ISPC' in exthdr:
+                ispc_val = exthdr.get('ISPC')
+                if ispc_val in (1, True):
+                    is_pc_data = True
+                elif ispc_val in (0, False):
+                    is_pc_data = False
+                else:
+                    raise ValueError(f"Expected True or False for ISPC value in header: {ispc_val}.")
             else:
-                # Default to analog if not specified
-                is_pc_data = False
+                raise ValueError("Missing ISPC keyword in L1 header. Cannot determine PC vs analog.")
     
     # Dark calibration - create appropriate dark based on data type
     dark_cal = None
@@ -417,6 +418,9 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
             
             # Verify data level
             verify_header_keywords(img.ext_hdr, {'DATALVL': 'L3'}, frame_info, logger)
+
+            # Verify analog or PC
+            verify_header_keywords(img.ext_hdr, {'ISPC': is_pc_data}, frame_info, logger)
 
             # Check this is spectroscopy data
             dpam = img.ext_hdr.get('DPAMNAME', '')
