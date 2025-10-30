@@ -5,6 +5,7 @@ from corgidrp import star_center
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 from corgidrp.l3_to_l4 import find_star
+import corgidrp.l2b_to_l3 as l2b_to_l3
 
 old_err_tracking = corgidrp.track_individual_errors
 
@@ -113,6 +114,138 @@ def test_overwrite_parameters():
 
     corgidrp.track_individual_errors = old_err_tracking
 
+def test_find_star_polarimetry():
+    """
+    Generate mock polarimetric input data and pass into find_star function with an offset guess
+    """
+    corgidrp.track_individual_errors = True # this test uses individual error components
+
+    # Set the star center position for injection of satellite spots
+
+    # Add small offset and rotation in the injected data
+    injected_position = [(2, 1), (-2, - 1)]
+
+    satellite_spot_angle_offset = 3
+    guess_angle_offset = 0
+
+    modes = ['NFOV', 'WFOV']
+
+    for mode in modes:
+        separation = satellite_spot_parameters_defaults[mode]['separation']['spotSepPix']
+
+        # Generate test data
+
+        image_WP1_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(
+            dpamname='POL0', 
+            observing_mode=mode, 
+            left_image_value=1, 
+            right_image_value=2,
+            image_shape=(1024,1024),
+            bg_sigma=1.0,
+            bg_offset=10.0,
+            gaussian_fwhm=5.0,
+            separation=separation,
+            star_center=injected_position,
+            angle_offset=satellite_spot_angle_offset,
+            amplitude_multiplier=100)
+
+        image_WP1= mocks.create_mock_l2b_polarimetric_image(
+            dpamname='POL0', 
+            observing_mode=mode, 
+            left_image_value=1, 
+            right_image_value=2)
+
+        image_WP2_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(
+            dpamname='POL45', 
+            observing_mode=mode, 
+            left_image_value=1, 
+            right_image_value=2,
+            image_shape=(1024,1024),
+            bg_sigma=1.0,
+            bg_offset=10.0,
+            gaussian_fwhm=5.0,
+            separation=separation,
+            star_center=injected_position,
+            angle_offset=satellite_spot_angle_offset,
+            amplitude_multiplier=100)
+
+        image_WP2 = mocks.create_mock_l2b_polarimetric_image(
+            dpamname='POL45', 
+            observing_mode=mode, 
+            left_image_value=1, 
+            right_image_value=2)
+
+        input_dataset = data.Dataset([image_WP1_sp, image_WP1, image_WP2_sp, image_WP2])
+        input_dataset_autocrop = l2b_to_l3.split_image_by_polarization_state(input_dataset)
+
+        thetaOffsetGuess = guess_angle_offset
+
+        dataset_with_center = find_star(
+            input_dataset=input_dataset_autocrop, 
+            thetaOffsetGuess=thetaOffsetGuess,
+            drop_satspots_frames = False)
+
+        measured_x_slice_0, measured_y_slice_0 = (dataset_with_center.frames[0].ext_hdr['STARLOCX'],
+                                            dataset_with_center.frames[0].ext_hdr['STARLOCY'])
+
+        measured_x_slice_45, measured_y_slice_45 = (dataset_with_center.frames[2].ext_hdr['STARLOCX'],
+                                            dataset_with_center.frames[2].ext_hdr['STARLOCY']) 
+
+        injected_x_slice_0, injected_y_slice_0 = (dataset_with_center.frames[0].data[0].shape[0]//2 + injected_position[0][0],
+                                            dataset_with_center.frames[0].data[0].shape[1]//2 + injected_position[0][1])
+
+        injected_x_slice_45, injected_y_slice_45 = (dataset_with_center.frames[2].data[0].shape[0]//2 + injected_position[0][0],
+                                            dataset_with_center.frames[2].data[0].shape[1]//2 + injected_position[0][1])                                            
+                                      
+        #Test find star on pol 0
+        assert np.isclose(injected_x_slice_0, measured_x_slice_0, atol=0.1), \
+            f"{mode}. Expected {injected_x_slice_0}, got {measured_x_slice_0}"
+        assert np.isclose(injected_y_slice_0, measured_y_slice_0, atol=0.1), \
+            f"{mode}. Expected {injected_y_slice_0}, got {measured_y_slice_0}"
+
+        # test that the slices are corretly aligned
+        # find the star center on the second slice and check that it's the same as the first slice
+        tuningParamDict = satellite_spot_parameters_defaults[mode]
+
+        star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+            img_ref=dataset_with_center.frames[1].data[1],
+            img_sat_spot=dataset_with_center.frames[0].data[1],
+            star_coordinate_guess=(dataset_with_center.frames[0].data[1].shape[1]//2, dataset_with_center.frames[0].data[1].shape[0]//2),
+            thetaOffsetGuess=thetaOffsetGuess,
+            satellite_spot_parameters=tuningParamDict,
+        )       
+         #Test that we find the star on the same pixel
+        assert np.isclose(star_xy[0], measured_x_slice_0, atol=0.1), \
+            f"{mode}. Expected {measured_x_slice_0}, got {star_xy[0]}"
+        assert np.isclose(star_xy[1], measured_y_slice_0, atol=0.1), \
+            f"{mode}. Expected {measured_y_slice_0}, got {star_xy[1]}"
+
+        #Test find star on pol 45
+        assert np.isclose(injected_x_slice_45, measured_x_slice_45, atol=0.1), \
+            f"{mode}. Expected {injected_x_slice_45}, got {measured_x_slice_45}"
+        assert np.isclose(injected_y_slice_45, measured_y_slice_45, atol=0.1), \
+            f"{mode}. Expected {injected_y_slice_45}, got {measured_y_slice_45}"
+
+        # test that the slices are corretly aligned
+        # find the star center on the second slice and check that it's the same as the first slice
+        star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+            img_ref=dataset_with_center.frames[3].data[1],
+            img_sat_spot=dataset_with_center.frames[2].data[1],
+            star_coordinate_guess=(dataset_with_center.frames[2].data[1].shape[1]//2, dataset_with_center.frames[2].data[1].shape[0]//2),
+            thetaOffsetGuess=thetaOffsetGuess,
+            satellite_spot_parameters=tuningParamDict,
+        )       
+         #Test that we find the star on the same pixel
+        assert np.isclose(star_xy[0], measured_x_slice_45, atol=0.1), \
+            f"{mode}. Expected {measured_x_slice_45}, got {star_xy[0]}"
+        assert np.isclose(star_xy[1], measured_y_slice_45, atol=0.1), \
+            f"{mode}. Expected {measured_y_slice_45}, got {star_xy[1]}"
+
+
+    corgidrp.track_individual_errors = old_err_tracking
+
+
 if __name__ == "__main__":
     test_find_star_offset()
     test_overwrite_parameters()
+    test_find_star_polarimetry()
