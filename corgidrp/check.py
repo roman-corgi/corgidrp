@@ -474,9 +474,13 @@ def verify_hdu_count(hdul, expected_count, frame_info="", logger=None):
     if logger is None:
         logger = globals()['logger']
     
-    if len(hdul) == expected_count:
-        logger.info(f"{frame_info}: HDU count={len(hdul)}. Expected: {expected_count}. PASS.")
+    actual_count = len(hdul)
+    if actual_count == expected_count:
+        logger.info(f"{frame_info}: HDU count={actual_count}. Expected: {expected_count}. PASS.")
         return True
+    else:
+        logger.info(f"{frame_info}: HDU count={actual_count}. Expected: {expected_count}. FAIL.")
+        return False
 
 def verify_header_keywords(header, required_keywords, frame_info="", logger=None):
     """Verify that required header keywords are present and have expected values.
