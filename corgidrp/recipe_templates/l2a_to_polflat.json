@@ -45,12 +45,6 @@
             }
         },
         {
-            "name" : "combine_subexposures",
-            "keywords" : {
-                "num_frames_per_group" : 6
-            }
-        },
-        {
             "name" : "create_onsky_pol_flatfield"
         },
         {

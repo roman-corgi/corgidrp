@@ -19,7 +19,6 @@ import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
 import corgidrp.detector
 import corgidrp.flat
-import corgidrp.polflat
 import corgidrp.darks
 import corgidrp.sorting
 import corgidrp.fluxcal
@@ -47,7 +46,7 @@ all_steps = {
     "calibrate_kgain" : corgidrp.calibrate_kgain.calibrate_kgain,
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.flat.create_onsky_flatfield,
-    "create_onsky_pol_flatfield" : corgidrp.polflat.create_onsky_pol_flatfield,
+    "create_onsky_pol_flatfield" : corgidrp.flat.create_onsky_pol_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark,
     "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
@@ -288,7 +287,12 @@ def guess_template(dataset):
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_boresight.json'] #"l1_to_boresight.json"
             chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_FLAT":
-            recipe_filename = "l1_flat_and_bp.json"
+
+            if image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45'):
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_polflat.json"]
+                chained = True
+            else:
+                recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
             # explicitly check if ISPC is True or 1 (in case this value is overloaded/ assigned other integer values)
@@ -323,8 +327,6 @@ def guess_template(dataset):
                 recipe_filename = "l2a_to_l2a_noisemap.json"
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "l2a_build_trad_dark_image.json"
-        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_FLAT" and image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45'):
-            recipe_filename = "l2a_to_polflat.json"
         else:
             # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
             is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'

@@ -19,6 +19,7 @@ from corgidrp.check import (check_filename_convention, check_dimensions, verify_
 
 #Get path to this file
 current_file_path = os.path.dirname(os.path.abspath(__file__))
+thisfile_dir = os.path.dirname(__file__)
 
 def fix_str_for_tvac(
     list_of_fits,
@@ -270,19 +271,12 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     logger.info('Running processing pipeline')
     logger.info('='*80)
-    logger.info('Step 1: Processing L1 -> L2a')
+    logger.info('Step 1: Processing L1 -> Pol Flat Field')
     
     # Step 1: Process L1 to L2a
-    walker.walk_corgidrp(l1_flatfield_filelist, "", l2a_mock_outdir)
-    
-    # Find the L2a output files
-    l2a_files = [f for f in os.listdir(l2a_mock_outdir) if f.endswith('_l2a.fits')]
-    l2a_filelist = [os.path.join(l2a_mock_outdir, f) for f in l2a_files]
-    logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
-    
-    # Step 2: Process L2a to polarization flatfield 
-    logger.info('Step 2: Processing L2a -> polarization flatfield')
-    walker.walk_corgidrp(l2a_filelist, "", flat_outputdir)
+    walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
+
+    logger.info('Processing pol flat field complete')
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
@@ -522,17 +516,9 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     logger.info('Step 1: Processing L1 -> L2a')
     
-    # Step 1: Process L1 to L2a
-    walker.walk_corgidrp(l1_flatfield_filelist, "", l2a_mock_outdir)
+    # Step 1: Process L1 to Flat field cal
+    walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
     
-    # Find the L2a output files
-    l2a_files = [f for f in os.listdir(l2a_mock_outdir) if f.endswith('_l2a.fits')]
-    l2a_filelist = [os.path.join(l2a_mock_outdir, f) for f in l2a_files]
-    logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
-    
-    # Step 2: Process L2a to polarization flatfield
-    logger.info('Step 2: Processing L2a -> polarization flatfield')
-    walker.walk_corgidrp(l2a_filelist, "", flat_outputdir)
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
@@ -551,8 +537,6 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     
-
-    thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
     e2edata_dir =  "/Users/jmilton/Documents/CGI/E2E_Test_Data2"
 
@@ -562,6 +546,7 @@ if __name__ == "__main__":
     ap.add_argument("-o", "--outputdir", default=outputdir,
                 help="directory to write results to [%(default)s]")
     args = ap.parse_args()
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
     test_flat_creation_neptune_POL0(e2edata_dir, outputdir)
     test_flat_creation_neptune_POL45(e2edata_dir, outputdir)
