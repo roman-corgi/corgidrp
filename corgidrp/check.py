@@ -426,6 +426,10 @@ def check_filename_convention(filename, expected_pattern, frame_info="",
         valid = filename.startswith('cgi_') and '_dpm_cal.fits' in filename
     elif expected_pattern == 'cgi_*_line_spread.fits':
         valid = filename.startswith('cgi_') and '_line_spread.fits' in filename
+    elif expected_pattern == 'cgi_*_mmx_cal.fits':
+        valid = filename.startswith('cgi_') and '_mmx_cal.fits' in filename
+    elif expected_pattern == 'cgi_*_ndm_cal.fits':
+        valid = filename.startswith('cgi_') and '_ndm_cal.fits' in filename
     else:
         valid = expected_pattern in filename
     
@@ -470,9 +474,13 @@ def verify_hdu_count(hdul, expected_count, frame_info="", logger=None):
     if logger is None:
         logger = globals()['logger']
     
-    if len(hdul) == expected_count:
-        logger.info(f"{frame_info}: HDU count={len(hdul)}. Expected: {expected_count}. PASS.")
+    actual_count = len(hdul)
+    if actual_count == expected_count:
+        logger.info(f"{frame_info}: HDU count={actual_count}. Expected: {expected_count}. PASS.")
         return True
+    else:
+        logger.info(f"{frame_info}: HDU count={actual_count}. Expected: {expected_count}. FAIL.")
+        return False
 
 def verify_header_keywords(header, required_keywords, frame_info="", logger=None):
     """Verify that required header keywords are present and have expected values.
