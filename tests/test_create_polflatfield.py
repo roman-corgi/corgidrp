@@ -24,8 +24,9 @@ def test_create_polflatfield_pol0_neptune():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir) 
+    # simulated images to be checked in flat division
+    # create_simflat_dataset returns a Dataset, so use that directly
     simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
-    
     
     ###### create simulated raster scanned data
     # check that simulated raster scanned data folder exists, and create if not
@@ -108,6 +109,8 @@ def test_create_polflatfield_pol45_neptune():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir) 
+    # simulated images to be checked in flat division
+    # create_simflat_dataset returns a Dataset, so use that directly
     simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
     
     ###### create simulated raster scanned data
@@ -186,6 +189,8 @@ def test_create_polflatfield_pol0_uranus():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir) 
+    # simulated images to be checked in flat division
+    # create_simflat_dataset returns a Dataset, so use that directly
     simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
     
     ###### create simulated raster scanned data
@@ -262,6 +267,8 @@ def test_create_polflatfield_pol45_uranus():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir) 
+    # simulated images to be checked in flat division
+    # create_simflat_dataset returns a Dataset, so use that directly
     simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
     
     ###### create simulated raster scanned data
