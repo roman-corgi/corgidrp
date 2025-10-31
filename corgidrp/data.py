@@ -846,8 +846,10 @@ class LineSpread(Image):
             self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
 
             # Generate default output filename
+            # Strip level suffix (e.g., _l2b) before adding calibration suffix
             base = input_dataset[0].filename.split(".fits")[0]
-            self.filename = f"{base}_line_spread.fits"
+            self.filename = f"{base}_lsf_cal.fits"
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             if gauss_par is not None:
                 if not (gauss_par.ndim == 1 and len(gauss_par) == 6):
                     raise ValueError('The LineSpread calibration gauss_par array must have 6 entries')
