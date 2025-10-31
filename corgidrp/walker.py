@@ -350,6 +350,8 @@ def guess_template(dataset):
             recipe_filename = 'l2b_to_corethroughput.json'
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
             recipe_filename = "l2b_to_polcal.json"
+        elif image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+            recipe_filename = "l2b_to_l3_pol.json"
         else:
             recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
