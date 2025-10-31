@@ -273,18 +273,15 @@ def test_prescan_sub():
         # create simulated data
         dataset = mocks.create_prescan_files(filedir=datadir, arrtype=arrtype)
 
-        filenames = glob.glob(os.path.join(datadir, f"sim_prescan_{arrtype}*.fits"))
-
-        dataset = data.Dataset(filenames)
         assert len(dataset) == 2
 
         iit_images = []
         iit_frames = []
 
         # II&T version
-        for fname in filenames:
+        for frame in dataset:
 
-            l1_data = fits.getdata(fname)
+            l1_data = fits.getdata(frame.filepath)
 
             # Read in data
             meta_path = Path(here,'test_data','metadata.yaml') if arrtype == 'SCI' else Path(here,'test_data','metadata_eng.yaml')

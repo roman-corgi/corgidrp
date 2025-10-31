@@ -10,6 +10,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import shutil
 from corgidrp.darks import build_synthesized_dark
 
 try:
@@ -31,44 +32,13 @@ def fix_str_for_tvac(
     for file in list_of_fits:
         fits_file = fits.open(file)
         exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1:
+        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         if type(exthdr['EMGAIN_C']) is str:
             exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def fix_headers_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
-    Writes headers back to disk
-
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        # Adjust VISTYPE
-        prihdr['VISTYPE'] = "TDEMO"
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-        exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        if 'KGAIN' in exthdr:
-            exthdr['KGAINPAR'] = exthdr['KGAIN']
-        else:
-            exthdr['KGAINPAR'] = 8.7
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        prihdr['PHTCNT'] = False
-        exthdr['ISPC'] = False
-        exthdr['BUNIT'] = 'DN'
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_l1_to_l2b(e2edata_path, e2eoutput_path):
@@ -79,39 +49,37 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_output")
-    if not os.path.exists(test_outputdir):
-        os.mkdir(test_outputdir)
-    # clean up by removing old files
-    for file in os.listdir(test_outputdir):
-        if not os.path.isfile(os.path.join(test_outputdir, file)):
-            continue
-        os.remove(os.path.join(test_outputdir, file))
-    l2a_tvac_outputdir = os.path.join(e2eoutput_path, "l1_to_l2a_tvac_output")
+    test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_e2e")
+    if os.path.exists(test_outputdir):
+        shutil.rmtree(test_outputdir)
+    os.makedirs(test_outputdir)
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(test_outputdir, 'input_l1')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    calibrations_dir = os.path.join(test_outputdir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
+    l2a_tvac_outputdir = os.path.join(test_outputdir, "tvac_reference_data", "l2a")
     if not os.path.exists(l2a_tvac_outputdir):
-        os.mkdir(l2a_tvac_outputdir)
+        os.makedirs(l2a_tvac_outputdir)
     # clean up by removing old files
     for file in os.listdir(l2a_tvac_outputdir):
         os.remove(os.path.join(l2a_tvac_outputdir, file))
-    l2b_tvac_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_tvac_output")
+    l2b_tvac_outputdir = os.path.join(test_outputdir, "tvac_reference_data", "l2b")
     if not os.path.exists(l2b_tvac_outputdir):
-        os.mkdir(l2b_tvac_outputdir)
+        os.makedirs(l2b_tvac_outputdir)
     # clean up by removing old files
     for file in os.listdir(l2b_tvac_outputdir):
         os.remove(os.path.join(l2b_tvac_outputdir, file))
     # separate L2a and L2b outputdirs
-    l2a_outputdir = os.path.join(test_outputdir, "l2a")
+    l2a_outputdir = os.path.join(test_outputdir, "l1_to_l2a")
     if not os.path.exists(l2a_outputdir):
         os.mkdir(l2a_outputdir)
     # clean up by removing old files
     for file in os.listdir(l2a_outputdir):
         os.remove(os.path.join(l2a_outputdir, file))
-    l2b_outputdir = os.path.join(test_outputdir, "l2b")
-    if not os.path.exists(l2b_outputdir):
-        os.mkdir(l2b_outputdir)
-    # clean up by removing old files
-    for file in os.listdir(l2b_outputdir):
-        os.remove(os.path.join(l2b_outputdir, file))
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -143,7 +111,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=test_outputdir, filename="mock_nonlinearcal.fits" )
+    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -153,7 +121,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=test_outputdir, filename="mock_kgain.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -176,26 +144,33 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=test_outputdir, filename="mock_detnoisemaps.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
 
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    flat.save(filedir=test_outputdir, filename="mock_flat.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat)
 
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    bp_map.save(filedir=test_outputdir, filename="mock_bpmap.fits")
+    mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     this_caldb.create_entry(bp_map)
 
     # define the raw science data to process
 
     l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
+
+    # Copy files to input_data directory and update file list
+    l1_data_filelist = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in l1_data_filelist
+    ] 
+
     # tvac_l2a_filelist = [os.path.join(l2a_datadir, os.listdir(l2a_datadir)[i]) for i in [0,1]] #[os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
     # tvac_l2b_filelist = [os.path.join(l2b_datadir, os.listdir(l2b_datadir)[i]) for i in [0,1]] #[os.path.join(l2b_datadir, "{0}.fits".format(i)) for i in [90529, 90531]] # just grab the first two files
     tvac_l2a_filelist = []
@@ -249,7 +224,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
     # l2a -> l2b processing
     new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')] #[os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
-    walker.walk_corgidrp(new_l2a_filenames, "", l2b_outputdir)
+    walker.walk_corgidrp(new_l2a_filenames, "", test_outputdir)
 
     ##### Check against TVAC data
     # l2a data
@@ -264,7 +239,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         assert np.all(np.abs(diff) < 1e-5)
 
     # l2b data
-    new_l2b_filenames = [os.path.join(l2b_outputdir, f) for f in os.listdir(l2b_outputdir) if f.endswith('l2b.fits') ] #[os.path.join(l2b_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    new_l2b_filenames = [os.path.join(test_outputdir, f) for f in os.listdir(test_outputdir) if f.endswith('l2b.fits') ] #[os.path.join(l2b_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
     for new_filename, tvac_filename in zip(sorted(new_l2b_filenames), sorted(tvac_l2b_filelist)):
         img = data.Image(new_filename)
@@ -314,7 +289,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

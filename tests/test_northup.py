@@ -1,4 +1,6 @@
 import os,math
+import warnings
+import astropy.io.fits as fits
 from corgidrp import data, mocks, astrom
 from corgidrp.l3_to_l4 import northup
 from corgidrp.l2b_to_l3 import create_wcs
@@ -134,7 +136,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 ylen, xlen = sci_input.shape
                 xcen, ycen = xlen / 2, ylen / 2
                 # check the angle offset
-                astr_hdr = WCS(sci_hd)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
+                    astr_hdr = WCS(sci_hd)
                 angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
                 # the location for test
                 x_value1 = input_dataset[0].ext_hdr['X_1VAL']
@@ -220,7 +224,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             ylen, xlen = sci_input.shape
             xcen, ycen = xlen / 2, ylen / 2
             # check the angle offset
-            astr_hdr = WCS(sci_hd)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
+                astr_hdr = WCS(sci_hd)
             angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
             # the location for test
             x_value1 = input_dataset[0].ext_hdr['X_1VAL']

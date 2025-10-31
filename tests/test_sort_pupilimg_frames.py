@@ -197,7 +197,7 @@ def make_minimal_image(
     # Record actual exposure time
     hdul[1].header['EXPTIME'] = exptime_sec
     # Add corresponding VISTYPE
-    hdul[0].header['VISTYPE'] = 'PUPILIMG'
+    hdul[0].header['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
     hdul[0].header['AUXFILE'] = auxfile
     hdul[1].header['DPAMNAME'] = 'PUPIL,PUPIL_FFT' #from latest update of TVAC files from SSC
     hdul[1].header['CFAMNAME'] = 'CLEAR' # would have actual filter names, but for now, just shouldn't be 'DARK'
@@ -664,3 +664,4 @@ if __name__ == "__main__":
     test_nonlin_sorting_w_change()
     print('* Non-linearity tests with different exposure times among non-unity gains passed')
 
+    
