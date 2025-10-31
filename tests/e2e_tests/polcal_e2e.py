@@ -381,7 +381,7 @@ if __name__ == "__main__":
     
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  "/Users/maxmb/Data/corgi/E2E_Test_Data/"
+    e2edata_dir =  '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the l2b-> Polcal end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

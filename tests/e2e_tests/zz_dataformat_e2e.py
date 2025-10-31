@@ -860,7 +860,31 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
         # diff the two outputs
         compare_docs(ref_doc_contents, doc_contents)
 
+@pytest.mark.e2e
+def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
+    fluxcal_pol_data_file = glob.glob(os.path.join(thisfile_dir, "fluxcal_pol_e2e", "WP1", "*_abf_cal.fits"))[0]
+    
+    validate_cgi_filename(fluxcal_pol_data_file, 'abf_cal')
+    
+    generate_fits_excel_documentation(fluxcal_pol_data_file, os.path.join(thisfile_dir, "fluxcal_pol_e2e", "WP1", "abf_cal_documentation.xlsx"))
+    
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
 
+    with fits.open(fluxcal_pol_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "fluxcal_pol.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "fluxcal_pol.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+        
 @pytest.mark.e2e
 def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
     polcal_data_file = glob.glob(os.path.join(thisfile_dir, "polcal_e2e", "*_mmx_cal.fits"))[0]
@@ -1171,6 +1195,7 @@ if __name__ == "__main__":
     test_ctmap_dataformat_e2e(e2edata_dir, outputdir)
     test_flat_dataformat_e2e(e2edata_dir, outputdir)
     test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
+    test_fluxcal_pol_dataformat_e2e(e2edata_dir, outputdir)
     test_kgain_dataformat_e2e(e2edata_dir, outputdir)
     test_l2a_dataformat_e2e(e2edata_dir, outputdir)
     test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
