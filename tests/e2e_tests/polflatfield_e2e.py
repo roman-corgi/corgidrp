@@ -131,7 +131,7 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # raw science data to mock from
-    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "CGI_*.fits"))
+    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "cgi_*.fits"))
     fix_str_for_tvac(l1_dark_filelist)
     l1_dark_filelist.sort()
 
@@ -160,7 +160,11 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         # add 1 millisecond each time to UTC time
-        base_image.filename = l1_dark_st_filename.replace(last_num_str, str(start_utc + i))
+        if l1_dark_st_filename and last_num_str:
+            base_image.filename = l1_dark_st_filename.replace(last_num_str, str(start_utc + i))
+        else:
+            # Fallback if no filename or last_num_str available
+            base_image.filename = f"cgi_0000000000000000000_{str(start_utc + i).zfill(13)}_l1_.fits"
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = polraster_dataset[i].data
@@ -378,7 +382,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # raw science data to mock from
-    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "CGI_*.fits"))
+    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "cgi_*.fits"))
     fix_str_for_tvac(l1_dark_filelist)
     l1_dark_filelist.sort()
 
@@ -539,7 +543,7 @@ if __name__ == "__main__":
 
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  "/Users/polaris/Roman_CGI_flatfielding/pol_flatfielding/corgi/"
+    e2edata_dir =  "/Users/jmilton/Documents/CGI/E2E_Test_Data2"
 
     ap = argparse.ArgumentParser(description="run the l2b-> PolFlatfield end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

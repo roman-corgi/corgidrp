@@ -46,6 +46,7 @@ all_steps = {
     "calibrate_kgain" : corgidrp.calibrate_kgain.calibrate_kgain,
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.flat.create_onsky_flatfield,
+    "create_onsky_pol_flatfield" : corgidrp.polflat.create_onsky_pol_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark,
     "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
@@ -317,6 +318,9 @@ def guess_template(dataset):
                 recipe_filename = "l2a_to_l2a_noisemap.json"
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "l2a_build_trad_dark_image.json"
+        elif image.pri_hdr['VISTYPE'] == "FFIELD" and image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45'):
+            # Polarization flat field data
+            recipe_filename = "l2a_to_polflat.json"
         else:
             if image.ext_hdr['ISPC']:
                 recipe_filename = "l2a_to_l2b_pc.json"
