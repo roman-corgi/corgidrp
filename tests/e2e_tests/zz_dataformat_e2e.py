@@ -387,7 +387,7 @@ def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
         compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
-def test_l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l2b_pc_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l2b_data_dir = os.path.join(thisfile_dir, "photon_count_e2e", "l2a_to_l2b")
     l2b_data_file = glob.glob(os.path.join(l2b_data_dir, "*_l2b.fits"))[0]
@@ -862,6 +862,115 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
+def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
+    polcal_data_file = glob.glob(os.path.join(thisfile_dir, "polcal_e2e", "*_mmx_cal.fits"))[0]
+    
+    validate_cgi_filename(polcal_data_file, 'mmx_cal')
+    
+    generate_fits_excel_documentation(polcal_data_file, os.path.join(thisfile_dir, "polcal_e2e", "mmx_cal_documentation.xlsx"))
+    
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(polcal_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "mmx_cal.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "mmx_cal.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+
+@pytest.mark.e2e
+def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
+    polcal_data_file = glob.glob(os.path.join(thisfile_dir, "polcal_e2e", "*_ndm_cal.fits"))[0]
+    
+    validate_cgi_filename(polcal_data_file, 'ndm_cal')
+    
+    generate_fits_excel_documentation(polcal_data_file, os.path.join(thisfile_dir, "polcal_e2e", "ndm_cal_documentation.xlsx"))
+    
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(polcal_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "ndm_cal.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "ndm_cal.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+
+
+@pytest.mark.e2e
+def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
+    spec_linespread_data_file = glob.glob(os.path.join(thisfile_dir, "spec_linespread_cal_e2e", "*_lsf_cal.fits"))[0]
+    
+    validate_cgi_filename(spec_linespread_data_file, 'lsf_cal')
+    
+    generate_fits_excel_documentation(spec_linespread_data_file, os.path.join(thisfile_dir, "spec_linespread_cal_e2e", "lsf_cal_documentation.xlsx"))
+    
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(spec_linespread_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "lsf_cal.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "lsf_cal.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+
+@pytest.mark.e2e
+def test_spec_prism_disp_dataformat_e2e(e2edata_path, e2eoutput_path):
+    spec_prism_disp_data_file = glob.glob(os.path.join(thisfile_dir, "spec_prism_disp_cal_e2e", "*_dpm_cal.fits"))[0]
+    
+    validate_cgi_filename(spec_prism_disp_data_file, 'dpm_cal')
+    
+    generate_fits_excel_documentation(spec_prism_disp_data_file, os.path.join(thisfile_dir, "spec_prism_disp_cal_e2e", "dpm_cal_documentation.xlsx"))
+    
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(spec_prism_disp_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "dpm_cal.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "dpm_cal.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+
+@pytest.mark.e2e
 def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
     """
     Create a cross-reference Excel file showing which headers appear in which data products.
@@ -907,9 +1016,12 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'CoreThroughput': glob.glob(os.path.join(thisfile_dir, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits")),
         'CoreThroughputMap': glob.glob(os.path.join(thisfile_dir, "ctmap_cal_e2e", "*_ctm_cal.fits")),
         'FluxCal': glob.glob(os.path.join(thisfile_dir, "flux_cal_e2e", "*_abf_cal.fits")),
+        'FluxCalPol': glob.glob(os.path.join(thisfile_dir, "fluxcal_pol_e2e", "WP1","*_abf_cal.fits")),
         'KGain': glob.glob(os.path.join(thisfile_dir, "kgain_cal_e2e", "*_krn_cal.fits")),
+        'MuellerMatrix': glob.glob(os.path.join(thisfile_dir, "polcal_e2e", "*_mmx_cal.fits")),
         'NonLin': glob.glob(os.path.join(thisfile_dir, "nonlin_cal_e2e", "*_nln_cal.fits")),
         'NDFilter': glob.glob(os.path.join(thisfile_dir, "nd_filter_cal_e2e", "*_ndf_cal.fits")),
+        'NDMueller': glob.glob(os.path.join(thisfile_dir, "polcal_e2e", "*_ndm_cal.fits")),
         'NoiseMaps': glob.glob(os.path.join(thisfile_dir, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits")),
         'Dark': glob.glob(os.path.join(thisfile_dir, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits")),
         'TrapPump': glob.glob(os.path.join(thisfile_dir, "trap_pump_cal_e2e", "*_tpu_cal.fits")),
@@ -1053,22 +1165,26 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
+    test_astrom_dataformat_e2e(e2edata_dir, outputdir)
     test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
-    test_l2bpc_dataformat_e2e(e2edata_dir, outputdir)
-    test_dark_dataformat_e2e(e2edata_dir, outputdir)
+    test_ct_dataformat_e2e(e2edata_dir, outputdir)
+    test_ctmap_dataformat_e2e(e2edata_dir, outputdir)
+    test_flat_dataformat_e2e(e2edata_dir, outputdir)
+    test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
+    test_kgain_dataformat_e2e(e2edata_dir, outputdir)
     test_l2a_dataformat_e2e(e2edata_dir, outputdir)
     test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
+    test_l2b_pc_dataformat_e2e(e2edata_dir, outputdir)
     test_l3_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
-    test_astrom_dataformat_e2e(e2edata_dir, outputdir)
-    test_flat_dataformat_e2e(e2edata_dir, outputdir)
-    test_ct_dataformat_e2e(e2edata_dir, outputdir)
-    test_ctmap_dataformat_e2e(e2edata_dir, outputdir)
-    test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
-    test_kgain_dataformat_e2e(e2edata_dir, outputdir)
-    test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
+    test_mueller_matrix_dataformat_e2e(e2edata_dir, outputdir)
     test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
     test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
+    test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
+    test_nd_mueller_dataformat_e2e(e2edata_dir, outputdir)
+    test_spec_linespread_dataformat_e2e(e2edata_dir, outputdir)
+    test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
+    test_dark_dataformat_e2e(e2edata_dir, outputdir)
     test_tpump_dataformat_e2e(e2edata_dir, outputdir)
     test_header_crossreference_e2e(e2edata_dir, outputdir)
