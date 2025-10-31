@@ -1,19 +1,21 @@
 # Place to put flatfield-related utility functions
-
+import warnings
 import numpy as np
 from scipy import interpolate
 from scipy.ndimage import median_filter
 from scipy.ndimage import gaussian_filter as gauss
 from scipy import ndimage
 from scipy.signal import convolve2d
+from scipy.ndimage import zoom
 import astropy.io.fits as fits
 from astropy.convolution import convolve_fft
+from astropy.utils.exceptions import AstropyUserWarning
 import photutils.centroids as centr
 from photutils.aperture import CircularAperture
-import corgidrp.mocks as mocks
 from photutils.detection import DAOStarFinder
 import corgidrp.data as data
-from scipy.ndimage import zoom
+import corgidrp.mocks as mocks
+
 
 def create_flatfield(flat_dataset):
 
@@ -223,7 +225,9 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
     nx = np.arange(0,full_residuals_resel.shape[1])
     ny = np.arange(0,full_residuals_resel.shape[0])
     nxx,nyy = np.meshgrid(ny,nx)
-    cent_n=centr.centroid_com(p_flat)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=AstropyUserWarning) 
+        cent_n=centr.centroid_com(p_flat)
     nrr = np.sqrt((nxx-cent_n[0])**2 + (nyy-cent_n[1])**2)
     p_flat[nrr>n_pix//2]= 1
     p_flat_err[nrr>n_pix//2]=0
@@ -324,7 +328,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
     
     return(onsky_flatfield)
 
-def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=None, observing_mode='NFOV', n_pad=None, fwhm_guess=20,sky_annulus_rin=2, sky_annulus_rout=4,plate_scale=0.0218,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,dpamname='POL0'):
+def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=None, observing_mode='NFOV', n_pad=None, fwhm_guess=20,sky_annulus_rin=2, sky_annulus_rout=4,plate_scale=0.0218,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,dpamname=None):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
 
@@ -351,7 +355,7 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
             separation_diameter_arcsec (float): separation between the two orthogonal pol components in arcsecs
             alignment_angle_WP1 (int): wollaston prism angle for Pol0 - 0
             alignment_angle_WP2 (int): wollaston prism angle for Pol45- 45
-            dpamname (str): wollaston prism POL0 or POL45
+            dpamname (str): wollaston prism POL0 or POL45. Defaults to DPAMNAME in the header.
             
     	Returns:
     		data.FlatField (corgidrp.data.FlatField): a master flat corresponding to Pol0 or Pol 45 for flat calibration using on sky images of planet in band specified
