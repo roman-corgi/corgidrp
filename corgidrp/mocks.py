@@ -1025,23 +1025,36 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             planet_rot_images.append(planet_repoint_current[0][j])
             pred_cents.append(planet_repoint_current[1][j])
 
-    filepattern = "cgi_pppppccaaasssooovvv_yyyymmddt{0:02d}00_l2a.fits"
     frames=[]
+    # Generate base timestamp once for consistency
+    base_dt = datetime.datetime.now()
+    base_visitid = None
+    
     for i in range(numfiles*raster_subexps):
         prihdr, exthdr = create_default_L1_headers()
+        
+        # Get VISITID (should be consistent across frames)
+        if base_visitid is None:
+            base_visitid = prihdr.get('VISITID', '0000000000000000000')
+        
+        # Generate unique timestamp for each frame (add microseconds for uniqueness)
+        dt = base_dt + datetime.timedelta(microseconds=i*100)
+        ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+        
         sim_data=planet_rot_images[i]
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         pl=planet
         band=band
         frame.pri_hdr.set('TARGET', pl)
         frame.ext_hdr.append(('CFAMNAME', "{0}F".format(band)), end=True)
+        
+        # Set proper L2a filename
+        filename = f"cgi_{base_visitid}_{ftime}_l2a.fits"
+        
         if filedir is not None:
-            frame.save(filedir=filedir, filename=filepattern.format(i))
+            frame.save(filedir=filedir, filename=filename)
         else:
-            # fake filenumber as hours and minutes
-            hours = i // 60
-            minutes = i % 60
-            frame.filename = filepattern.format(hours, minutes)
+            frame.filename = filename
         frames.append(frame)
     raster_dataset = data.Dataset(frames)
     return raster_dataset
@@ -3189,7 +3202,6 @@ def generate_reference_star_dataset_with_flux(
     elif len(roll_angles) != n_frames:
         raise ValueError("roll_angles must match n_frames or be None.")
 
-    from corgidrp.data import Dataset
     frames = []
     for i in range(n_frames):
         # 1) Create a single flux image with the star alone
@@ -3325,11 +3337,7 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
         data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq)]
         # Add some filename following the file convention:
         # cgi_<VisitID: PPPPPCCAAASSSOOOVVV>_<TimeUTC>_l2b.fits
-        # Generate unique timestamp for each PSF
-        from datetime import datetime, timedelta
-        base_time = datetime.now()
-        unique_time = (base_time + timedelta(milliseconds=len(data_psf)*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        data_psf[-1].filename = f'cgi_0200001001001001001_{unique_time}_l2b.fits'
+        data_psf[-1].filename = 'cgi_0200001001001001001_20250415t0305102_l2b.fits'
         
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
@@ -3936,7 +3944,6 @@ def generate_coron_dataset_with_companions(
     Returns:
       Dataset: A dataset of frames (each an Image) with the star and companion(s) injected.
     """
-    import numpy as np
     ny, nx = shape
     if host_star_center is None:
         host_star_center = (nx / 2, ny / 2)  # (x, y)
@@ -4038,16 +4045,13 @@ def generate_coron_dataset_with_companions(
             for key, value in companion_keywords.items():
                 exthdr[key] = value
 
-        from corgidrp.data import Image
         frame = Image(data_arr, pri_hdr=prihdr, ext_hdr=exthdr)
         frames.append(frame)
 
-    from corgidrp.data import Dataset
     dataset = Dataset(frames)
 
     # (F) Optionally save the dataset.
     if outdir is not None:
-        import os
         os.makedirs(outdir, exist_ok=True)
         
         # Generate CGI filenames for all frames
@@ -4277,9 +4281,6 @@ def generate_reference_star_dataset(
     Returns:
         dataset (corgidrp.Data.Dataset): A Dataset object containing the generated reference star frames.
     """
-    from corgidrp.data import Dataset, Image
-    import numpy as np
-    import os
 
     # We'll adapt the same logic but no companion injection
     ny, nx = shape
@@ -4556,7 +4557,6 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
         
         # Check if file already exists (collision detection)
         if os.path.exists(new_filename):
-            import warnings
             warnings.warn(f"File collision detected: {os.path.basename(new_filename)} already exists! This file will be overwritten.")
         
         if is_image_object:
@@ -4816,20 +4816,25 @@ def create_spatial_pol(dataset,filedir=None,nr=None,pfov_size=174,image_center_x
     WP_pol[start_right[1]:start_right[1]+pfov, start_right[0]:start_right[0]+pfov]=I_2[yc_init - (pfov//2):yc_init + (pfov//2),xc_init - (pfov//2):xc_init + (pfov//2)]* 0.5 * (1-(2*r_xy))
 
     # create the default headers and modify the header keywords
-    filepattern = "cgi_pppppccaaasssooovvv_yyyymmddt{0:02d}00_l2a.fits"
     prihdr, exthdr = create_default_L1_headers()
     prihdr['TARGET']=planet
     exthdr['DPAMNAME'] = dpamname
+    
+    # Generate proper filename with current timestamp
+    dt = datetime.datetime.now()
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    visitid = prihdr.get('VISITID', '0000000000000000000')
+    
     image = data.Image(WP_pol, pri_hdr=prihdr, ext_hdr=exthdr)
     image.pri_hdr.append(('FILTER',band), end=True)
-    i=len(image.data)
+    
+    # Set proper L2a filename
+    filename = f"cgi_{visitid}_{ftime}_l2a.fits"
+    
     if filedir is not None:
-            image.save(filedir=filedir, filename=filepattern.format(i))
+        image.save(filedir=filedir, filename=filename)
     else:
-        # fake filenumber as hours and minutes
-            hours = i // 60
-            minutes = i % 60
-            image.filename = filepattern.format(hours, minutes)
+        image.filename = filename
     pol_image=data.Dataset([image])
     return (pol_image) 
 

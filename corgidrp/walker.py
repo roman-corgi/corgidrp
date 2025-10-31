@@ -19,6 +19,7 @@ import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
 import corgidrp.detector
 import corgidrp.flat
+import corgidrp.polflat
 import corgidrp.darks
 import corgidrp.sorting
 import corgidrp.fluxcal
@@ -322,8 +323,7 @@ def guess_template(dataset):
                 recipe_filename = "l2a_to_l2a_noisemap.json"
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "l2a_build_trad_dark_image.json"
-        elif image.pri_hdr['VISTYPE'] == "FFIELD" and image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45'):
-            # Polarization flat field data
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_FLAT" and image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45'):
             recipe_filename = "l2a_to_polflat.json"
         else:
             # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)

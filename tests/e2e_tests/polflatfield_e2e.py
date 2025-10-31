@@ -48,10 +48,15 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
         e2edata_path (str): path to L1 data files
         e2eoutput_path (str): output directory
     """
+    # create output dir first (delete existing to start fresh)
+    output_dir = os.path.join(e2eoutput_path, 'pol_flatfield_cal_e2e')
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
 
     # set up logging
     global logger
-    log_file = os.path.join(e2eoutput_path, 'pol_flatfield_e2e.log')
+    log_file = os.path.join(output_dir, 'pol_flatfield_cal_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('pol_flatfield_e2e')
@@ -88,14 +93,19 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "pol_flat_neptune_output_pol0")
-    print(flat_outputdir)
-    if not os.path.exists(flat_outputdir):
-        os.mkdir(flat_outputdir)
-    flat_mock_inputdir = os.path.join(flat_outputdir, "mock_input_data")
-    if not os.path.exists(flat_mock_inputdir):
-        os.mkdir(flat_mock_inputdir)  
+    flat_outputdir = os.path.join(e2eoutput_path, "pol_flatfield_cal_e2e", "flat_neptune_pol0")
+
+    os.makedirs(flat_outputdir, exist_ok=True)
+    flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
+    os.makedirs(flat_mock_inputdir, exist_ok=True)  
     
+    l2a_mock_outdir = os.path.join(flat_outputdir, "output_l2a")
+    os.makedirs(l2a_mock_outdir, exist_ok=True) 
+    
+    calibrations_dir = os.path.join(flat_outputdir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
+
     logger.info('='*80)
     logger.info('Pre-test: set up input calibration files')
     logger.info('='*80)
@@ -154,7 +164,7 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     for i in range(len(polraster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Neptune"
-        base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
         base_image.ext_hdr['CFAMNAME'] = "4F"
         base_image.ext_hdr['DPAMNAME'] = "POL0"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
@@ -209,7 +219,7 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
+    nonlinear_cal.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -222,7 +232,7 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
+    kgain.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -246,7 +256,7 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=flat_outputdir, filename="mock_detnoisemaps.fits")
+    noise_map.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
 
@@ -260,16 +270,19 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     logger.info('Running processing pipeline')
     logger.info('='*80)
-    logger.info('Running walker for POL0')
-
-    recipe = walker.autogen_recipe(l1_flatfield_filelist, flat_outputdir)
-     ### Modify they keywords of some of the steps
-    for step in recipe['steps']:
-        # if step['name'] in ["desmear", "cti_correction"]:
-        #     step['skip'] = True
-        if step['name'] == "create_onsky_pol_flatfield":
-            step['keywords']['n_pix'] = 174 # full shaped pupil FOV
-    walker.run_recipe(recipe, save_recipe_file=True)
+    logger.info('Step 1: Processing L1 -> L2a')
+    
+    # Step 1: Process L1 to L2a
+    walker.walk_corgidrp(l1_flatfield_filelist, "", l2a_mock_outdir)
+    
+    # Find the L2a output files
+    l2a_files = [f for f in os.listdir(l2a_mock_outdir) if f.endswith('_l2a.fits')]
+    l2a_filelist = [os.path.join(l2a_mock_outdir, f) for f in l2a_files]
+    logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
+    
+    # Step 2: Process L2a to polarization flatfield 
+    logger.info('Step 2: Processing L2a -> polarization flatfield')
+    walker.walk_corgidrp(l2a_filelist, "", flat_outputdir)
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
@@ -280,11 +293,6 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     #smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
     #print(np.std(smoothed_diff[good_region]))
     #assert np.std(smoothed_diff[good_region]) < 0.0071
-
-    ####### Check the bad pixel map result
-    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
-    bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
-    #assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -299,13 +307,13 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
         e2edata_path (str): path to L1 data files
         e2eoutput_path (str): output directory
     """
-
     # set up logging
     global logger
-    log_file = os.path.join(e2eoutput_path, 'pol_flatfield_e2e.log')
+    output_dir = os.path.join(e2eoutput_path, 'pol_flatfield_cal_e2e')
+    log_file = os.path.join(output_dir, 'pol_flatfield_cal_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
-    logger = logging.getLogger('pol_flatfield_e2e')
+    logger = logging.getLogger('pol_flatfield_cal_e2e')
     logger.setLevel(logging.INFO)
 
     # Create file handler
@@ -339,13 +347,18 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "pol_flat_neptune_output_pol45")
-    print(flat_outputdir)
-    if not os.path.exists(flat_outputdir):
-        os.mkdir(flat_outputdir)
-    flat_mock_inputdir = os.path.join(flat_outputdir, "mock_input_data")
-    if not os.path.exists(flat_mock_inputdir):
-        os.mkdir(flat_mock_inputdir)  
+    flat_outputdir = os.path.join(e2eoutput_path, "pol_flatfield_cal_e2e", "flat_neptune_pol45")
+
+    os.makedirs(flat_outputdir, exist_ok=True)
+    flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
+    os.makedirs(flat_mock_inputdir, exist_ok=True) 
+
+    l2a_mock_outdir = os.path.join(flat_outputdir, "output_l2a")
+    os.makedirs(l2a_mock_outdir, exist_ok=True) 
+    
+    calibrations_dir = os.path.join(flat_outputdir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
     
     logger.info('='*80)
     logger.info('Pre-test: set up input calibration files')
@@ -405,7 +418,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     for i in range(len(polraster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Neptune"
-        base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
         base_image.ext_hdr['CFAMNAME'] = "4F"
         base_image.ext_hdr['DPAMNAME'] = "POL45"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
@@ -456,7 +469,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
+    nonlinear_cal.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -469,7 +482,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
+    kgain.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -493,7 +506,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=flat_outputdir, filename="mock_detnoisemaps.fits")
+    noise_map.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
 
@@ -507,16 +520,19 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     logger.info('Running processing pipeline')
     logger.info('='*80)
-    logger.info('Running walker for POL45')
-
-    recipe = walker.autogen_recipe(l1_flatfield_filelist, flat_outputdir)
-     ### Modify they keywords of some of the steps
-    for step in recipe['steps']:
-        # if step['name'] in ["desmear", "cti_correction"]:
-        #     step['skip'] = True
-        if step['name'] == "create_onsky_pol_flatfield":
-            step['keywords']['n_pix'] = 174 # full shaped pupil FOV
-    walker.run_recipe(recipe, save_recipe_file=True)
+    logger.info('Step 1: Processing L1 -> L2a')
+    
+    # Step 1: Process L1 to L2a
+    walker.walk_corgidrp(l1_flatfield_filelist, "", l2a_mock_outdir)
+    
+    # Find the L2a output files
+    l2a_files = [f for f in os.listdir(l2a_mock_outdir) if f.endswith('_l2a.fits')]
+    l2a_filelist = [os.path.join(l2a_mock_outdir, f) for f in l2a_files]
+    logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
+    
+    # Step 2: Process L2a to polarization flatfield
+    logger.info('Step 2: Processing L2a -> polarization flatfield')
+    walker.walk_corgidrp(l2a_filelist, "", flat_outputdir)
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
@@ -527,11 +543,6 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     #smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
     #print(np.std(smoothed_diff[good_region]))
     #assert np.std(smoothed_diff[good_region]) < 0.0071
-
-    ####### Check the bad pixel map result
-    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
-    bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
-    #assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
