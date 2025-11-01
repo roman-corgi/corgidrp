@@ -1,0 +1,49 @@
+{
+    "name": "l3_to_l4_pol",
+    "template": true, 
+    "drpconfig": {
+        "track_individual_errors": false
+    },
+    "inputs": [],
+    "outputdir": "",
+    "steps": [
+        {
+            "name": "replace_bad_pixels"
+        },
+        {
+            "name": "distortion_correction", 
+            "calibs": {
+                "AstrometricCalibration": "AUTOMATIC"
+            }
+        },
+        {
+            "name": "find_star"
+        },
+        {
+            "name": "align_polarimetry_frames"
+        },
+        {
+            "name": "subtract_stellar_polarization",
+            "calibs": {
+                "MuellerMatrix": "AUTOMATIC",
+                "NDMuellerMatrix": "AUTOMATIC"
+            }
+        },
+        {
+            "name": "combine_polarization_states",
+            "calibs": {
+                "MuellerMatrix": "AUTOMATIC"
+            }
+        },
+        {
+            "name": "update_to_l4",
+            "calibs": {
+                "CoreThroughputCalibration": "AUTOMATIC",
+                "FluxcalFactor": "AUTOMATIC"
+            }
+        },
+        {
+            "name": "save"
+        }
+    ]
+}
