@@ -7,6 +7,7 @@ import logging
 import pytest
 import argparse
 import warnings
+import shutil
 from astropy.io.fits.verify import VerifyWarning
 
 from corgidrp.data import Dataset
@@ -19,7 +20,7 @@ import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
                            get_latest_cal_file)
-
+from tests.e2e_tests.l1_to_l3_spec_e2e import run_l1_to_l3_e2e_test
 
 # first lift the L1 simulations to L3
 
@@ -51,18 +52,37 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Check if input folder already contains the expected files
-    psfref_files = sorted(glob.glob(os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L2a", 'cgi_*_l2a.fits')))
-    target_files = sorted(glob.glob(os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L2b", 'cgi_*_l2b.fits')))
-    logger.info(f"Found {len(target_files)} existing L2b target files in {e2edata_path}")
-    logger.info(f"Found {len(psfref_files)} existing L2a reference files in {e2edata_path}")
+    psfref_files_old = sorted(glob.glob(os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "CGI_*L1_.fits")))
+    for file in psfref_files_old:
+        new_file = file.split("/")[-1]
+        new_file = new_file.replace("L1_", "l1_", 1)
+        new_file = new_file.replace("CGI", "cgi", 1)
+        shutil.copy(file, os.path.join(e2edata_path,"SPEC_refstar_slit_prism", "L1", new_file))
+        
+    psfref_files_new = sorted(glob.glob(os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L1", "cgi_*l1_.fits")))
+    psfref_files_path = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L1")
+    target_files_path = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1")
+    target_files = sorted(glob.glob(os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1", "cgi_*l1_.fits")))
+    logger.info(f"Found {len(target_files)} existing L1 target files in {e2edata_path}")
+    logger.info(f"Found {len(psfref_files_new)} existing L1 reference files in {e2edata_path}")
     
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
+    ref_l3_output_dir = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L3")
+    target_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3")
+    
+    run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
+    run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger)
+    
+    exit()
+    l3_psfref = sorted(glob.glob(os.path.join(ref_l3_output_dir, "cgi_*l3_.fits")))
+    l3_target = sorted(glob.glob(os.path.join(target_l3_output_dir, "cgi_*l3_.fits")))
     all_frames = []
-    l2a_dataset_with_psfref = Dataset(psfref_files)
-    for frame in l2a_dataset_with_psfref:
+    l3_dataset_with_psfref = Dataset(l3_psfref)
+    for frame in l3_dataset_with_psfref:
         frame.ext_hdr["PSFREF"] = 1
         all_frames.append(frame)
-    l2b_dataset_with_target = Dataset(target_files)
-    for frame in l2b_dataset_with_target:
+    l3_dataset_with_target = Dataset(l3_target)
+    for frame in l3_dataset_with_target:
         all_frames.append(frame)
         
     l3_dataset = Dataset(all_frames)
