@@ -305,7 +305,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     
     # Step 1: L1 -> L2a (generic processing)
     logger.info('Step 1: Running L1 to L2a recipe...')
-    walker.walk_corgidrp(input_data_filelist, "", l3_outputdir, template="l1_to_l2a_basic.json")
+    walker.walk_corgidrp(input_data_filelist, "", l3_outputdir)
     
     # Find the L2a output files
     l2a_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2a.fits')]

@@ -1500,8 +1500,11 @@ def spec_psf_subtraction(input_dataset):
         image_list.append(frame)
 
     out_dataset = data.Dataset(image_list)
-    history_msg = f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
-    out_dataset.update_after_processing_step(history_msg)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=VerifyWarning)
+        history_msg = f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
+        out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 
 

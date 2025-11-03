@@ -277,7 +277,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     
     # Step 2: L2b -> L3 
     logger.info('Step 2: Running L2b to L3 polarimetry recipe...')
-    walker.walk_corgidrp(l2b_filelist, "", l3_outputdir, template="l2b_to_l3_pol.json")
+    walker.walk_corgidrp(l2b_filelist, "", l3_outputdir)
     logger.info('L2b to L3 complete.')
     logger.info('')
     
