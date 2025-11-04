@@ -5,6 +5,7 @@ import pytest
 import os, shutil
 import numpy as np
 import scipy.ndimage
+import datetime
 import astropy.time as time
 import astropy.io.fits as fits
 import corgidrp
@@ -157,7 +158,6 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     target_snr = 250/np.sqrt(4.95) # per pix
 
     # Create properly formatted CGI filenames
-    import datetime
     base_time = datetime.datetime.now()
     l1_flat_dataset = []
     for i in range(len(polraster_dataset)):
@@ -169,7 +169,7 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         
-        # Generate proper CGI filename with correct timestamp format
+        # Generate CGI filename with correct timestamp format
         visitid = base_image.pri_hdr.get('VISITID', '0089001001001001027')
         unique_time = base_time + datetime.timedelta(seconds=i)
         time_str = data.format_ftimeutc(unique_time.isoformat())
@@ -414,7 +414,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         
-        # Generate proper CGI filename with correct timestamp format
+        # Generate CGI filename with correct timestamp format
         visitid = base_image.pri_hdr.get('VISITID', '0089001001001001027')
         unique_time = base_time + datetime.timedelta(seconds=i)
         time_str = data.format_ftimeutc(unique_time.isoformat())
