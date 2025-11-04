@@ -156,11 +156,9 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
-    # change the UTC time using the UTC time from the first time as the start
-    l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
-    match = re.findall(r'\d{2,}', l1_dark_st_filename)
-    last_num_str = match[-1] if match else None
-    start_utc = int(last_num_str)
+    # Create properly formatted CGI filenames
+    import datetime
+    base_time = datetime.datetime.now()
     l1_flat_dataset = []
     for i in range(len(polraster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
@@ -170,12 +168,12 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
         base_image.ext_hdr['DPAMNAME'] = "POL0"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
-        # add 1 millisecond each time to UTC time
-        if l1_dark_st_filename and last_num_str:
-            base_image.filename = l1_dark_st_filename.replace(last_num_str, str(start_utc + i))
-        else:
-            # Fallback if no filename or last_num_str available
-            base_image.filename = f"cgi_0000000000000000000_{str(start_utc + i).zfill(13)}_l1_.fits"
+        
+        # Generate proper CGI filename with correct timestamp format
+        visitid = base_image.pri_hdr.get('VISITID', '0089001001001001027')
+        unique_time = base_time + datetime.timedelta(seconds=i)
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        base_image.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = polraster_dataset[i].data
@@ -403,11 +401,9 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
-    # change the UTC time using the UTC time from the first time as the start
-    l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
-    match = re.findall(r'\d{2,}', l1_dark_st_filename)
-    last_num_str = match[-1] if match else None
-    start_utc = int(last_num_str)
+    # Create properly formatted CGI filenames
+    import datetime
+    base_time = datetime.datetime.now()
     l1_flat_dataset = []
     for i in range(len(polraster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
@@ -417,8 +413,12 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
         base_image.ext_hdr['DPAMNAME'] = "POL45"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
-        # add 1 millisecond each time to UTC time
-        base_image.filename = l1_dark_st_filename.replace(last_num_str, str(start_utc + i))
+        
+        # Generate proper CGI filename with correct timestamp format
+        visitid = base_image.pri_hdr.get('VISITID', '0089001001001001027')
+        unique_time = base_time + datetime.timedelta(seconds=i)
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        base_image.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = polraster_dataset[i].data
