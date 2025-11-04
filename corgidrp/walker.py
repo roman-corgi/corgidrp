@@ -62,6 +62,7 @@ all_steps = {
     "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
     "find_star": corgidrp.l3_to_l4.find_star,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
+    "spec_psf_subtraction": corgidrp.l3_to_l4.spec_psf_subtraction,
     "determine_wave_zeropoint": corgidrp.l3_to_l4.determine_wave_zeropoint,
     "add_wavelength_map": corgidrp.l3_to_l4.add_wavelength_map,
     "extract_spec": corgidrp.l3_to_l4.extract_spec,

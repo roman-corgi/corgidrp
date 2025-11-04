@@ -17,7 +17,7 @@
             }
         },
         {
-            "name" : "spec_psf_subraction",
+            "name" : "spec_psf_subtraction"
         },
         {
             "name" : "extract_spec"

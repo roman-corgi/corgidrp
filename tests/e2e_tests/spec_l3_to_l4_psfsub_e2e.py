@@ -50,14 +50,6 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
-
-    # Check if input folder already contains the expected files
-    psfref_files_old = sorted(glob.glob(os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "CGI_*L1_.fits")))
-    for file in psfref_files_old:
-        new_file = file.split("/")[-1]
-        new_file = new_file.replace("L1_", "l1_", 1)
-        new_file = new_file.replace("CGI", "cgi", 1)
-        shutil.copy(file, os.path.join(e2edata_path,"SPEC_refstar_slit_prism", "L1", new_file))
         
     psfref_files_new = sorted(glob.glob(os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L1", "cgi_*l1_.fits")))
     psfref_files_path = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L1")
@@ -73,20 +65,13 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger)
     
-    exit()
+    l3_files = []
     l3_psfref = sorted(glob.glob(os.path.join(ref_l3_output_dir, "cgi_*l3_.fits")))
+    l3_files.extend(l3_psfref)
     l3_target = sorted(glob.glob(os.path.join(target_l3_output_dir, "cgi_*l3_.fits")))
-    all_frames = []
-    l3_dataset_with_psfref = Dataset(l3_psfref)
-    for frame in l3_dataset_with_psfref:
-        frame.ext_hdr["PSFREF"] = 1
-        all_frames.append(frame)
-    l3_dataset_with_target = Dataset(l3_target)
-    for frame in l3_dataset_with_target:
-        all_frames.append(frame)
+    l3_files.extend(l3_target)
+    l3_dataset = Dataset(l3_files)
         
-    l3_dataset = Dataset(all_frames)
-
     logger.info('')
     
     # ================================================================================
@@ -101,9 +86,10 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         frame_info = f"L3 Frame {i}"
         
         check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l3_.fits', frame_info, logger, data_level = 'l3_')
-        check_dimensions(frame.data, (81, 81), frame_info, logger)
+        check_dimensions(frame.data, (125, 125), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3'}, frame_info, logger)
+        verify_header_keywords(frame.pri_hdr, {'PSFREF'}, frame_info, logger)
         logger.info("")
 
     logger.info(f"Total input images validated: {len(l3_dataset)}")
@@ -129,7 +115,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     exthd['CFAMNAME'] = '3'
     exthd['DPAMNAME'] = 'PRISM3'
     exthd['FSAMNAME'] = 'R1C2'
-    fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = l2b_dataset_with_target)
+    fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = l3_dataset)
 
     rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
@@ -146,10 +132,10 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
 
     logger.info('Running e2e recipe...')
     recipe = walk_corgidrp(
-        filelist=saved_files, 
+        filelist=l3_files, 
         CPGS_XML_filepath="",
         outputdir=e2eoutput_path,
-        template="l2_to_l4_psfsub_spec.json"
+        template="l3_to_l4_psfsub_spec.json"
     )
     logger.info("")
     
@@ -204,7 +190,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         check_dimensions(wave_err, (19,), "HDU5 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
         
         # Verify header keywords
-        verify_header_keywords(hdul[1].header, {'DATALVL': 'L4', 'CFAMNAME' : '3', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3', 'BUNIT' : 'photoelectron/s/bin'},
+        verify_header_keywords(hdul[1].header, {'DATALVL': 'L4', 'CFAMNAME' : '3F', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3', 'BUNIT' : 'photoelectron/s/bin'},
                                                "spec output product", logger)
         verify_header_keywords(hdul[1].header, {'WAVLEN0', 'WV0_X', 'WV0_Y', 'WV0_DIMX', 'WV0_DIMY'},
                                                "spec output product", logger)
