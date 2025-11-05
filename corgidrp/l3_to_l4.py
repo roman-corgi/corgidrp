@@ -1219,9 +1219,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             # propagate errors for the subtraction
             sum_err = np.sqrt(frame.err[0,0,:,:]**2 + frame.err[0,1,:,:]**2)
             diff_err = sum_err
-            diff_err = np.sqrt(diff_err**2 + 
-                               (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
-                        )
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                # error propagation for diff - sum * normalized_diff
+                diff_err = np.sqrt(diff_err**2 + 
+                                (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
+                            )
             frame.err[0,0,:,:] = np.sqrt(sum_err**2 + diff_err**2) / 2
             frame.err[0,1,:,:] = frame.err[0,0,:,:]
             
