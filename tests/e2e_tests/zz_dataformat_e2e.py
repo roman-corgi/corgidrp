@@ -595,6 +595,34 @@ def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
         # diff the two outputs
         compare_docs(ref_doc_contents, doc_contents)
 
+@pytest.mark.e2e
+def test_polflat_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    polflat_data_file = glob.glob(os.path.join(thisfile_dir, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "*_flt_cal.fits"))[0]
+    
+    validate_cgi_filename(polflat_data_file, 'flt_cal')
+    
+    generate_fits_excel_documentation(polflat_data_file, os.path.join(thisfile_dir, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "polflt_cal_documentation.xlsx"))
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(polflat_data_file) as hdulist:
+        doc_contents = generate_template(hdulist, dtype_name="PolFlatField")
+
+    doc_filepath = os.path.join(doc_dir, "polflt.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "polflt.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+
 
 @pytest.mark.e2e
 def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -1037,6 +1065,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'Astrom': glob.glob(os.path.join(thisfile_dir, "astrom_cal_e2e", "*_ast_cal.fits")),
         'BPMap': glob.glob(os.path.join(thisfile_dir, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits")),
         'Flat': glob.glob(os.path.join(thisfile_dir, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits")),
+        'PolFlat': glob.glob(os.path.join(thisfile_dir, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "*_flt_cal.fits")),
         'CoreThroughput': glob.glob(os.path.join(thisfile_dir, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits")),
         'CoreThroughputMap': glob.glob(os.path.join(thisfile_dir, "ctmap_cal_e2e", "*_ctm_cal.fits")),
         'FluxCal': glob.glob(os.path.join(thisfile_dir, "flux_cal_e2e", "*_abf_cal.fits")),
@@ -1194,6 +1223,7 @@ if __name__ == "__main__":
     test_ct_dataformat_e2e(e2edata_dir, outputdir)
     test_ctmap_dataformat_e2e(e2edata_dir, outputdir)
     test_flat_dataformat_e2e(e2edata_dir, outputdir)
+    test_polflat_dataformat_e2e(e2edata_dir, outputdir)
     test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
     test_fluxcal_pol_dataformat_e2e(e2edata_dir, outputdir)
     test_kgain_dataformat_e2e(e2edata_dir, outputdir)
