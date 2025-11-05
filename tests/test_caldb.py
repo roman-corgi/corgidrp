@@ -181,7 +181,7 @@ def test_default_calibs():
     # Copy all files in corgidrp.default_cal_dir to a temporary directory, 
     # then clear out corgidrp.default_cal_dir for this test and restore it at the end
     current_dir = os.path.dirname(__file__)
-    temp_dir = os.path.join(os.path.dirname(current_dir), "temp_test_dir")
+    temp_dir = os.path.join(current_dir, "temp_test_dir")
     shutil.copy2(corgidrp.caldb_filepath, os.path.join(corgidrp.config_folder, "temp_caldb.csv"))
     os.makedirs(temp_dir, exist_ok=True)
     for filename in os.listdir(corgidrp.default_cal_dir):
