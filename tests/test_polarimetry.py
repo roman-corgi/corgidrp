@@ -16,6 +16,7 @@ import corgidrp.l2b_to_l3 as l2b_to_l3
 import corgidrp.l3_to_l4 as l3_to_l4
 import corgidrp.l4_to_tda as l4_to_tda
 from corgidrp.pol import calc_stokes_unocculted
+import corgidrp.corethroughput as corethroughput
 
 from corgidrp import star_center
 
@@ -489,6 +490,41 @@ def test_combine_polarization_states():
     combine_polarization_states() step function, checks that the output Stokes datacube matches
     with the known on-sky Stokes vector
     '''
+
+    ###########################
+    #### Make dummy CT cal ####
+    ###########################
+
+    # Dataset with some CT profile defined in create_ct_interp
+    # Pupil image
+    pupil_image = np.zeros([1024, 1024])
+    # Set it to some known value for a selected range of pixels
+    pupil_image[510:530, 510:530]=1
+    prhd, exthd_pupil, errhdr, dqhdr = mocks.create_default_L3_headers()
+    # DRP
+    # cfam filter
+    exthd_pupil['CFAMNAME'] = '1F'
+    # Add specific values for pupil images:
+    # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+    exthd_pupil['DPAMNAME'] = 'PUPIL'
+    exthd_pupil['LSAMNAME'] = 'OPEN'
+    exthd_pupil['FSAMNAME'] = 'OPEN'
+    exthd_pupil['FPAMNAME'] = 'OPEN_12'
+
+    data_psf, psf_loc_in, half_psf = mocks.create_ct_psfs(50, cfam_name='1F',
+    n_psfs=100)
+    ct_dataset0 = data_psf[0]
+    ct_dataset0.ext_hdr['FPAMNAME'] = 'HLC12_C2R1'  # set FPM to a coronagraphic one
+    
+    err = np.ones([1024,1024])
+    data_ct_interp = [ct_dataset0, data.Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd_pupil, err = err)]
+    # Set of off-axis PSFs with a CT profile defined in create_ct_interp
+    # First, we need the CT FPM center to create the CT radial profile
+    # We can use a miminal dataset to get to know it
+    ct_cal_tmp = corethroughput.generate_ct_cal(data.Dataset(data_ct_interp))
+
+
     # define instrument mueller matrix and target Stokes vector
     system_mueller_matrix = np.array([
         [ 0.67450, 0.00623, 0.00000, 0.00000],
@@ -571,7 +607,8 @@ def test_combine_polarization_states():
         # catch warning raised when rotating with roll angle instead of wcs
         warnings.filterwarnings('ignore', category=UserWarning)
         output_dataset = l3_to_l4.combine_polarization_states(input_pol_dataset, 
-                                                            system_mueller_matrix_cal=system_mm_cal,
+                                                            system_mm_cal,
+                                                            ct_cal_tmp,
                                                             use_wcs=False, 
                                                             measure_klip_thrupt=False,
                                                             measure_1d_core_thrupt=False)

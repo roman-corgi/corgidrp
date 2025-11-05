@@ -702,6 +702,10 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
             # look for WCS solutions
         if use_wcs is True:
+            if is_pol:
+                if 'NAXIS3' in sci_hd:
+                    del sci_hd['NAXIS3']
+                sci_hd['NAXIS'] = 2
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
                 astr_hdr = WCS(sci_hd)
@@ -1231,12 +1235,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 
 def combine_polarization_states(input_dataset,
                                 system_mueller_matrix_cal,
+                                ct_calibration,
                                 svd_threshold=1e-5,
                                 use_wcs=True,
                                 rot_center='im_center',
-                                ct_calibration=None,
                                 reference_star_dataset=None,
-                                measure_klip_thrupt=False,
+                                measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,
                                 cand_locs=None,
                                 kt_seps=None,
@@ -1337,6 +1341,11 @@ def combine_polarization_states(input_dataset,
                 total_intensity_frames.append(frame)
     total_intensity_dataset = data.Dataset(total_intensity_frames)
 
+    for frame in total_intensity_dataset:
+        frame.ext_hdr['NAXIS'] = 2
+    if 'NAXIS3' in frame.ext_hdr:   
+        del frame.ext_hdr['NAXIS3']
+
     # ensure only one KL basis is used for PSF subtraction, so that only one image is returned
     if 'numbasis' in klip_kwargs:
         if isinstance(klip_kwargs['numbasis'], list) and len(klip_kwargs['numbasis']) > 1:
@@ -1350,7 +1359,7 @@ def combine_polarization_states(input_dataset,
         else:
             # set to the length of the reference star dataset if one is provided
             klip_kwargs['numbasis'] = len(reference_star_dataset)
-    
+
     # perform PSF subtraction on total intensity
     with warnings.catch_warnings():
         # suppress astropy warnings
@@ -1442,7 +1451,17 @@ def combine_polarization_states(input_dataset,
                               ext_hdr=psf_subtracted_intensity.ext_hdr.copy(),
                               err=output_err,
                               err_hdr=psf_subtracted_intensity.err_hdr.copy())
+    
+    output_frame.filename = dataset.frames[-1].filename
+
     updated_dataset = data.Dataset([output_frame])
+
+    #Append the KL_THRU HDU if it exists in the psf_subtracted_dataset
+    if 'KL_THRU' in psf_subtracted_dataset.frames[0].hdu_list:
+        updated_dataset.frames[0].hdu_list.append(psf_subtracted_dataset.frames[0].hdu_list['KL_THRU'])
+    if 'CT_THRU' in psf_subtracted_dataset.frames[0].hdu_list:
+        updated_dataset.frames[0].hdu_list.append(psf_subtracted_dataset.frames[0].hdu_list['CT_THRU'])
+
     history_msg = f"Combined polarization states, performed PSF subtraction, and rotated data north-up. Final output size: {output_frame.data.shape}"
     updated_dataset.update_after_processing_step(history_msg)
     return updated_dataset
@@ -1679,9 +1698,13 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             # propagate errors for the subtraction
             sum_err = np.sqrt(frame.err[0,0,:,:]**2 + frame.err[0,1,:,:]**2)
             diff_err = sum_err
-            diff_err = np.sqrt(diff_err**2 + 
-                               (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
-                        )
+            #Ignore RuntimeWarnings here because of the potential to divide by zero (especially in tests). 
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                # error propagation for diff - sum * normalized_diff
+                diff_err = np.sqrt(diff_err**2 + 
+                                (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
+                            )
             frame.err[0,0,:,:] = np.sqrt(sum_err**2 + diff_err**2) / 2
             frame.err[0,1,:,:] = frame.err[0,0,:,:]
             
