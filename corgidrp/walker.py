@@ -73,6 +73,9 @@ all_steps = {
     "split_image_by_polarization_state": corgidrp.l2b_to_l3.split_image_by_polarization_state,
     "calc_stokes_unocculted": corgidrp.pol.calc_stokes_unocculted,
     "generate_mueller_matrix_cal": corgidrp.pol.generate_mueller_matrix_cal,
+    "align_polarimetry_frames": corgidrp.l3_to_l4.align_polarimetry_frames,
+    "combine_polarization_states": corgidrp.l3_to_l4.combine_polarization_states,
+    "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -356,12 +359,15 @@ def guess_template(dataset):
             recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
     elif image.ext_hdr['DATALVL'] == "L3":
-        if image.ext_hdr['FSMLOS'] == 1:
-            # coronagraphic obs - PSF subtraction
-            recipe_filename = "l3_to_l4.json"
+        if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+            recipe_filename = "l3_to_l4_pol.json"
         else:
-            # noncorongrpahic obs - no PSF subtraction
-            recipe_filename = "l3_to_l4_nopsfsub.json"
+            if image.ext_hdr['FSMLOS'] == 1:
+                # coronagraphic obs - PSF subtraction
+                recipe_filename = "l3_to_l4.json"
+            else:
+                # noncorongrpahic obs - no PSF subtraction
+                recipe_filename = "l3_to_l4_nopsfsub.json"
             
     else:
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))

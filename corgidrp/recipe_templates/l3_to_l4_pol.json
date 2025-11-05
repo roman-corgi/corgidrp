@@ -32,7 +32,8 @@
         {
             "name": "combine_polarization_states",
             "calibs": {
-                "MuellerMatrix": "AUTOMATIC"
+                "MuellerMatrix": "AUTOMATIC",
+                "CoreThroughputCalibration": "AUTOMATIC"
             }
         },
         {
