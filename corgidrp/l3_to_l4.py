@@ -530,8 +530,11 @@ def do_psf_subtraction(input_dataset,
 
         # Derotate and time collapse
         derotated_output_dataset = northup(dataset_for_derotation,use_wcs=False,
-                                           rot_center='starloc')
-        
+                                           rot_center='starloc',
+                                           new_center=pyklip_dataset.output_centers[0]
+                                           )
+        centers_for_derotation = pyklip_dataset.output_centers[0]
+
         # Assign derotated dq and err maps
         derotated_output_dataset.all_dq[:] = dq_out_collapsed
         derotated_output_dataset.all_err[:] = err_out_collapsed
@@ -693,13 +696,13 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         
         # define the center for rotation
         if rot_center == 'im_center':
-            xcen, ycen = [(xlen-1) / 2., (ylen-1) / 2.]
+            xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
         elif rot_center == 'starloc':
             try:
                 xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY'] 
             except KeyError:
                 warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
-                xcen, ycen = [(xlen-1) / 2., (ylen-1) / 2.]
+                xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
         else:
             xcen = rot_center[0]
             ycen = rot_center[1]
