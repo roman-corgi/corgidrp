@@ -245,105 +245,16 @@ def test_replace_bps_nonuniform():
         raise Exception("Output DQ array does not match input DQ array for 2D nonuniform data.")
 
 
-import copy
 
-
-def create_pol_dataset(n_frames=1):
-    """
-    Creates a dataset for polarization data of shape (n_frames, 2, 1024, 1024).
-
-    Args:
-        n_frames (int): Number of frames to include in the dataset.
-
-    Returns:
-        np.ndarray: Polarization dataset with simulated error and DQ maps.
-    """
-    datashape = (2, 1024, 1024)  # pol frame shape
-    bpixmap = np.zeros(datashape)
-    ## CREATE POL DATASET
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
-    # Create the first dataset as a template
-    input_dataset_pol = mocks.create_astrom_data(field_path, bpix_map=bpixmap[0], sim_err_map=True)
-    # Convert frames to a list (otherwise can't append)
-    frames_list = list(input_dataset_pol.frames)
-
-    for i in range(len(frames_list)):
-        # Stack to create (2, 1024, 1024) for each frame
-        frames_list[i].data = np.stack([frames_list[i].data,
-                                        frames_list[i].data])
-        original_err = frames_list[i].err
-        frames_list[i].err = np.stack([original_err, original_err], axis=1)
-        frames_list[i].dq = np.stack([frames_list[i].dq,
-                                      frames_list[i].dq])
-
-    # Duplicate existing frames if n_frames > 1
-    if n_frames > len(frames_list):
-        frames_to_add = n_frames - len(frames_list)
-        for _ in range(frames_to_add):
-            # Create a copy of the first frame
-            new_frame = copy.deepcopy(frames_list[0])
-            frames_list.append(new_frame)
-
-    # Put new frames in dataset
-    input_dataset_pol.frames = np.array(frames_list)
-    # Stack all frames
-    input_dataset_pol.all_data = np.array([frame.data for frame in input_dataset_pol.frames])
-    input_dataset_pol.all_err = np.array([frame.err for frame in input_dataset_pol.frames])
-    input_dataset_pol.all_dq = np.array([frame.dq for frame in input_dataset_pol.frames])
-
-    return input_dataset_pol
-
-
-def test_replace_bps_pol():
-    """Test that the replace_bad_pixels correctly patches bad pixels, and
-    the error array, and does not modify the dq array, given a uniform pol data array.
-    """
-
-    # test this w/ 1 frame
-    input_dataset_pol = create_pol_dataset()
-    # Set to uniform constant values
-    input_dataset_clean = input_dataset_pol.copy()
-    input_dataset_clean.all_data[:, :, :, :] = constant
-    input_dataset_clean.all_err[:, :, :, :, :] = constant
-
-    # Flag some bad pixels and assign erroneous values in data
-    input_dataset_bad = input_dataset_clean.copy()
-
-    # Pixel on the edge of first pol state
-    input_dataset_bad.all_dq[0, 0, 0, 1] = 1
-    input_dataset_bad.all_data[0, 0, 0, 1] = 100.
-    input_dataset_bad.all_err[0, :, 0, 0, 1] = 100.
-
-    # Pixel near the middle of second pol state
-    input_dataset_bad.all_dq[0, 1, 9, 9] = 1
-    input_dataset_bad.all_data[0, 1, 9, 9] = 100.
-    input_dataset_bad.all_err[0, :, 1, 9, 9] = 100.
-
-    # Patch of 4 pixels in second pol state
-    input_dataset_bad.all_dq[0, 1, 15:17, 15:17] = 1
-    input_dataset_bad.all_data[0, 1, 15:17, 15:17] = 100.
-    input_dataset_bad.all_err[0, :, 1, 15:17, 15:17] = 100.
-
-    # Run bad pixel cleaning
-    cleaned_dataset = replace_bad_pixels(input_dataset_bad)
-
-    if not cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data):
-        raise Exception("Cleaned data array does not match input data array for pol uniform data.")
-    if not cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err):
-        raise Exception("Cleaned error array does not match input error array for pol uniform data.")
-    if not cleaned_dataset.all_dq == pytest.approx(input_dataset_bad.all_dq):
-        raise Exception("Output DQ array does not match input DQ array for pol uniform data.")
-
-    print("UT passed for pol data")
-
-
-def test_replace_bps_pol_2frames():
+def test_replace_bps_pol_4frames():
     """Test that the replace_bad_pixels correctly patches bad pixels, and
     the error array, and does not modify the dq array, given a uniform pol data array.
     """
 
     # test this w/ 2 frames
-    input_dataset_pol = create_pol_dataset(2)
+    input_dataset_pol = mocks.create_mock_polarization_l3_dataset()
+
+
     # Set to uniform constant values
     input_dataset_clean = input_dataset_pol.copy()
     input_dataset_clean.all_data[:, :, :, :] = constant
@@ -362,10 +273,10 @@ def test_replace_bps_pol_2frames():
     input_dataset_bad.all_data[0, 1, 9, 9] = 100.
     input_dataset_bad.all_err[0, :, 1, 9, 9] = 100.
 
-    # Patch of 4 pixels in second frame,  second pol state
-    input_dataset_bad.all_dq[1, 1, 15:17, 15:17] = 1
-    input_dataset_bad.all_data[1, 1, 15:17, 15:17] = 100.
-    input_dataset_bad.all_err[1, :, 1, 15:17, 15:17] = 100.
+    # Patch of 4 pixels in third frame,  second pol state
+    input_dataset_bad.all_dq[2, 1, 15:17, 15:17] = 1
+    input_dataset_bad.all_data[2, 1, 15:17, 15:17] = 100.
+    input_dataset_bad.all_err[2, :, 1, 15:17, 15:17] = 100.
 
     # pixel on edge of second frame, first pol state
     input_dataset_bad.all_dq[1, 0, 0, 1] = 1
@@ -390,5 +301,4 @@ if __name__ == '__main__':
     test_replace_bps_2d()
     test_replace_bps_3d()
     test_replace_bps_nonuniform()
-    test_replace_bps_pol()
-    test_replace_bps_pol_2frames()
+    test_replace_bps_pol_4frames()
