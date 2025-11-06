@@ -702,6 +702,10 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
             # look for WCS solutions
         if use_wcs is True:
+            if is_pol:
+                if 'NAXIS3' in sci_hd:
+                    del sci_hd['NAXIS3']
+                sci_hd['NAXIS'] = 2
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
                 astr_hdr = WCS(sci_hd)
@@ -1052,7 +1056,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
                                                taken with both wollastons at the same roll angle. All frames for the
                                                same target star must have the same x and y dimensions
         system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
-        nd_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
+        nd_mueller_matrix_cal (corgidrp.data.NDMuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
 
     Returns:
         corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
@@ -1215,9 +1219,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             # propagate errors for the subtraction
             sum_err = np.sqrt(frame.err[0,0,:,:]**2 + frame.err[0,1,:,:]**2)
             diff_err = sum_err
-            diff_err = np.sqrt(diff_err**2 + 
-                               (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
-                        )
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                # error propagation for diff - sum * normalized_diff
+                diff_err = np.sqrt(diff_err**2 + 
+                                (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
+                            )
             frame.err[0,0,:,:] = np.sqrt(sum_err**2 + diff_err**2) / 2
             frame.err[0,1,:,:] = frame.err[0,0,:,:]
             
@@ -1231,12 +1238,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 
 def combine_polarization_states(input_dataset,
                                 system_mueller_matrix_cal,
+                                ct_calibration,
                                 svd_threshold=1e-5,
                                 use_wcs=True,
                                 rot_center='im_center',
-                                ct_calibration=None,
                                 reference_star_dataset=None,
-                                measure_klip_thrupt=False,
+                                measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,
                                 cand_locs=None,
                                 kt_seps=None,
@@ -1337,6 +1344,11 @@ def combine_polarization_states(input_dataset,
                 total_intensity_frames.append(frame)
     total_intensity_dataset = data.Dataset(total_intensity_frames)
 
+    for frame in total_intensity_dataset:
+        frame.ext_hdr['NAXIS'] = 2
+    if 'NAXIS3' in frame.ext_hdr:   
+        del frame.ext_hdr['NAXIS3']
+
     # ensure only one KL basis is used for PSF subtraction, so that only one image is returned
     if 'numbasis' in klip_kwargs:
         if isinstance(klip_kwargs['numbasis'], list) and len(klip_kwargs['numbasis']) > 1:
@@ -1350,7 +1362,7 @@ def combine_polarization_states(input_dataset,
         else:
             # set to the length of the reference star dataset if one is provided
             klip_kwargs['numbasis'] = len(reference_star_dataset)
-    
+
     # perform PSF subtraction on total intensity
     with warnings.catch_warnings():
         # suppress astropy warnings
@@ -1442,7 +1454,17 @@ def combine_polarization_states(input_dataset,
                               ext_hdr=psf_subtracted_intensity.ext_hdr.copy(),
                               err=output_err,
                               err_hdr=psf_subtracted_intensity.err_hdr.copy())
+    
+    output_frame.filename = dataset.frames[-1].filename
+
     updated_dataset = data.Dataset([output_frame])
+
+    #Append the KL_THRU HDU if it exists in the psf_subtracted_dataset
+    if 'KL_THRU' in psf_subtracted_dataset.frames[0].hdu_list:
+        updated_dataset.frames[0].hdu_list.append(psf_subtracted_dataset.frames[0].hdu_list['KL_THRU'])
+    if 'CT_THRU' in psf_subtracted_dataset.frames[0].hdu_list:
+        updated_dataset.frames[0].hdu_list.append(psf_subtracted_dataset.frames[0].hdu_list['CT_THRU'])
+
     history_msg = f"Combined polarization states, performed PSF subtraction, and rotated data north-up. Final output size: {output_frame.data.shape}"
     updated_dataset.update_after_processing_step(history_msg)
     return updated_dataset
@@ -1504,194 +1526,6 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
     return dataset
 
-def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_mueller_matrix_cal):
-    """
-    Takes in polarimetric L3 images and their unocculted polarimetric observations,
-    computes and subtracts off the stellar polarization component from each image
-    TODO: make issue about error propagation, need to check that it is done correctly
-          and make changes if necessary to ensure the errors are accurate
-
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
-                                               taken with both wollastons at the same roll angle. All frames for the
-                                               same target star must have the same x and y dimensions
-        system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
-        nd_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
-
-    Returns:
-        corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
-    """
-    
-    # check that the data is at the L3 level, and only polarimetric observations are inputted
-    dataset = input_dataset.copy()
-    for frame in dataset:
-        if frame.ext_hdr['DATALVL'] != "L3":
-            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(frame.filename, frame.ext_hdr['DATALVL'])
-            raise ValueError(err_msg)
-        if frame.ext_hdr['DPAMNAME'] not in ['POL0', 'POL45']:
-            raise ValueError("{0} must be a polarimetric observation".format(frame.filename))
-        
-    # split the dataset by the target star
-    split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=['TARGET'])
-
-    # process each target star
-    updated_frames = []
-    for target_dataset in split_datasets:
-        # split further based on if the observation is unocculted or not, and the wollaston used
-        coron_frames = []
-        unocculted_pol0_frames = []
-        unocculted_pol45_frames = []
-        target_name = target_dataset.frames[0].pri_hdr['TARGET']
-        for frame in target_dataset:
-            if frame.ext_hdr['FPAMNAME'] == 'ND225':
-                # unocculted observations, separate by wollaston
-                if frame.ext_hdr['DPAMNAME'] == 'POL0':
-                    unocculted_pol0_frames.append(frame)
-                else:
-                    unocculted_pol45_frames.append(frame)
-            else:
-                # coronagraphic observation
-                coron_frames.append(frame)
-        
-        # make sure input dataset contains unocculted frames taken with both wollastons
-        if len(unocculted_pol0_frames) == 0:
-            raise ValueError(f"Input dataset must contain unocculted POL0 frame(s) for target {target_name}")
-        if len(unocculted_pol45_frames) == 0:
-            raise ValueError(f"Input dataset must contain unocculted POL45 frame(s) for target {target_name}")
-        
-        unocculted_pol0_img = unocculted_pol0_frames[0]
-        unocculted_pol45_img = unocculted_pol45_frames[0]
-
-        # construct image for each polarization to pass into aper_phot function in order to obtain flux
-        I_0_img = data.Image(unocculted_pol0_img.data[0], 
-                             err=unocculted_pol0_img.err[:,0,:,:], 
-                             pri_hdr=unocculted_pol0_img.pri_hdr.copy(),
-                             ext_hdr=unocculted_pol0_img.ext_hdr.copy())
-        I_90_img = data.Image(unocculted_pol0_img.data[1], 
-                             err=unocculted_pol0_img.err[:,1,:,:], 
-                             pri_hdr=unocculted_pol0_img.pri_hdr.copy(),
-                             ext_hdr=unocculted_pol0_img.ext_hdr.copy())
-        I_45_img = data.Image(unocculted_pol45_img.data[0], 
-                             err=unocculted_pol45_img.err[:,0,:,:], 
-                             pri_hdr=unocculted_pol45_img.pri_hdr.copy(),
-                             ext_hdr=unocculted_pol45_img.ext_hdr.copy())
-        I_135_img = data.Image(unocculted_pol45_img.data[1], 
-                             err=unocculted_pol45_img.err[:,1,:,:], 
-                             pri_hdr=unocculted_pol45_img.pri_hdr.copy(),
-                             ext_hdr=unocculted_pol45_img.ext_hdr.copy())
-        # calculate flux
-        I_0_flux, I_0_flux_err = fluxcal.aper_phot(I_0_img, encircled_radius=5)
-        I_90_flux, I_90_flux_err = fluxcal.aper_phot(I_90_img, encircled_radius=5)
-        I_45_flux, I_45_flux_err = fluxcal.aper_phot(I_45_img, encircled_radius=5)
-        I_135_flux, I_135_flux_err = fluxcal.aper_phot(I_135_img, encircled_radius=5)
-        
-        ## construct I, Q, U components after instrument with ND filter
-        # I = I_0 +I_90
-        I_nd = I_0_flux + I_90_flux
-        # Q = I_0 - I_90
-        Q_nd = I_0_flux - I_90_flux
-        # U = I_45 - I_135
-        U_nd = I_45_flux - I_135_flux
-        # assume V is basically 0
-        V_nd = 0
-        # construct stokes vector after instrument with ND filter
-        S_nd = [I_nd, Q_nd, U_nd, V_nd]
-
-        # S_nd = M_nd * R(roll_angle) * S_in
-        # invert M_nd * R(roll_angle) to recover S_in
-        roll_angle = unocculted_pol0_img.pri_hdr['ROLL']
-        total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
-        system_nd_inv = np.linalg.pinv(total_system_mm_nd)
-        S_in = system_nd_inv @ S_nd
-
-        # propagate errors to find uncertainty of S_in
-        I_nd_var = I_0_flux_err**2 + I_90_flux_err**2
-        Q_nd_var = I_nd_var
-        U_nd_var = I_45_flux_err**2 + I_135_flux_err**2
-        v_nd_var = 0
-        # construct covariance matrix for S_nd
-        C_nd = np.array([[I_nd_var, 0, 0, 0],
-                         [0, Q_nd_var, 0, 0],
-                         [0, 0, U_nd_var, 0],
-                         [0, 0, 0, v_nd_var]])
-        # solve for covariance matrix of input stokes vector
-        # C_in = pinv(M) * C_nd * pinv(M)^T
-        #TODO: incoporate the error terms of the nd mueller matrix into this calculation if necessary 
-        C_in = system_nd_inv @ C_nd @ system_nd_inv.T
-        # contract back to just the variance
-        S_in_var = np.array([
-            C_in[0,0],
-            C_in[1,1],
-            C_in[2,2],
-            C_in[3,3]
-        ])
-        S_in_err = np.sqrt(S_in_var)
-
-        # subtract stellar polarization from the rest of the frames
-        for frame in coron_frames:
-            # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
-            frame_roll_angle = frame.pri_hdr['ROLL']
-            total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_roll_angle)
-            S_out = total_system_mm @ S_in
-            # construct I0, I45, I90, and I135 back from stokes vector
-            I_0_star = (S_out[0] + S_out[1]) / 2
-            I_90_star = (S_out[0] - S_out[1]) / 2
-            I_45_star = (S_out[0] + S_out[2]) / 2
-            I_135_star = (S_out[0] - S_out[2]) / 2
-
-            # propagate errors back to the new intensity terms for the unocculted star, assuming independence
-            # σS_out^2 = (σM^2)(I_in^2) + (M^2)(σI_in^2)
-            #TODO: double check if this is valid/invalid, change if necessary
-            system_mm_var = (system_mueller_matrix_cal.err[0])**2
-            system_mm_sq = (system_mueller_matrix_cal.data)**2
-            S_in_sq = S_in**2
-            S_out_var = (system_mm_var @ S_in_sq) + (system_mm_sq @ S_in_var)
-            I_0_star_err = np.sqrt(S_out_var[0] + S_out_var[1]) / 2
-            I_90_star_err = I_0_star_err
-            I_45_star_err = np.sqrt(S_out_var[0] + S_out_var[2]) / 2
-            I_135_star_err = I_45_star_err
-
-            with warnings.catch_warnings():
-                # catch divide by zero warnings
-                warnings.filterwarnings('ignore', category=RuntimeWarning)
-                # calculate normalized difference for the specific wollaston
-                if frame.ext_hdr['DPAMNAME'] == 'POL0':
-                    normalized_diff = (I_0_star - I_90_star) / (I_0_star + I_90_star)
-                    # error
-                    normalized_diff_err = normalized_diff * np.sqrt(
-                        (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star - I_90_star))**2 +
-                        (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star + I_90_star))**2
-                    )
-                else:
-                    normalized_diff = (I_45_star - I_135_star) / (I_45_star + I_135_star)
-                    # error
-                    normalized_diff_err = normalized_diff * np.sqrt(
-                        (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star - I_135_star))**2 +
-                        (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star + I_135_star))**2
-                    )
-            # subtract
-            sum = frame.data[0] + frame.data[1]
-            diff = frame.data[0] - frame.data[1]
-            diff -= sum * normalized_diff
-            frame.data[0] = (sum + diff) / 2
-            frame.data[1] = (sum - diff) / 2
-
-            # propagate errors for the subtraction
-            sum_err = np.sqrt(frame.err[0,0,:,:]**2 + frame.err[0,1,:,:]**2)
-            diff_err = sum_err
-            diff_err = np.sqrt(diff_err**2 + 
-                               (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
-                        )
-            frame.err[0,0,:,:] = np.sqrt(sum_err**2 + diff_err**2) / 2
-            frame.err[0,1,:,:] = frame.err[0,0,:,:]
-            
-            updated_frames.append(frame)
-
-    updated_dataset = data.Dataset(updated_frames)
-    history_msg = f"Subtracted Apparent Stellar Polarization, stellar Q value: {S_in[1]}, stellar Q err: {S_in_err[1]}, \
-    stellar U value: {S_in[2]}, stellar U err: {S_in_err[2]}."
-    updated_dataset.update_after_processing_step(history_msg)
-    return updated_dataset
 
 def spec_psf_subtraction(input_dataset):
     '''
