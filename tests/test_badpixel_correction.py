@@ -251,7 +251,7 @@ def test_replace_bps_pol_4frames():
     the error array, and does not modify the dq array, given a uniform pol data array.
     """
 
-    # test this w/ 2 frames
+    # test this w/ 4 frames
     input_dataset_pol = mocks.create_mock_polarization_l3_dataset()
 
 
