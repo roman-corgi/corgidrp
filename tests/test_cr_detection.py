@@ -13,6 +13,8 @@ from pathlib import Path
 from scipy.ndimage import median_filter
 from pytest import approx
 
+from collections import Counter
+
 ###########################################
 ### Create a dummy non-linearity file ####
 #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
@@ -594,7 +596,7 @@ def test_mask_box_corners():
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
     dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
-                        plat_thresh, cosm_filter=2, cosm_box=2)
+                        plat_thresh, cosm_filter=2, cosm_box=2, pct_oversat_lim=50)
 
     if not np.array_equal(np.where(dataset_masked.all_dq>0,1,0)[0], check_mask):
         raise Exception("Incorrect pixels were masked.")
@@ -810,25 +812,25 @@ def test_remove_sat_images():
     dqhd = fits.Header()
     dqhd["CASE"] = "test"
 
-    sat_fwc = 35
+    sat_fwc = [35, 47, 89, 2]
     pct_sat = 85
 
     # Create fully saturated image
     full_sat_img = np.ones([100, 100])
-    full_sat_img *= sat_fwc + 15 # Make image saturated
+    full_sat_img *= sat_fwc[0] + 15 # Make image saturated
     full_sat_image = data.Image(full_sat_img, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
     full_sat_image.filename = "full_sat_image.fits"
 
-    # Create image just over sat frac
+    # Create image just over sat pct lim
     sat_img = np.ones([100, 100])
-    sat_img[:pct_sat, :] *= sat_fwc + 4
-    sat_img[99, 99] *= sat_fwc + 4
+    sat_img[:pct_sat, :] *= sat_fwc[1] + 4
+    sat_img[99, 99] *= sat_fwc[1] + 4
     sat_image = data.Image(sat_img, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
     sat_image.filename = "sat_image.fits"
 
-    # Create image at sat frac
+    # Create image at sat pct lim
     at_sat_img = np.ones([100, 100])
-    at_sat_img[:pct_sat, :] *= sat_fwc + 1
+    at_sat_img[:pct_sat, :] *= sat_fwc[2] + 1
     at_sat_image = data.Image(at_sat_img, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
     at_sat_image.filename = "at_sat_image.fits"
 
@@ -837,29 +839,34 @@ def test_remove_sat_images():
     not_sat_image = data.Image(not_sat_img, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
     not_sat_image.filename = "not_sat_image.fits"
 
-    ds = data.Dataset([full_sat_image, at_sat_image, sat_image, not_sat_image])
-    ds_out, fwc_out = remove_sat_images(ds, [sat_fwc] * len(ds), pct_sat)
+    ds = data.Dataset([full_sat_image, sat_image, at_sat_image, not_sat_image])
+    ds_out, fwcs_out = remove_sat_images(ds, sat_fwc, pct_sat)
 
-    # Assert return values TODO
+    # Check output
+    good_filenames = ["at_sat_image.fits", "not_sat_image.fits"]
+    good_fwcs = [sat_fwc[2], sat_fwc[3]]
+
+    assert Counter([i.filename for i in ds_out]) == Counter(good_filenames)
+    assert Counter(good_fwcs) == Counter(fwcs_out)
 
 if __name__ == "__main__":
-    #test_iit_vs_corgidrp()
-    #test_crs_zeros_frame()
-    #test_correct_headers()
-    #test_saturation_calc()
-    #test_mask()
-    #test_i_begs()
-    #test_left_edge_i_begs()
-    #test_right_edge_i_begs()
-    #test_two_cosm_i_begs()
-    #test_p_small()
-    #test_p_large()
-    #test_p_dip()
-    #test_p_dip_deep()
-    #test_p_uneven()
-    #test_p_below_min()
-    #test_mask_box()
-    #test_mask_box_corners()
-    #test_cosm_tail_2()
-    #test_cosm_tail_bleed_over()
+    test_iit_vs_corgidrp()
+    test_crs_zeros_frame()
+    test_correct_headers()
+    test_saturation_calc()
+    test_mask()
+    test_i_begs()
+    test_left_edge_i_begs()
+    test_right_edge_i_begs()
+    test_two_cosm_i_begs()
+    test_p_small()
+    test_p_large()
+    test_p_dip()
+    test_p_dip_deep()
+    test_p_uneven()
+    test_p_below_min()
+    test_mask_box()
+    test_mask_box_corners()
+    test_cosm_tail_2()
+    test_cosm_tail_bleed_over()
     test_remove_sat_images()

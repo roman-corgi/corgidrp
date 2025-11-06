@@ -158,7 +158,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image', detector_regions=None, frac_frame_oversat=0.7):
+                       mode='image', detector_regions=None, pct_oversat_lim=20):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -198,9 +198,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         detector_regions: (dict):  
             A dictionary of detector geometry properties.  Keys should be as 
             found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
-        frac_frame_oversat: (float):
-            Fraction of frame over sat_thresh at which we determine the frame is oversaturated
-            and will be discarded.
+        pct_oversat_lim: (float):
+            Percent of total frame over sat_fwc over which we determine the frame is oversaturated
+            and will be discarded, Frame saturations equal to this argument are not discarded.
 
     Returns:
         corgidrp.data.Dataset:
@@ -247,7 +247,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         frame.ext_hdr['SAT_DN'] = initial_sat_fwcs[i]
 
     # Remove images that are too saturated to remove cosmics in a timely manner
-    crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, frac_frame_oversat)
+    crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim)
     crmasked_cube = crmasked_dataset.all_data
 
     sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])
@@ -334,10 +334,11 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
 
     return linearized_dataset
 
-def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim):
+def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20):
     """
     Discards images from the dataset that have more than a frac_frame_sat_limit fraction of values
     over the sat_thresh limit. Also removes corresponding fwc elements from sat_fwc array.
+    Intended to be called by detect_cosmic_rays to remove problematic images before processing.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L1-level)
@@ -379,10 +380,8 @@ def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim):
         bad_frame = input_dataset.frames[bad_index]
         history_msg += " {0} ({1}),".format(bad_frame.filename, reject_reason[bad_index])
     history_msg = history_msg[:-1] # remove last comma or :
-    print(history_msg)
 
     pruned_dataset.update_after_processing_step(history_msg)
-    print([i.filename for i in pruned_dataset], pruned_fwcs)
 
     return pruned_dataset, pruned_fwcs
 
