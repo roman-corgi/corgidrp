@@ -61,6 +61,9 @@ def run_polcal_test(output_dir, do_ND=False,
         for frame in frames:
             frame.pri_hdr["VISITID"] = visit_id  #19 digit visit ID for non-ND
     new_filenames = mocks.rename_files_to_cgi_format(frames, level_suffix="l2b", output_dir=output_dir)
+    # need to strip off the output_dir part of the filename
+    for i in range(len(new_filenames)):
+        new_filenames[i] = new_filenames[i].split(os.path.sep)[-1]
     for i,frame in enumerate(mock_dataset):
         frame.pri_hdr["FILENAME"] = new_filenames[i]
     if do_ND:
@@ -284,6 +287,9 @@ def test_polcal_stokes_vap(e2edata_path, e2eoutput_path,
     for frame in frames:
         frame.pri_hdr["VISITID"] = visit_id  #19 digit visit ID for non-ND
     new_filenames = mocks.rename_files_to_cgi_format(frames, level_suffix="l2b", output_dir=output_dir)
+    # need to strip off the output_dir part of the filename
+    for i in range(len(new_filenames)):
+        new_filenames[i] = new_filenames[i].split(os.path.sep)[-1]
     for i,frame in enumerate(mock_dataset):
         frame.pri_hdr["FILENAME"] = new_filenames[i]
     

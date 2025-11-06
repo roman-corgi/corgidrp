@@ -46,6 +46,7 @@ all_steps = {
     "calibrate_kgain" : corgidrp.calibrate_kgain.calibrate_kgain,
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.flat.create_onsky_flatfield,
+    "create_onsky_pol_flatfield" : corgidrp.flat.create_onsky_pol_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark,
     "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
@@ -73,6 +74,9 @@ all_steps = {
     "split_image_by_polarization_state": corgidrp.l2b_to_l3.split_image_by_polarization_state,
     "calc_stokes_unocculted": corgidrp.pol.calc_stokes_unocculted,
     "generate_mueller_matrix_cal": corgidrp.pol.generate_mueller_matrix_cal,
+    "align_polarimetry_frames": corgidrp.l3_to_l4.align_polarimetry_frames,
+    "combine_polarization_states": corgidrp.l3_to_l4.combine_polarization_states,
+    "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -286,10 +290,16 @@ def guess_template(dataset):
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_boresight.json'] #"l1_to_boresight.json"
             chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_FLAT":
-            recipe_filename = "l1_flat_and_bp.json"
+
+            if image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45'):
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_polflat.json"]
+                chained = True
+            else:
+                recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC']:
+            # explicitly check if ISPC is True or 1 (in case this value is overloaded/ assigned other integer values)
+            if image.ext_hdr['ISPC'] in (True, 1):
                 recipe_filename = "l1_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l1_to_l2a_noisemap.json"
@@ -314,17 +324,26 @@ def guess_template(dataset):
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC']:
+            if image.ext_hdr['ISPC'] in (True, 1):
                 recipe_filename = "l2a_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l2a_to_l2a_noisemap.json"
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "l2a_build_trad_dark_image.json"
         else:
-            if image.ext_hdr['ISPC']:
-                recipe_filename = "l2a_to_l2b_pc.json"
+            # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
+            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
+            
+            if is_spectroscopy:
+                if image.ext_hdr['ISPC'] in (True, 1):
+                    recipe_filename = "l2a_to_l2b_pc_spec.json"
+                else:
+                    recipe_filename = "l2a_to_l2b_spec.json"
             else:
-                recipe_filename = "l2a_to_l2b.json"  # science data and all else
+                if image.ext_hdr['ISPC'] in (True, 1):
+                    recipe_filename = "l2a_to_l2b_pc.json"
+                else:
+                    recipe_filename = "l2a_to_l2b.json"  # science data and all else
     # L2b -> L3 data processing
     elif image.ext_hdr['DATALVL'] == "L2b":
         if image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
@@ -340,16 +359,21 @@ def guess_template(dataset):
             recipe_filename = 'l2b_to_corethroughput.json'
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
             recipe_filename = "l2b_to_polcal.json"
+        elif image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+            recipe_filename = "l2b_to_l3_pol.json"
         else:
             recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
     elif image.ext_hdr['DATALVL'] == "L3":
-        if image.ext_hdr['FSMLOS'] == 1:
-            # coronagraphic obs - PSF subtraction
-            recipe_filename = "l3_to_l4.json"
+        if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+            recipe_filename = "l3_to_l4_pol.json"
         else:
-            # noncorongrpahic obs - no PSF subtraction
-            recipe_filename = "l3_to_l4_nopsfsub.json"
+            if image.ext_hdr['FSMLOS'] == 1:
+                # coronagraphic obs - PSF subtraction
+                recipe_filename = "l3_to_l4.json"
+            else:
+                # noncorongrpahic obs - no PSF subtraction
+                recipe_filename = "l3_to_l4_nopsfsub.json"
             
     else:
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
@@ -452,7 +476,7 @@ def run_recipe(recipe, save_recipe_file=True):
                 suffix =  step["keywords"]["suffix"]
             else:
                 suffix = ''
-            
+
             save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
             save_step = True
 
