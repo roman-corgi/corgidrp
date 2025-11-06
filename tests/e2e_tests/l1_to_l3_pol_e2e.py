@@ -361,7 +361,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
 
 
 @pytest.mark.e2e
-def test_l2b_to_l3(e2edata_path, e2eoutput_path):
+def test_l1_to_l3(e2edata_path, e2eoutput_path):
     """Run the complete L1 to L3 polarimetry data end-to-end test with recipe chaining.
     
     Args:
@@ -468,5 +468,5 @@ if __name__ == "__main__":
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
 
-    test_l2b_to_l3(e2edata_dir, outputdir)
+    test_l1_to_l3(e2edata_dir, outputdir)
 

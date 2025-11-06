@@ -702,6 +702,10 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
             # look for WCS solutions
         if use_wcs is True:
+            if is_pol:
+                if 'NAXIS3' in sci_hd:
+                    del sci_hd['NAXIS3']
+                sci_hd['NAXIS'] = 2
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
                 astr_hdr = WCS(sci_hd)
@@ -1038,6 +1042,7 @@ def align_polarimetry_frames(input_dataset):
     
     return processed_dataset
 
+
 def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_mueller_matrix_cal):
     """
     Takes in polarimetric L3 images and their unocculted polarimetric observations,
@@ -1050,7 +1055,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
                                                taken with both wollastons at the same roll angle. All frames for the
                                                same target star must have the same x and y dimensions
         system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
-        nd_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
+        nd_mueller_matrix_cal (corgidrp.data.NDMuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
 
     Returns:
         corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
@@ -1213,9 +1218,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             # propagate errors for the subtraction
             sum_err = np.sqrt(frame.err[0,0,:,:]**2 + frame.err[0,1,:,:]**2)
             diff_err = sum_err
-            diff_err = np.sqrt(diff_err**2 + 
-                               (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
-                        )
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                # error propagation for diff - sum * normalized_diff
+                diff_err = np.sqrt(diff_err**2 + 
+                                (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
+                            )
             frame.err[0,0,:,:] = np.sqrt(sum_err**2 + diff_err**2) / 2
             frame.err[0,1,:,:] = frame.err[0,0,:,:]
             
@@ -1229,12 +1237,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 
 def combine_polarization_states(input_dataset,
                                 system_mueller_matrix_cal,
+                                ct_calibration,
                                 svd_threshold=1e-5,
                                 use_wcs=True,
                                 rot_center='im_center',
-                                ct_calibration=None,
                                 reference_star_dataset=None,
-                                measure_klip_thrupt=False,
+                                measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,
                                 cand_locs=None,
                                 kt_seps=None,
@@ -1335,6 +1343,11 @@ def combine_polarization_states(input_dataset,
                 total_intensity_frames.append(frame)
     total_intensity_dataset = data.Dataset(total_intensity_frames)
 
+    for frame in total_intensity_dataset:
+        frame.ext_hdr['NAXIS'] = 2
+    if 'NAXIS3' in frame.ext_hdr:   
+        del frame.ext_hdr['NAXIS3']
+
     # ensure only one KL basis is used for PSF subtraction, so that only one image is returned
     if 'numbasis' in klip_kwargs:
         if isinstance(klip_kwargs['numbasis'], list) and len(klip_kwargs['numbasis']) > 1:
@@ -1348,7 +1361,7 @@ def combine_polarization_states(input_dataset,
         else:
             # set to the length of the reference star dataset if one is provided
             klip_kwargs['numbasis'] = len(reference_star_dataset)
-    
+
     # perform PSF subtraction on total intensity
     with warnings.catch_warnings():
         # suppress astropy warnings
@@ -1440,10 +1453,78 @@ def combine_polarization_states(input_dataset,
                               ext_hdr=psf_subtracted_intensity.ext_hdr.copy(),
                               err=output_err,
                               err_hdr=psf_subtracted_intensity.err_hdr.copy())
+    
+    output_frame.filename = dataset.frames[-1].filename
+
     updated_dataset = data.Dataset([output_frame])
+
+    #Append the KL_THRU HDU if it exists in the psf_subtracted_dataset
+    if 'KL_THRU' in psf_subtracted_dataset.frames[0].hdu_list:
+        updated_dataset.frames[0].hdu_list.append(psf_subtracted_dataset.frames[0].hdu_list['KL_THRU'])
+    if 'CT_THRU' in psf_subtracted_dataset.frames[0].hdu_list:
+        updated_dataset.frames[0].hdu_list.append(psf_subtracted_dataset.frames[0].hdu_list['CT_THRU'])
+
     history_msg = f"Combined polarization states, performed PSF subtraction, and rotated data north-up. Final output size: {output_frame.data.shape}"
     updated_dataset.update_after_processing_step(history_msg)
     return updated_dataset
+
+
+def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
+    """
+    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
+    the wavelength zero point with units photoelectron/s/bin.
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): 
+        halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
+        halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
+        apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
+        
+    Returns:
+        corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
+    """
+    dataset = input_dataset.copy()
+    
+    for image in dataset:
+        xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
+        image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        err_cutout = image.err[:,ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        bad_ind = np.where(dq_cutout > 0)
+        image_cutout[bad_ind] = np.nan
+        err_cutout[bad_ind] = np.nan
+        wave = np.mean(wave_cal_map_cutout, axis=1)
+        wave_err = np.mean(wave_err_cutout, axis=1)
+        err = np.sqrt(np.nansum(np.square(err_cutout), axis=2))
+        # dq collpase: keep all flags on
+        dq_collapse = np.bitwise_or.reduce(dq_cutout, axis=1)
+ 
+        if apply_weights:
+            err_cutout[0][err_cutout[0] == 0] = np.nan
+            whts = 1./np.square(err_cutout[0])
+            spec = np.nansum(image_cutout * whts, axis = 1) / np.nansum (whts, axis = 1) * (2 * halfwidth + 1)
+            err[0] = 1./np.sqrt(np.nansum(whts, axis = 1))
+            weight_str = "weights applied"
+        else:
+            spec = np.nansum(image_cutout, axis=1)
+            weight_str = "no weights applied"
+        image.data = spec
+        image.err = err
+        image.dq = dq_collapse
+        image.hdu_list["WAVE"].data = wave
+        image.hdu_list["WAVE_ERR"].data = wave_err
+        del(image.hdu_list["POSLOOKUP"])
+    history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
+    dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
+    return dataset
+
 
 def spec_psf_subtraction(input_dataset):
     '''
