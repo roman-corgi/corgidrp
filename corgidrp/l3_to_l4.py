@@ -398,7 +398,8 @@ def find_star(input_dataset,
 
             processed_dataset.update_after_processing_step(
                 history_msg,
-                header_entries=header_entries)
+                header_entries=header_entries,
+                update_err_header=False)
 
     return processed_dataset
 
