@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 try:
-    from numpy import RankWarning
-except:
     from numpy.exceptions import RankWarning
+except:
+    from numpy import RankWarning
 
 from corgidrp import check
 import corgidrp.data as data

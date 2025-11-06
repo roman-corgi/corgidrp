@@ -844,6 +844,7 @@ class LineSpread(Image):
                 raise ValueError("Must pass `input_dataset` to create new LineSpread calibration.")
 
             self.ext_hdr['DATATYPE'] = 'LineSpread'
+            self.ext_hdr['DATALVL'] = 'CAL'
             self.ext_hdr['EXTNAME'] = 'FLUX_PROF'
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
@@ -1747,7 +1748,7 @@ class FluxcalFactor(Image):
             self.filedir = "."
             # slight hack for old mocks not in the stardard filename format
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_L[0-9].', '', self.filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
 class FpamFsamCal(Image):
@@ -2371,11 +2372,12 @@ class CoreThroughputMap(Image):
                 self.ext_hdr['HISTORY'] = ('CoreThroughputMap derived '
                     f'from a set of frames on {self.ext_hdr["DATETIME"]}')
 
-            # The corethroughput map is not a calibration product as of writing
-            # this class. The filename does not follow the convention for
-            # calibration files
+            # Generate filename following the calibration file convention
             self.filedir = '.'
-            self.filename = 'corethroughput_map.fits'
+            if input_dataset is not None:
+                self.filename = re.sub('_l[0-9].', '_ctm_cal', input_dataset[-1].filename)
+            else:
+                self.filename = 'corethroughput_map.fits'  # fallback
             self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = L3
@@ -2615,7 +2617,9 @@ class PyKLIPDataset(pyKLIP_Data):
             wvs_all += [CWAVEL] * NINTS
 
             # pyklip will look for wcs.cd, so make sure that attribute exists
-            wcs_obj = wcs.WCS(header=shead)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+                wcs_obj = wcs.WCS(header=shead)
 
             if not hasattr(wcs_obj.wcs,'cd'):
                 wcs_obj.wcs.cd = wcs_obj.wcs.pc * wcs_obj.wcs.cdelt
@@ -2899,6 +2903,102 @@ class NDFilterSweetSpotDataset(Image):
 
         return interpolator(x, y)
 
+class MuellerMatrix(Image):
+    """
+    Class for a Mueller matrix dataset product.
+    Stores a 4x4 Mueller matrix and its error
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this Mueller Matrix (required only if raw 2D data is passed in)
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+
+        # if this is a new Mueller Matrix map, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
+        if ext_hdr is not None:
+            if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new Mueller Matrix. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this Mueller Matrix.")
+            self.ext_hdr['DATATYPE'] = 'MuellerMatrix'
+
+            # log all the data that went into making this Mueller Matrix
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Mueller Matrix created"
+
+            # set the filename
+            self.filename = re.sub('_l[0-9].', '_mmx_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename          
+            
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+            if 'ND225' in self.ext_hdr['FPAMNAME'] or 'ND475' in self.ext_hdr['FPAMNAME']:
+                raise ValueError("Mueller Matrix cannot be created from ND225 or ND475 data, instead create an NDMuellerMatrix")
+
+        # double check that this is actually a bad pixel map that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr:
+            raise ValueError("File that was loaded was not a MuellerMatrix file.")
+        if self.ext_hdr['DATATYPE'] != 'MuellerMatrix':
+            raise ValueError("File that was loaded was not a MuellerMatrix file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
+
+class NDMuellerMatrix(Image):
+    """
+    Class for a Mueller matrix dataset product made with ND filter data.
+    Stores a 4x4 Mueller matrix and its error.
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this Mueller Matrix (required only if raw 2D data is passed in)
+        err (astropy.io.fits.Header): the error array (required only if raw 2D data is passed in)
+        err_hdr (astropy.io.fits.Header): the error header (required only if raw 2D data is passed in)
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+
+        # if this is a new ND Mueller Matrix map, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
+        if ext_hdr is not None:
+            if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new ND Mueller Matrix. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this ND Mueller Matrix.")
+            self.ext_hdr['DATATYPE'] = 'NDMuellerMatrix'
+
+            # log all the data that went into making this Mueller Matrix
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Mueller Matrix created"
+
+            # set the filename
+            self.filename = re.sub('_l[0-9].', '_ndm_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename          
+            
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+            if 'ND225' not in self.ext_hdr['FPAMNAME'] and 'ND475' not in self.ext_hdr['FPAMNAME']:
+                raise ValueError("An ND Mueller Matrix is only for datasets with ND225 or ND475. You may want to instead create a MuellerMatrix instead.")
+
+        # double check that this is actually a bad pixel map that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr:
+            raise ValueError("File that was loaded was not a ND MuellerMatrix file.")
+        if self.ext_hdr['DATATYPE'] != 'NDMuellerMatrix':
+            raise ValueError("File that was loaded was not a ND MuellerMatrix file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
+
 def format_ftimeutc(ftime_str):
     """
     Round the input FTIMEUTC time to the nearest 0.01 sec and reformat as:
@@ -2950,6 +3050,8 @@ def format_ftimeutc(ftime_str):
     return formatted_time
 
 
+
+
 datatypes = { "Image" : Image,
               "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -2967,7 +3069,9 @@ datatypes = { "Image" : Image,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel,
-              "LineSpread": LineSpread
+              "LineSpread": LineSpread,
+                "MuellerMatrix": MuellerMatrix,
+                "NDMuellerMatrix": NDMuellerMatrix,
               }
 
 def autoload(filepath):

@@ -6,7 +6,6 @@ from scipy.interpolate import interp1d
 import warnings
 from photutils.psf import fit_2dgaussian
 from corgidrp.data import Dataset, Image
-
 import corgidrp.fluxcal as fluxcal
 from corgidrp import check
 from corgidrp.klip_fm import measure_noise
@@ -184,7 +183,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
     produce a calibrated 1-sigma flux ratio "contrast" curve (or "noise curve" since contrast curve is typically 5-sigma), also accounting for the throughput of the coronagraph.
     It calculates flux ratio noise curve value for each radial separation from the subtracted star location, interpolating KLIP and core throughput values at these input separations.
     It uses a dataset of unocculted stars and ND transmission to determine the integrated flux of the Gaussian-fit star (where each frame in the dataset is assumed to correspond to the frames 
-    in the input_dataset), and the an estimate of planet flux per frame of inupt_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to 
+    in the input_dataset), and an estimate of planet flux per frame of input_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to 
     the annular noise and FWHM equal to that used for KLIP algorithm througput for each radial separation.
 
     Args:
@@ -475,7 +474,7 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
     image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
     
     sn_source, xy_source = [], []
-       
+
     # Iteratively detect sources above the SNR threshold
     while np.nanmax(image_snmap) >= nsigma_threshold:
 
@@ -541,3 +540,201 @@ def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
     zp = app_mag + 2.5 * np.log10(ap_sum)
 
     return zp
+
+def calc_pol_p_and_pa_image(input_Image):
+    """Compute polarization intensity, fractional polarization, and EVPA from Stokes maps.
+
+    Args:
+        input_Image (Image): Object containing Stokes maps and uncertainties.
+
+    Returns:
+        Image: Image object containing
+            - data: stacked [P, p, evpa] (shape: 3 x H x W)
+            - ext_hdr: Header with updated HISTORY
+            - err, dq: arrays reflecting Perr, perr and evpa_err
+
+    Raises:
+        AttributeError: If `input_Image` is missing `data` or `err` attributes.
+        ValueError: If Stokes maps I, Q, U have inconsistent shapes or insufficient slices.
+    """
+    # --- Extract Stokes parameters ---
+    try:
+        I, Q, U = input_Image.data[0:3]
+        Ierr, Qerr, Uerr = input_Image.err[0][0:3]
+        Idq, Qdq, Udq = input_Image.dq[0:3]
+        # V, Qphi, Uphi = Image.data[3:6] # unused
+    except AttributeError as e:
+        raise AttributeError("Image object must have 'data' and 'err' attributes.") from e
+    except IndexError as e:
+        raise ValueError("Image.data and Image.err must have at least [0..2] slices.") from e
+
+    # --- Polarized intensity and error ---
+    P = np.sqrt(Q**2 + U**2)
+    Perr = np.sqrt((Q * Qerr)**2 + (U * Uerr)**2) / np.maximum(P, 1e-10)
+
+    # --- Fractional polarization and its error ---
+    p = P / np.maximum(I, 1e-10)
+    perr = np.sqrt((Perr / np.maximum(I, 1e-10))**2 +
+                   (P * Ierr / np.maximum(I, 1e-10)**2)**2)
+
+    # --- Polarization angle (EVPA) and uncertainty ---
+    evpa = 0.5 * np.arctan2(U, Q)  # radians
+    evpa_err = 0.5 * np.sqrt((Q * Uerr)**2 + (U * Qerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
+    evpa = np.degrees(evpa)
+    evpa_err = np.degrees(evpa_err)
+
+    # --- Data quality propagation ---
+    dq = np.bitwise_or(np.bitwise_or(Idq, Qdq), Udq)
+
+    # --- Stack results ---
+    data_out = np.stack([P, p, evpa], axis=0)
+    err_out = np.stack([Perr, perr, evpa_err], axis=0)
+    dq_out = np.stack([dq, dq, dq], axis=0)
+
+    # --- Headers ---
+    pri_hdr = input_Image.pri_hdr
+    ext_hdr = input_Image.ext_hdr
+    err_hdr = input_Image.err_hdr
+    dq_hdr = input_Image.dq_hdr
+
+    ext_hdr.add_history(
+        "Derived polarization products: data=[P, p, EVPA]; "
+        "err=[Perr, perr, EVPA_err]; dq propagated from I,Q,U."
+    )
+
+    # --- Construct output Image ---
+    Image_out = Image(
+        data_out,
+        pri_hdr=pri_hdr,
+        ext_hdr=ext_hdr,
+        err=err_out,
+        dq=dq_out,
+        err_hdr=err_hdr,
+        dq_hdr=dq_hdr
+    )
+
+    return Image_out
+def compute_QphiUphi(image, x_center=None, y_center=None):
+    """
+    Compute Q_phi and U_phi from Stokes Q and U, returning an Image with shape [6, n, m]:
+    [I, Q, U, V, Q_phi, U_phi].
+
+    Args:
+        image: Image
+            Input image whose `data` is shaped [4, n, m] as [I, Q, U, V]. If the extension
+            header contains 'STARLOCX' and 'STARLOCY', these are used as the stellar center.
+        x_center: float or None
+            Optional override for the x-coordinate of the center. Used only when the header
+            does not provide 'STARLOCX'. If both header and this argument are missing, the
+            image center ( (m-1)/2 ) is used.
+        y_center: float or None
+            Optional override for the y-coordinate of the center. Used only when the header
+            does not provide 'STARLOCY'. If both header and this argument are missing, the
+            image center ( (n-1)/2 ) is used.
+
+    Returns:
+        Image: A copy of the input image with data expanded to [6, n, m] as
+            [I, Q, U, V, Q_phi, U_phi]. The `err` array is expanded to match and the
+            uncertainties for Q_phi/U_phi are propagated from Q and U (assuming no covariance).
+            The `dq` planes are expanded to match; if I/Q/U/V have identical dq, that mask is
+            copied to both Q_phi and U_phi, otherwise Q_phi inherits Q’s dq and U_phi inherits
+            U’s dq.
+    """
+
+    # copy of the input image
+    out = image.copy(copy_data=True)
+
+    data = out.data
+    I, Q, U, V = data
+    n, m = I.shape
+
+    ext_hdr = getattr(out, "ext_hdr", None)
+
+    # Determine center coordinates: header > input args > image center (print which is used)
+    if ext_hdr is not None and ("STARLOCX" in ext_hdr) and ("STARLOCY" in ext_hdr):
+        cx = float(ext_hdr["STARLOCX"])
+        cy = float(ext_hdr["STARLOCY"])
+    elif (x_center is not None) and (y_center is not None):
+        cx = float(x_center)
+        cy = float(y_center)
+    else:
+        cx = (m - 1) * 0.5
+        cy = (n - 1) * 0.5
+
+    # Polar angle φ and rotation (use float64 to reduce numerical errors)
+    y_idx, x_idx = np.mgrid[0:n, 0:m]
+    phi = np.arctan2(y_idx - cy, x_idx - cx)
+
+    c2 = np.cos(2.0 * phi, dtype=np.float64)
+    s2 = np.sin(2.0 * phi, dtype=np.float64)
+
+    Qf = Q.astype(np.float64, copy=False)
+    Uf = U.astype(np.float64, copy=False)
+
+    Q_phi = -Qf * c2 - Uf * s2
+    U_phi =  Qf * s2 - Uf * c2
+
+    # Cast back to the same dtype as input data
+    Q_phi = Q_phi.astype(data.dtype, copy=False)
+    U_phi = U_phi.astype(data.dtype, copy=False)
+
+    # Expand data to [6,n,m]
+    out.data = np.concatenate([data, Q_phi[None, ...], U_phi[None, ...]], axis=0)
+
+    # Ensure err / dq match the data (create if missing, or add 2 new planes)
+    nplanes = out.data.shape[0]
+
+    # --- err propagation ---
+    if out.err is None:
+        out.err = np.zeros((nplanes, n, m), dtype=out.data.dtype)
+    else:
+        if out.err.shape[0] >= 3 and out.err.shape[1:] == (n, m):
+            sigma_Q = out.err[1].astype(np.float64)
+            sigma_U = out.err[2].astype(np.float64)
+            var_Qphi = (c2**2) * sigma_Q**2 + (s2**2) * sigma_U**2
+            var_Uphi = (s2**2) * sigma_Q**2 + (c2**2) * sigma_U**2
+
+            err_Qphi = np.sqrt(var_Qphi).astype(out.data.dtype)
+            err_Uphi = np.sqrt(var_Uphi).astype(out.data.dtype)
+
+            out.err = np.concatenate([out.err,
+                                    err_Qphi[None, ...],
+                                    err_Uphi[None, ...]], axis=0)
+        else:
+            out.err = np.zeros((nplanes, n, m), dtype=out.data.dtype)
+
+    # --- dq alignment & inheritance ---
+    if getattr(out, "dq", None) is None:
+        # dq is nothing -> create zeros with correct shape
+        out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
+    elif out.dq.ndim != 3 or out.dq.shape[1:] != (n, m):
+        # shape mismatch -> reset
+        out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
+    else:
+        # if we still have only I,Q,U,V planes, append two new planes
+        if out.dq.shape[0] == nplanes - 2 and out.dq.shape[0] >= 4:
+            dq_Q = out.dq[1].astype(np.uint16, copy=False)
+            dq_U = out.dq[2].astype(np.uint16, copy=False)
+            dq_or = (dq_Q | dq_U).astype(np.uint16)
+            out.dq = np.concatenate([out.dq, dq_or[None, ...], dq_or[None, ...]], axis=0)
+    
+        # if already 6 planes, (re)compute Q_phi/U_phi dq for correctness
+        elif out.dq.shape[0] == nplanes:
+            out.dq[4] = (out.dq[1].astype(np.uint16) | out.dq[2].astype(np.uint16))
+            out.dq[5] = (out.dq[1].astype(np.uint16) | out.dq[2].astype(np.uint16))
+    
+        else:
+            # anything else -> reset
+            out.dq = np.zeros((nplanes, n, m), dtype=np.uint16)
+
+    # Add HISTORY record
+    msg = f"Computed Q_phi/U_phi with center=({cx:.6f},{cy:.6f}); output data shape {out.data.shape}."
+
+    if ext_hdr is not None:
+        try:
+            ext_hdr['HISTORY'] = msg
+        except Exception:
+            pass
+
+    return out
+

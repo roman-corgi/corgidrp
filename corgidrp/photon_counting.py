@@ -124,11 +124,11 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
 
     Returns:
-        corgidrp.data.Dataset or corgidrp.data.Dark: If If the input dataset's header key 'VISTYPE' is not equal to 'DARK', 
+        corgidrp.data.Dataset or corgidrp.data.Dark: If If the input dataset's header key 'VISTYPE' is not equal to 'CGIVST_CAL_DRK', 
             corgidrp.data.Dataset is the output type, and the output is the processed illuminated set, whether 
             dark subtraction happened or not.  Contains mean expected array (detected electrons if not dark-subtracted, 
             photoelectrons if dark-subtracted). 
-            If the input dataset's header key 'VISTYPE' is equal to 'DARK', corgidrp.data.Dark is the output type, and the output
+            If the input dataset's header key 'VISTYPE' is equal to 'CGIVST_CAL_DRK', corgidrp.data.Dark is the output type, and the output
             is the processed dark set.  Contains mean expected array (detected electrons).
 
     References
@@ -150,7 +150,14 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         raise ValueError('bin_size must be less than the number of frames in input_dataset.')
         
     num_bins = len(input_dataset)//bin_size 
-    
+
+    lines = []
+    for line in input_dataset[0].ext_hdr['HISTORY']:
+        lines += [line]
+    msg = 'Dark subtracted using dark'
+    if msg in lines:
+        pc_master_dark = None # dark subtraction was already done, so override any input pc_master_dark
+
     list_new_image = []
     list_err = [] # only used for dark processing case
     list_dq = [] # only used for dark processing case
@@ -160,23 +167,23 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         subset_frames = input_dataset.frames[bin_size*i:bin_size*(i+1)]
         sub_dataset = data.Dataset(subset_frames)
         if dataset_copy:
-            test_dataset, _ = sub_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
+            test_dataset, unique_vals = sub_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
         else:
-            test_dataset, _ = sub_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
+            test_dataset, unique_vals = sub_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
         if len(test_dataset) > 1:
             raise PhotonCountException('All frames must have the same exposure time, '
                                     'commanded EM gain, and k gain.')
         datasets, val = test_dataset[0].split_dataset(prihdr_keywords=['VISTYPE'])
         if len(val) != 1:
             raise PhotonCountException('There should only be 1 \'VISTYPE\' value for the dataset.')
-        if val[0] == 'DARK':
+        if val[0] == 'CGIVST_CAL_DRK':
             if inputmode != 'darks':
-                raise PhotonCountException('Inputmode is not \'darks\', but the input dataset has \'VISTYPE\' = \'DARK\'.')
+                raise PhotonCountException('Inputmode is not \'darks\', but the input dataset has \'VISTYPE\' = \'CGIVST_CAL_DRK\'.')
             if pc_master_dark is not None:
-                raise PhotonCountException('The input frames are \'VISTYPE\'=\'DARK\' frames, so no pc_master_dark should be provided.')
-        if val[0] != 'DARK':
+                raise PhotonCountException('The input frames are \'VISTYPE\'=\'CGIVST_CAL_DRK\' frames, so no pc_master_dark should be provided.')
+        if val[0] != 'CGIVST_CAL_DRK':
             if inputmode != 'illuminated':
-                raise PhotonCountException('Inputmode is not \'illuminated\', but the input dataset has \'VISTYPE\' not equal to \'DARK\'.')
+                raise PhotonCountException('Inputmode is not \'illuminated\', but the input dataset has \'VISTYPE\' not equal to \'CGIVST_CAL_DRK\'.')
         if 'ISPC' in datasets[0].frames[0].ext_hdr:
             if datasets[0].frames[0].ext_hdr['ISPC'] != True:
                 raise PhotonCountException('\'ISPC\' header value must be True if these frames are to be processed as photon-counted.')
@@ -284,17 +291,18 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if pc_master_dark is not None:
             if type(pc_master_dark) is not data.Dark:
                 raise Exception('Input type for pc_master_dark must be a Dataset of corgidrp.data.Dark instances.')
+            if (pc_master_dark.ext_hdr['EXPTIME'], pc_master_dark.ext_hdr['EMGAIN_C']) != unique_vals[0][:2]:
+                raise PhotonCountException('Dark should have the same EXPTIME and EMGAIN_C as input_dataset.')
             if 'PC_STAT' not in pc_master_dark.ext_hdr:
                 raise PhotonCountException('\'PC_STAT\' must be a key in the extension header of each frame of pc_master_dark.')
-            if pc_master_dark.ext_hdr['PC_STAT'] != 'photon-counted master dark':
-                raise PhotonCountException('Each frame of pc_master_dark must be a photon-counted master dark (i.e., '
-                                        'the extension header key \'PC_STAT\' must be \'photon-counted master dark\').')
-            if 'PCTHRESH' not in pc_master_dark.ext_hdr:
-                raise PhotonCountException('Threshold should be stored under the header \'PCTHRESH\'.')
-            if pc_master_dark.ext_hdr['PCTHRESH'] != thresh:
-                raise PhotonCountException('Threshold used for photon-counted master dark should match the threshold to be used for the illuminated frames.')
-            if pc_master_dark.ext_hdr['NUM_FR'] < len(sub_dataset):
-                raise PhotonCountException('Number of frames that created the photon-counted master dark must be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
+            if pc_master_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark':
+                if 'PCTHRESH' not in pc_master_dark.ext_hdr:
+                    raise PhotonCountException('Threshold should be stored under the header \'PCTHRESH\'.')
+                if pc_master_dark.ext_hdr['PCTHRESH'] != thresh:
+                    raise PhotonCountException('Threshold used for photon-counted master dark should match the threshold to be used for the illuminated frames.')
+                if pc_master_dark.ext_hdr['NUM_FR'] < len(sub_dataset):
+                    raise Warning('Number of frames that created the photon-counted master dark should be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
+    
             # in case the number of subsets of darks < number of subsets of brights, which can happen since the number of darks within a subset can be bigger than the number in a bright subset
             j = np.mod(i, pc_master_dark.data.shape[0])
             pc_means.append(pc_master_dark.data[j])
@@ -326,7 +334,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             dq_hdr = dataset[-1].dq_hdr
             hdulist = dataset[-1].hdu_list
 
-        if val[0] != "DARK":  
+        if val[0] != "CGIVST_CAL_DRK":  
             new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 
                                 dq_hdr=dq_hdr, input_hdulist=hdulist) 
             new_image.filename = dataset[-1].filename.replace("L2a", "L2b")
@@ -338,9 +346,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             list_new_image.append(combined_pc_mean)
             list_err.append(combined_err)
             list_dq.append(combined_dq)
-    if val[0] != "DARK":
+    if val[0] != "CGIVST_CAL_DRK":
         pc_ill_dataset = data.Dataset(list_new_image)
-        pc_ill_dataset.update_after_processing_step("Photon-counted {0} illuminated frames for each PC frame of the output dataset.  Number of subsets: {1}.  Total number of frames in input dataset: {2}. Using T_factor={3} and niter={4}. Dark-subtracted: {5}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter, dark_sub))
+        pc_ill_dataset.update_after_processing_step("Photon-counted {0} illuminated frames for each PC frame of the output dataset.  Number of subsets: {1}.  Total number of frames in input dataset: {2}. Using T_factor={3} and niter={4}. Dark-subtracted with PC dark: {5}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter, dark_sub))
         
         return pc_ill_dataset
     else:
