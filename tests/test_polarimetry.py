@@ -784,10 +784,10 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
     return
 
 if __name__ == "__main__":
-    # test_image_splitting()
-    # test_calc_pol_p_and_pa_image()
-    # test_subtract_stellar_polarization()
-    # test_mueller_matrix_cal()
-    # test_combine_polarization_states()
-    # test_align_frames()
+    test_image_splitting()
+    test_calc_pol_p_and_pa_image()
+    test_subtract_stellar_polarization()
+    test_mueller_matrix_cal()
+    test_combine_polarization_states()
+    test_align_frames()
     test_calc_stokes_unocculted()

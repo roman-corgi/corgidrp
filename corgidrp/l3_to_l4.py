@@ -14,7 +14,7 @@ import corgidrp
 from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
 from astropy.io import fits
-from scipy.ndimage import generic_filter
+from scipy.ndimage import generic_filter, shift
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation
 from corgidrp import pol
 from corgidrp import fluxcal
