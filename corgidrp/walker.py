@@ -121,7 +121,6 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
         if i > 0 and  len(recipe['inputs']) == 0:
             for filename in output_filelist:
                 recipe["inputs"].append(filename)
-
         output_filelist = run_recipe(recipe)
 
     # return just the recipe if there was only one
@@ -368,12 +367,17 @@ def guess_template(dataset):
             # coronagraphic obs - PSF subtraction
             recipe_filename = "l3_to_l4.json"
         else:
-            # noncorongrpahic obs - no PSF subtraction
+            # noncoronagraphic obs - no PSF subtraction
             recipe_filename = "l3_to_l4_nopsfsub.json"
-            
+        if image.ext_hdr['DPAMNAME'] == 'PRISM3':
+            if image.ext_hdr['FSMLOS'] == 1:
+                # coronagraphic obs - PSF subtraction
+                recipe_filename = "l3_to_l4_psfsub_spec.json"
+            else:
+                # noncoronagraphic obs - no PSF subtraction
+                recipe_filename = "l3_to_l4_noncoron_spec.json" 
     else:
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
-
     return recipe_filename, chained
 
 

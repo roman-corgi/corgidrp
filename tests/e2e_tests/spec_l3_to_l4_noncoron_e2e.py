@@ -74,6 +74,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
         pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
+        ext_hdr["FSMLOS"] = False
         # add a fake satellite spot image from a small band simulation
         image_spot = Image(psf_array_spot, pri_hdr = pri_hdr.copy(), ext_hdr = ext_hdr.copy(),
                            err =np.zeros_like(psf_array_spot), err_hdr = errhdr.copy(),
@@ -185,8 +186,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
     recipe = walk_corgidrp(
         filelist=saved_files, 
         CPGS_XML_filepath="",
-        outputdir=e2eoutput_path,
-        template="l3_to_l4_spec.json"
+        outputdir=e2eoutput_path
     )
     logger.info("")
     

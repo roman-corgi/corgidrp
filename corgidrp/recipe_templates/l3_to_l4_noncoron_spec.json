@@ -1,5 +1,5 @@
 {
-    "name" : "l3_to_l4_spec",
+    "name" : "l3_to_l4_noncoron_spec",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false

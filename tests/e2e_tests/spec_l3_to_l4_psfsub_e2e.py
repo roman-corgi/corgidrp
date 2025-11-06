@@ -2,13 +2,10 @@ import os
 import glob
 import numpy as np
 import astropy.io.fits as fits
-from datetime import datetime, timedelta
 import logging
 import pytest
 import argparse
-import warnings
-import shutil
-from astropy.io.fits.verify import VerifyWarning
+
 
 from corgidrp.data import Dataset
 from corgidrp.data import Image
@@ -51,25 +48,40 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
         
-    psfref_files_new = sorted(glob.glob(os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L1", "cgi_*l1_.fits")))
+    psfref_satspot_path = os.path.join(e2edata_path, "SPEC_refstar_satspot", "L1")
+    target_satspot_path = os.path.join(e2edata_path, "SPEC_targetstar_satspot", "L1")
+    psfref_satspot_files = sorted(glob.glob(os.path.join(psfref_satspot_path, "cgi_*l1_.fits")))
+    target_satspot_files = sorted(glob.glob(os.path.join(target_satspot_path, "cgi_*l1_.fits")))
     psfref_files_path = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L1")
+    psfref_files = sorted(glob.glob(os.path.join(psfref_files_path, "cgi_*l1_.fits")))
     target_files_path = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1")
-    target_files = sorted(glob.glob(os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1", "cgi_*l1_.fits")))
+    target_files = sorted(glob.glob(os.path.join(target_files_path, "cgi_*l1_.fits")))
     logger.info(f"Found {len(target_files)} existing L1 target files in {e2edata_path}")
-    logger.info(f"Found {len(psfref_files_new)} existing L1 reference files in {e2edata_path}")
+    logger.info(f"Found {len(psfref_files)} existing L1 reference files in {e2edata_path}")
+    logger.info(f"Found {len(target_satspot_files)} existing L1 target satspot files in {e2edata_path}")
+    logger.info(f"Found {len(psfref_satspot_files)} existing L1 reference satspot files in {e2edata_path}")
     
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     ref_l3_output_dir = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L3")
     target_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3")
+    ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L3", "satspot")
+    target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3", "satspot")
     
+    run_l1_to_l3_e2e_test(psfref_satspot_path, ref_spot_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
+    
+    run_l1_to_l3_e2e_test(target_satspot_path, target_spot_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger)
     
     l3_files = []
     l3_psfref = sorted(glob.glob(os.path.join(ref_l3_output_dir, "cgi_*l3_.fits")))
     l3_files.extend(l3_psfref)
+    l3_psfref_spot = sorted(glob.glob(os.path.join(ref_spot_l3_output_dir, "cgi_*l3_.fits")))
+    l3_files.extend(l3_psfref_spot)
     l3_target = sorted(glob.glob(os.path.join(target_l3_output_dir, "cgi_*l3_.fits")))
     l3_files.extend(l3_target)
+    l3_target_spot = sorted(glob.glob(os.path.join(target_spot_l3_output_dir, "cgi_*l3_.fits")))
+    l3_files.extend(l3_target_spot)
     l3_dataset = Dataset(l3_files)
         
     logger.info('')
@@ -84,12 +96,13 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     # Validate all input images
     for i, frame in enumerate(l3_dataset):
         frame_info = f"L3 Frame {i}"
-        
+        #simulation seems to be done without coronagraph
+        frame.ext_hdr['FSMLOS'] = True
         check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l3_.fits', frame_info, logger, data_level = 'l3_')
         check_dimensions(frame.data, (125, 125), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
-        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3'}, frame_info, logger)
-        verify_header_keywords(frame.pri_hdr, {'PSFREF'}, frame_info, logger)
+        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3', 'FSMLOS' : True}, frame_info, logger)
+        verify_header_keywords(frame.pri_hdr, {'PSFREF', 'SATSPOTS'}, frame_info, logger)
         logger.info("")
 
     logger.info(f"Total input images validated: {len(l3_dataset)}")
@@ -134,8 +147,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     recipe = walk_corgidrp(
         filelist=l3_files, 
         CPGS_XML_filepath="",
-        outputdir=e2eoutput_path,
-        template="l3_to_l4_psfsub_spec.json"
+        outputdir=e2eoutput_path
     )
     logger.info("")
     
