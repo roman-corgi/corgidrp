@@ -1,18 +1,30 @@
+import os, glob
 import numpy as np
+import pandas as pd
+import shutil
+import warnings
+
+from astropy.io.fits import Header
+
 import pytest
+
+from corgidrp.data import Dataset, Image
+import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.pol as pol
 import corgidrp.l2b_to_l3 as l2b_to_l3
 import corgidrp.l3_to_l4 as l3_to_l4
-import corgidrp.data as data
-import pandas as pd
-import corgidrp.pol as pol
-import os
-import shutil
-import warnings
+import corgidrp.l4_to_tda as l4_to_tda
+from corgidrp.pol import calc_stokes_unocculted
+import corgidrp.corethroughput as corethroughput
+
+from corgidrp import star_center
+
 from astropy.io.fits.verify import VerifyWarning
 from astropy.wcs import FITSFixedWarning
 from pyklip.klip import rotate
+
+
 
 def test_image_splitting():
     """
@@ -148,90 +160,193 @@ def test_image_splitting():
     # test that an error is raised if we set the image size too big
     with pytest.raises(ValueError):
         invalid_output = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=682)
+        
+def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3.):
+    """
+    Test `calc_pol_p_and_pa_image` using mock L4 Stokes cubes.
+
+    This test verifies that the recovered fractional polarization (p)
+    and electric-vector position angle (EVPA) are statistically consistent
+    with the true input values within their propagated uncertainties.
+
+    For each simulation, we compute normalized residuals:
+        chi = (measured - true) / sigma
+    for both p and EVPA. If the uncertainty propagation is correct,
+    the chi distribution should follow N(0, 1).
+
+    We then check that the median of the chi means is near zero,
+    and the median of the chi standard deviations is near one.
+
+    The tolerance (`nsigma_tol`) defines the acceptable deviation from
+    ideal statistics in units of standard errors. For `n_sim` simulations,
+    the expected fluctuations of the median and standard deviation of chi
+    are approximately 1/sqrt(n_sim) and 1/sqrt(2*(n_sim-1)), respectively.
+    Multiplying by `nsigma_tol` allows for a configurable confidence
+    interval, e.g., `nsigma_tol=3` corresponds roughly to a 3-sigma limit
+    on expected statistical deviations.
+    """
+    # --- Simulation parameters ---
+    p_input = 0.1 + 0.2 * np.random.rand(n_sim)
+    theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
+
+    # --- Containers for chi statistics ---
+    p_chi_mean, p_chi_std = [], []
+    evpa_chi_mean, evpa_chi_std = [], []
+
+    for p, theta in zip(p_input, theta_input):
+
+        # Generate mock Stokes cube
+        Image_polmock = mocks.create_mock_stokes_image_l4(
+            badpixel_fraction=0.0,
+            fwhm=1e2,
+            I0=1e10,
+            p=p,
+            theta_deg=theta
+        )
+
+        # Compute polarization products
+        Image_pol = l4_to_tda.calc_pol_p_and_pa_image(Image_polmock)
+
+        p_map = Image_pol.data[1]       # fractional polarization
+        evpa_map = Image_pol.data[2]    # EVPA
+        p_map_err = Image_pol.err[0][1]
+        evpa_map_err = Image_pol.err[0][2]
+
+        # Compute chi statistics
+        p_chi = (p_map - p) / p_map_err
+        evpa_chi = (evpa_map - theta) / evpa_map_err
+
+        p_chi_mean.append(np.nanmedian(p_chi))
+        p_chi_std.append(np.nanstd(p_chi))
+        evpa_chi_mean.append(np.nanmedian(evpa_chi))
+        evpa_chi_std.append(np.nanstd(evpa_chi))
+
+    #print(np.median(p_chi_mean), np.median(p_chi_std),
+    #      np.median(evpa_chi_mean), np.median(evpa_chi_std))
+    tol_mean = 1. / np.sqrt(n_sim) * nsigma_tol
+    tol_std = 1. / np.sqrt(2.*(n_sim-1.)) * nsigma_tol
+    assert np.median(p_chi_mean) == pytest.approx(0.0, abs=tol_mean)
+    assert np.median(p_chi_std) == pytest.approx(1.0, abs=tol_std)
+    assert np.median(evpa_chi_mean) == pytest.approx(0.0, abs=tol_mean)
+    assert np.median(evpa_chi_std) == pytest.approx(1.0, abs=tol_std)
+
+def test_align_frames():
+    """
+    Test that polarimetric images are align correctly on the POL 0 subdataset
+    """
+    # Generate mock data
+    injected_position_pol0 = [(2, - 1), (-2, 1)]
+    injected_position_pol45 = [(1, - 2), (2, -1)]
+
+    image_WP1_nfov_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(dpamname='POL0',
+     observing_mode='NFOV',
+     left_image_value=1,
+     right_image_value=2,
+     star_center=injected_position_pol0,
+     amplitude_multiplier=1000)
+    image_WP1_nfov= mocks.create_mock_l2b_polarimetric_image(dpamname='POL0',
+     observing_mode='NFOV',
+     left_image_value=1,
+     right_image_value=2)
+
+    image_WP2_nfov_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(dpamname='POL45',
+     observing_mode='NFOV',
+     left_image_value=1,
+     right_image_value=2,
+     star_center=injected_position_pol45,
+     amplitude_multiplier=1000)
+    image_WP2_nfov = mocks.create_mock_l2b_polarimetric_image(dpamname='POL45',
+     observing_mode='NFOV',
+     left_image_value=1,
+     right_image_value=2)
+    input_dataset_nfov = data.Dataset([image_WP1_nfov_sp, image_WP1_nfov, image_WP2_nfov_sp, image_WP2_nfov])
+    input_dataset_autocrop_nfov = l2b_to_l3.split_image_by_polarization_state(input_dataset_nfov)
+    
+    # Find the star
+    # Checks on finding the star are done in test_find_star.py
+    dataset_with_center = l3_to_l4.find_star(input_dataset_autocrop_nfov, drop_satspots_frames=False)
+
+    starloc_pol0 = (dataset_with_center.frames[0].ext_hdr['STARLOCX'], dataset_with_center.frames[0].ext_hdr['STARLOCY'])
+    starloc_pol45 = (dataset_with_center.frames[2].ext_hdr['STARLOCX'], dataset_with_center.frames[2].ext_hdr['STARLOCY'])
+    
+                                              
+    injected_x_slice_0, injected_y_slice_0 = (dataset_with_center.frames[0].data[0].shape[0]//2 + injected_position_pol0[0][0],
+                                            dataset_with_center.frames[0].data[0].shape[1]//2 + injected_position_pol0[0][1])   
+    
+    injected_x_slice_45, injected_y_slice_45 = (dataset_with_center.frames[1].data[0].shape[0]//2 + injected_position_pol45[0][0],
+                                                dataset_with_center.frames[1].data[0].shape[1]//2 + injected_position_pol45[0][1])
+
+    assert np.isclose(injected_x_slice_45, starloc_pol45[0], atol=0.1), \
+        f"Expected {injected_x_slice_45}, got {starloc_pol45[0]}"
+    assert np.isclose(injected_y_slice_45, starloc_pol45[1], atol=0.1), \
+        f"Expected {injected_y_slice_45}, got {starloc_pol45[1]}"
+
+    # Test that the difference between the measured stars is the difference between the injected positions. 
+    assert np.isclose( starloc_pol0[0] - starloc_pol45[0], injected_x_slice_0 - injected_x_slice_45, atol=0.1)
+    assert np.isclose( starloc_pol0[1] - starloc_pol45[1], injected_y_slice_0 - injected_y_slice_45, atol=0.1)
+    # Align the pol 45 data with the pol 0 data 
+    output_dataset_aligned= l3_to_l4.align_polarimetry_frames(dataset_with_center)
+    
+    # Check that the pol 45 frames are now aligned on the pol 0 frames
+    star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+        img_ref=output_dataset_aligned.frames[3].data[0],
+        img_sat_spot=output_dataset_aligned.frames[2].data[0],
+        star_coordinate_guess=(output_dataset_aligned.frames[3].data[0].shape[1]//2, output_dataset_aligned.frames[3].data[0].shape[0]//2),
+        thetaOffsetGuess=0,
+        satellite_spot_parameters=star_center.satellite_spot_parameters_defaults['NFOV']
+    )       
+    assert np.isclose(star_xy[0], starloc_pol0[0], atol=0.1), \
+            f" Expected {starloc_pol0[0]}, got {star_xy[0]}"
+    assert np.isclose(star_xy[1], starloc_pol0[1], atol=0.1), \
+            f" Expected {starloc_pol0[1]}, got {star_xy[1]}"
+
+    # Check that every frame is aligned on the same  on STARLOC
+    starloc = []
+
+    for frame in output_dataset_aligned.frames:
+        starloc.append((frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']))
+
+    assert all(location == starloc_pol0 for location in starloc), \
+        "All frames should have the same star location."
                 
 def test_mueller_matrix_cal():
     '''
     Tests the creation of a Mueller Matrix calibration file from a mock dataset.
     '''
     
-    read_noise = 200
-    
-    image_separation_arcsec = 7.5
-
-    #Build an instrumental polarization matrix to inject into the mock data
-    q_instrumental_polarization = 0.5 #assumed instrumental polarization in percent
-    u_instrumental_polarization = -0.1 #assumed instrumental polarization in percent
-    q_efficiency = 0.8
-    uq_cross_talk = 0.05
-    u_efficiency = 0.7
-    qu_cross_talk = 0.03
-
     #Get path to this file
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    path_to_pol_ref_file = os.path.join(current_file_path, "test_data/stellar_polarization_database.csv")
-    #Read in the test polarization stellar database from test_data/
-    pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
-    pol_ref_targets = pol_ref["TARGET"].tolist()
-    #Create mock data for three targets in the database - for each target inject known polarization
-    image_list = []
-    for i, target in enumerate(pol_ref_targets):
-        #create two mock L2b polarimetric images for each target, one for each Wollaston prism angle
-        #set left and right image values to zero so that only injected polarization is measured
-        pol0 = mocks.create_mock_l2b_polarimetric_image(dpamname='POL0', 
-                                                        observing_mode='NFOV', left_image_value=0, right_image_value=0)
-        pol0.pri_hdr['TARGET'] = target
-        pol45 = mocks.create_mock_l2b_polarimetric_image(dpamname='POL45', 
-                                                        observing_mode='NFOV', left_image_value=0, right_image_value=0)
-        pol45.pri_hdr['TARGET'] = target
+    #To test this we need this catalog with the same values as the test data also in corgidrp/data/stellar_polarization_database.csv
+    path_to_pol_ref_file = os.path.join(current_file_path, "test_data","stellar_polarization_database.csv")
 
-        pol0.err = (np.ones_like(pol0.data) * 1)[None,:]
-        pol45.err = (np.ones_like(pol45.data) * 1)[None,:]
+    q_instrumental_polarization = 0.5  # in percent
+    u_instrumental_polarization = -0.1  # in percent
+    q_efficiency = 0.8
+    u_efficiency = 0.7
+    uq_cross_talk = 0.05
+    qu_cross_talk = 0.03
 
-        #Add Random Roll - This should still work everywhere. 
-        random_roll = np.random.randint(0,360)
-        pol0.pri_hdr['ROLL'] = random_roll
-        pol45.pri_hdr['ROLL'] = random_roll
-
-        #get the q and u values from the reference polarization degree and angle
-        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_roll)
-        q_meas = q * q_efficiency + u * uq_cross_talk + q_instrumental_polarization/100.0
-        u_meas = u * u_efficiency + q * qu_cross_talk + u_instrumental_polarization/100.0
-        # generate four gaussians scaled appropriately for the target's polarization
-        gauss_array_shape = [26,26]
-        gauss1 = mocks.gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + q_meas)/2 #left image, POL0
-        gauss2 = mocks.gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - q_meas)/2 #right image, POL0
-        gauss3 = mocks.gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + u_meas)/2 #left image, POL45
-        gauss4 = mocks.gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - u_meas)/2 #right image, POL45
-        #add the gaussians to the mock images
-        center_left0, center_right0 = mocks.get_pol_image_centers(image_separation_arcsec, 0)
-        center_left45, center_right45 = mocks.get_pol_image_centers(image_separation_arcsec, 45)
-        pol0.data[center_left0[1]-gauss_array_shape[1]//2:center_left0[1]+gauss_array_shape[1]//2,
-                  center_left0[0]-gauss_array_shape[0]//2:center_left0[0]+gauss_array_shape[0]//2] += gauss1
-        pol0.data[center_right0[1]-gauss_array_shape[1]//2:center_right0[1]+gauss_array_shape[1]//2,
-                  center_right0[0]-gauss_array_shape[0]//2:center_right0[0]+gauss_array_shape[0]//2] += gauss2
-        pol45.data[center_left45[1]-gauss_array_shape[1]//2:center_left45[1]+gauss_array_shape[1]//2,
-                   center_left45[0]-gauss_array_shape[0]//2:center_left45[0]+gauss_array_shape[0]//2] += gauss3
-        pol45.data[center_right45[1]-gauss_array_shape[1]//2:center_right45[1]+gauss_array_shape[1]//2,
-                   center_right45[0]-gauss_array_shape[0]//2:center_right45[0]+gauss_array_shape[0]//2] += gauss4
-        
-        pol0.err = (np.sqrt(pol0.data+read_noise**2))[None,:]
-        pol45.err = (np.sqrt(pol45.data+read_noise**2))[None,:]
-
-        image_list.append(pol0)
-        image_list.append(pol45)
-    mock_dataset = data.Dataset(image_list)
+    mock_dataset = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file,
+                                           q_inst=q_instrumental_polarization,
+                                           u_inst=u_instrumental_polarization,
+                                           q_eff=q_efficiency,
+                                           u_eff=u_efficiency,
+                                           uq_ct=uq_cross_talk,
+                                           qu_ct=qu_cross_talk)
     mock_dataset = l2b_to_l3.divide_by_exptime(mock_dataset)
+    mock_dataset = l2b_to_l3.split_image_by_polarization_state(mock_dataset)
+    stokes_dataset = pol.calc_stokes_unocculted(mock_dataset)
 
     #Run the Mueller matrix calibration function
-    mueller_matrix = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
+    mueller_matrix = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
     #Check that the measured mueller matrix is close to the input values
-    assert mueller_matrix.data[1,0] == pytest.approx(q_instrumental_polarization/100.0, abs=1e-2)
-    assert mueller_matrix.data[2,0] == pytest.approx(u_instrumental_polarization/100.0, abs=1e-2)
-    assert mueller_matrix.data[1,1] == pytest.approx(q_efficiency, abs=1e-2)
-    assert mueller_matrix.data[2,2] == pytest.approx(u_efficiency, abs=1e-2)
-    assert mueller_matrix.data[1,2] == pytest.approx(uq_cross_talk, abs=1e-2)
-    assert mueller_matrix.data[2,1] == pytest.approx(qu_cross_talk, abs=1e-2)
+    assert mueller_matrix.data[1,0] == pytest.approx(q_instrumental_polarization/100.0, abs=1e-3)
+    assert mueller_matrix.data[2,0] == pytest.approx(u_instrumental_polarization/100.0, abs=1e-3)
+    assert mueller_matrix.data[1,1] == pytest.approx(q_efficiency, abs=1e-3)
+    assert mueller_matrix.data[2,2] == pytest.approx(u_efficiency, abs=1e-3)
+    assert mueller_matrix.data[1,2] == pytest.approx(uq_cross_talk, abs=1e-3)
+    assert mueller_matrix.data[2,1] == pytest.approx(qu_cross_talk, abs=1e-3)
 
     #Check that the type of mueller_matrix is correct
     assert isinstance(mueller_matrix, pol.MuellerMatrix)
@@ -239,13 +354,13 @@ def test_mueller_matrix_cal():
     #Put in the ND filter and make sure the type is correct. 
     for framm in mock_dataset.frames:
         framm.ext_hdr["FPAMNAME"] = "ND225"
-    mueller_matrix_nd = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
+    mueller_matrix_nd = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
     assert isinstance(mueller_matrix_nd, pol.NDMuellerMatrix)
 
     #Make sure that if the dataset is mixed ND and non-ND an error is raised
     mock_dataset.frames[0].ext_hdr["FPAMNAME"] = "CLEAR"
     with pytest.raises(ValueError):
-        mueller_matrix_mixed = pol.generate_mueller_matrix_cal(mock_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
+        mueller_matrix_mixed = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
 def test_subtract_stellar_polarization():
     """
@@ -375,6 +490,41 @@ def test_combine_polarization_states():
     combine_polarization_states() step function, checks that the output Stokes datacube matches
     with the known on-sky Stokes vector
     '''
+
+    ###########################
+    #### Make dummy CT cal ####
+    ###########################
+
+    # Dataset with some CT profile defined in create_ct_interp
+    # Pupil image
+    pupil_image = np.zeros([1024, 1024])
+    # Set it to some known value for a selected range of pixels
+    pupil_image[510:530, 510:530]=1
+    prhd, exthd_pupil, errhdr, dqhdr = mocks.create_default_L3_headers()
+    # DRP
+    # cfam filter
+    exthd_pupil['CFAMNAME'] = '1F'
+    # Add specific values for pupil images:
+    # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+    exthd_pupil['DPAMNAME'] = 'PUPIL'
+    exthd_pupil['LSAMNAME'] = 'OPEN'
+    exthd_pupil['FSAMNAME'] = 'OPEN'
+    exthd_pupil['FPAMNAME'] = 'OPEN_12'
+
+    data_psf, psf_loc_in, half_psf = mocks.create_ct_psfs(50, cfam_name='1F',
+    n_psfs=100)
+    ct_dataset0 = data_psf[0]
+    ct_dataset0.ext_hdr['FPAMNAME'] = 'HLC12_C2R1'  # set FPM to a coronagraphic one
+    
+    err = np.ones([1024,1024])
+    data_ct_interp = [ct_dataset0, data.Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd_pupil, err = err)]
+    # Set of off-axis PSFs with a CT profile defined in create_ct_interp
+    # First, we need the CT FPM center to create the CT radial profile
+    # We can use a miminal dataset to get to know it
+    ct_cal_tmp = corethroughput.generate_ct_cal(data.Dataset(data_ct_interp))
+
+
     # define instrument mueller matrix and target Stokes vector
     system_mueller_matrix = np.array([
         [ 0.67450, 0.00623, 0.00000, 0.00000],
@@ -457,7 +607,8 @@ def test_combine_polarization_states():
         # catch warning raised when rotating with roll angle instead of wcs
         warnings.filterwarnings('ignore', category=UserWarning)
         output_dataset = l3_to_l4.combine_polarization_states(input_pol_dataset, 
-                                                            system_mueller_matrix_cal=system_mm_cal,
+                                                            system_mm_cal,
+                                                            ct_cal_tmp,
                                                             use_wcs=False, 
                                                             measure_klip_thrupt=False,
                                                             measure_1d_core_thrupt=False)
@@ -487,9 +638,156 @@ def test_combine_polarization_states():
     assert np.allclose(target_stokes_vector[2] * (target_total_intensity), stokes_datacube[2], atol=0.05)
     assert np.allclose(target_stokes_vector[3] * (target_total_intensity), stokes_datacube[3], atol=0.05)
     
+def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
+    """
+    Test the `calc_stokes_unocculted` function using synthetic L3 polarimetric datasets.
+
+    Each mock dataset contains multiple images corresponding to different Wollaston
+    prisms and roll angles. The test generates a variety of fractional polarization
+    values and polarization angles, computes the unocculted Stokes parameters, and
+    compares the recovered Q and U against the input values using their propagated
+    uncertainties. The comparison is performed in units of the standard errors (chi),
+    ensuring the function correctly handles multiple images per dataset and provides
+    statistically consistent results.
+
+    The tolerance (`nsigma_tol`) defines the acceptable deviation from ideal
+    statistics, expressed in units of standard errors. For `n_sim` simulations, the
+    expected fluctuations of the median and standard deviation of chi are approximately
+    1/sqrt(n_sim) and 1/sqrt(2*(n_sim-1)), respectively. Multiplying by `nsigma_tol`
+    allows for a configurable confidence interval, e.g., `nsigma_tol=3` corresponds
+    roughly to a 3-sigma limit on expected statistical deviations.
+    """
+
+    # Set the random seed for reproducibility
+    np.random.seed(42) 
+
+    # --- Simulate varying polarization fractions ---
+    p_input = 0.1 + 0.2 * np.random.rand(n_sim)
+    theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
+
+    Q_recovered = []
+    Qerr_recovered = []
+    U_recovered = []
+    Uerr_recovered = []
+
+    n_repeat = 8
+    
+    # prisms and rolls
+    prisms = np.append(np.tile('POL0', n_repeat//2), np.tile('POL45', n_repeat//2))
+    rolls = np.full(n_repeat, 0)
+
+    for p, theta in zip(p_input, theta_input):
+        # --- Generate mock L2b image ---
+        dataset_polmock = mocks.create_mock_polarization_l3_dataset(
+            I0=1e10,
+            p=p,
+            theta_deg=theta,
+            roll_angles=rolls,
+            prisms=prisms
+        )
+
+        # --- Compute unocculted Stokes ---
+        Image_stokes_unocculted = calc_stokes_unocculted(dataset_polmock)[0]
+
+        Q_obs = Image_stokes_unocculted.data[1]
+        U_obs = Image_stokes_unocculted.data[2]
+        Q_err = Image_stokes_unocculted.err[0][1]
+        U_err = Image_stokes_unocculted.err[0][2]
+
+        Q_recovered.append(Q_obs)
+        Qerr_recovered.append(Q_err)
+        U_recovered.append(U_obs)
+        Uerr_recovered.append(U_err)
+
+    # --- Convert lists to arrays ---
+    Q_recovered = np.array(Q_recovered)
+    Qerr_recovered = np.array(Qerr_recovered)
+    U_recovered = np.array(U_recovered)
+    Uerr_recovered = np.array(Uerr_recovered)
+
+    # --- Compute chi ---
+    theta_rad = np.radians(theta_input)
+    Q_input = p_input * np.cos(2 * theta_rad)
+    Q_chi = (Q_recovered - Q_input) / Qerr_recovered
+    U_input = p_input * np.sin(2 * theta_rad)
+    U_chi = (U_recovered - U_input) / Uerr_recovered
+
+    #print(np.median(Q_chi), np.std(Q_chi), np.median(U_chi), np.std(U_chi))
+    # --- Assertions ---
+    tol_mean = 1. / np.sqrt(n_sim) * nsigma_tol
+    tol_std = 1. / np.sqrt(2.*(n_sim-1.)) * nsigma_tol
+    assert np.median(Q_chi) == pytest.approx(0, abs=tol_mean)
+    assert np.std(Q_chi) == pytest.approx(1, abs=tol_std)
+    assert np.median(U_chi) == pytest.approx(0, abs=tol_mean)
+    assert np.std(U_chi) == pytest.approx(1, abs=tol_std)
+
+    ## Test that passingin multiple targets in a single dataset behaves as expected. 
+    # Create a dataset with two targets, each with different known polarization
+    p_target1 = 0.15
+    theta_target1 = 20.0
+    p_target2 = 0.25
+    theta_target2 = 40.0
+    prisms = np.array(['POL0', 'POL45']*4)
+    rolls = np.array([0,0,0,0,0,0,0,0])
+
+    dataset1_polmock_list = mocks.create_mock_polarization_l3_dataset(
+        I0=1e10,
+        p=p_target1,
+        theta_deg=theta_target1,
+        roll_angles=rolls,
+        prisms=prisms, 
+        return_image_list=True
+    )
+    for img in dataset1_polmock_list:
+        img.pri_hdr['TARGET'] = '1'
+
+    for img in dataset1_polmock_list:
+        img.pri_hdr['TARGET'] = '2'
+
+
+    dataset2_polmock_list = mocks.create_mock_polarization_l3_dataset(
+        I0=1e10,
+        p=p_target2,
+        theta_deg=theta_target2,
+        roll_angles=rolls,
+        prisms=prisms, 
+        return_image_list=True
+    )
+
+    #concatenate the lists
+    combined_image_list = dataset1_polmock_list + dataset2_polmock_list
+    combined_dataset = data.Dataset(combined_image_list)
+
+    # Compute unocculted Stokes for combined dataset
+    combined_stokes_dataset = calc_stokes_unocculted(combined_dataset)
+    # Separate the results for each target
+    stokes_target1 = combined_stokes_dataset[0]
+    stokes_target2 = combined_stokes_dataset[1]
+
+    #assert check that we get what is expceted for target 1
+    Q1_obs = stokes_target1.data[1]
+    U1_obs = stokes_target1.data[2]
+    Q2_obs = stokes_target2.data[1]
+    U2_obs = stokes_target2.data[2]
+
+    Q1_input = p_target1 * np.cos(2 * np.radians(theta_target1))
+    U1_input = p_target1 * np.sin(2 * np.radians(theta_target1))
+    Q2_input = p_target2 * np.cos(2 * np.radians(theta_target2))
+    U2_input = p_target2 * np.sin(2 * np.radians(theta_target2))
+
+    #should be at least 0.03
+    assert Q1_obs == pytest.approx(Q1_input, abs=0.03)
+    assert U1_obs == pytest.approx(U1_input, abs=0.03)
+    assert Q2_obs == pytest.approx(Q2_input, abs=0.03)
+    assert U2_obs == pytest.approx(U2_input, abs=0.03)
+
+    return
 
 if __name__ == "__main__":
-    test_image_splitting()
-    test_subtract_stellar_polarization()
-    test_mueller_matrix_cal()
-    test_combine_polarization_states()
+    # test_image_splitting()
+    # test_calc_pol_p_and_pa_image()
+    # test_subtract_stellar_polarization()
+    # test_mueller_matrix_cal()
+    # test_combine_polarization_states()
+    # test_align_frames()
+    test_calc_stokes_unocculted()

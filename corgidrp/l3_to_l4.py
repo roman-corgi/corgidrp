@@ -98,64 +98,88 @@ def distortion_correction(input_dataset, astrom_calibration):
 
         im_data = undistorted_data.data
         im_err = undistorted_data.err
-        imgsizeX, imgsizeY = im_data.shape
+        is_pol_data = len(im_data.shape) == 3 and im_data.shape[0] == 2
+        num_iterations = 2 if is_pol_data else 1 #handle pol Image (2,1024,1024) so loop twice to correct both frames
+        undistorted_image_list = []
+        undistorted_errors_list = []
 
-        # set image size to the largest axis if not square imagea
-        imgsize = np.max([imgsizeX,imgsizeY])
+        for pol_idx in range(num_iterations):
+            # extract appropriate data slice
+            if is_pol_data:
+                im_data_single = im_data[pol_idx]
+                im_err_single = im_err[:, pol_idx]
+            else:
+                im_data_single = im_data
+                im_err_single = im_err
 
-        yorig, xorig = np.indices(im_data.shape)
-        y0, x0 = imgsize//2, imgsize//2
-        yorig -= y0
-        xorig -= x0
+            imgsizeX, imgsizeY = im_data_single.shape
 
-        ### compute the distortion map based on the calibration file passed in
-        fitparams = (distortion_order + 1)**2
+            # set image size to the largest axis if not square image
+            imgsize = np.max([imgsizeX, imgsizeY])
 
-            # reshape the coefficient arrays
-        x_params = distortion_coeffs[:fitparams]
-        x_params = x_params.reshape(distortion_order+1, distortion_order+1)
+            yorig, xorig = np.indices(im_data_single.shape)
+            y0, x0 = imgsize // 2, imgsize // 2
+            yorig -= y0
+            xorig -= x0
+            ### compute the distortion map based on the calibration file passed in
+            fitparams = (distortion_order + 1)**2
 
-        total_orders = np.arange(distortion_order+1)[:,None] + np.arange(distortion_order+1)[None,:]
-        x_params = x_params / 500**(total_orders)
+                # reshape the coefficient arrays
+            x_params = distortion_coeffs[:fitparams]
+            x_params = x_params.reshape(distortion_order+1, distortion_order+1)
 
-            # evaluate the legendre polynomial at all pixel positions
-        x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), x_params)
-        x_corr = x_corr.reshape(xorig.shape)
+            total_orders = np.arange(distortion_order+1)[:,None] + np.arange(distortion_order+1)[None,:]
+            x_params = x_params / 500**(total_orders)
 
-        distmapX = x_corr - xorig
+                # evaluate the legendre polynomial at all pixel positions
+            x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), x_params)
+            x_corr = x_corr.reshape(xorig.shape)
 
-            # reshape and evaluate the same way for the y coordinates
-        y_params = distortion_coeffs[fitparams:]
-        y_params = y_params.reshape(distortion_order+1, distortion_order+1)
-        y_params = y_params /500**(total_orders)
+            distmapX = x_corr - xorig
 
-        y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), y_params)
-        y_corr = y_corr.reshape(yorig.shape)
-        distmapY = y_corr - yorig
+                # reshape and evaluate the same way for the y coordinates
+            y_params = distortion_coeffs[fitparams:]
+            y_params = y_params.reshape(distortion_order+1, distortion_order+1)
+            y_params = y_params /500**(total_orders)
 
-        # apply the distortion grid to the image indeces and map the image
-        gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
-        gridx = gridx - distmapX
-        gridy = gridy - distmapY
-        
-        undistorted_image = scipy.ndimage.map_coordinates(im_data, [gridy, gridx])
-        
-        # undistort the errors
-        if len(im_err.shape) == 2:
-            undistorted_errors = scipy.ndimage.map_coordinates(im_err, [gridy, gridx])
+            y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), y_params)
+            y_corr = y_corr.reshape(yorig.shape)
+            distmapY = y_corr - yorig
+
+            # apply the distortion grid to the image indeces and map the image
+            gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
+            gridx = gridx - distmapX
+            gridy = gridy - distmapY
+
+            undistorted_image = scipy.ndimage.map_coordinates(im_data_single, [gridy, gridx])
+
+            # undistort the errors
+            if len(im_err_single.shape) == 2:
+                undistorted_errors = scipy.ndimage.map_coordinates(im_err_single, [gridy, gridx])
+            else:
+                undistorted_errors = []
+                for err in im_err_single:
+                    und_err = scipy.ndimage.map_coordinates(err, [gridy, gridx])
+                    undistorted_errors.append(und_err)
+
+            undistorted_image_list.append(undistorted_image)
+            undistorted_errors_list.append(undistorted_errors)
+        # stack results back now that individual frames are undistorted
+        if is_pol_data:
+            undistorted_image = np.stack(undistorted_image_list)    #shape (2,1024,1024)
+            undistorted_errors = [np.stack([undistorted_errors_list[0][i],
+                                             undistorted_errors_list[1][i]])
+                                  for i in range(len(undistorted_errors_list[0]))]  #shape (1,2,1024,1024)
         else:
-            undistorted_errors = []
-            for err in im_err:
-                und_err = scipy.ndimage.map_coordinates(err, [gridy, gridx])
-                
-                undistorted_errors.append(und_err)
-        
+            undistorted_image = undistorted_image_list[0] #shape (1024,1024)
+            undistorted_errors = undistorted_errors_list[0] #shape (1,1024,1024)
         undistorted_ims.append(undistorted_image)
         undistorted_errs.append(undistorted_errors)
-
     history_msg = 'Distortion correction completed'
 
-    undistorted_dataset.update_after_processing_step(history_msg, new_all_data=np.array(undistorted_ims), new_all_err=np.array(undistorted_errs))
+    undistorted_dataset.update_after_processing_step(history_msg, new_all_data=np.array(undistorted_ims),
+                                                       new_all_err=np.array(undistorted_errs))
+
 
     return undistorted_dataset
 
@@ -174,6 +198,9 @@ def find_star(input_dataset,
 
     The star's (x, y) location is stored in each frame's extension header under 
     ``STARLOCX`` and ``STARLOCY``.
+
+    In case of polarimetric data, the star location is estimated on the first slice and 
+    the second slice is aligned on it. POL 0 and POL 45 are processed independantly 
 
     You can replace many of the default settings for by adjusting the satellite_spot_parameters 
     dictionary. You only need to replace the parameters of interest and the rest will stay as defaults. 
@@ -242,7 +269,7 @@ def find_star(input_dataset,
             If None, default parameters corresponding to the specified observing_mode will be used.     
         drop_satspots_frames (bool, optional):
             If True, frames with satellite spots (``SATSPOTS=1``) will be removed from 
-            the returned dataset. Defaults to False.
+            the returned dataset. Defaults to True.
 
     Returns:
         corgidrp.data.Dataset:
@@ -263,77 +290,117 @@ def find_star(input_dataset,
           ``star_center.star_center_from_satellite_spots`` routine.
         • Future enhancements may include separate handling of positive vs. negative 
           satellite spot frames once the relevant metadata keywords are defined.
-        • This routine can fail, if the guess position is off by more than a few pixel.
+        • This routine can fail, if the guess position is off by more than a few pixels.
+          More than 2 pixels on any axis leads almost systematically to failure
           A significantly wrong guess of the angle offset can also lead to failure.
     """
 
     # Copy input dataset
+
     dataset = input_dataset.copy()
 
     satellite_spot_parameters_defaults = star_center.satellite_spot_parameters_defaults
 
+
     # Separate the dataset into frames with and without satellite spots
-    sci_frames = []
-    sat_spot_frames = []
+    split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+    out_frames = []
+    for val, split_dataset in  zip(unique_vals, split_datasets):
+        observing_mode = []
+        sci_frames = []
+        sat_spot_frames = []
+        for frame in split_dataset.frames:
+            if frame.pri_hdr["SATSPOTS"] == 0:
+                sci_frames.append(frame)
+                observing_mode.append(frame.ext_hdr['FSMPRFL'])
+            elif frame.pri_hdr["SATSPOTS"] == 1:
+                sat_spot_frames.append(frame)
+                observing_mode.append(frame.ext_hdr['FSMPRFL'])
+            else:
+                raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
 
-    observing_mode = []
+        assert all(mode == observing_mode[0] for mode in observing_mode), \
+            "All frames should have the same observing mode."
 
-    for frame in dataset.frames:
-        if frame.pri_hdr["SATSPOTS"] == 0:
-            sci_frames.append(frame)
-            observing_mode.append(frame.ext_hdr['FSMPRFL'])
-        elif frame.pri_hdr["SATSPOTS"] == 1:
-            sat_spot_frames.append(frame)
-            observing_mode.append(frame.ext_hdr['FSMPRFL'])
-        else:
-            raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
+        observing_mode = observing_mode[0]
 
-    assert all(mode == observing_mode[0] for mode in observing_mode), \
-        "All frames should have the same observing mode."
+        sci_dataset = data.Dataset(sci_frames)
+        sat_spot_dataset = data.Dataset(sat_spot_frames)
 
-    observing_mode = observing_mode[0]
+        tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
+        # See if the satellite spot parameters are provided, if not used defaults
+        if satellite_spot_parameters is not None:
+            tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
+        # Compute median images
+        img_ref = np.median(sci_dataset.all_data, axis=0)
+        img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
 
-    sci_dataset = data.Dataset(sci_frames)
-    sat_spot_dataset = data.Dataset(sat_spot_frames)
+        # if polarimetry
+        if val  == 'POL0' or val == 'POL45': 
+            # Compute median images and find star on both slices
+            star_xy_list = []
+            for i in [0,1]: #for i in range(0, len(unique_vals))
+                img_ref_slice = img_ref[i]
+                img_sat_spot_slice = img_sat_spot[i]
+                # Default star_coordinate_guess to center of img_sat_spot if None
+                if star_coordinate_guess is None:
+                    star_coordinate_guess = (img_sat_spot_slice.shape[1] // 2, img_sat_spot_slice.shape[0] // 2)
 
-    # Compute median images
-    img_ref = np.median(sci_dataset.all_data, axis=0)
-    img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
+                star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+                    img_ref=img_ref_slice,
+                    img_sat_spot=img_sat_spot_slice,
+                    star_coordinate_guess=star_coordinate_guess,
+                    thetaOffsetGuess=thetaOffsetGuess,
+                    satellite_spot_parameters=tuningParamDict,
+                )
+                star_xy_list.append(star_xy)
+                
+            #align second slice on first slice and drop satellite spot images if necessary
+            shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
+            for frame in split_dataset:
+                if not drop_satspots_frames or frame.pri_hdr["SATSPOTS"] == 0 :
+                    aligned_slice = shift(frame.data[1], shift_value)
+                    frame.data[1] = aligned_slice
+                    frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]
+                    frame.ext_hdr['STARLOCY'] =star_xy_list[0][1]
+                    frame.ext_hdr['HISTORY'] = (
+                                    f"Satellite spots analyzed. Star location at x={star_xy_list[0][0]} "
+                                    f"and y={star_xy_list[0][1]}."
+                                )
 
-    # Default star_coordinate_guess to center of img_sat_spot if None
-    if star_coordinate_guess is None:
-        star_coordinate_guess = (img_sat_spot.shape[1] // 2, img_sat_spot.shape[0] // 2)
+                    out_frames.append(frame)
+            processed_dataset = data.Dataset(out_frames)
 
-    tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
-    # See if the satellite spot parameters are provided, if not used defaults
-    if satellite_spot_parameters is not None:
-        tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
+        else :
 
-    # Find star center
-    star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
-        img_ref=img_ref,
-        img_sat_spot=img_sat_spot,
-        star_coordinate_guess=star_coordinate_guess,
-        thetaOffsetGuess=thetaOffsetGuess,
-        satellite_spot_parameters=tuningParamDict,
-    )
+            # Default star_coordinate_guess to center of img_sat_spot if None
+            if star_coordinate_guess is None:
+                star_coordinate_guess = (img_sat_spot.shape[1] // 2, img_sat_spot.shape[0] // 2)
 
-    # Add star location to frame headers
-    header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
+            # Find star center
+            star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+                img_ref=img_ref,
+                img_sat_spot=img_sat_spot,
+                star_coordinate_guess=star_coordinate_guess,
+                thetaOffsetGuess=thetaOffsetGuess,
+                satellite_spot_parameters=tuningParamDict,
+            )
+            if drop_satspots_frames:
+                processed_dataset = sci_dataset
 
-    if drop_satspots_frames:
-        dataset = sci_dataset
+            # Add star location to frame headers
+            header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
 
-    history_msg = (
-        f"Satellite spots analyzed. Star location at x={star_xy[0]} "
-        f"and y={star_xy[1]}."
-    )
+            history_msg = (
+                f"Satellite spots analyzed. Star location at x={star_xy[0]} "
+                f"and y={star_xy[1]}."
+            )
 
-    dataset.update_after_processing_step(
-        history_msg,
-        header_entries=header_entries)
+            processed_dataset.update_after_processing_step(
+                history_msg,
+                header_entries=header_entries)
 
-    return dataset
+    return processed_dataset
 
 
 def do_psf_subtraction(input_dataset, 
@@ -709,6 +776,10 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
 
             # look for WCS solutions
         if use_wcs is True:
+            if is_pol:
+                if 'NAXIS3' in sci_hd:
+                    del sci_hd['NAXIS3']
+                sci_hd['NAXIS'] = 2
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
                 astr_hdr = WCS(sci_hd)
@@ -967,6 +1038,43 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     return dataset
 
 
+def align_polarimetry_frames(input_dataset):  
+    """
+    Aligns the frames by centering them on STARLOC
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): the L3-level dataset of polarimetry images with STARLOCX and STARLOCY 
+
+    Returns:
+        corgidrp.data.Dataset: L3 dataset where all the images are registered to the same pixel
+
+
+    """
+    processed_dataset = input_dataset.copy()
+    starloc0 = (processed_dataset.frames[0].ext_hdr['STARLOCX'],processed_dataset.frames[0].ext_hdr['STARLOCY'])
+
+    for frame in processed_dataset:
+        starloc = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        if starloc != starloc0:
+            shift_value = (starloc0[1] - starloc[1] , starloc0[0] - starloc[0])
+            frame.data[0] = shift( frame.data[0], shift_value)
+            frame.data[1] = shift( frame.data[1], shift_value)
+            frame.ext_hdr['STARLOCX'] = starloc0[0]
+            frame.ext_hdr['STARLOCY'] = starloc0[1]
+
+    history_msgs = "Images centered on star location."
+
+    history_msg = (
+        f"Image centered on star location at x={starloc0[0]} "
+        f"and y={starloc0[1]}."
+    )
+    processed_dataset.update_after_processing_step(
+        history_msgs)
+
+    
+    return processed_dataset
+
+
 def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_mueller_matrix_cal):
     """
     Takes in polarimetric L3 images and their unocculted polarimetric observations,
@@ -979,7 +1087,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
                                                taken with both wollastons at the same roll angle. All frames for the
                                                same target star must have the same x and y dimensions
         system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
-        nd_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
+        nd_mueller_matrix_cal (corgidrp.data.NDMuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
 
     Returns:
         corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
@@ -1142,9 +1250,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             # propagate errors for the subtraction
             sum_err = np.sqrt(frame.err[0,0,:,:]**2 + frame.err[0,1,:,:]**2)
             diff_err = sum_err
-            diff_err = np.sqrt(diff_err**2 + 
-                               (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
-                        )
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                # error propagation for diff - sum * normalized_diff
+                diff_err = np.sqrt(diff_err**2 + 
+                                (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
+                            )
             frame.err[0,0,:,:] = np.sqrt(sum_err**2 + diff_err**2) / 2
             frame.err[0,1,:,:] = frame.err[0,0,:,:]
             
@@ -1158,12 +1269,12 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 
 def combine_polarization_states(input_dataset,
                                 system_mueller_matrix_cal,
+                                ct_calibration,
                                 svd_threshold=1e-5,
                                 use_wcs=True,
                                 rot_center='im_center',
-                                ct_calibration=None,
                                 reference_star_dataset=None,
-                                measure_klip_thrupt=False,
+                                measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,
                                 cand_locs=None,
                                 kt_seps=None,
@@ -1264,6 +1375,11 @@ def combine_polarization_states(input_dataset,
                 total_intensity_frames.append(frame)
     total_intensity_dataset = data.Dataset(total_intensity_frames)
 
+    for frame in total_intensity_dataset:
+        frame.ext_hdr['NAXIS'] = 2
+    if 'NAXIS3' in frame.ext_hdr:   
+        del frame.ext_hdr['NAXIS3']
+
     # ensure only one KL basis is used for PSF subtraction, so that only one image is returned
     if 'numbasis' in klip_kwargs:
         if isinstance(klip_kwargs['numbasis'], list) and len(klip_kwargs['numbasis']) > 1:
@@ -1277,7 +1393,7 @@ def combine_polarization_states(input_dataset,
         else:
             # set to the length of the reference star dataset if one is provided
             klip_kwargs['numbasis'] = len(reference_star_dataset)
-    
+
     # perform PSF subtraction on total intensity
     with warnings.catch_warnings():
         # suppress astropy warnings
@@ -1369,7 +1485,17 @@ def combine_polarization_states(input_dataset,
                               ext_hdr=psf_subtracted_intensity.ext_hdr.copy(),
                               err=output_err,
                               err_hdr=psf_subtracted_intensity.err_hdr.copy())
+    
+    output_frame.filename = dataset.frames[-1].filename
+
     updated_dataset = data.Dataset([output_frame])
+
+    #Append the KL_THRU HDU if it exists in the psf_subtracted_dataset
+    if 'KL_THRU' in psf_subtracted_dataset.frames[0].hdu_list:
+        updated_dataset.frames[0].hdu_list.append(psf_subtracted_dataset.frames[0].hdu_list['KL_THRU'])
+    if 'CT_THRU' in psf_subtracted_dataset.frames[0].hdu_list:
+        updated_dataset.frames[0].hdu_list.append(psf_subtracted_dataset.frames[0].hdu_list['CT_THRU'])
+
     history_msg = f"Combined polarization states, performed PSF subtraction, and rotated data north-up. Final output size: {output_frame.data.shape}"
     updated_dataset.update_after_processing_step(history_msg)
     return updated_dataset
@@ -1431,194 +1557,6 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
     return dataset
 
-def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_mueller_matrix_cal):
-    """
-    Takes in polarimetric L3 images and their unocculted polarimetric observations,
-    computes and subtracts off the stellar polarization component from each image
-    TODO: make issue about error propagation, need to check that it is done correctly
-          and make changes if necessary to ensure the errors are accurate
-
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
-                                               taken with both wollastons at the same roll angle. All frames for the
-                                               same target star must have the same x and y dimensions
-        system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
-        nd_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
-
-    Returns:
-        corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
-    """
-    
-    # check that the data is at the L3 level, and only polarimetric observations are inputted
-    dataset = input_dataset.copy()
-    for frame in dataset:
-        if frame.ext_hdr['DATALVL'] != "L3":
-            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(frame.filename, frame.ext_hdr['DATALVL'])
-            raise ValueError(err_msg)
-        if frame.ext_hdr['DPAMNAME'] not in ['POL0', 'POL45']:
-            raise ValueError("{0} must be a polarimetric observation".format(frame.filename))
-        
-    # split the dataset by the target star
-    split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=['TARGET'])
-
-    # process each target star
-    updated_frames = []
-    for target_dataset in split_datasets:
-        # split further based on if the observation is unocculted or not, and the wollaston used
-        coron_frames = []
-        unocculted_pol0_frames = []
-        unocculted_pol45_frames = []
-        target_name = target_dataset.frames[0].pri_hdr['TARGET']
-        for frame in target_dataset:
-            if frame.ext_hdr['FPAMNAME'] == 'ND225':
-                # unocculted observations, separate by wollaston
-                if frame.ext_hdr['DPAMNAME'] == 'POL0':
-                    unocculted_pol0_frames.append(frame)
-                else:
-                    unocculted_pol45_frames.append(frame)
-            else:
-                # coronagraphic observation
-                coron_frames.append(frame)
-        
-        # make sure input dataset contains unocculted frames taken with both wollastons
-        if len(unocculted_pol0_frames) == 0:
-            raise ValueError(f"Input dataset must contain unocculted POL0 frame(s) for target {target_name}")
-        if len(unocculted_pol45_frames) == 0:
-            raise ValueError(f"Input dataset must contain unocculted POL45 frame(s) for target {target_name}")
-        
-        unocculted_pol0_img = unocculted_pol0_frames[0]
-        unocculted_pol45_img = unocculted_pol45_frames[0]
-
-        # construct image for each polarization to pass into aper_phot function in order to obtain flux
-        I_0_img = data.Image(unocculted_pol0_img.data[0], 
-                             err=unocculted_pol0_img.err[:,0,:,:], 
-                             pri_hdr=unocculted_pol0_img.pri_hdr.copy(),
-                             ext_hdr=unocculted_pol0_img.ext_hdr.copy())
-        I_90_img = data.Image(unocculted_pol0_img.data[1], 
-                             err=unocculted_pol0_img.err[:,1,:,:], 
-                             pri_hdr=unocculted_pol0_img.pri_hdr.copy(),
-                             ext_hdr=unocculted_pol0_img.ext_hdr.copy())
-        I_45_img = data.Image(unocculted_pol45_img.data[0], 
-                             err=unocculted_pol45_img.err[:,0,:,:], 
-                             pri_hdr=unocculted_pol45_img.pri_hdr.copy(),
-                             ext_hdr=unocculted_pol45_img.ext_hdr.copy())
-        I_135_img = data.Image(unocculted_pol45_img.data[1], 
-                             err=unocculted_pol45_img.err[:,1,:,:], 
-                             pri_hdr=unocculted_pol45_img.pri_hdr.copy(),
-                             ext_hdr=unocculted_pol45_img.ext_hdr.copy())
-        # calculate flux
-        I_0_flux, I_0_flux_err = fluxcal.aper_phot(I_0_img, encircled_radius=5)
-        I_90_flux, I_90_flux_err = fluxcal.aper_phot(I_90_img, encircled_radius=5)
-        I_45_flux, I_45_flux_err = fluxcal.aper_phot(I_45_img, encircled_radius=5)
-        I_135_flux, I_135_flux_err = fluxcal.aper_phot(I_135_img, encircled_radius=5)
-        
-        ## construct I, Q, U components after instrument with ND filter
-        # I = I_0 +I_90
-        I_nd = I_0_flux + I_90_flux
-        # Q = I_0 - I_90
-        Q_nd = I_0_flux - I_90_flux
-        # U = I_45 - I_135
-        U_nd = I_45_flux - I_135_flux
-        # assume V is basically 0
-        V_nd = 0
-        # construct stokes vector after instrument with ND filter
-        S_nd = [I_nd, Q_nd, U_nd, V_nd]
-
-        # S_nd = M_nd * R(roll_angle) * S_in
-        # invert M_nd * R(roll_angle) to recover S_in
-        roll_angle = unocculted_pol0_img.pri_hdr['ROLL']
-        total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
-        system_nd_inv = np.linalg.pinv(total_system_mm_nd)
-        S_in = system_nd_inv @ S_nd
-
-        # propagate errors to find uncertainty of S_in
-        I_nd_var = I_0_flux_err**2 + I_90_flux_err**2
-        Q_nd_var = I_nd_var
-        U_nd_var = I_45_flux_err**2 + I_135_flux_err**2
-        v_nd_var = 0
-        # construct covariance matrix for S_nd
-        C_nd = np.array([[I_nd_var, 0, 0, 0],
-                         [0, Q_nd_var, 0, 0],
-                         [0, 0, U_nd_var, 0],
-                         [0, 0, 0, v_nd_var]])
-        # solve for covariance matrix of input stokes vector
-        # C_in = pinv(M) * C_nd * pinv(M)^T
-        #TODO: incoporate the error terms of the nd mueller matrix into this calculation if necessary 
-        C_in = system_nd_inv @ C_nd @ system_nd_inv.T
-        # contract back to just the variance
-        S_in_var = np.array([
-            C_in[0,0],
-            C_in[1,1],
-            C_in[2,2],
-            C_in[3,3]
-        ])
-        S_in_err = np.sqrt(S_in_var)
-
-        # subtract stellar polarization from the rest of the frames
-        for frame in coron_frames:
-            # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
-            frame_roll_angle = frame.pri_hdr['ROLL']
-            total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_roll_angle)
-            S_out = total_system_mm @ S_in
-            # construct I0, I45, I90, and I135 back from stokes vector
-            I_0_star = (S_out[0] + S_out[1]) / 2
-            I_90_star = (S_out[0] - S_out[1]) / 2
-            I_45_star = (S_out[0] + S_out[2]) / 2
-            I_135_star = (S_out[0] - S_out[2]) / 2
-
-            # propagate errors back to the new intensity terms for the unocculted star, assuming independence
-            # σS_out^2 = (σM^2)(I_in^2) + (M^2)(σI_in^2)
-            #TODO: double check if this is valid/invalid, change if necessary
-            system_mm_var = (system_mueller_matrix_cal.err[0])**2
-            system_mm_sq = (system_mueller_matrix_cal.data)**2
-            S_in_sq = S_in**2
-            S_out_var = (system_mm_var @ S_in_sq) + (system_mm_sq @ S_in_var)
-            I_0_star_err = np.sqrt(S_out_var[0] + S_out_var[1]) / 2
-            I_90_star_err = I_0_star_err
-            I_45_star_err = np.sqrt(S_out_var[0] + S_out_var[2]) / 2
-            I_135_star_err = I_45_star_err
-
-            with warnings.catch_warnings():
-                # catch divide by zero warnings
-                warnings.filterwarnings('ignore', category=RuntimeWarning)
-                # calculate normalized difference for the specific wollaston
-                if frame.ext_hdr['DPAMNAME'] == 'POL0':
-                    normalized_diff = (I_0_star - I_90_star) / (I_0_star + I_90_star)
-                    # error
-                    normalized_diff_err = normalized_diff * np.sqrt(
-                        (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star - I_90_star))**2 +
-                        (np.sqrt(I_0_star_err**2 + I_90_star_err**2) / (I_0_star + I_90_star))**2
-                    )
-                else:
-                    normalized_diff = (I_45_star - I_135_star) / (I_45_star + I_135_star)
-                    # error
-                    normalized_diff_err = normalized_diff * np.sqrt(
-                        (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star - I_135_star))**2 +
-                        (np.sqrt(I_45_star_err**2 + I_135_star_err**2) / (I_45_star + I_135_star))**2
-                    )
-            # subtract
-            sum = frame.data[0] + frame.data[1]
-            diff = frame.data[0] - frame.data[1]
-            diff -= sum * normalized_diff
-            frame.data[0] = (sum + diff) / 2
-            frame.data[1] = (sum - diff) / 2
-
-            # propagate errors for the subtraction
-            sum_err = np.sqrt(frame.err[0,0,:,:]**2 + frame.err[0,1,:,:]**2)
-            diff_err = sum_err
-            diff_err = np.sqrt(diff_err**2 + 
-                               (sum * normalized_diff * np.sqrt((sum_err/sum)**2 + (normalized_diff_err/normalized_diff)**2))**2
-                        )
-            frame.err[0,0,:,:] = np.sqrt(sum_err**2 + diff_err**2) / 2
-            frame.err[0,1,:,:] = frame.err[0,0,:,:]
-            
-            updated_frames.append(frame)
-
-    updated_dataset = data.Dataset(updated_frames)
-    history_msg = f"Subtracted Apparent Stellar Polarization, stellar Q value: {S_in[1]}, stellar Q err: {S_in_err[1]}, \
-    stellar U value: {S_in[2]}, stellar U err: {S_in_err[2]}."
-    updated_dataset.update_after_processing_step(history_msg)
-    return updated_dataset
 
 def spec_psf_subtraction(input_dataset):
     '''
@@ -1675,8 +1613,11 @@ def spec_psf_subtraction(input_dataset):
         image_list.append(frame)
 
     out_dataset = data.Dataset(image_list)
-    history_msg = f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
-    out_dataset.update_after_processing_step(history_msg)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=VerifyWarning)
+        history_msg = f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
+        out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 
 

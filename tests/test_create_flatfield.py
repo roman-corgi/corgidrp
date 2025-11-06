@@ -39,10 +39,10 @@ def test_create_flatfield_neptune():
     data_set = data.Dataset(filenames)
     # creating flatfield for neptune for band 1
     planet='neptune'; band='1'
-    flat_dataset = mocks.create_onsky_rasterscans(data_set,planet='neptune',band='1',im_size=1024,d=50, n_dith=3,radius=54,snr=250,snr_constant=4.55)
+    flat_dataset = mocks.create_onsky_rasterscans(data_set,planet='neptune',band='1',im_size=1024,d=45, n_dith=3,radius=50,snr=250,snr_constant=4.55)
     
     ####### create flat field 
-    onskyflat_field = flat.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=1024, N=1, rad_mask=1.26,  planet_rad=50, n_pix=165, n_pad=0)
+    onskyflat_field = flat.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=1024, N=2, rad_mask=1.26,  planet_rad=50, n_pix=300, n_pad=0,image_center_x=512,image_center_y=512)
 
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     assert np.size(np.where(np.isnan(onskyflat_field.data))) == 0 # no bad pixels
@@ -119,10 +119,10 @@ def test_create_flatfield_uranus():
     filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
     data_set = data.Dataset(filenames)
     planet='uranus'; band='4'
-    flat_dataset = mocks.create_onsky_rasterscans(data_set,planet='uranus',band='4',im_size=1024,d=65, n_dith=3,radius=90,snr=250,snr_constant=9.66)
+    flat_dataset = mocks.create_onsky_rasterscans(data_set,planet='uranus',band='4',im_size=1024,d=50, n_dith=3,radius=90,snr=250,snr_constant=9.66)
     
     ####### create flat field
-    onskyflat_field = flat.create_onsky_flatfield(flat_dataset, planet='uranus',band='4',up_radius=55, im_size=1024, N=1, rad_mask=1.75,  planet_rad=65, n_pix=165)
+    onskyflat_field = flat.create_onsky_flatfield(flat_dataset, planet='uranus',band='1',up_radius=55, im_size=1024, N=2, rad_mask=1.26,  planet_rad=50, n_pix=320, n_pad=0,image_center_x=512,image_center_y=512)
 
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     assert np.size(np.where(np.isnan(onskyflat_field.data))) == 0 # no bad pixels
