@@ -1025,23 +1025,36 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             planet_rot_images.append(planet_repoint_current[0][j])
             pred_cents.append(planet_repoint_current[1][j])
 
-    filepattern = "cgi_pppppccaaasssooovvv_yyyymmddt{0:02d}{1:02d}00_l2a.fits"
     frames=[]
+    # Generate base timestamp once for consistency
+    base_dt = datetime.datetime.now()
+    base_visitid = None
+    
     for i in range(numfiles*raster_subexps):
         prihdr, exthdr = create_default_L1_headers()
+        
+        # Get VISITID (should be consistent across frames)
+        if base_visitid is None:
+            base_visitid = prihdr.get('VISITID', '0000000000000000000')
+        
+        # Generate unique timestamp for each frame (add microseconds for uniqueness)
+        dt = base_dt + datetime.timedelta(microseconds=i*100)
+        ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+        
         sim_data=planet_rot_images[i]
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         pl=planet
         band=band
         frame.pri_hdr.set('TARGET', pl)
         frame.ext_hdr.append(('CFAMNAME', "{0}F".format(band)), end=True)
+        
+        # Set proper L2a filename
+        filename = f"cgi_{base_visitid}_{ftime}_l2a.fits"
+        
         if filedir is not None:
-            frame.save(filedir=filedir, filename=filepattern.format(i))
+            frame.save(filedir=filedir, filename=filename)
         else:
-            # fake filenumber as hours and minutes
-            hours = i // 60
-            minutes = i % 60
-            frame.filename = filepattern.format(hours, minutes)
+            frame.filename = filename
         frames.append(frame)
     raster_dataset = data.Dataset(frames)
     return raster_dataset
@@ -3194,7 +3207,6 @@ def generate_reference_star_dataset_with_flux(
     elif len(roll_angles) != n_frames:
         raise ValueError("roll_angles must match n_frames or be None.")
 
-    from corgidrp.data import Dataset
     frames = []
     for i in range(n_frames):
         # 1) Create a single flux image with the star alone
@@ -3330,11 +3342,7 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
         data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq)]
         # Add some filename following the file convention:
         # cgi_<VisitID: PPPPPCCAAASSSOOOVVV>_<TimeUTC>_l2b.fits
-        # Generate unique timestamp for each PSF
-        from datetime import datetime, timedelta
-        base_time = datetime.now()
-        unique_time = (base_time + timedelta(milliseconds=len(data_psf)*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        data_psf[-1].filename = f'cgi_0200001001001001001_{unique_time}_l2b.fits'
+        data_psf[-1].filename = 'cgi_0200001001001001001_20250415t0305102_l2b.fits'
         
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
@@ -3941,7 +3949,6 @@ def generate_coron_dataset_with_companions(
     Returns:
       Dataset: A dataset of frames (each an Image) with the star and companion(s) injected.
     """
-    import numpy as np
     ny, nx = shape
     if host_star_center is None:
         host_star_center = (nx / 2, ny / 2)  # (x, y)
@@ -4043,16 +4050,13 @@ def generate_coron_dataset_with_companions(
             for key, value in companion_keywords.items():
                 exthdr[key] = value
 
-        from corgidrp.data import Image
         frame = Image(data_arr, pri_hdr=prihdr, ext_hdr=exthdr)
         frames.append(frame)
 
-    from corgidrp.data import Dataset
     dataset = Dataset(frames)
 
     # (F) Optionally save the dataset.
     if outdir is not None:
-        import os
         os.makedirs(outdir, exist_ok=True)
         
         # Generate CGI filenames for all frames
@@ -4282,9 +4286,6 @@ def generate_reference_star_dataset(
     Returns:
         dataset (corgidrp.Data.Dataset): A Dataset object containing the generated reference star frames.
     """
-    from corgidrp.data import Dataset, Image
-    import numpy as np
-    import os
 
     # We'll adapt the same logic but no companion injection
     ny, nx = shape
@@ -4561,7 +4562,6 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
         
         # Check if file already exists (collision detection)
         if os.path.exists(new_filename):
-            import warnings
             warnings.warn(f"File collision detected: {os.path.basename(new_filename)} already exists! This file will be overwritten.")
         
         if is_image_object:
@@ -4709,6 +4709,139 @@ def get_formatted_filename(dt, visitid):
     """
     timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
     return f"cgi_{visitid}_{timestamp}_l2b.fits"
+
+def create_spatial_pol(dataset,filedir=None,nr=None,pfov_size=174,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,planet=None,band=None,dpamname='POL0'):
+    """Turns a dataset of neptune or uranus images with single planet images into the images observed through the wollaston prisms also incorporates the spatial variation of polarization on the 
+        surface of the planet
+
+    
+        Args:
+            dataset (corgidrp.data.Dataset): a dataset of image frames that are raster scanned (L2a-level)
+            filedir (str): Full path to directory to save the raster scanned images.
+            nr (int): planet radius
+            pfov_size (int): size of the image created for the polarization variation, typically ~ 2 x nr
+            image_center_x (int): x coordinate of the center pixel of the final image with two orthogonal pol components
+            image_center_y (int): y coordinate of the center pixel of the final image with two orthogonal pol components
+            separation_diameter_arcsec (float): separation between the two orthogonal pol components in arcsecs
+            alignment_angle_WP1 (int): wollaston prism angle for Pol0 - 0
+            alignment_angle_WP2 (int): wollaston prism angle for Pol45- 45
+            planet (str): neptune or uranus
+            band (str): 1F or 4F
+            dpamname (str): wollaston prism pol0 or pol45
+            
+    	Returns:
+    		data.Dataset: dataset of uranus or neptune with spatial variation of polarization corresponding to specific wollaston prism
+    		
+	"""
+    
+    assert dpamname in ['POL0', 'POL45'], \
+        "Invalid prism selected, must be 'POL0' or 'POL45'"
+    
+    
+    # Size of the square array used for introducing spatial variation of polarization - equal to/greater than the twice of planet radius (to make sure that planet pixels are not cropped)
+    pfov = pfov_size
+    polar_fov = np.ones((pfov,pfov))
+    x = np.arange(0,pfov)
+    y = np.arange(0,pfov)
+    xx, yy = np.meshgrid(x,y)
+    nrr = np.sqrt((xx-(pfov//2))**2 + (yy-(pfov//2))**2)
+    #Divide the pfov_size image into 4 quadrants with ones (true) and zeros (false) - true and flase quadrants are assigned specific pol values for uranus and neptune in band 1 and 4 based on 
+    # the previous ground based observations
+    polar_filter = np.logical_and(yy<.99*xx,yy<.99*(pfov-xx)) + np.logical_and(yy>.99*xx,yy>.99*(pfov-xx))
+
+
+    
+    # read in the medium combined HST images of neptune ad uranus
+    for i in range(len(dataset)):
+        target=dataset[i].pri_hdr['TARGET']
+        filter=dataset[i].pri_hdr['FILTER']
+        if planet==target and band==filter: 
+            #image data corresponding to the planet and band required
+            planet_image=dataset[i].data
+    
+    # add the spatial variation of polarization 
+    if planet == 'uranus' and band=="1":
+        polar_fov[polar_filter==True] = .0115
+        polar_fov[polar_filter==False] = -0.0115
+    elif planet == 'uranus' and band=="4" or planet == 'neptune' and band=="4":
+        polar_fov[polar_filter==True] = .005
+        polar_fov[polar_filter==False] = -0.005
+    elif planet == 'neptune' and band=="1":
+        polar_fov[polar_filter==True] = .006
+        polar_fov[polar_filter==False] = -0.006
+    r_xy = polar_fov
+    
+    n_rad=nr
+    if n_rad is None:
+        if planet.lower() =='neptune':
+             n_rad = 60
+        elif planet.lower() == 'uranus':
+             n_rad = 95
+    
+    #make all the pixels greater than the planet radius as zero
+    r_xy[nrr>=n_rad] = 0
+    
+    # the HST images contain only one image of neptune or uranus wheras the pol images through POL0 and POL45 have two images. Make two copies of the planet images
+    u_data=planet_image
+    I_1 = u_data.copy()
+    I_2 = u_data.copy()
+    centroid_init = centr.centroid_1dg(u_data)
+    xc_init=int(centroid_init[0])
+    yc_init=int(centroid_init[1])
+
+    
+    # estimate the angle and displacement according to the dpam position
+    if dpamname == 'POL0':
+    #place image according to specified angle
+        angle_rad = (alignment_angle_WP1 * np.pi) / 180
+    else:
+        angle_rad = (alignment_angle_WP2 * np.pi) / 180
+
+    
+     
+    # fixed plate scale is used here since there are the mock HST images before raster scanned.
+    displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
+    displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
+    center_left = (image_center_x - displacement_x, image_center_y + displacement_y)
+    center_right = (image_center_x + displacement_x, image_center_y - displacement_y)
+
+    # create the pol image with zeros
+    WP_image=np.ones(shape=(1024, 1024))
+    
+
+    image_radius = pfov_size // 2
+    start_left = (center_left[0] - image_radius, center_left[1] - image_radius)
+    start_right = (center_right[0] - image_radius, center_right[1] - image_radius)
+
+    y, x = np.indices([np.shape(WP_image)[0], np.shape(WP_image)[1]])
+    
+    # insert the two pol images with spatial variation at the specified location. wp_pol is the POL0 or POL45 image of neptune/uranus that has to be raster scanned.
+    WP_pol=WP_image.copy() 
+    WP_pol[start_left[1]:start_left[1]+pfov, start_left[0]:start_left[0]+pfov]=I_1[yc_init - (pfov//2):yc_init + (pfov//2),xc_init - (pfov//2):xc_init + (pfov//2)]* 0.5 * (1+(2*r_xy)) 
+    WP_pol[start_right[1]:start_right[1]+pfov, start_right[0]:start_right[0]+pfov]=I_2[yc_init - (pfov//2):yc_init + (pfov//2),xc_init - (pfov//2):xc_init + (pfov//2)]* 0.5 * (1-(2*r_xy))
+
+    # create the default headers and modify the header keywords
+    prihdr, exthdr = create_default_L1_headers()
+    prihdr['TARGET']=planet
+    exthdr['DPAMNAME'] = dpamname
+    
+    # Generate proper filename with current timestamp
+    dt = datetime.datetime.now()
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    visitid = prihdr.get('VISITID', '0000000000000000000')
+    
+    image = data.Image(WP_pol, pri_hdr=prihdr, ext_hdr=exthdr)
+    image.pri_hdr.append(('FILTER',band), end=True)
+    
+    # Set proper L2a filename
+    filename = f"cgi_{visitid}_{ftime}_l2a.fits"
+    
+    if filedir is not None:
+        image.save(filedir=filedir, filename=filename)
+    else:
+        image.filename = filename
+    pol_image=data.Dataset([image])
+    return (pol_image) 
 
 def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
                                        left_image_value=1, right_image_value=1, image_separation_arcsec=7.5, alignment_angle=None):
