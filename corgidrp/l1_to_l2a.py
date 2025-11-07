@@ -200,7 +200,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
-            and will be discarded, Frame saturations equal to this argument are not discarded.
+            and will be discarded. Frame saturations equal to this argument are not discarded.
 
     Returns:
         corgidrp.data.Dataset:
@@ -367,7 +367,7 @@ def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20):
     bad_frames = np.where(reject_flag == True)[0]
     # check that we didn't remove all of the good frames
     if np.size(good_frames) == 0:
-        raise ValueError("No good frames were selected. Unable to continue")
+        raise ValueError(f"All frames are saturated (at least {pct_oversat_lim} of pixels saturated). Unable to continue")
 
     # Create good frame collections
     pruned_dataset = data.Dataset(pruned_dataset.frames[good_frames])
