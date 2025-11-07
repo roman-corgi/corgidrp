@@ -352,13 +352,13 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
 
     Info on intermediate products in this function:
     FPN_map : array-like (full frame)
-        A per-pixel map of fixed-pattern noise (in deteceted electrons).  Any negative values
+        A per-pixel map of fixed-pattern noise (in detected electrons).  Any negative values
         from the fit are made positive in the end.
     CIC_map : array-like (full frame)
-        A per-pixel map of EXCAM clock-induced charge (in deteceted electrons). Any negative
+        A per-pixel map of EXCAM clock-induced charge (in detected electrons). Any negative
         values from the fit are made positive in the end.
     DC_map : array-like (full frame)
-        A per-pixel map of dark current (in deteceted electrons/s). Any negative values
+        A per-pixel map of dark current (in detected electrons/s). Any negative values
         from the fit are made positive in the end.
     bias_offset : float
         The median for the residual FPN+CIC in the region where bias was
@@ -370,22 +370,22 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         The lower bound of bias offset, accounting for error in input datasets
         and the fit.
     FPN_image_map : array-like (image area)
-        A per-pixel map of fixed-pattern noise in the image area (in deteceted electrons).
+        A per-pixel map of fixed-pattern noise in the image area (in detected electrons).
         Any negative values from the fit are made positive in the end.
     CIC_image_map : array-like (image area)
         A per-pixel map of EXCAM clock-induced charge in the image area
         (in deteceted electrons). Any negative values from the fit are made positive in the end.
     DC_image_map : array-like (image area)
-        A per-pixel map of dark current in the image area (in deteceted electrons/s).
+        A per-pixel map of dark current in the image area (in detected electrons/s).
         Any negative values from the fit are made positive in the end.
     FPNvar : float
-        Variance of fixed-pattern noise map (in deteceted electrons).
+        Variance of fixed-pattern noise map (in detected electrons).
     CICvar : float
-        Variance of clock-induced charge map (in deteceted electrons).
+        Variance of clock-induced charge map (in detected electrons).
     DCvar : float
-        Variance of dark current map (in deteceted electrons).
+        Variance of dark current map (in detected electrons).
     read_noise : float
-        Read noise estimate from the noise profile of a mean frame (in deteceted electrons).
+        Read noise estimate from the noise profile of a mean frame (in detected electrons).
         It's read off from the sub-stack with the lowest product of EM gain and
         frame time so that the gained variance of C and D is comparable to or
         lower than read noise variance, thus making reading it off doable.
