@@ -293,7 +293,6 @@ def test_replace_bps_pol_4frames():
     if not cleaned_dataset.all_dq == pytest.approx(input_dataset_bad.all_dq):
         raise Exception("Output DQ array does not match input DQ array for pol uniform data.")
 
-    print("UT passed for pol data")
 
 
 if __name__ == '__main__':
