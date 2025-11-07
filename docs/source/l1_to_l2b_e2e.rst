@@ -67,8 +67,8 @@ Helper function to standardize TVAC FITS headers for pipeline compatibility:
             exthdr['DATALVL'] = exthdr['DATA_LEVEL']
             exthdr['KGAINPAR'] = exthdr.get('KGAIN', 8.7)
             prihdr["OBSNAME"] = prihdr['OBSTYPE']
-            prihdr['PHTCNT'] = False
-            exthdr['ISPC'] = False
+            prihdr['PHTCNT'] = 0
+            exthdr['ISPC'] = 0
             fits_file.writeto(file, overwrite=True)
 
 This function modifies TVAC FITS headers to match the structure expected by the pipeline.

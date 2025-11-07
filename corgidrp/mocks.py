@@ -2751,8 +2751,8 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame.ext_hdr['EXPTIME'] = exptime
         frame.ext_hdr['RN'] = 100
         frame.ext_hdr['KGAINPAR'] = kgain
-        frame.pri_hdr['PHTCNT'] = 0
-        frame.ext_hdr['ISPC'] = True
+        frame.pri_hdr['PHTCNT'] = 1
+        frame.ext_hdr['ISPC'] = 1
         frame.pri_hdr["VISTYPE"] = "CGIVST_TDD_OBS"
         # Generate CGI filename with incrementing datetime
         visitid = frame.pri_hdr["VISITID"]
@@ -2774,8 +2774,8 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark.ext_hdr['EXPTIME'] = exptime
         frame_dark.ext_hdr['RN'] = 100
         frame_dark.ext_hdr['KGAINPAR'] = kgain
-        frame_dark.pri_hdr['PHTCNT'] = True
-        frame_dark.ext_hdr['ISPC'] = True
+        frame_dark.pri_hdr['PHTCNT'] = 1
+        frame_dark.ext_hdr['ISPC'] = 1
         frame_dark.pri_hdr["VISTYPE"] = "CGIVST_CAL_DRK"
         # Generate CGI filename with incrementing datetime for dark frames
         visitid = frame_dark.pri_hdr["VISITID"]
