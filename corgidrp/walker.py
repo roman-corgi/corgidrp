@@ -437,8 +437,8 @@ def run_recipe(recipe, save_recipe_file=True):
                 recipe['name'] == 'pc_dark_2' or
                 recipe['name'] == 'trad_dark_image_2')
     ram_heavy_steps = ['get_pc_mean', 'calibrate_darks']
-    num_pix_ram = 250*1024**2 #noisemaps XXX
-    num_pix_ram = 390*1024**2 # pc; approx number of pixels that can be held in 100 GB RAM XXX
+    num_pix_ram = 250*(64*3*1200*2200+32*1200)/(8*1e9) #noisemaps XXX
+    num_pix_ram = 390*(64*3*1024**2+32*1024)/(8*1e9) # pc; approx number of pixels that can be held in 100 GB RAM XXX
     if crop_stack_bool:
         ram_increment = 390 #assumes 100GB upper limit for float64 frames XXX
     else: # steps before crop_stack step
@@ -464,6 +464,8 @@ def run_recipe(recipe, save_recipe_file=True):
             if crop_stack_bool:
                 crop_curr_dataset = data.Dataset(filelist[n:n+ram_increment])
                 for i in range(len(crop_curr_dataset)):
+                    crop_stack()
+                    ram_curr_stack = 100/ram_increment
                     crop_curr_dataset[i].data = crop_curr_dataset[i].data[0:] #save each chunk to hard disk
                     crop_curr_dataset.err = slice_section(crop_curr_dataset[i].err, 
                                                        crop_curr_dataset[i].pri_hdr['ARRTYPE'], 
@@ -544,3 +546,32 @@ def run_recipe(recipe, save_recipe_file=True):
     
     return output_filepaths
 
+def crop_stack(folder_path):
+    """
+    Crops the input frames into smaller sections to reduce RAM usage during processing.
+    Saves the cropped sections into the same folder.
+
+    Args:
+        folder_path (str): path to the folder with frames to crop 
+    """
+
+    
+    def crop_function(image):
+        # Define the cropping logic here
+        # For example, split the image into 4 quadrants and save each
+        height, width = image.data.shape
+        mid_height = height // 2
+        mid_width = width // 2
+
+        quadrants = [
+            image.data[0:mid_height, 0:mid_width],      # Top-left
+            image.data[0:mid_height, mid_width:width],   # Top-right
+            image.data[mid_height:height, 0:mid_width],  # Bottom-left
+            image.data[mid_height:height, mid_width:width] # Bottom-right
+        ]
+
+        for i, quadrant in enumerate(quadrants):
+            quadrant_image = image.copy()
+            quadrant_image.data = quadrant
+            quadrant_filename = os.path.join(folder_path, f"{os.path.basename(image.filename).split('.')[0]}_quad{i}.fits")
+            quadrant_image.save(filedir=folder_path, filenames=[quadrant_filename])
