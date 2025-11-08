@@ -50,6 +50,9 @@ def mean_combine(image_list, bpmap_list, err=False):
         mpas can be effectively determined for all pixels.
 
     """
+    import psutil
+    process = psutil.Process()
+
     # if input is an np array or stack, try to accommodate
     if type(image_list) == np.ndarray:
         if image_list.ndim == 1: # pathological case of empty array
@@ -121,6 +124,14 @@ def mean_combine(image_list, bpmap_list, err=False):
     enough_for_rn = True
     if map_im.min() < len(image_list)/2:
         enough_for_rn = False
+
+    mem = process.memory_info()
+    # peak_wset is only available on Windows; fall back to rss on other platforms
+    if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+        peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+    else:
+        peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+    print(f"mean_combine peak memory usage:  {peak_memory:.2f} MB")
 
     return comb_image, comb_bpmap, map_im, enough_for_rn
 
@@ -533,6 +544,8 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
 
+    import psutil
+    process = psutil.Process()
     # flag value for those that are masked all the way through for all
     # but 3 (or fewer) stacks
     output_dq = np.bitwise_or.reduce(output_dqs, axis=0)
@@ -766,6 +779,14 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
     noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
+    
+    mem = process.memory_info()
+    # peak_wset is only available on Windows; fall back to rss on other platforms
+    if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+        peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+    else:
+        peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+    print(f"calibrate_darks_lsq peak memory usage:  {peak_memory:.2f} MB")
 
     return noise_maps
 

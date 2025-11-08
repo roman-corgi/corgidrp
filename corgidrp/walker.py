@@ -294,7 +294,7 @@ def guess_template(dataset):
             if image.ext_hdr['ISPC']:
                 recipe_filename = ["l1_to_l2b_pc_dark_1.json", "l1_to_l2b_pc_dark_2.json"]#"l1_to_l2b_pc_dark.json"XXX
             elif len(unique_vals) > 1: # darks for noisemap creation
-                recipe_filename = ["l1_to_l2a_noisemap_1.json", "l1_to_l2a_noisemap_2.json"]#"l1_to_l2a_noisemap.json"XXX
+                recipe_filename = "l1_to_l2a_noisemap.json" #["l1_to_l2a_noisemap_1.json", "l1_to_l2a_noisemap_2.json"] XXX XXX
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = ["build_trad_dark_image_1.json", "build_trad_dark_image_2.json"] #"build_trad_dark_image.json" XXX
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
@@ -319,7 +319,7 @@ def guess_template(dataset):
             if image.ext_hdr['ISPC']:
                 recipe_filename = ["l2a_to_l2b_pc_dark_1.json", "l2a_to_l2b_pc_dark_2.json"]#"l2a_to_l2b_pc_dark.json"XXX
             elif len(unique_vals) > 1: # darks for noisemap creation
-                recipe_filename = ["l2a_to_l2a_noisemap_1.json", "l2a_to_l2a_noisemap_2.json"] #"l2a_to_l2a_noisemap.json"XXX
+                recipe_filename = "l2a_to_l2a_noisemap.json" #["l2a_to_l2a_noisemap_1.json", "l2a_to_l2a_noisemap_2.json"]  XXX XXX
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = ["l2a_build_trad_dark_image_1.json", "l2a_build_trad_dark_image_2.json"] #"l2a_build_trad_dark_image.json" XXX
         else:
@@ -433,9 +433,9 @@ def run_recipe(recipe, save_recipe_file=True):
     # determine if this is a RAM-heavy recipe which needs crop-stack processing
     crop_stack_bool = (recipe['name'] == 'noisemap_generation_2' or 
                 recipe['name'] == 'build_trad_dark_2' or 
+                recipe['name'] == 'trad_dark_image_2' or
                 recipe['name'] == '_pc_2' or
-                recipe['name'] == 'pc_dark_2' or
-                recipe['name'] == 'trad_dark_image_2')
+                recipe['name'] == 'pc_dark_2')
     ram_heavy_steps = ['get_pc_mean', 'calibrate_darks']
     num_pix_ram = 250*(64*3*1200*2200+32*1200)/(8*1e9) #noisemaps XXX
     num_pix_ram = 390*(64*3*1024**2+32*1024)/(8*1e9) # pc; approx number of pixels that can be held in 100 GB RAM XXX
@@ -463,17 +463,17 @@ def run_recipe(recipe, save_recipe_file=True):
         if recipe["inputs"]:
             if crop_stack_bool:
                 crop_curr_dataset = data.Dataset(filelist[n:n+ram_increment])
-                for i in range(len(crop_curr_dataset)):
-                    crop_stack()
-                    ram_curr_stack = 100/ram_increment
-                    crop_curr_dataset[i].data = crop_curr_dataset[i].data[0:] #save each chunk to hard disk
-                    crop_curr_dataset.err = slice_section(crop_curr_dataset[i].err, 
-                                                       crop_curr_dataset[i].pri_hdr['ARRTYPE'], 
-                                                       'image', detector_areas)
-                    crop_curr_dataset.dq = slice_section(crop_curr_dataset[i].dq, 
-                                                       crop_curr_dataset[i].pri_hdr['ARRTYPE'], 
-                                                       'image', detector_areas)
-                crop_curr_dataset.all_data = crop_curr_dataset.all_data[:
+            #     for i in range(len(crop_curr_dataset)):
+            #         crop_stack()
+            #         ram_curr_stack = 100/ram_increment
+            #         crop_curr_dataset[i].data = crop_curr_dataset[i].data[0:] #save each chunk to hard disk
+            #         crop_curr_dataset.err = slice_section(crop_curr_dataset[i].err, 
+            #                                            crop_curr_dataset[i].pri_hdr['ARRTYPE'], 
+            #                                            'image', detector_areas)
+            #         crop_curr_dataset.dq = slice_section(crop_curr_dataset[i].dq, 
+            #                                            crop_curr_dataset[i].pri_hdr['ARRTYPE'], 
+            #                                            'image', detector_areas)
+            #     crop_curr_dataset.all_data = crop_curr_dataset.all_data[:
 
             else:
                 curr_dataset = data.Dataset(filelist[n:n+ram_increment])
