@@ -95,64 +95,88 @@ def distortion_correction(input_dataset, astrom_calibration):
 
         im_data = undistorted_data.data
         im_err = undistorted_data.err
-        imgsizeX, imgsizeY = im_data.shape
+        is_pol_data = len(im_data.shape) == 3 and im_data.shape[0] == 2
+        num_iterations = 2 if is_pol_data else 1 #handle pol Image (2,1024,1024) so loop twice to correct both frames
+        undistorted_image_list = []
+        undistorted_errors_list = []
 
-        # set image size to the largest axis if not square imagea
-        imgsize = np.max([imgsizeX,imgsizeY])
+        for pol_idx in range(num_iterations):
+            # extract appropriate data slice
+            if is_pol_data:
+                im_data_single = im_data[pol_idx]
+                im_err_single = im_err[:, pol_idx]
+            else:
+                im_data_single = im_data
+                im_err_single = im_err
 
-        yorig, xorig = np.indices(im_data.shape)
-        y0, x0 = imgsize//2, imgsize//2
-        yorig -= y0
-        xorig -= x0
+            imgsizeX, imgsizeY = im_data_single.shape
 
-        ### compute the distortion map based on the calibration file passed in
-        fitparams = (distortion_order + 1)**2
+            # set image size to the largest axis if not square image
+            imgsize = np.max([imgsizeX, imgsizeY])
 
-            # reshape the coefficient arrays
-        x_params = distortion_coeffs[:fitparams]
-        x_params = x_params.reshape(distortion_order+1, distortion_order+1)
+            yorig, xorig = np.indices(im_data_single.shape)
+            y0, x0 = imgsize // 2, imgsize // 2
+            yorig -= y0
+            xorig -= x0
+            ### compute the distortion map based on the calibration file passed in
+            fitparams = (distortion_order + 1)**2
 
-        total_orders = np.arange(distortion_order+1)[:,None] + np.arange(distortion_order+1)[None,:]
-        x_params = x_params / 500**(total_orders)
+                # reshape the coefficient arrays
+            x_params = distortion_coeffs[:fitparams]
+            x_params = x_params.reshape(distortion_order+1, distortion_order+1)
 
-            # evaluate the legendre polynomial at all pixel positions
-        x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), x_params)
-        x_corr = x_corr.reshape(xorig.shape)
+            total_orders = np.arange(distortion_order+1)[:,None] + np.arange(distortion_order+1)[None,:]
+            x_params = x_params / 500**(total_orders)
 
-        distmapX = x_corr - xorig
+                # evaluate the legendre polynomial at all pixel positions
+            x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), x_params)
+            x_corr = x_corr.reshape(xorig.shape)
 
-            # reshape and evaluate the same way for the y coordinates
-        y_params = distortion_coeffs[fitparams:]
-        y_params = y_params.reshape(distortion_order+1, distortion_order+1)
-        y_params = y_params /500**(total_orders)
+            distmapX = x_corr - xorig
 
-        y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), y_params)
-        y_corr = y_corr.reshape(yorig.shape)
-        distmapY = y_corr - yorig
+                # reshape and evaluate the same way for the y coordinates
+            y_params = distortion_coeffs[fitparams:]
+            y_params = y_params.reshape(distortion_order+1, distortion_order+1)
+            y_params = y_params /500**(total_orders)
 
-        # apply the distortion grid to the image indeces and map the image
-        gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
-        gridx = gridx - distmapX
-        gridy = gridy - distmapY
-        
-        undistorted_image = scipy.ndimage.map_coordinates(im_data, [gridy, gridx])
-        
-        # undistort the errors
-        if len(im_err.shape) == 2:
-            undistorted_errors = scipy.ndimage.map_coordinates(im_err, [gridy, gridx])
+            y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), y_params)
+            y_corr = y_corr.reshape(yorig.shape)
+            distmapY = y_corr - yorig
+
+            # apply the distortion grid to the image indeces and map the image
+            gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
+            gridx = gridx - distmapX
+            gridy = gridy - distmapY
+
+            undistorted_image = scipy.ndimage.map_coordinates(im_data_single, [gridy, gridx])
+
+            # undistort the errors
+            if len(im_err_single.shape) == 2:
+                undistorted_errors = scipy.ndimage.map_coordinates(im_err_single, [gridy, gridx])
+            else:
+                undistorted_errors = []
+                for err in im_err_single:
+                    und_err = scipy.ndimage.map_coordinates(err, [gridy, gridx])
+                    undistorted_errors.append(und_err)
+
+            undistorted_image_list.append(undistorted_image)
+            undistorted_errors_list.append(undistorted_errors)
+        # stack results back now that individual frames are undistorted
+        if is_pol_data:
+            undistorted_image = np.stack(undistorted_image_list)    #shape (2,1024,1024)
+            undistorted_errors = [np.stack([undistorted_errors_list[0][i],
+                                             undistorted_errors_list[1][i]])
+                                  for i in range(len(undistorted_errors_list[0]))]  #shape (1,2,1024,1024)
         else:
-            undistorted_errors = []
-            for err in im_err:
-                und_err = scipy.ndimage.map_coordinates(err, [gridy, gridx])
-                
-                undistorted_errors.append(und_err)
-        
+            undistorted_image = undistorted_image_list[0] #shape (1024,1024)
+            undistorted_errors = undistorted_errors_list[0] #shape (1,1024,1024)
         undistorted_ims.append(undistorted_image)
         undistorted_errs.append(undistorted_errors)
-
     history_msg = 'Distortion correction completed'
 
-    undistorted_dataset.update_after_processing_step(history_msg, new_all_data=np.array(undistorted_ims), new_all_err=np.array(undistorted_errs))
+    undistorted_dataset.update_after_processing_step(history_msg, new_all_data=np.array(undistorted_ims),
+                                                       new_all_err=np.array(undistorted_errs))
+
 
     return undistorted_dataset
 
@@ -171,6 +195,9 @@ def find_star(input_dataset,
 
     The star's (x, y) location is stored in each frame's extension header under 
     ``STARLOCX`` and ``STARLOCY``.
+
+    In case of polarimetric data, the star location is estimated on the first slice and 
+    the second slice is aligned on it. POL 0 and POL 45 are processed independantly 
 
     You can replace many of the default settings for by adjusting the satellite_spot_parameters 
     dictionary. You only need to replace the parameters of interest and the rest will stay as defaults. 
@@ -239,7 +266,7 @@ def find_star(input_dataset,
             If None, default parameters corresponding to the specified observing_mode will be used.     
         drop_satspots_frames (bool, optional):
             If True, frames with satellite spots (``SATSPOTS=1``) will be removed from 
-            the returned dataset. Defaults to False.
+            the returned dataset. Defaults to True.
 
     Returns:
         corgidrp.data.Dataset:
@@ -260,77 +287,117 @@ def find_star(input_dataset,
           ``star_center.star_center_from_satellite_spots`` routine.
         • Future enhancements may include separate handling of positive vs. negative 
           satellite spot frames once the relevant metadata keywords are defined.
-        • This routine can fail, if the guess position is off by more than a few pixel.
+        • This routine can fail, if the guess position is off by more than a few pixels.
+          More than 2 pixels on any axis leads almost systematically to failure
           A significantly wrong guess of the angle offset can also lead to failure.
     """
 
     # Copy input dataset
+
     dataset = input_dataset.copy()
 
     satellite_spot_parameters_defaults = star_center.satellite_spot_parameters_defaults
 
+
     # Separate the dataset into frames with and without satellite spots
-    sci_frames = []
-    sat_spot_frames = []
+    split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+    out_frames = []
+    for val, split_dataset in  zip(unique_vals, split_datasets):
+        observing_mode = []
+        sci_frames = []
+        sat_spot_frames = []
+        for frame in split_dataset.frames:
+            if frame.pri_hdr["SATSPOTS"] == 0:
+                sci_frames.append(frame)
+                observing_mode.append(frame.ext_hdr['FSMPRFL'])
+            elif frame.pri_hdr["SATSPOTS"] == 1:
+                sat_spot_frames.append(frame)
+                observing_mode.append(frame.ext_hdr['FSMPRFL'])
+            else:
+                raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
 
-    observing_mode = []
+        assert all(mode == observing_mode[0] for mode in observing_mode), \
+            "All frames should have the same observing mode."
 
-    for frame in dataset.frames:
-        if frame.pri_hdr["SATSPOTS"] == 0:
-            sci_frames.append(frame)
-            observing_mode.append(frame.ext_hdr['FSMPRFL'])
-        elif frame.pri_hdr["SATSPOTS"] == 1:
-            sat_spot_frames.append(frame)
-            observing_mode.append(frame.ext_hdr['FSMPRFL'])
-        else:
-            raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
+        observing_mode = observing_mode[0]
 
-    assert all(mode == observing_mode[0] for mode in observing_mode), \
-        "All frames should have the same observing mode."
+        sci_dataset = data.Dataset(sci_frames)
+        sat_spot_dataset = data.Dataset(sat_spot_frames)
 
-    observing_mode = observing_mode[0]
+        tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
+        # See if the satellite spot parameters are provided, if not used defaults
+        if satellite_spot_parameters is not None:
+            tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
+        # Compute median images
+        img_ref = np.median(sci_dataset.all_data, axis=0)
+        img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
 
-    sci_dataset = data.Dataset(sci_frames)
-    sat_spot_dataset = data.Dataset(sat_spot_frames)
+        # if polarimetry
+        if val  == 'POL0' or val == 'POL45': 
+            # Compute median images and find star on both slices
+            star_xy_list = []
+            for i in [0,1]: #for i in range(0, len(unique_vals))
+                img_ref_slice = img_ref[i]
+                img_sat_spot_slice = img_sat_spot[i]
+                # Default star_coordinate_guess to center of img_sat_spot if None
+                if star_coordinate_guess is None:
+                    star_coordinate_guess = (img_sat_spot_slice.shape[1] // 2, img_sat_spot_slice.shape[0] // 2)
 
-    # Compute median images
-    img_ref = np.median(sci_dataset.all_data, axis=0)
-    img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
+                star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+                    img_ref=img_ref_slice,
+                    img_sat_spot=img_sat_spot_slice,
+                    star_coordinate_guess=star_coordinate_guess,
+                    thetaOffsetGuess=thetaOffsetGuess,
+                    satellite_spot_parameters=tuningParamDict,
+                )
+                star_xy_list.append(star_xy)
+                
+            #align second slice on first slice and drop satellite spot images if necessary
+            shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
+            for frame in split_dataset:
+                if not drop_satspots_frames or frame.pri_hdr["SATSPOTS"] == 0 :
+                    aligned_slice = shift(frame.data[1], shift_value)
+                    frame.data[1] = aligned_slice
+                    frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]
+                    frame.ext_hdr['STARLOCY'] =star_xy_list[0][1]
+                    frame.ext_hdr['HISTORY'] = (
+                                    f"Satellite spots analyzed. Star location at x={star_xy_list[0][0]} "
+                                    f"and y={star_xy_list[0][1]}."
+                                )
 
-    # Default star_coordinate_guess to center of img_sat_spot if None
-    if star_coordinate_guess is None:
-        star_coordinate_guess = (img_sat_spot.shape[1] // 2, img_sat_spot.shape[0] // 2)
+                    out_frames.append(frame)
+            processed_dataset = data.Dataset(out_frames)
 
-    tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
-    # See if the satellite spot parameters are provided, if not used defaults
-    if satellite_spot_parameters is not None:
-        tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
+        else :
 
-    # Find star center
-    star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
-        img_ref=img_ref,
-        img_sat_spot=img_sat_spot,
-        star_coordinate_guess=star_coordinate_guess,
-        thetaOffsetGuess=thetaOffsetGuess,
-        satellite_spot_parameters=tuningParamDict,
-    )
+            # Default star_coordinate_guess to center of img_sat_spot if None
+            if star_coordinate_guess is None:
+                star_coordinate_guess = (img_sat_spot.shape[1] // 2, img_sat_spot.shape[0] // 2)
 
-    # Add star location to frame headers
-    header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
+            # Find star center
+            star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+                img_ref=img_ref,
+                img_sat_spot=img_sat_spot,
+                star_coordinate_guess=star_coordinate_guess,
+                thetaOffsetGuess=thetaOffsetGuess,
+                satellite_spot_parameters=tuningParamDict,
+            )
+            if drop_satspots_frames:
+                processed_dataset = sci_dataset
 
-    if drop_satspots_frames:
-        dataset = sci_dataset
+            # Add star location to frame headers
+            header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
 
-    history_msg = (
-        f"Satellite spots analyzed. Star location at x={star_xy[0]} "
-        f"and y={star_xy[1]}."
-    )
+            history_msg = (
+                f"Satellite spots analyzed. Star location at x={star_xy[0]} "
+                f"and y={star_xy[1]}."
+            )
 
-    dataset.update_after_processing_step(
-        history_msg,
-        header_entries=header_entries)
+            processed_dataset.update_after_processing_step(
+                history_msg,
+                header_entries=header_entries)
 
-    return dataset
+    return processed_dataset
 
 
 def do_psf_subtraction(input_dataset, 
@@ -914,6 +981,44 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
     dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
     return dataset
+
+def align_polarimetry_frames(input_dataset):  
+    """
+    Aligns the frames by centering them on STARLOC
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): the L3-level dataset of polarimetry images with STARLOCX and STARLOCY 
+
+    Returns:
+        corgidrp.data.Dataset: L3 dataset where all the images are registered to the same pixel
+
+
+    """
+    processed_dataset = input_dataset.copy()
+    starloc0 = (processed_dataset.frames[0].ext_hdr['STARLOCX'],processed_dataset.frames[0].ext_hdr['STARLOCY'])
+
+    for frame in processed_dataset:
+        starloc = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        if starloc != starloc0:
+            shift_value = (starloc0[1] - starloc[1] , starloc0[0] - starloc[0])
+            frame.data[0] = shift( frame.data[0], shift_value)
+            frame.data[1] = shift( frame.data[1], shift_value)
+            frame.ext_hdr['STARLOCX'] = starloc0[0]
+            frame.ext_hdr['STARLOCY'] = starloc0[1]
+
+    history_msgs = "Images centered on star location."
+
+    history_msg = (
+        f"Image centered on star location at x={starloc0[0]} "
+        f"and y={starloc0[1]}."
+    )
+    processed_dataset.update_after_processing_step(
+        history_msgs)
+
+    
+    return processed_dataset
+
+
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
