@@ -46,8 +46,7 @@
         {
             "name" : "dark_subtraction",
             "calibs" : {
-                "DetectorNoiseMaps" : "AUTOMATIC, OPTIONAL",
-                "Dark" : "AUTOMATIC, OPTIONAL"
+                "DetectorNoiseMaps" : "AUTOMATIC, OPTIONAL"
             },
             "keywords" : {
                 "outputdir" : "AUTOMATIC"

@@ -29,7 +29,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     np.random.seed(1234)
     # using CIC and dark current average values which come from the corresponding values from cic_path and dark_path above; FPN mean is already 0 in fpn_path and simulated set below
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158) 
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158)
     output_dir = os.path.join(e2eoutput_path, 'photon_count_e2e')
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
@@ -161,7 +161,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # make PC illuminated, subtracting the PC dark
     # below I leave out the template specification to check that the walker recipe guesser works as expected
     # L1 to L2a
-    walker.walk_corgidrp(l1_data_ill_filelist, '', output_l2a_dir)#, template="l1_to_l2b_pc.json")
+    walker.walk_corgidrp(l1_data_ill_filelist, '', output_l2a_dir)
 
     # grab L2a files to go to L2b
     l2a_files = []
@@ -171,8 +171,14 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)
-    walker.walk_corgidrp(l2a_files, '', l2a_to_l2b_output_dir)
 
+    recipe = walker.autogen_recipe(l2a_files, l2a_to_l2b_output_dir)
+    ### Modify they keywords of some of the steps
+    for step in recipe['steps']:
+        if step['name'] == "dark_subtraction":
+            step['calibs']['Dark'] = master_dark_filepath_list[0] # to find PC dark
+    walker.run_recipe(recipe, save_recipe_file=True)
+    
     # get photon-counted frame
     master_ill_filename_list = []
     master_ill_filepath_list = []
@@ -315,7 +321,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # go from L2a, where now dark subtraction should be performed using the traditional dark made above, 
     # and get_pc_mean() should ignore the Dark created from traditional dark when it 
     # detects that dark-subtraction has already occurred (during the dark_subtraction() step)
-    walker.walk_corgidrp(l2a_files, '', output_dir)
+    recipe = walker.autogen_recipe(l2a_files, output_dir)
+    ### Modify they keywords of some of the steps
+    for step in recipe['steps']:
+        if step['name'] == "dark_subtraction":
+            step['calibs']['Dark'] = trad_dark_cal.filepath # to find traditional dark
+    walker.run_recipe(recipe, save_recipe_file=True)
 
     # get photon-counted frame
     master_ill_filename_list = []
