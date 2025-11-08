@@ -102,6 +102,37 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
         template = json.load(open(recipe_filepath, 'r'))
 
     # generate recipe
+    # This basically creates a Dict which brings in the paths to each of the calibration files for each step of the process.
+    # {'name': 'l1_to_l2b_pc',
+    #  'template': False,
+    #  'drpconfig': {'track_individual_errors': False},
+    #  'inputs': ['./L1_input_data/ref_star/batch_0/CGI_0200001001001001001_20251102T1643410_L1_.fits',
+    #   './L1_input_data/ref_star/batch_0/CGI_0200001001001001001_20251102T1643420_L1_.fits'],
+    #  'outputdir': './L2b_photon_counted_data/ref_star',
+    #  'steps': [{'name': 'prescan_biassub',
+    #    'calibs': {'DetectorNoiseMaps': '/Users/michael/Desktop/wip/ai/projects/jpl/calibration_data/mock_detnoisemaps.fits'},
+    #    'keywords': {'return_full_frame': False, 'dataset_copy': False}},
+    #   {'name': 'detect_cosmic_rays',
+    #    'calibs': {'DetectorParams': '/Users/michael/.corgidrp/default_calibs/DetectorParams_2023-11-01T00.00.00.000.fits',
+    #     'KGain': '/Users/michael/Desktop/wip/ai/projects/jpl/calibration_data/mock_kgain.fits'}},
+    #   {'name': 'correct_nonlinearity',
+    #    'calibs': {'NonLinearityCalibration': '/Users/michael/Desktop/wip/ai/projects/jpl/calibration_data/nonlin_table_TVAC.fits'}},
+    #   {'name': 'update_to_l2a'},
+    #   {'name': 'frame_select'},
+    #   {'name': 'convert_to_electrons',
+    #    'calibs': {'KGain': '/Users/michael/Desktop/wip/ai/projects/jpl/calibration_data/mock_kgain.fits'}},
+    #   {'name': 'get_pc_mean',
+    #    'calibs': {'Dark': '/Users/michael/Desktop/wip/ai/projects/jpl/calibration_data/pc_frame_dark_16_DRK_CAL.fits'},
+    #    'keywords': {'dataset_copy': False}},
+    #   {'name': 'desmear',
+    #    'calibs': {'DetectorParams': '/Users/michael/.corgidrp/default_calibs/DetectorParams_2023-11-01T00.00.00.000.fits'}},
+    #   {'name': 'cti_correction', 'calibs': {'TrapCalibration': None}},
+    #   {'name': 'flat_division',
+    #    'calibs': {'FlatField': '/Users/michael/Desktop/wip/ai/projects/jpl/calibration_data/flat_mock.fits'}},
+    #   {'name': 'correct_bad_pixels',
+    #    'calibs': {'BadPixelMap': '/Users/michael/Desktop/wip/ai/projects/jpl/calibration_data/bad_pix_mock.fits'}},
+    #   {'name': 'update_to_l2b'},
+    #   {'name': 'save'}]}    
     recipes = autogen_recipe(filelist, outputdir, template=template)
 
 
@@ -186,6 +217,7 @@ def autogen_recipe(filelist, outputdir, template=None):
         ## Populate default values
         ## This includes calibration files that need to be automatically determined
         ## This also includes the dark subtraction outputdir for synthetic darks
+        # TODO: What is this? Another Caldb?
         this_caldb = caldb.CalDB()
         for step in recipe["steps"]:
             # by default, identify all the calibration files needed, unless jit setting is turned on
@@ -424,12 +456,16 @@ def run_recipe(recipe, save_recipe_file=True):
             frame.ext_hdr["RECIPE"] = json.dumps(recipe)
     else:
         curr_dataset = []
-
+    
     # save recipe before running recipe
     if save_recipe_file:
         recipe_filename = "{0}_{1}_recipe.json".format(recipe["name"], time.Time.now().isot)
         recipe_filename = recipe_filename.replace(":", ".")  # replace colons with periods for compatibility with Windows machines
         recipe_filepath = os.path.join(recipe["outputdir"], recipe_filename)
+        
+        # Ensure the output directory exists before writing the recipe file
+        os.makedirs(recipe["outputdir"], exist_ok=True)
+        
         with open(recipe_filepath, "w") as json_file:
             json.dump(recipe, json_file, indent=4)
 
