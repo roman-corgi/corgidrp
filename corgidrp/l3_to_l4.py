@@ -1069,8 +1069,11 @@ def align_2d_frames(input_dataset, center='first_frame'):
         # use the deortation with angle=0 to do recentering
         old_starx = frame.ext_hdr['STARLOCX']
         old_stary = frame.ext_hdr['STARLOCY']
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+            astr_hdr = WCS(frame.ext_hdr)
         new_data = derotate_arr(frame.data, 0, old_starx, old_stary, new_center=new_center, 
-                                        astr_hdr=frame.ext_hdr, is_dq=False)
+                                        astr_hdr=astr_hdr, is_dq=False)
         new_err = derotate_arr(frame.err, 0, old_starx, old_stary, new_center=new_center, is_dq=False)
         new_dq = derotate_arr(frame.dq, 0, old_starx, old_stary, new_center=new_center, is_dq=True)
         # update arrays, but ensure we are writing memory in place
@@ -1079,6 +1082,8 @@ def align_2d_frames(input_dataset, center='first_frame'):
         frame.dq[:] = new_dq
         frame.ext_hdr['STARLOCX'] = x_ref
         frame.ext_hdr['STARLOCY'] = y_ref
+        frame.ext_hdr['CRPIX1'] += (x_ref - old_starx)
+        frame.ext_hdr['CRPIX2'] += (y_ref - old_stary)
     
     history_msg = f"Images aligned to pixel location x={x_ref}, y={y_ref}."
     output_dataset.update_after_processing_step(history_msg)
