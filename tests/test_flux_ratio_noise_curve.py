@@ -49,11 +49,13 @@ def test_expected_flux_ratio_noise():
     pl_contrast = 0. # No planet
     rolls = [0,15.,0,0]
     numbasis = [1,2]
+    data_shape=(101,101)
     mock_sci_rdi,mock_ref_rdi = create_psfsub_dataset(nsci,nref,rolls,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
-                                            pl_contrast=pl_contrast)
+                                            pl_contrast=pl_contrast,
+                                            data_shape=data_shape)
 
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
@@ -94,7 +96,7 @@ def test_expected_flux_ratio_noise():
     star_image = data.Image(star_PSF, prihdr, exthdr)
     star_dataset = data.Dataset([star_image for i in range(len(psfsub_dataset_rdi))])
     # fake an ND calibration:
-    nd_x, nd_y = np.meshgrid(np.linspace(0, 100, 5), np.linspace(0, 100, 5))
+    nd_x, nd_y = np.meshgrid(np.linspace(0, data_shape[1], 5), np.linspace(0, data_shape[0], 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
     nd_od = np.ones(nd_y.shape) * 1e-2
@@ -175,7 +177,7 @@ def test_expected_flux_ratio_noise():
     with pytest.warns(UserWarning):
         compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=100)
     # star location guess outside array bounds
-    with pytest.raises(ValueError):
+    with pytest.raises(IndexError):
         compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, unocculted_star_loc=np.array([[50],[101]]))
     
 

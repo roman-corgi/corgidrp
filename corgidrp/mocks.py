@@ -516,6 +516,7 @@ def create_default_L2b_headers(arrtype="SCI"):
     errhdr['KGAIN_ER']      = exthdr['KGAIN_ER'] # Kgain error (copied from exthdr)
     errhdr['RN']            = exthdr['RN']       # Kgain error (copied from exthdr)
     errhdr['DESMEAR']       = exthdr['DESMEAR']  # Whether desmearing was used (copied from exthdr)
+    errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
 
     return prihdr, exthdr, errhdr, dqhdr, biashdr
 
@@ -613,6 +614,8 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
+    errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
+
     return prihdr, exthdr, errhdr, dqhdr
 
 
@@ -656,6 +659,8 @@ def create_default_L4_headers(arrtype="SCI"):
     exthdr['CTCALFN']       = ''            # Core throughput linked file for calibration
     exthdr['FLXCALFN']      = ''            # Abs flux file linked for calibration
     exthdr['DATALVL']       = 'L4'          # Data level (e.g., 'L1', 'L2a', 'L2b')
+
+    errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
 
     return prihdr, exthdr, errhdr, dqhdr
 
