@@ -17,10 +17,13 @@
             }
         },
         {
-            "name" : "extract_spec"
+            "name" : "find_spec_star"
         },
         {
             "name" : "spec_psf_subtraction"
+        },
+        {
+            "name" : "combine_spec"
         },
         {
             "name" : "extract_spec"

@@ -97,14 +97,19 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     for i, frame in enumerate(l3_dataset):
         frame_info = f"L3 Frame {i}"
         #simulation seems to be done without coronagraph
-        frame.ext_hdr['FSMLOS'] = True
+        frame.ext_hdr['FSMLOS'] = 1
         check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l3_.fits', frame_info, logger, data_level = 'l3_')
         check_dimensions(frame.data, (125, 125), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
-        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3', 'FSMLOS' : True}, frame_info, logger)
+        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3', 'FSMLOS' : 1}, frame_info, logger)
         verify_header_keywords(frame.pri_hdr, {'PSFREF', 'SATSPOTS'}, frame_info, logger)
         logger.info("")
-
+    
+    l3_files_dir = os.path.join(e2eoutput_path, "L3")
+    if not os.path.exists(l3_files_dir):
+        os.makedirs(l3_files_dir)
+    l3_dataset.save(filedir = l3_files_dir)
+    l3_files_input = sorted(glob.glob(os.path.join(l3_files_dir, "cgi_*_l3_.fits")))
     logger.info(f"Total input images validated: {len(l3_dataset)}")
     logger.info("")
     
@@ -145,7 +150,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
 
     logger.info('Running e2e recipe...')
     recipe = walk_corgidrp(
-        filelist=l3_files, 
+        filelist=l3_files_input, 
         CPGS_XML_filepath="",
         outputdir=e2eoutput_path
     )
@@ -159,13 +164,17 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Validate output product
-    out_file = get_latest_cal_file(e2eoutput_path, '*_l4_.fits', logger)
+    out_files = sorted(glob.glob(os.path.join(e2eoutput_path, '*_l4_.fits')))
+    if len(out_files) == 1:
+        logger.info("Expected: only one combined l4 file. PASS.")
+    else:
+        logger.info(f"Expected: only one combined l4 file but contains {len(out_files)} files. FAIL.")
+    out_file = out_files[0]
     check_filename_convention(os.path.basename(out_file), 'cgi_*_l4_.fits', "spec l4 output product", logger, data_level = "l4_")
 
     with fits.open(out_file) as hdul:        
         verify_hdu_count(hdul, 11, "spec l4 output product", logger)
         
-        hdul.info()
         # Verify HDU0 (header only)
         hdu0 = hdul[0]
         if hdu0.data is None:

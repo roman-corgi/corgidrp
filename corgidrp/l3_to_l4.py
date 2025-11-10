@@ -1572,6 +1572,26 @@ def spec_psf_subtraction(input_dataset):
         out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 
+def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
+    '''
+    combination of psf subtracted frames for spectroscopy mode.
+    Assumes they all have the same alignment.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): L3 spectroscopy dataset.
+        collapse (str): "mean" or "median". (default: mean) 
+        num_frames_scaling (bool): Multiply by number of frames in sequence in order to ~conserve photons (default: True)
+        
+    Returns:
+        corgidrp.data.Dataset: dataset containing one frame of the PSF-subtracted science images
+    
+    '''
+    dataset = input_dataset.copy()
+    dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling)
+    history_msg = f"Combined psf subtracted spectroscopy frames by applying {collapse}, result is a dataset with one frame"
+    dataset.update_after_processing_step(history_msg)
+    return dataset
+
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """

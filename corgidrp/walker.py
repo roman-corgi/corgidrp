@@ -79,7 +79,8 @@ all_steps = {
     "generate_mueller_matrix_cal": corgidrp.pol.generate_mueller_matrix_cal,
     "align_polarimetry_frames": corgidrp.l3_to_l4.align_polarimetry_frames,
     "combine_polarization_states": corgidrp.l3_to_l4.combine_polarization_states,
-    "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization
+    "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization,
+    "combine_spec": corgidrp.l3_to_l4.combine_spec
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -386,7 +387,7 @@ def guess_template(dataset):
                 recipe_filename = "l3_to_l4_nopsfsub.json"
     else:
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
-
+    print(recipe_filename)
     return recipe_filename, chained
 
 
