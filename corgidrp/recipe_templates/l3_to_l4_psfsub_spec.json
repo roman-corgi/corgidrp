@@ -17,6 +17,9 @@
             }
         },
         {
+            "name" : "extract_spec"
+        },
+        {
             "name" : "spec_psf_subtraction"
         },
         {

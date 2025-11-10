@@ -17,7 +17,7 @@ from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 from astropy.io import fits
 from scipy.ndimage import generic_filter
-from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation
+from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation, star_pos_spec
 from corgidrp import pol
 from corgidrp import fluxcal
 from corgidrp.combine import combine_subexposures
@@ -950,6 +950,42 @@ def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials
     dataset.update_after_processing_step(history_msg)
     return dataset
 
+def find_spec_star(input_dataset, r_lamD=3, phi_deg=0):
+    """ 
+      Find the position of the star using the information from the satellite
+      spot. The position of the satellite spot on EXCAM is given by the
+      zero-point solution. Using the information of the commanded position of
+      the satellite spot with respect the occulted star, one can infer the
+      location of the occulted star.
+      The relative of the satellite spot with respect the occulted star is given
+      in polar coordinates. The radial distance of the satellite spot is measured
+      in units lambda/D, with lambda the band reference wavelength, either 730 nm
+      (band 3) or 660 nm (band 2), and D=2.4 m. The polar angle is measured in
+      degrees, with 0 degrees meaning +X and 90 degrees meaning +Y. The polar
+      coordinates of the satellite spot are translated into (X,Y) EXCAM pixel
+      coordinates, which can then be subtracted from the zero-point solution to
+      infer the location of the occulted star.
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of spectroscopy Images (L3-level)
+        r_lamD (float): Radial distance of the satellite spot on EXCAM with respect
+        the occulted star in units of lambda/D.
+        phi_deg (float): Polar angle of the satellite spot on EXCAM with respect
+        the occulted star in degrees, with 0 degrees meaning +X and 90 degrees
+        meaning +Y.
+
+    Returns:
+        corgidrp.data.Dataset: Dataset with updated keywords recording the satellite position
+          in EXCAM pixels.
+    """
+    
+    dataset = input_dataset.copy()
+    dataset = star_pos_spec(dataset, r_lamD = r_lamD, phi_deg = phi_deg)
+    
+    history_msg = "star position on EXCAM added to the header"
+    dataset.update_after_processing_step(history_msg)
+    return dataset
+
 def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
     """
     extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
@@ -997,13 +1033,15 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
             spec = np.nansum(image_cutout, axis=1)
             weight_str = "no weights applied"
         
-        spec_header = image.ext_hdr.copy()
+        spec_header = fits.Header()
         spec_header['BUNIT'] = "photoelectron/s/bin"
         image.add_extension_hdu("SPEC", data = spec, header=spec_header)
         image.add_extension_hdu("SPEC_ERR", data = err, header=spec_header)
         image.add_extension_hdu("SPEC_DQ", data = dq_collapse, header=None)
-        image.add_extension_hdu("SPEC_WAVE", data = wave, header=None)
-        image.add_extension_hdu("SPEC_WAVE_ERR", data = wave_err, header=None)
+        wave_header = fits.Header()
+        wave_header['BUNIT'] = 'nm'
+        image.add_extension_hdu("SPEC_WAVE", data = wave, header=wave_header)
+        image.add_extension_hdu("SPEC_WAVE_ERR", data = wave_err, header=wave_header)
         del(image.hdu_list["POSLOOKUP"])
     history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
     dataset.update_after_processing_step(history_msg)

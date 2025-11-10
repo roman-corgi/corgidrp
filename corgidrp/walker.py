@@ -61,6 +61,7 @@ all_steps = {
     "replace_bad_pixels": corgidrp.l3_to_l4.replace_bad_pixels,
     "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
     "find_star": corgidrp.l3_to_l4.find_star,
+    "find_spec_star" : corgidrp.l3_to_l4.find_spec_star,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
     "spec_psf_subtraction": corgidrp.l3_to_l4.spec_psf_subtraction,
     "determine_wave_zeropoint": corgidrp.l3_to_l4.determine_wave_zeropoint,

@@ -1232,7 +1232,7 @@ def slit_transmission(
 
 def star_pos_spec(
     dataset,
-    r_lamD=0,
+    r_lamD=3,
     phi_deg=0,
     ):
     """ Find the position of the star using the information from the satellite

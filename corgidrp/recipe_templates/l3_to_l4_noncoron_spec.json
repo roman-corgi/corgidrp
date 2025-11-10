@@ -17,6 +17,9 @@
             }
         },
         {
+            "name" : "find_spec_star"
+        },
+        {
             "name" : "extract_spec"
         },
         {
