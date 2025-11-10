@@ -1147,9 +1147,9 @@ def slit_transmission(
         
     # Average all spectra of the images with FSAM=OPEN
     if average.lower() == 'mean': 
-        spec_open = np.mean([ds.data for ds in dataset_open], axis=0)
+        spec_open = np.mean([ds.hdu_list["SPEC"].data for ds in dataset_open], axis=0)
     elif average.lower() == 'median':
-        spec_open = np.median([ds.data for ds in dataset_open], axis=0)
+        spec_open = np.median([ds.hdu_list["SPEC"].data for ds in dataset_open], axis=0)
     else:
         raise ValueError(f'Averaging method {average} not recognized.')
 
@@ -1162,10 +1162,10 @@ def slit_transmission(
         slit_pos_x += [subset[0].ext_hdr['WV0_X']]
         slit_pos_y += [subset[0].ext_hdr['WV0_Y']]
         if average.lower() == 'mean':
-            slit_trans_fsm += [np.mean([ds.data/spec_open for ds in subset], axis=0)]
+            slit_trans_fsm += [np.mean([ds.hdu_list["SPEC"].data/spec_open for ds in subset], axis=0)]
         # At this point average can only take 'mean' and 'median' values
         else:
-            slit_trans_fsm += [np.median([ds.data/spec_open for ds in subset], axis=0)]
+            slit_trans_fsm += [np.median([ds.hdu_list["SPEC"].data/spec_open for ds in subset], axis=0)]
     # Double check they all have the same length
     slit_pos_x = np.array(slit_pos_x)
     slit_pos_y = np.array(slit_pos_y)

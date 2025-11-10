@@ -996,14 +996,17 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
         else:
             spec = np.nansum(image_cutout, axis=1)
             weight_str = "no weights applied"
-        image.data = spec
-        image.err = err
-        image.dq = dq_collapse
-        image.hdu_list["WAVE"].data = wave
-        image.hdu_list["WAVE_ERR"].data = wave_err
+        
+        spec_header = image.ext_hdr.copy()
+        spec_header['BUNIT'] = "photoelectron/s/bin"
+        image.add_extension_hdu("SPEC", data = spec, header=spec_header)
+        image.add_extension_hdu("SPEC_ERR", data = err, header=spec_header)
+        image.add_extension_hdu("SPEC_DQ", data = dq_collapse, header=None)
+        image.add_extension_hdu("SPEC_WAVE", data = wave, header=None)
+        image.add_extension_hdu("SPEC_WAVE_ERR", data = wave_err, header=None)
         del(image.hdu_list["POSLOOKUP"])
     history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
-    dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
+    dataset.update_after_processing_step(history_msg)
     return dataset
 
 def align_polarimetry_frames(input_dataset):  
@@ -1467,63 +1470,6 @@ def combine_polarization_states(input_dataset,
     history_msg = f"Combined polarization states, performed PSF subtraction, and rotated data north-up. Final output size: {output_frame.data.shape}"
     updated_dataset.update_after_processing_step(history_msg)
     return updated_dataset
-
-
-def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
-    """
-    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
-    the wavelength zero point with units photoelectron/s/bin.
-    
-    Args:
-        input_dataset (corgidrp.data.Dataset): 
-        halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
-        halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
-        apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
-        
-    Returns:
-        corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
-    """
-    dataset = input_dataset.copy()
-    
-    for image in dataset:
-        xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
-        image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
-                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
-                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
-                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
-                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        err_cutout = image.err[:,ycent_round - halfheight:ycent_round + halfheight + 1,
-                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        bad_ind = np.where(dq_cutout > 0)
-        image_cutout[bad_ind] = np.nan
-        err_cutout[bad_ind] = np.nan
-        wave = np.mean(wave_cal_map_cutout, axis=1)
-        wave_err = np.mean(wave_err_cutout, axis=1)
-        err = np.sqrt(np.nansum(np.square(err_cutout), axis=2))
-        # dq collpase: keep all flags on
-        dq_collapse = np.bitwise_or.reduce(dq_cutout, axis=1)
- 
-        if apply_weights:
-            err_cutout[0][err_cutout[0] == 0] = np.nan
-            whts = 1./np.square(err_cutout[0])
-            spec = np.nansum(image_cutout * whts, axis = 1) / np.nansum (whts, axis = 1) * (2 * halfwidth + 1)
-            err[0] = 1./np.sqrt(np.nansum(whts, axis = 1))
-            weight_str = "weights applied"
-        else:
-            spec = np.nansum(image_cutout, axis=1)
-            weight_str = "no weights applied"
-        image.data = spec
-        image.err = err
-        image.dq = dq_collapse
-        image.hdu_list["WAVE"].data = wave
-        image.hdu_list["WAVE_ERR"].data = wave_err
-        del(image.hdu_list["POSLOOKUP"])
-    history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
-    dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
-    return dataset
 
 
 def spec_psf_subtraction(input_dataset):

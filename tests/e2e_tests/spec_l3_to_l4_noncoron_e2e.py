@@ -202,7 +202,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
     check_filename_convention(os.path.basename(out_file), 'cgi_*_l4_.fits', "spec l4 output product", logger, data_level = "l4_")
 
     with fits.open(out_file) as hdul:        
-        verify_hdu_count(hdul, 6, "spec l4 output product", logger)
+        verify_hdu_count(hdul, 11, "spec l4 output product", logger)
         
         # Verify HDU0 (header only)
         hdu0 = hdul[0]
@@ -210,38 +210,59 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
             logger.info("HDU0: Header only. Expected: header only. PASS.")
         else:
             logger.info(f"HDU0: Contains data with shape {hdu0.data.shape}. Expected: header only. FAIL.")
-        #verify HDU1
+            
+        # Verify HDU1 (spec data)
         hdu1 = hdul[1]
-        check_dimensions(hdu1.data, (19,), "HDU1 Data Array: containing the 1D spectral distribution", logger)
-        if np.isnan(hdu1.data).any() is True:
-            logger.info(f"HDU1 Data Array: Contains NANs in the data. Expected: no NANs. FAIL.")
-        else:
-            logger.info(f"HDU1 Data Array: No NANs in the data. Expected: no NANs. PASS.")
-        if np.isinf(hdu1.data).any() is True:
-            logger.info(f"HDU1 Data Array: Contains INFs in the data. Expected: no INFs. FAIL.")
-        else:
-            logger.info(f"HDU1 Data Array: No INFs in the data. Expected: no INFs. PASS.")
-        # Verify HDU2 (error)
+        data = hdu1.data
+        check_dimensions(data, (81, 81), "HDU1 Data Array: 2D array containing the 2D spectral distribution", logger)
+        # Verify HDU2 (err)
         hdu2 = hdul[2]
-        err = hdu2.data
-        check_dimensions(err, (1, 19), "HDU2 Data Array: 1D array with the corresponding spectral uncertainty", logger)
-        # Verify HDU3 (dq)
+        data = hdu2.data
+        check_dimensions(data, (1,81, 81), "HDU2 Data Array: 3D array containing the 3D spectral uncertainty", logger)
+        # Verify HDU3 (DQ)
         hdu3 = hdul[3]
-        dq = hdu3.data
-        check_dimensions(dq, (19,), "HDU3 Data Array: 1D array with the corresponding spectral data quality", logger)
-        
-        # Verify HDU4 (wavelength)
+        data = hdu3.data
+        check_dimensions(data, (81, 81), "HDU3 Data Array: 2D array containing the 2D data quality", logger)
+        # Verify HDU4 (WAVE)
         hdu4 = hdul[4]
-        wave = hdu4.data
-        check_dimensions(wave, (19,), "HDU4 Data Array: 1D array with the corresponding wavelength", logger)
-        
-        # Verify HDU5 (wavelength uncertainties)
+        data = hdu4.data
+        check_dimensions(data, (81, 81), "HDU4 Data Array: 2D array containing the 2D wavelength distribution", logger)
+        # Verify HDU5 (WAVE_ERR)
         hdu5 = hdul[5]
-        wave_err = hdu5.data
-        check_dimensions(wave_err, (19,), "HDU5 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
+        data = hdu5.data
+        check_dimensions(data, (81, 81), "HDU5 Data Array: 2D array containing the 2D wavelength uncertainty distribution", logger)
+        #verify HDU6
+        hdu6 = hdul[6]
+        check_dimensions(hdu6.data, (19,), "HDU6 Data Array: containing the 1D spectral distribution", logger)
+        if np.isnan(hdu6.data).any() is True:
+            logger.info(f"HDU6 Data Array: Contains NANs in the data. Expected: no NANs. FAIL.")
+        else:
+            logger.info(f"HDU6 Data Array: No NANs in the data. Expected: no NANs. PASS.")
+        if np.isinf(hdu6.data).any() is True:
+            logger.info(f"HDU6 Data Array: Contains INFs in the data. Expected: no INFs. FAIL.")
+        else:
+            logger.info(f"HDU6 Data Array: No INFs in the data. Expected: no INFs. PASS.")
+        # Verify HDU7 (error)
+        hdu7 = hdul[7]
+        err = hdu7.data
+        check_dimensions(err, (1, 19), "HDU7 Data Array: 1D array with the corresponding spectral uncertainty", logger)
+        # Verify HDU8 (dq)
+        hdu8 = hdul[8]
+        dq = hdu8.data
+        check_dimensions(dq, (19,), "HDU8 Data Array: 1D array with the corresponding spectral data quality", logger)
+        
+        # Verify HDU9 (wavelength)
+        hdu9 = hdul[9]
+        wave = hdu9.data
+        check_dimensions(wave, (19,), "HDU9 Data Array: 1D array with the corresponding wavelength", logger)
+        
+        # Verify HDU10 (wavelength uncertainties)
+        hdu10 = hdul[10]
+        wave_err = hdu10.data
+        check_dimensions(wave_err, (19,), "HDU10 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
         
         # Verify header keywords
-        verify_header_keywords(hdul[1].header, {'DATALVL': 'L4', 'CFAMNAME' : '3', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3', 'BUNIT' : 'photoelectron/s/bin'},
+        verify_header_keywords(hdul[1].header, {'DATALVL': 'L4', 'CFAMNAME' : '3', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3', 'BUNIT' : 'photoelectron/s'},
                                                "spec output product", logger)
         verify_header_keywords(hdul[1].header, {'WAVLEN0', 'WV0_X', 'WV0_Y', 'WV0_DIMX', 'WV0_DIMY'},
                                                "spec output product", logger)
@@ -257,8 +278,8 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
 
     # Load and display spec output product results
     spec_out = Image(out_file)
-    sed = spec_out.data
-    wave = spec_out.hdu_list["WAVE"].data
+    sed = spec_out.hdu_list["SPEC"].data
+    wave = spec_out.hdu_list["SPEC_WAVE"].data
     logger.info(f"wavelengths: {wave} nm")
     logger.info(f"spectrum: {sed}")
     logger.info("")
@@ -287,8 +308,8 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     global logger
     
     # Create the spec_l3_to_l4_e2e subfolder regardless
-    input_top_level = os.path.join(e2edata_path, 'spec_l3_to_l4_e2e')
-    output_top_level = os.path.join(e2eoutput_path, 'spec_l3_to_l4_e2e')
+    input_top_level = os.path.join(e2edata_path, 'spec_l3_to_l4_noncoron_e2e')
+    output_top_level = os.path.join(e2eoutput_path, 'spec_l3_to_l4_noncoron_e2e')
     
     os.makedirs(input_top_level, exist_ok=True)
     os.makedirs(output_top_level, exist_ok=True)
@@ -341,7 +362,7 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
-    top_level_dir = os.path.join(thisfile_dir, 'spec_l3_to_l4_e2e')
+    top_level_dir = os.path.join(thisfile_dir, 'spec_l3_to_l4_noncoron_e2e')
     outputdir = os.path.join(top_level_dir, 'output')
     e2edata_dir = os.path.join(top_level_dir, 'input_data')
 
