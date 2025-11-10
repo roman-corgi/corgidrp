@@ -497,5 +497,5 @@ if __name__ == "__main__":
     # args = ap.parse_args(args_here)
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_trad_dark_im(e2edata_dir, outputdir)
     test_trad_dark(e2edata_dir, outputdir)
+    test_trad_dark_im(e2edata_dir, outputdir)

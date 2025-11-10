@@ -281,7 +281,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     else:
         masked_frames = np.ma.masked_array(frames, bpmaps)
         stat_std = np.zeros_like(frames[0]).astype(float)
-        stat_std[nonzero_inds] = np.ma.std(masked_frames[:][nonzero_inds[0]], axis=0)/np.sqrt(unmasked_num[nonzero_inds])
+        stat_std[nonzero_inds] = np.ma.std(masked_frames[:, nonzero_inds[0], nonzero_inds[1]], axis=0)/np.sqrt(unmasked_num[nonzero_inds])
         stat_std[zero_inds] = 0
         stat_std = np.ma.getdata(stat_std)
     rows_one, cols_one = np.where(unmasked_num==1)
@@ -610,7 +610,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         else:
             masked_frames = np.ma.masked_array(frames, bpmaps)
             stat_std = np.zeros_like(frames[0]).astype(float)
-            stat_std[nonzero_inds] = np.ma.std(masked_frames[:][nonzero_inds[0]], axis=0)/np.sqrt(unmasked_num[nonzero_inds])
+            stat_std[nonzero_inds] = np.ma.std(masked_frames[:, nonzero_inds[0], nonzero_inds[1]], axis=0)/np.sqrt(unmasked_num[nonzero_inds])
             stat_std[zero_inds] = 0
             stat_std = np.ma.getdata(stat_std)
         stat_std[telem_rows] = 1 # something non-zero; masked in the DQ anyways, and this assignment here prevents np.inf issues/warnings later
