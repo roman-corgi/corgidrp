@@ -1048,6 +1048,7 @@ def align_2d_frames(input_dataset, center='first_frame'):
                                 1. 'first_frame' (default) - aligns all frames to the STARLOCX/Y of the first frame
                                 2. 'im_center' - aligns all frames to the center of the image
                                 3. (x,y) tuple - aligns all frames to the provided (x,y) pixel location
+    
     Returns:
         corgidrp.data.Dataset: L3 dataset where all the images are registered to the same pixel
     """
