@@ -1,5 +1,5 @@
 {
-    "name" : "noisemap_generation_1",
+    "name" : "l1_to_l2b_pc_dark_1",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
@@ -9,8 +9,11 @@
     "steps" : [
         {
             "name" : "prescan_biassub",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC"
+            },
             "keywords" : {
-                "return_full_frame" : true,
+                "return_full_frame" : false,
                 "dataset_copy" : false
             }
         },
@@ -18,10 +21,7 @@
             "name" : "detect_cosmic_rays",
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC",
-                "KGain" : "AUTOMATIC, OPTIONAL"
-            },
-            "keywords" : {
-                "mode" : "full"
+                "KGain" : "AUTOMATIC"
             }
         },
         {
@@ -33,8 +33,9 @@
         {
             "name" : "update_to_l2a"
         },
+
         {
-            "name" : "save"
+            "name" : "frame_select"
         },
         {
             "name" : "convert_to_electrons",

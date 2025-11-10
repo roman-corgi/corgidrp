@@ -140,6 +140,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     Kevin Ludwick - UAH - 2023
 
     """
+    import psutil 
+    process = psutil.Process()
+
     if not isinstance(niter, (int, np.integer)) or niter < 1:
             raise PhotonCountException('niter must be an integer greater than '
                                         '0')
@@ -231,38 +234,78 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             else:
                 warnings.warn('thresh should be less than em_gain for effective '
                 'photon counting')
-        if np.nanmean(dataset.all_data[:, considered_indices]/em_gain) > pc_ecount_max:
-            if safemode:
-                raise Exception('average # of electrons/pixel is > pc_ecount_max, which means '
-                'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
-                'time to get lower average # of photons/pixel.')
-            else:
-                warnings.warn('average # of electrons/pixel is > pc_ecount_max, which means '
-                'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
-                'time to get lower average # of photons/pixel.')
         if read_noise <=0:
             raise Exception('read noise should be greater than 0 for effective '
             'photon counting')
         if thresh < 4*read_noise: # leave as just a warning
             warnings.warn('thresh should be at least 4 or 5 times read_noise for '
             'accurate photon counting')
-
-        # Photon count stack of frames
-        frames_pc = photon_count(dataset.all_data, thresh)
-        bool_map = dataset.all_dq.astype(bool).astype(float)
-        bool_map[bool_map > 0] = np.nan
-        bool_map[bool_map == 0] = 1
-        nframes = np.nansum(bool_map, axis=0)
-        # upper and lower bounds for PC (for getting accurate err)
-        frames_pc_up = photon_count(dataset.all_data+dataset.all_err[:,0], thresh)
-        frames_pc_low = photon_count(dataset.all_data-dataset.all_err[:,0], thresh)
-        frames_pc_masked = frames_pc * bool_map
-        frames_pc_masked_up = frames_pc_up * bool_map
-        frames_pc_masked_low = frames_pc_low * bool_map
-        # Co-add frames
-        frame_pc_coadded = np.nansum(frames_pc_masked, axis=0)
-        frame_pc_coadded_up = np.nansum(frames_pc_masked_up, axis=0)
-        frame_pc_coadded_low = np.nansum(frames_pc_masked_low, axis=0)
+        
+        if dataset[0].data is None:
+            for j, frame in enumerate(dataset.frames): 
+                with fits.open(frame.filepath, 'readonly') as temp_fits:
+                    frame_data = temp_fits[1].data
+                    frame_err = temp_fits[2].data[0]
+                    bool_map = temp_fits[3].data.astype(bool).astype(float)
+                del temp_fits
+                if np.nanmean(frame_data[considered_indices]/em_gain > pc_ecount_max):
+                    if safemode:
+                        raise Exception('average # of electrons/pixel is > pc_ecount_max, which means '
+                        'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
+                        'time to get lower average # of photons/pixel.')
+                    else:
+                        warnings.warn('average # of electrons/pixel is > pc_ecount_max, which means '
+                        'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
+                        'time to get lower average # of photons/pixel.')
+                # Photon count stack of frames
+                frames_pc = photon_count(frame_data, thresh)
+                bool_map[bool_map > 0] = np.nan
+                bool_map[bool_map == 0] = 1
+                if j == 0:
+                    nframes = bool_map
+                else:
+                    nframes = np.nansum([nframes, bool_map], axis=0)
+                # upper and lower bounds for PC (for getting accurate err)
+                frames_pc_up = photon_count(frame_data + frame_err, thresh)
+                frames_pc_low = photon_count(frame_data - frame_err, thresh)
+                frames_pc_masked = frames_pc * bool_map
+                frames_pc_masked_up = frames_pc_up * bool_map
+                frames_pc_masked_low = frames_pc_low * bool_map
+                # Co-add frames
+                if j == 0:
+                    frame_pc_coadded = frames_pc_masked
+                    frame_pc_coadded_up = frames_pc_masked_up
+                    frame_pc_coadded_low = frames_pc_masked_low
+                else:
+                    frame_pc_coadded = np.nansum([frame_pc_coadded, frames_pc_masked], axis=0)
+                    frame_pc_coadded_up = np.nansum([frame_pc_coadded_up, frames_pc_masked_up], axis=0)
+                    frame_pc_coadded_low = np.nansum([frame_pc_coadded_low, frames_pc_masked_low], axis=0)
+        else:    
+            if np.nanmean(dataset.all_data[:, considered_indices]/em_gain) > pc_ecount_max:
+                if safemode:
+                    raise Exception('average # of electrons/pixel is > pc_ecount_max, which means '
+                    'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
+                    'time to get lower average # of photons/pixel.')
+                else:
+                    warnings.warn('average # of electrons/pixel is > pc_ecount_max, which means '
+                    'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
+                    'time to get lower average # of photons/pixel.')
+            # Photon count stack of frames
+            frames_pc = photon_count(dataset.all_data, thresh)
+            bool_map = dataset.all_dq.astype(bool).astype(float)
+            bool_map[bool_map > 0] = np.nan
+            bool_map[bool_map == 0] = 1
+            nframes = np.nansum(bool_map, axis=0)
+            # upper and lower bounds for PC (for getting accurate err)
+            frames_pc_up = photon_count(dataset.all_data+dataset.all_err[:,0], thresh)
+            frames_pc_low = photon_count(dataset.all_data-dataset.all_err[:,0], thresh)
+            frames_pc_masked = frames_pc * bool_map
+            frames_pc_masked_up = frames_pc_up * bool_map
+            frames_pc_masked_low = frames_pc_low * bool_map
+            # Co-add frames
+            frame_pc_coadded = np.nansum(frames_pc_masked, axis=0)
+            frame_pc_coadded_up = np.nansum(frames_pc_masked_up, axis=0)
+            frame_pc_coadded_low = np.nansum(frames_pc_masked_low, axis=0)
         
         # Correct for thresholding and coincidence loss; any pixel masked all the 
         # way through the stack may give NaN, but it should be masked in lam_newton_fit(); 
@@ -283,7 +326,18 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         low = mean_expected_low -  pc_variance
         errs.append(np.max([up - mean_expected, mean_expected - low], axis=0))
         good_inds = np.where(nframes != 0)
-        dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
+        if dataset[0].data is None:
+            dq_sum = np.zeros_like(mean_expected).astype(float)
+            for j in range(len(dataset)):
+                with fits.open(dataset[j].filepath, 'readonly') as temp_fits:
+                    dq_temp = temp_fits[3].data #dq
+                    dq_sum += dq_temp.astype(float)
+                del dq_temp, temp_fits
+            dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
+            dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
+            dq = dq.filled(0).astype(int)
+        else:
+            dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
         dq[good_inds] = 0 
         pc_means.append(mean_expected)
         dqs.append(dq)
@@ -346,6 +400,15 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             list_new_image.append(combined_pc_mean)
             list_err.append(combined_err)
             list_dq.append(combined_dq)
+
+        mem = process.memory_info()
+        # peak_wset is only available on Windows; fall back to rss on other platforms
+        if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+            peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+        else:
+            peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+        print(f"get_pc_mean peak memory usage:  {peak_memory:.2f} MB")
+
     if val[0] != "CGIVST_CAL_DRK":
         pc_ill_dataset = data.Dataset(list_new_image)
         pc_ill_dataset.update_after_processing_step("Photon-counted {0} illuminated frames for each PC frame of the output dataset.  Number of subsets: {1}.  Total number of frames in input dataset: {2}. Using T_factor={3} and niter={4}. Dark-subtracted with PC dark: {5}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter, dark_sub))

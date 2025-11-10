@@ -484,8 +484,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2' #r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
-    #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data' #'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     outputdir = thisfile_dir
 
@@ -498,5 +497,5 @@ if __name__ == "__main__":
     # args = ap.parse_args(args_here)
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_trad_dark(e2edata_dir, outputdir)
     test_trad_dark_im(e2edata_dir, outputdir)
+    test_trad_dark(e2edata_dir, outputdir)

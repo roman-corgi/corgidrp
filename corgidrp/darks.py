@@ -3,11 +3,12 @@ import re
 import warnings
 from astropy.io import fits
 
-from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, detector_areas
+from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
 from corgidrp.data import DetectorNoiseMaps, Dark
+import corgidrp.data as data
 
-def mean_combine(image_list, bpmap_list, err=False):
+def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
     Get mean frame and corresponding bad-pixel map from L2b data frames.  The
     input image_list should consist of frames with no bad pixels marked or
@@ -24,11 +25,11 @@ def mean_combine(image_list, bpmap_list, err=False):
     master dark.
 
     Args:
-        image_list (list or array_like): List (or stack) of L2b data frames
+        dataset_or_image_list (dataset, list, or array_like): Dataset or list (or stack) of L2b data frames
     (with no bad pixels applied to them).
         bpmap_list (list or array_like): List (or stack) of bad-pixel maps
         associated with L2b data frames. Each must be 0 (good) or 1 (bad)
-        at every pixel.
+        at every pixel. If first input is a Dataset, this input is ignored.
         err (bool):  If True, calculates the standard error over all
         the frames.  Intended for the corgidrp.Data.Dataset.all_err
         arrays. Defaults to False.
@@ -53,61 +54,80 @@ def mean_combine(image_list, bpmap_list, err=False):
     import psutil
     process = psutil.Process()
 
-    # if input is an np array or stack, try to accommodate
-    if type(image_list) == np.ndarray:
-        if image_list.ndim == 1: # pathological case of empty array
-            image_list = list(image_list)
-        elif image_list.ndim == 2: #covers case of single 2D frame
-            image_list = [image_list]
-        elif image_list.ndim == 3: #covers case of stack of 2D frames
-            image_list = list(image_list)
-    if type(bpmap_list) == np.ndarray:
-        if bpmap_list.ndim == 1: # pathological case of empty array
-            bpmap_list = list(bpmap_list)
-        elif bpmap_list.ndim == 2: #covers case of single 2D frame
-            bpmap_list = [bpmap_list]
-        elif bpmap_list.ndim == 3: #covers case of stack of 2D frames
-            bpmap_list = list(bpmap_list)
+    if isinstance(dataset_or_image_list, list):
+        # if input is an np array or stack, try to accommodate
+        if type(dataset_or_image_list) == np.ndarray:
+            if dataset_or_image_list.ndim == 1: # pathological case of empty array
+                dataset_or_image_list = list(dataset_or_image_list)
+            elif dataset_or_image_list.ndim == 2: #covers case of single 2D frame
+                dataset_or_image_list = [dataset_or_image_list]
+            elif dataset_or_image_list.ndim == 3: #covers case of stack of 2D frames
+                dataset_or_image_list = list(dataset_or_image_list)
+        if type(bpmap_list) == np.ndarray:
+            if bpmap_list.ndim == 1: # pathological case of empty array
+                bpmap_list = list(bpmap_list)
+            elif bpmap_list.ndim == 2: #covers case of single 2D frame
+                bpmap_list = [bpmap_list]
+            elif bpmap_list.ndim == 3: #covers case of stack of 2D frames
+                bpmap_list = list(bpmap_list)
 
-    # Check inputs
-    if not isinstance(image_list, list):
-        raise TypeError('image_list must be a list')
-    if not isinstance(bpmap_list, list):
-        raise TypeError('bpmap_list must be a list')
-    if len(image_list) != len(bpmap_list):
-        raise TypeError('image_list and bpmap_list must be the same length')
-    if len(image_list) == 0:
-        raise TypeError('input lists cannot be empty')
-    s0 = image_list[0].shape
-    for index, im in enumerate(image_list):
-        check.twoD_array(im, 'image_list[' + str(index) + ']', TypeError)
-        if im.shape != s0:
-            raise TypeError('all input list elements must be the same shape')
-        pass
-    for index, bp in enumerate(bpmap_list):
-        check.twoD_array(bp, 'bpmap_list[' + str(index) + ']', TypeError)
-        if np.logical_and((bp != 0), (bp != 1)).any():
-            raise TypeError('bpmap_list elements must be 0- or 1-valued')
-        if bp.dtype != int:
-            raise TypeError('bpmap_list must be made up of int arrays')
-        if bp.shape != s0:
-            raise TypeError('all input list elements must be the same shape')
-        pass
-
-
-    # Get masked arrays
-    ims_m = np.ma.masked_array(image_list, bpmap_list)
+        # Check inputs
+        if not isinstance(dataset_or_image_list, list):
+            raise TypeError('image_list must be a list')
+        if not isinstance(bpmap_list, list):
+            raise TypeError('bpmap_list must be a list')
+        if len(dataset_or_image_list) != len(bpmap_list):
+            raise TypeError('image_list and bpmap_list must be the same length')
+        if len(dataset_or_image_list) == 0:
+            raise TypeError('input lists cannot be empty')
+        s0 = dataset_or_image_list[0].shape
+        for index, im in enumerate(dataset_or_image_list):
+            check.twoD_array(im, 'image_list[' + str(index) + ']', TypeError)
+            if im.shape != s0:
+                raise TypeError('all input list elements must be the same shape')
+            pass
+        for index, bp in enumerate(bpmap_list):
+            check.twoD_array(bp, 'bpmap_list[' + str(index) + ']', TypeError)
+            if np.logical_and((bp != 0), (bp != 1)).any():
+                raise TypeError('bpmap_list elements must be 0- or 1-valued')
+            if bp.dtype != int:
+                raise TypeError('bpmap_list must be made up of int arrays')
+            if bp.shape != s0:
+                raise TypeError('all input list elements must be the same shape')
+            pass
 
     # Add non masked elements
-    sum_im = np.zeros_like(image_list[0])
-    map_im = np.zeros_like(image_list[0], dtype=int)
-    for im_m in ims_m:
+    if isinstance(dataset_or_image_list, data.Dataset):
+        with fits.open(dataset_or_image_list[0].filepath, 'readonly') as temp_fits:
+            if err:
+                shape = temp_fits[2].data.shape[1:]
+            else:
+                shape = temp_fits[1].data.shape
+        del temp_fits
+        sum_im = np.zeros(shape).astype(float)
+        map_im = np.zeros(shape, dtype=int)
+    else: #list
+        sum_im = np.zeros_like(dataset_or_image_list[0]).astype(float)
+        map_im = np.zeros_like(dataset_or_image_list[0], dtype=int)
+
+    for i in range(len(dataset_or_image_list)):
+        if isinstance(dataset_or_image_list, data.Dataset):
+            with fits.open(dataset_or_image_list[i].filepath, 'readonly') as temp_fits:
+                if err:
+                    frame_data = temp_fits[2].data[0]
+                else:
+                    frame_data = temp_fits[1].data.astype(float)
+                im_m = np.ma.masked_array(frame_data, temp_fits[3].data.astype(bool).astype(int))
+            del frame_data, temp_fits
+        else: #list
+            im_m = np.ma.masked_array(dataset_or_image_list[i], bpmap_list[i])
         masked = im_m.filled(0)
         if err:
             sum_im += masked**2
         else:
             sum_im += masked
         map_im += (im_m.mask == False).astype(int)
+        del masked, im_m
 
     # Divide sum_im by map_im only where map_im is not equal to 0 (i.e.,
     # not masked).
@@ -122,7 +142,7 @@ def mean_combine(image_list, bpmap_list, err=False):
     comb_bpmap = (map_im == 0).astype(int)
 
     enough_for_rn = True
-    if map_im.min() < len(image_list)/2:
+    if map_im.min() < len(dataset_or_image_list)/2:
         enough_for_rn = False
 
     mem = process.memory_info()
@@ -208,28 +228,62 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     frames = []
     bpmaps = []
     errs = []
-    for fr in dataset.frames:
-        # ensure frame is in float so nan can be assigned, though it should
-        # already be float
-        frame = fr.data.astype(float)
-        # For the fit, all types of bad pixels should be masked:
-        b1 = fr.dq.astype(bool).astype(int)
-        err = fr.err[0]
-        frame[telem_rows] = np.nan
-        i0 = slice_section(frame, 'SCI', 'image', detector_regions)
-        if np.isnan(i0).any():
-            raise ValueError('telem_rows cannot be in image area.')
-        frame[telem_rows] = 0
-        frames.append(frame)
-        bpmaps.append(b1)
-        errs.append(err)
+    if dataset[0].data is not None:
+        for fr in dataset.frames:
+            # ensure frame is in float so nan can be assigned, though it should
+            # already be float
+            frame = fr.data.astype(float)
+            # For the fit, all types of bad pixels should be masked:
+            b1 = fr.dq.astype(bool).astype(int)
+            err = fr.err[0]
+            frame[telem_rows] = np.nan
+            i0 = slice_section(frame, 'SCI', 'image', detector_regions)
+            if np.isnan(i0).any():
+                raise ValueError('telem_rows cannot be in image area.')
+            frame[telem_rows] = 0
+            frames.append(frame)
+            bpmaps.append(b1)
+            errs.append(err)
+    else:
+        frames = dataset
+        bpmaps = None #not used in this case
+        errs = frames
+        with fits.open(dataset.frames[0].filepath, 'readonly') as temp_fits:
+            test_frame = temp_fits[1].data.astype(float)
+            test_frame[telem_rows] = np.nan
+            i0 = slice_section(test_frame, 'SCI', 'image', detector_regions)
+            if np.isnan(i0).any():
+                raise ValueError('telem_rows cannot be in image area.')
+            test_frame[telem_rows] = 0
     mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
     mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
     # combine the error from individual frames to the standard deviation across
     # the frames due to statistical variance
-    masked_frames = np.ma.masked_array(frames, bpmaps)
-    stat_std = np.ma.std(masked_frames, axis=0)/np.sqrt(unmasked_num)
-    stat_std = np.ma.getdata(stat_std)
+    zero_inds = np.where(unmasked_num==0)
+    nonzero_inds = np.where(unmasked_num!=0)
+    if dataset[0].data is None:
+        with fits.open(dataset[0].filepath, 'readonly') as temp_fits:
+            shape = temp_fits[1].data.shape
+        del temp_fits
+        sum_squares = np.zeros(shape).astype(float)
+        for f in dataset.frames:
+            with fits.open(f.filepath, 'readonly') as temp_fits:
+                test_frame = temp_fits[1].data.astype(float)
+                mask = temp_fits[3].data.astype(bool).astype(int) #dq
+                masked_frame = np.ma.masked_array(test_frame, mask)
+                masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
+                sum_squares += (masked_frame - masked_mean)**2
+            del masked_frame, test_frame, mask, temp_fits
+        stat_std = np.zeros_like(sum_squares).astype(float)
+        stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds])/np.sqrt(unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
+        stat_std[zero_inds] = 0
+        stat_std = np.ma.getdata(stat_std)
+    else:
+        masked_frames = np.ma.masked_array(frames, bpmaps)
+        stat_std = np.zeros_like(frames[0]).astype(float)
+        stat_std[nonzero_inds] = np.ma.std(masked_frames[:][nonzero_inds[0]], axis=0)/np.sqrt(unmasked_num[nonzero_inds])
+        stat_std[zero_inds] = 0
+        stat_std = np.ma.getdata(stat_std)
     rows_one, cols_one = np.where(unmasked_num==1)
     rows_normal, cols_normal = np.where(unmasked_num == unmasked_num.max())
     if unmasked_num.max() <= 1: # this would virtually never happen
@@ -240,8 +294,19 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     # bitwise_or flag value for those that are masked all the way through for all
     # frames
     fittable_inds = np.where(combined_bpmap ==0) 
-    output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
-    output_dq[fittable_inds] = 0 
+    if dataset[0].data is None:
+        dq_sum = np.zeros_like(mean_frame).astype(float)
+        for j in range(len(dataset)):
+            with fits.open(dataset[j].filepath, 'readonly') as temp_fits:
+                dq_temp = temp_fits[3].data #dq
+                dq_sum += dq_temp.astype(float)
+            del dq_temp, temp_fits
+        dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
+        output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
+        output_dq = output_dq.filled(0).astype(int)
+    else:
+        output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
+        output_dq[fittable_inds] = 0 
     if not full_frame:
         dq = slice_section(output_dq, 'SCI', 'image', detector_regions)
         err = slice_section(total_err, 'SCI', 'image', detector_regions)
@@ -473,8 +538,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         frames = []
         bpmaps = []
         errs = []
-        check.threeD_array(datasets[i].all_data,
-                           'datasets['+str(i)+'].all_data', TypeError)
+        
         if i > 0:
             if np.shape(datasets[i-1].all_data)[1:] != np.shape(datasets[i].all_data)[1:]:
                 raise CalDarksLSQException('All sub-stacks must have the same frame shape.')
@@ -490,33 +554,68 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
         exptime_arr = np.append(exptime_arr, exptime)
         kgain_arr = np.append(kgain_arr, kgain)
-
-        for fr in datasets[i].frames:
-            # ensure frame is in float so nan can be assigned, though it should
-            # already be float
-            frame = fr.data.astype(float)
-            # For the fit, all types of bad pixels should be masked:
-            b1 = fr.dq.astype(bool).astype(int)
-            err = fr.err[0]
-            frame[telem_rows] = np.nan
-            i0 = slice_section(frame, 'SCI', 'image', detector_regions)
-            if np.isnan(i0).any():
-                raise ValueError('telem_rows cannot be in image area.')
-            frame[telem_rows] = 0
-            frames.append(frame)
-            bpmaps.append(b1)
-            errs.append(err)
+        
+        if not datasets[i][0].data is None:
+            check.threeD_array(datasets[i].all_data,
+                'datasets['+str(i)+'].all_data', TypeError)
+            for fr in datasets[i].frames:
+                # ensure frame is in float so nan can be assigned, though it should
+                # already be float
+                frame = fr.data.astype(float)
+                # For the fit, all types of bad pixels should be masked:
+                b1 = fr.dq.astype(bool).astype(int)
+                err = fr.err[0]
+                frame[telem_rows] = np.nan
+                i0 = slice_section(frame, 'SCI', 'image', detector_regions)
+                if np.isnan(i0).any():
+                    raise ValueError('telem_rows cannot be in image area.')
+                frame[telem_rows] = 0
+                frames.append(frame)
+                bpmaps.append(b1)
+                errs.append(err)
+        else:
+            frames = datasets[i]
+            bpmaps = None #not used in this case
+            errs = frames
+            with fits.open(datasets[i].frames[0].filepath, 'readonly') as temp_fits:
+                test_frame = temp_fits[1].data.astype(float)
+                test_frame[telem_rows] = np.nan
+                i0 = slice_section(test_frame, 'SCI', 'image', detector_regions)
+                if np.isnan(i0).any():
+                    raise ValueError('telem_rows cannot be in image area.')
+                test_frame[telem_rows] = 0
         mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
         mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
         # combine the error from individual frames to the standard deviation across
         # the frames due to statistical variance
-        masked_frames = np.ma.masked_array(frames, bpmaps)
-        stat_std = np.ma.std(masked_frames, axis=0)/np.sqrt(unmasked_num)
-        stat_std = np.ma.getdata(stat_std)
+        zero_inds = np.where(unmasked_num==0)
+        nonzero_inds = np.where(unmasked_num!=0)
+        if datasets[i][0].data is None:
+            with fits.open(datasets[i][0].filepath, 'readonly') as temp_fits:
+                shape = temp_fits[1].data.shape
+            del temp_fits
+            sum_squares = np.zeros(shape).astype(float)
+            for f in datasets[i].frames:
+                with fits.open(f.filepath, 'readonly') as temp_fits:
+                    test_frame = temp_fits[1].data.astype(float)
+                    mask = temp_fits[3].data.astype(bool).astype(int) #dq
+                    masked_frame = np.ma.masked_array(test_frame, mask)
+                    masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
+                    sum_squares += (masked_frame - masked_mean)**2
+                del masked_frame, test_frame, mask, temp_fits
+            stat_std = np.zeros_like(sum_squares).astype(float)
+            stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds])/np.sqrt(unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
+            stat_std[zero_inds] = 0
+            stat_std = np.ma.getdata(stat_std)
+        else:
+            masked_frames = np.ma.masked_array(frames, bpmaps)
+            stat_std = np.zeros_like(frames[0]).astype(float)
+            stat_std[nonzero_inds] = np.ma.std(masked_frames[:][nonzero_inds[0]], axis=0)/np.sqrt(unmasked_num[nonzero_inds])
+            stat_std[zero_inds] = 0
+            stat_std = np.ma.getdata(stat_std)
         stat_std[telem_rows] = 1 # something non-zero; masked in the DQ anyways, and this assignment here prevents np.inf issues/warnings later
         # where the number of unmasked frames is 1, the std is 0, but we want error to increase as the number of usuable frames decreases, so fudge it a little:
         rows_one, cols_one = np.where(unmasked_num==1)
-        zero_inds = np.where(unmasked_num==0)
         if zero_inds[0].size != 0:
             stat_std[zero_inds] = 1 # just assign as something non-zero; doesn't really matter b/c such pixels will be masked in the DQ; this will prevent warning outputs
         rows_normal, cols_normal = np.where(unmasked_num == unmasked_num.max())
@@ -536,7 +635,18 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # bitwise_or flag value for those that are masked all the way through for all
         # frames
         fittable_inds = np.where(combined_bpmap != 1)
-        output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
+        if datasets[i][0].data is None:
+            dq_sum = np.zeros_like(mean_frame).astype(float)
+            for j in range(len(datasets[i])):
+                with fits.open(datasets[i][j].filepath, 'readonly') as temp_fits:
+                    dq_temp = temp_fits[3].data #dq
+                    dq_sum += dq_temp.astype(float)
+                del dq_temp, temp_fits
+            dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
+            output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
+            output_dq = output_dq.filled(0).astype(int)
+        else:
+            output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
         output_dq[fittable_inds] = 0 
         output_dqs.append(output_dq)
     output_dqs = np.stack(output_dqs)

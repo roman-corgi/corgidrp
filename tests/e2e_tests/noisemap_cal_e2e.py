@@ -212,14 +212,21 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
 
     ####### Run the DRP walker
     #template = "l1_to_l2a_noisemap.json"
+    #template = "l2a_to_l2a_noisemap.json"
+    #guess template should work
+    # walker.walk_corgidrp(stack_arr_files, "", noisemap_outputdir,template=None)
+
+    # for no weighting:
     recipe = walker.autogen_recipe(stack_arr_files, noisemap_outputdir)
     ### Modify a keyword
-    for step in recipe['steps']:
+    for step in recipe[1]['steps']:
         if step['name'] == "calibrate_darks":
             step['keywords'] = {}
             step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
-    walker.run_recipe(recipe, save_recipe_file=True)
-    #walker.walk_corgidrp(stack_arr_files, "", noisemap_outputdir,template=template)
+    walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = glob(os.path.join(recipe[0]['outputdir'], '*_l2a.fits'))
+    walker.run_recipe(recipe[1], save_recipe_file=True)
+    
 
     # Move L2a files to processed_l2a directory
     for f in os.listdir(noisemap_outputdir):
@@ -433,15 +440,18 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     set_obstype_for_darks(l2a_filepaths)
 
     ####### Run the DRP walker
-    #template = "l2a_to_l2a_noisemap.json"
-    #walker.walk_corgidrp(l2a_filepaths, "", noisemap_outputdir,template=template)
+    # template = "l2a_to_l2a_noisemap.json"
+    # walker.walk_corgidrp(l2a_filepaths, "", l2a_to_dnm_dir,template=template)
+
     recipe = walker.autogen_recipe(l2a_filepaths, l2a_to_dnm_dir)
     ### Modify a keyword
-    for step in recipe['steps']:
+    for step in recipe[1]['steps']:
         if step['name'] == "calibrate_darks":
             step['keywords'] = {}
             step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
-    walker.run_recipe(recipe, save_recipe_file=True)
+    walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = glob(os.path.join(recipe[0]['outputdir'], '*_l2a.fits'))
+    walker.run_recipe(recipe[1], save_recipe_file=True) 
 
 
     # getting output filename
@@ -533,5 +543,5 @@ if __name__ == "__main__":
     
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_noisemap_calibration_from_l2a(e2edata_dir, outputdir)
     test_noisemap_calibration_from_l1(e2edata_dir, outputdir)
+    test_noisemap_calibration_from_l2a(e2edata_dir, outputdir)

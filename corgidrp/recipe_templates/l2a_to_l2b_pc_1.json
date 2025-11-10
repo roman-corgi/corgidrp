@@ -1,0 +1,33 @@
+{
+    "name" : "l2a_to_l2b_pc_1",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "frame_select"
+        },
+        {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "dark_subtraction",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC, OPTIONAL",
+                "Dark" : "AUTOMATIC, OPTIONAL"
+            },
+            "keywords" : {
+                "outputdir" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

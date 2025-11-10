@@ -149,7 +149,7 @@ def autogen_recipe(filelist, outputdir, template=None):
         dataset0 = data.Dataset([filelist[0]])
         first_frame = dataset0[0]
         # don't need the actual data, especially if it would take up a lot of RAM just to hold it in cache
-        dataset = data.Dataset(filelist, no_data=True)
+        dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
 
     # if user didn't pass in template
     if template is None:
@@ -292,11 +292,14 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
             if image.ext_hdr['ISPC']:
-                recipe_filename = ["l1_to_l2b_pc_dark_1.json", "l1_to_l2b_pc_dark_2.json"]#"l1_to_l2b_pc_dark.json"XXX
+                recipe_filename = ["l1_to_l2b_pc_dark_1.json", "l1_to_l2b_pc_dark_2.json"]# "l1_to_l2b_pc_dark.json"
+                chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
-                recipe_filename = "l1_to_l2a_noisemap.json" #["l1_to_l2a_noisemap_1.json", "l1_to_l2a_noisemap_2.json"] XXX XXX
+                recipe_filename = ["l1_to_l2a_noisemap_1.json", "l1_to_l2a_noisemap_2.json"]#"l1_to_l2a_noisemap.json"
+                chained = True
             else: # then len(unique_vals) is 1 and not PC: traditional darks
-                recipe_filename = ["build_trad_dark_image_1.json", "build_trad_dark_image_2.json"] #"build_trad_dark_image.json" XXX
+                recipe_filename = ["build_trad_dark_image_1.json", "build_trad_dark_image_2.json"] #"build_trad_dark_image.json"
+                chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
@@ -317,14 +320,18 @@ def guess_template(dataset):
         if image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
             if image.ext_hdr['ISPC']:
-                recipe_filename = ["l2a_to_l2b_pc_dark_1.json", "l2a_to_l2b_pc_dark_2.json"]#"l2a_to_l2b_pc_dark.json"XXX
+                recipe_filename = ["l2a_to_l2b_pc_dark_1.json", "l2a_to_l2b_pc_dark_2.json"]#"l2a_to_l2b_pc_dark.json"
+                chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
-                recipe_filename = "l2a_to_l2a_noisemap.json" #["l2a_to_l2a_noisemap_1.json", "l2a_to_l2a_noisemap_2.json"]  XXX XXX
+                recipe_filename = ["l2a_to_l2a_noisemap_1.json", "l2a_to_l2a_noisemap_2.json"] # "l2a_to_l2a_noisemap.json"
+                chained = True
             else: # then len(unique_vals) is 1 and not PC: traditional darks
-                recipe_filename = ["l2a_build_trad_dark_image_1.json", "l2a_build_trad_dark_image_2.json"] #"l2a_build_trad_dark_image.json" XXX
+                recipe_filename = ["l2a_build_trad_dark_image_1.json", "l2a_build_trad_dark_image_2.json"] #"l2a_build_trad_dark_image.json" 
+                chained = True
         else:
             if image.ext_hdr['ISPC']:
-                recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json"] #"l2a_to_l2b_pc.json"XXX
+                recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
+                chained = True
             else:
                 recipe_filename = "l2a_to_l2b.json"  # science data and all else
     # L2b -> L3 data processing
@@ -431,52 +438,54 @@ def run_recipe(recipe, save_recipe_file=True):
             json.dump(recipe, json_file, indent=4)
 
     # determine if this is a RAM-heavy recipe which needs crop-stack processing
-    crop_stack_bool = (recipe['name'] == 'noisemap_generation_2' or 
+    #sort_pupilimg_frames included here b/c it sorts through a large number of frame (>700) b/c 
+    # EM gain cal files (sorted here and excluded, processed by SSC) are included in the visits
+    ram_heavy_bool = (recipe['name'] == 'noisemap_generation_2' or 
                 recipe['name'] == 'build_trad_dark_2' or 
                 recipe['name'] == 'trad_dark_image_2' or
                 recipe['name'] == '_pc_2' or
-                recipe['name'] == 'pc_dark_2')
-    ram_heavy_steps = ['get_pc_mean', 'calibrate_darks']
-    num_pix_ram = 250*(64*3*1200*2200+32*1200)/(8*1e9) #noisemaps XXX
-    num_pix_ram = 390*(64*3*1024**2+32*1024)/(8*1e9) # pc; approx number of pixels that can be held in 100 GB RAM XXX
-    if crop_stack_bool:
-        ram_increment = 390 #assumes 100GB upper limit for float64 frames XXX
-    else: # steps before crop_stack step
-        ram_increment = 200 # how many frames to process at a time if RAM-heavy XXX
+                recipe['name'] == 'pc_dark_2' or 
+                recipe['steps'][0]['name'] == 'sort_pupilimg_frames') 
+
+    ram_increment_bool = (recipe['name'] == 'noisemap_generation_1' or 
+                recipe['name'] == 'build_trad_dark_1' or 
+                recipe['name'] == 'trad_dark_image_1' or
+                recipe['name'] == '_pc_1' or
+                recipe['name'] == 'pc_dark_1')
     # read in data, if not doing bp map
     if not recipe["inputs"]:
         curr_dataset = []
-        crop_stack_bool = False
+        ram_heavy_bool = False
         total_dset_length = 1 #for loop purposes later
+        ram_increment = 1
     else:
         filelist = recipe["inputs"]
         total_dset_length = len(filelist)
-        curr_dataset = data.Dataset(filelist, no_data=True)
-        # write the recipe into the image extension header
-        for frame in curr_dataset:
-            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+        if ram_increment_bool:
+        # how many frames to process at a time (before getting the RAM-heaviest function in the recipe) if RAM-heavy
+            ram_increment = 200 
+        else:
+            ram_increment = len(filelist)
 
     tot_steps = len(recipe["steps"])
     save_step = False
-    crop_stack = []
+    
     for n in range(0, total_dset_length, ram_increment):
+        if n == 1 and ram_heavy_bool:
+            break # exit for loop b/c all frames already accounted for 
         if recipe["inputs"]:
-            if crop_stack_bool:
-                crop_curr_dataset = data.Dataset(filelist[n:n+ram_increment])
-            #     for i in range(len(crop_curr_dataset)):
-            #         crop_stack()
-            #         ram_curr_stack = 100/ram_increment
-            #         crop_curr_dataset[i].data = crop_curr_dataset[i].data[0:] #save each chunk to hard disk
-            #         crop_curr_dataset.err = slice_section(crop_curr_dataset[i].err, 
-            #                                            crop_curr_dataset[i].pri_hdr['ARRTYPE'], 
-            #                                            'image', detector_areas)
-            #         crop_curr_dataset.dq = slice_section(crop_curr_dataset[i].dq, 
-            #                                            crop_curr_dataset[i].pri_hdr['ARRTYPE'], 
-            #                                            'image', detector_areas)
-            #     crop_curr_dataset.all_data = crop_curr_dataset.all_data[:
-
+            if ram_heavy_bool:
+                if recipe['steps'][0]['name'] == 'sort_pupilimg_frames': 
+                    #in this case, the frames are L1 and don't yet have err and dq, so don't set those 
+                    # to None so that each frame is given the default starting err and dq for further pipeline processes
+                    curr_dataset = data.Dataset(filelist, no_data=True)
+                else:
+                    curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
             else:
                 curr_dataset = data.Dataset(filelist[n:n+ram_increment])
+                # write the recipe into the image extension header
+            for frame in curr_dataset:
+                frame.ext_hdr["RECIPE"] = json.dumps(recipe)
         # execute each pipeline step
         for i, step in enumerate(recipe["steps"]):
             print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
@@ -545,33 +554,3 @@ def run_recipe(recipe, save_recipe_file=True):
                 output_filepaths = [curr_dataset.filepath]
     
     return output_filepaths
-
-def crop_stack(folder_path):
-    """
-    Crops the input frames into smaller sections to reduce RAM usage during processing.
-    Saves the cropped sections into the same folder.
-
-    Args:
-        folder_path (str): path to the folder with frames to crop 
-    """
-
-    
-    def crop_function(image):
-        # Define the cropping logic here
-        # For example, split the image into 4 quadrants and save each
-        height, width = image.data.shape
-        mid_height = height // 2
-        mid_width = width // 2
-
-        quadrants = [
-            image.data[0:mid_height, 0:mid_width],      # Top-left
-            image.data[0:mid_height, mid_width:width],   # Top-right
-            image.data[mid_height:height, 0:mid_width],  # Bottom-left
-            image.data[mid_height:height, mid_width:width] # Bottom-right
-        ]
-
-        for i, quadrant in enumerate(quadrants):
-            quadrant_image = image.copy()
-            quadrant_image.data = quadrant
-            quadrant_filename = os.path.join(folder_path, f"{os.path.basename(image.filename).split('.')[0]}_quad{i}.fits")
-            quadrant_image.save(filedir=folder_path, filenames=[quadrant_filename])

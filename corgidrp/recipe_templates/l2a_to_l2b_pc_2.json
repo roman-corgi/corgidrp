@@ -1,0 +1,23 @@
+{
+    "name" : "l2a_to_l2b_pc_2",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name": "get_pc_mean",
+            "calibs" : {
+                "Dark" : "AUTOMATIC, OPTIONAL"
+            },
+            "keywords" : {
+                "dataset_copy" : false
+            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

@@ -29,7 +29,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     np.random.seed(1234)
     # using CIC and dark current average values which come from the corresponding values from cic_path and dark_path above; FPN mean is already 0 in fpn_path and simulated set below
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=2, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158) 
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158)
     output_dir = os.path.join(e2eoutput_path, 'photon_count_e2e')
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
@@ -62,6 +62,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     ill_dataset.save(output_ill_dir)
     dark_dataset.save(output_dark_dir)
+    del ill_dataset
+    del dark_dataset
     l1_data_ill_filelist = []
     l1_data_dark_filelist = []
     for f in os.listdir(output_ill_dir):
