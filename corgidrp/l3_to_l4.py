@@ -1578,6 +1578,10 @@ def spec_psf_subtraction(input_dataset):
     if values != [0,1] and values != [1,0]:
         raise ValueError("PSFREF keyword must be present in the primary header and be either 0 or 1 for all images")
     ref_index = values.index(True)
+    ref_frame_list = ''
+    for frame in input_datasets[ref_index]:
+        ref_frame_list += str(frame.filename) + ', '
+    ref_frame_list = ref_frame_list[:-2] # remove last comma and space
     mean_ref_dset = combine_subexposures(input_datasets[ref_index], num_frames_per_group=None, collapse="mean", num_frames_scaling=False)
     # undo any NaN assignments in the image since we FFT below
     nan_inds = np.where(np.isnan(mean_ref_dset[0].data))

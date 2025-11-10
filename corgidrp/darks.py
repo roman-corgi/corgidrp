@@ -249,9 +249,13 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['DATATYPE'] = 'Dark'
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
+    master_dark.ext_hdr['DRPNFILE'] = int(np.round(np.nanmean(unmasked_num)))
     master_dark.ext_hdr['BUNIT'] = 'detected electron'
     master_dark.err_hdr['BUNIT'] = 'detected electron'
-    master_dark.ext_hdr['HISTORY'] = 'traditional master analog dark (not synthesized from detector noise maps)'
+
+    msg = 'traditional master analog dark (not synthesized from detector noise maps)'
+    master_dark.ext_hdr.add_history(msg)
+
     return master_dark
 
 
@@ -305,7 +309,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         and each stack is for a unique EM gain and frame time combination.
         Each stack should have the same number of frames.
         Each frame should accord with the SCI frame geometry.
-        We recommend  >= 1300 frames for each stack if calibrating
+        We recommend  >= 1176 frames for each stack if calibrating
         darks for analog frames,
         thousands for photon counting depending on the maximum number of
         frames that will be used for photon counting.
@@ -450,16 +454,16 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     unreliable_pix_map = np.zeros((detector_regions['SCI']['frame_rows'],
                                    detector_regions['SCI']['frame_cols'])).astype(int)
     unfittable_pix_map = unreliable_pix_map.copy()
+    if len(dataset) < 1176:
+            print('The number of frames in dataset is less than 1176 frames, '
+            'which is the minimum number for the analog synthesized '
+            'master dark')
     for i in range(len(datasets)):
         frames = []
         bpmaps = []
         errs = []
         check.threeD_array(datasets[i].all_data,
                            'datasets['+str(i)+'].all_data', TypeError)
-        if len(datasets[i].all_data) < 1300:
-            print('A sub-stack was found with less than 1300 frames, '
-            'which is the recommended number per sub-stack for an analog '
-            'master dark')
         if i > 0:
             if np.shape(datasets[i-1].all_data)[1:] != np.shape(datasets[i].all_data)[1:]:
                 raise CalDarksLSQException('All sub-stacks must have the same frame shape.')
@@ -758,6 +762,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
     
+    noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))
     l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
     noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
@@ -877,5 +882,6 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
 
         master_dark = Dark(md_data, prihdr, exthdr, input_data, md_noise, FDCdq,
                         errhdr)
+        master_dark.ext_hdr['DRPNFILE'] = noise_maps.ext_hdr['DRPNFILE']
         
         return master_dark
