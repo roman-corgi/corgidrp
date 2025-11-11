@@ -387,7 +387,6 @@ def guess_template(dataset):
                 recipe_filename = "l3_to_l4_nopsfsub.json"
     else:
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
-    print(recipe_filename)
     return recipe_filename, chained
 
 
