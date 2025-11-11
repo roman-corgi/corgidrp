@@ -4,6 +4,7 @@ import glob
 import pytest
 import numpy as np
 import logging
+from datetime import datetime, timedelta
 
 import corgidrp
 import corgidrp.data as data
@@ -15,9 +16,15 @@ from corgidrp.check import (check_filename_convention, check_dimensions, verify_
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
+    # create output dir first
+    output_dir = os.path.join(e2eoutput_path, 'fluxcal_pol_e2e')
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+    
     # set up logging
     global logger
-    log_file = os.path.join(e2eoutput_path, 'fluxcal_pol_e2e.log')
+    log_file = os.path.join(output_dir, 'fluxcal_pol_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('fluxcal_pol_e2e')
@@ -49,12 +56,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
 
-    # create output dir
-    output_dir = os.path.join(e2eoutput_path, 'pol_flux_sim_test_data')
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.mkdir(output_dir)
-
     #mock a point source image
     fwhm = 3
     star_flux = 1.5e-09 #erg/(s*cm^2*AA)
@@ -62,12 +63,29 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # split the flux unevenly by polarization
     star_flux_left = 0.6 * star_flux
     star_flux_right = 0.4 * star_flux
-    flux_image_WP1 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL0', filedir=output_dir, file_save=True)
-    flux_image_WP1.ext_hdr['BUNIT'] = 'photoelectron'
-    flux_dataset_WP1 = data.Dataset([flux_image_WP1, flux_image_WP1])
-    flux_image_WP2 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL45', filedir=output_dir, file_save=True)
-    flux_image_WP2.ext_hdr['BUNIT'] = 'photoelectron'
-    flux_dataset_WP2 = data.Dataset([flux_image_WP2, flux_image_WP2])
+    
+    # Create WP1 images with unique timestamps
+    base_time = datetime.now()
+    flux_image_WP1_1 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL0', filedir=None, file_save=False)
+    flux_image_WP1_1.ext_hdr['BUNIT'] = 'photoelectron'
+    flux_image_WP1_1.ext_hdr['FILETIME'] = base_time.isoformat()
+    
+    flux_image_WP1_2 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL0', filedir=None, file_save=False)
+    flux_image_WP1_2.ext_hdr['BUNIT'] = 'photoelectron'
+    flux_image_WP1_2.ext_hdr['FILETIME'] = (base_time + timedelta(milliseconds=100)).isoformat()
+    
+    flux_dataset_WP1 = data.Dataset([flux_image_WP1_1, flux_image_WP1_2])
+    
+    # Create WP2 images with unique timestamps
+    flux_image_WP2_1 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL45', filedir=None, file_save=False)
+    flux_image_WP2_1.ext_hdr['BUNIT'] = 'photoelectron'
+    flux_image_WP2_1.ext_hdr['FILETIME'] = (base_time + timedelta(milliseconds=200)).isoformat()
+    
+    flux_image_WP2_2 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL45', filedir=None, file_save=False)
+    flux_image_WP2_2.ext_hdr['BUNIT'] = 'photoelectron'
+    flux_image_WP2_2.ext_hdr['FILETIME'] = (base_time + timedelta(milliseconds=300)).isoformat()
+    
+    flux_dataset_WP2 = data.Dataset([flux_image_WP2_1, flux_image_WP2_2])
 
     logger.info('='*80)
     logger.info('Test Case 1: Input Image Data Format and Content for WP1')
@@ -89,25 +107,19 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         logger.info("")
     logger.info(f"Total input images validated: {len(flux_dataset_WP1)}")
 
+    # Create proper folder structure: WP1 folder with input_l2b subdirectory
+
     output_dir_WP1 = os.path.join(output_dir, 'WP1')
-    os.mkdir(output_dir_WP1)
-    flux_dataset_WP1.save(output_dir_WP1, ['flux_e2e_WP1_{0}.fits'.format(i) for i in range(len(flux_dataset_WP1))])
-
-    data_filelist_WP1 = []
-
-    for f in os.listdir(output_dir_WP1):
-        data_filelist_WP1.append(os.path.join(output_dir_WP1, f))
+    os.makedirs(output_dir_WP1)
+    input_l2b_dir_WP1 = os.path.join(output_dir_WP1, 'input_l2b')
+    os.makedirs(input_l2b_dir_WP1)
     
-    # make DRP output directory if needed
-    fluxcal_outputdir = os.path.join(e2eoutput_path, "l2b_to_pol_fluxcal_factor_output")
-    if os.path.exists(fluxcal_outputdir):
-        shutil.rmtree(fluxcal_outputdir)
-    os.mkdir(fluxcal_outputdir)
-
-    fluxcal_outputdir_WP1 = os.path.join(fluxcal_outputdir, 'WP1')
-    fluxcal_outputdir_WP2 = os.path.join(fluxcal_outputdir, 'WP2')
-    os.mkdir(fluxcal_outputdir_WP1)
-    os.mkdir(fluxcal_outputdir_WP2)
+    # Save files with proper CGI naming convention
+    data_filelist_WP1 = mocks.rename_files_to_cgi_format(
+        list_of_fits=list(flux_dataset_WP1),
+        output_dir=input_l2b_dir_WP1,
+        level_suffix="l2b"
+    )
 
     ####### Run the DRP walker for WP1
     logger.info('='*80)
@@ -115,8 +127,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     logger.info('Running walker for WP1')
-    walker.walk_corgidrp(data_filelist_WP1, '', fluxcal_outputdir_WP1)
-    fluxcal_file_WP1 = glob.glob(os.path.join(fluxcal_outputdir_WP1, '*abf_cal*.fits'))[0]
+    walker.walk_corgidrp(data_filelist_WP1, '', output_dir_WP1)
+    fluxcal_file_WP1 = glob.glob(os.path.join(output_dir_WP1, '*abf_cal*.fits'))[0]
     fluxcal_image_WP1 = data.Image(fluxcal_file_WP1)
 
     logger.info('='*80)
@@ -147,8 +159,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # check header keyword values match with what is expected
     verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'DATALVL': 'CAL'}, logger=logger)
     verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'DATATYPE': 'FluxcalFactor'}, logger=logger)
-    verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'DPAMNAME': flux_image_WP1.ext_hdr['DPAMNAME']}, logger=logger)
-    verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'CFAMNAME': flux_image_WP1.ext_hdr['CFAMNAME']}, logger=logger)
+    verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'DPAMNAME': flux_image_WP1_1.ext_hdr['DPAMNAME']}, logger=logger)
+    verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'CFAMNAME': flux_image_WP1_1.ext_hdr['CFAMNAME']}, logger=logger)
     logger.info("")
 
     # baseline performance check WP1
@@ -191,19 +203,24 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         logger.info("")
     logger.info(f"Total input images validated: {len(flux_dataset_WP2)}")
 
+    # Create proper folder structure: WP2 folder with input_l2b subdirectory
+    # Output calibration files will be saved to WP2 root
     output_dir_WP2 = os.path.join(output_dir, 'WP2')
-    os.mkdir(output_dir_WP2)
-    flux_dataset_WP2.save(output_dir_WP2, ['flux_e2e_WP2_{0}.fits'.format(i) for i in range(len(flux_dataset_WP2))])
-
-    data_filelist_WP2 = []
-
-    for f in os.listdir(output_dir_WP2):
-        data_filelist_WP2.append(os.path.join(output_dir_WP2, f))
+    os.makedirs(output_dir_WP2)
+    input_l2b_dir_WP2 = os.path.join(output_dir_WP2, 'input_l2b')
+    os.makedirs(input_l2b_dir_WP2)
+    
+    # Save files with proper CGI naming convention
+    data_filelist_WP2 = mocks.rename_files_to_cgi_format(
+        list_of_fits=list(flux_dataset_WP2),
+        output_dir=input_l2b_dir_WP2,
+        level_suffix="l2b"
+    )
 
     ####### Run the DRP walker for WP2
     logger.info('Running walker for WP2')
-    walker.walk_corgidrp(data_filelist_WP2, '', fluxcal_outputdir_WP2)
-    fluxcal_file_WP2 = glob.glob(os.path.join(fluxcal_outputdir_WP2, '*abf_cal*.fits'))[0]
+    walker.walk_corgidrp(data_filelist_WP2, '', output_dir_WP2)
+    fluxcal_file_WP2 = glob.glob(os.path.join(output_dir_WP2, '*abf_cal*.fits'))[0]
     fluxcal_image_WP2 = data.Image(fluxcal_file_WP2)
 
     logger.info('='*80)
@@ -234,8 +251,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # check header keyword values match with what is expected
     verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'DATALVL': 'CAL'}, logger=logger)
     verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'DATATYPE': 'FluxcalFactor'}, logger=logger)
-    verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'DPAMNAME': flux_image_WP2.ext_hdr['DPAMNAME']}, logger=logger)
-    verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'CFAMNAME': flux_image_WP2.ext_hdr['CFAMNAME']}, logger=logger)
+    verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'DPAMNAME': flux_image_WP2_1.ext_hdr['DPAMNAME']}, logger=logger)
+    verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'CFAMNAME': flux_image_WP2_1.ext_hdr['CFAMNAME']}, logger=logger)
     logger.info("")
 
     # baseline performance check WP2

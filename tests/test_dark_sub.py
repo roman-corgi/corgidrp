@@ -1,5 +1,4 @@
 import os
-import glob
 import pickle
 import pytest
 import numpy as np
@@ -46,12 +45,8 @@ def test_dark_sub():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    mocks.create_dark_calib_files(filedir=datadir)
-
     ####### test data architecture
-    dark_filenames = glob.glob(os.path.join(datadir, "simcal_dark*.fits"))
-
-    dark_dataset = data.Dataset(dark_filenames)
+    dark_dataset = mocks.create_dark_calib_files(filedir=datadir)
 
     assert len(dark_dataset) == 10
 
@@ -67,21 +62,21 @@ def test_dark_sub():
     dark_dataset[0].data[0,0] = temp_store #reset to original value
 
     ###### create dark
-    dark_frame = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
+    dark_frame_full = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
 
     # check the level of dark current is approximately correct; leave off last row, telemetry row
-    assert np.mean(dark_frame.data[:-1]) == pytest.approx(150, abs=1e-2)
+    assert np.mean(dark_frame_full.data[:-1]) == pytest.approx(150, abs=1e-2)
 
     # leave out telemetry row of full frame
     dark_dataset_notelem = dark_dataset.all_data[:, 0:-1, :]
-    assert np.allclose(np.std(dark_dataset_notelem, axis = 0)/np.sqrt(len(dark_dataset_notelem)), dark_frame.err[0][0:-1, :], rtol=1e-6)
+    assert np.allclose(np.std(dark_dataset_notelem, axis = 0)/np.sqrt(len(dark_dataset_notelem)), dark_frame_full.err[0][0:-1, :], rtol=1e-6)
 
     # save dark
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     dark_filename = "sim_dark_calib.fits"
     if not os.path.exists(calibdir):
         os.mkdir(calibdir)
-    dark_frame.save(filedir=calibdir, filename=dark_filename)
+    dark_frame_full.save(filedir=calibdir, filename=dark_filename)
 
     ###### perform dark subtraction
     # load in the dark
@@ -95,13 +90,13 @@ def test_dark_sub():
     assert np.all(new_dark.data == pickled_dark.data)
 
     # subtract darks from itself; also saves to testcalib folder
-    darkest_dataset = l2a_to_l2b.dark_subtraction(dark_dataset, new_dark, outputdir=calibdir)
+    darkest_dataset = l2a_to_l2b.dark_subtraction(dark_dataset, dark=new_dark, outputdir=calibdir)
     assert(dark_filename in str(darkest_dataset[0].ext_hdr["HISTORY"]))
 
     # PC dark cannot be used for this step function
     new_dark.ext_hdr['PC_STAT'] = 'photon-counted master dark'
     with pytest.raises(Exception):
-        l2a_to_l2b.dark_subtraction(dark_dataset, new_dark, outputdir=calibdir)
+        l2a_to_l2b.dark_subtraction(dark_dataset,dark=new_dark, outputdir=calibdir)
 
     # check the level of the dataset is now approximately 0, leaving off telemetry row
     assert np.mean(darkest_dataset.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
@@ -154,7 +149,7 @@ def test_dark_sub():
     image_frame.ext_hdr['KGAINPAR'] = 7.
     image_frame.ext_hdr['BUNIT'] = 'detected electron'
     dataset_from_noisemap = data.Dataset([image_frame])
-    nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noise_maps, outputdir=calibdir)
+    nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noisemaps=noise_maps, outputdir=calibdir)
     # check the level of the dataset is now approximately 0, leaving off telemetry row
     assert np.mean(nm_dataset0.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
 
@@ -162,6 +157,19 @@ def test_dark_sub():
     pickled = pickle.dumps(master_dark)
     pickled_dark = pickle.loads(pickled)
     assert np.all(master_dark.data == pickled_dark.data)
+
+    # must have a noisemaps or dark input
+    with pytest.raises(Exception):
+        l2a_to_l2b.dark_subtraction(dataset_from_noisemap, None, None)
+    # analog dark trumps noise maps if both provided
+    ignore_nm_dark = l2a_to_l2b.dark_subtraction(dark_dataset, noisemaps=noise_maps, dark=dark_frame_full)
+    # check the level of the dataset is now approximately 0, leaving off telemetry row, since master_dark was made from dark_dataset
+    assert np.mean(ignore_nm_dark.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
+    # if PC dark provided, no subtraction occurs at this step
+    dark_dataset[0].ext_hdr['ISPC'] = 1 # set to PC frame for test below
+    dark_frame_full.ext_hdr['PC_STAT'] = 'photon-counted master dark' # set to PC dark for test below
+    pc_no_sub = l2a_to_l2b.dark_subtraction(dark_dataset, noisemaps=noise_maps, dark=dark_frame_full)
+    assert np.array_equal(pc_no_sub.all_data, dark_dataset.all_data)
 
     corgidrp.track_individual_errors = old_err_tracking
 

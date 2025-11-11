@@ -31,7 +31,10 @@ from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_
 from pyklip.instruments.utils.wcsgen import generate_wcs
 from corgidrp import measure_companions, corethroughput
 from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy
-
+import datetime
+import glob
+import shutil
+from corgidrp import pol
 
 from emccd_detect.emccd_detect import EMCCDDetect
 from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
@@ -171,13 +174,13 @@ def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
     return out
 
 
-def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
+def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS"):
     """
     Creates default L1 headers by reading values from the l1.csv documentation file.
     
     Args:
         arrtype (str): Array type ("SCI" or "ENG"). Defaults to "SCI".
-        vistype (str): Visit type. Defaults to "TDEMO".
+        vistype (str): Visit type. Defaults to "CGIVST_TDD_OBS".
     
     Returns:
         tuple: 
@@ -513,6 +516,7 @@ def create_default_L2b_headers(arrtype="SCI"):
     errhdr['KGAIN_ER']      = exthdr['KGAIN_ER'] # Kgain error (copied from exthdr)
     errhdr['RN']            = exthdr['RN']       # Kgain error (copied from exthdr)
     errhdr['DESMEAR']       = exthdr['DESMEAR']  # Whether desmearing was used (copied from exthdr)
+    errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
 
     return prihdr, exthdr, errhdr, dqhdr, biashdr
 
@@ -610,6 +614,8 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
+    errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
+
     return prihdr, exthdr, errhdr, dqhdr
 
 
@@ -653,6 +659,8 @@ def create_default_L4_headers(arrtype="SCI"):
     exthdr['CTCALFN']       = ''            # Core throughput linked file for calibration
     exthdr['FLXCALFN']      = ''            # Abs flux file linked for calibration
     exthdr['DATALVL']       = 'L4'          # Data level (e.g., 'L1', 'L2a', 'L2b')
+
+    errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
 
     return prihdr, exthdr, errhdr, dqhdr
 
@@ -704,7 +712,7 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain computed from coefficients and calibration temperature
     exthdr['DATALVL']      = 'CalibrationProduct'
     exthdr['DATATYPE']      = 'DetectorNoiseMaps'
-    exthdr['DRPNFILE']      = "Mocks"         # What files are used to create this calibration product 
+    exthdr['DRPNFILE']      = 2         # Number of files used to create this calibration product 
     exthdr['FILE0']         = "Mock0.fits"
     exthdr['FILE1']         = "Mock1.fits"
     exthdr['B_O'] = 0.01
@@ -821,7 +829,6 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    filepattern = "simcal_dark_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_L1_headers(arrtype="SCI")
@@ -832,7 +839,14 @@ def create_dark_calib_files(filedir=None, numfiles=10):
         sim_data = np.random.poisson(lam=150., size=(1200, 2200)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
-            frame.save(filedir=filedir, filename=filepattern.format(i))
+            # Generate unique, properly formatted filename
+            visitid = prihdr["VISITID"]
+            base_time = datetime.datetime.now()
+            time_offset = datetime.timedelta(seconds=i)
+            unique_time = base_time + time_offset
+            time_str = data.format_ftimeutc(unique_time.isoformat())
+            filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+            frame.save(filedir=filedir, filename=filename)
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
@@ -854,7 +868,6 @@ def create_simflat_dataset(filedir=None, numfiles=10):
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    filepattern = "sim_flat_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_L1_headers()
@@ -863,7 +876,14 @@ def create_simflat_dataset(filedir=None, numfiles=10):
         sim_data = np.random.poisson(lam=150., size=(1024, 1024)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
-            frame.save(filedir=filedir, filename=filepattern.format(i))
+            # Generate unique, properly formatted filename
+            visitid = prihdr["VISITID"]
+            base_time = datetime.datetime.now()
+            time_offset = datetime.timedelta(seconds=i)
+            unique_time = base_time + time_offset
+            time_str = data.format_ftimeutc(unique_time.isoformat())
+            filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+            frame.save(filedir=filedir, filename=filename)
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
@@ -1010,23 +1030,36 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             planet_rot_images.append(planet_repoint_current[0][j])
             pred_cents.append(planet_repoint_current[1][j])
 
-    filepattern = "cgi_pppppccaaasssooovvv_yyyymmddt{0:02d}00_l2a.fits"
     frames=[]
+    # Generate base timestamp once for consistency
+    base_dt = datetime.datetime.now()
+    base_visitid = None
+    
     for i in range(numfiles*raster_subexps):
         prihdr, exthdr = create_default_L1_headers()
+        
+        # Get VISITID (should be consistent across frames)
+        if base_visitid is None:
+            base_visitid = prihdr.get('VISITID', '0000000000000000000')
+        
+        # Generate unique timestamp for each frame (add microseconds for uniqueness)
+        dt = base_dt + datetime.timedelta(microseconds=i*100)
+        ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+        
         sim_data=planet_rot_images[i]
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         pl=planet
         band=band
         frame.pri_hdr.set('TARGET', pl)
         frame.ext_hdr.append(('CFAMNAME', "{0}F".format(band)), end=True)
+        
+        # Set proper L2a filename
+        filename = f"cgi_{base_visitid}_{ftime}_l2a.fits"
+        
         if filedir is not None:
-            frame.save(filedir=filedir, filename=filepattern.format(i))
+            frame.save(filedir=filedir, filename=filename)
         else:
-            # fake filenumber as hours and minutes
-            hours = i // 60
-            minutes = i % 60
-            frame.filename = filepattern.format(hours, minutes)
+            frame.filename = filename
         frames.append(frame)
     raster_dataset = data.Dataset(frames)
     return raster_dataset
@@ -1050,7 +1083,6 @@ def create_flatfield_dummy(filedir=None, numfiles=2):
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    filepattern= "flat_field_{0:01d}.fits"
     frames=[]
     for i in range(numfiles):
         prihdr, exthdr = create_default_L1_headers()
@@ -1058,7 +1090,14 @@ def create_flatfield_dummy(filedir=None, numfiles=2):
         sim_data = np.random.normal(loc=1.0, scale=0.01, size=(1024, 1024))
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
-            frame.save(filedir=filedir, filename=filepattern.format(i))
+            # Generate CGI filename with incrementing datetime
+            visitid = prihdr["VISITID"]
+            base_time = datetime.datetime.now()
+            time_offset = datetime.timedelta(seconds=i)
+            unique_time = base_time + time_offset
+            time_str = data.format_ftimeutc(unique_time.isoformat())
+            filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+            frame.save(filedir=filedir, filename=filename)
         frames.append(frame)
     flatfield = data.Dataset(frames)
     return flatfield
@@ -1082,7 +1121,6 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    filepattern = "simcal_nonlin_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_L1_headers()
@@ -1112,20 +1150,27 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
 
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
-            frame.save(filedir=filedir, filename=filepattern.format(i))
+            # Generate unique, properly formatted filename
+            visitid = prihdr["VISITID"]
+            base_time = datetime.datetime.now()
+            time_offset = datetime.timedelta(seconds=i)
+            unique_time = base_time + time_offset
+            time_str = data.format_ftimeutc(unique_time.isoformat())
+            filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+            frame.save(filedir=filedir, filename=filename)
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
 
 
-def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
+def create_cr_dataset(nonlin_filepath, filedir=None, obs_datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
     """
     Create simulated non-linear data with cosmic rays to test CR detection.
 
     Args:
         nonlin_filepath (str): path to FITS file containing nonlinear calibration data (e.g., tests/test_data/nonlin_sample.fits)
         filedir (str): (Optional) Full path to directory to save to.
-        datetime (astropy.time.Time): (Optional) Date and time of the observations to simulate.
+        obs_datetime (astropy.time.Time): (Optional) Date and time of the observations to simulate.
         numfiles (int): Number of files in dataset.  Defaults to 2 (not creating the cal here, just testing the function)
         em_gain (int): The EM gain to use for the simulated data.  Defaults to 2000.
         numCRs (int): The number of CR hits to inject. Defaults to 5.
@@ -1136,8 +1181,8 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
             The simulated dataset.
     """
 
-    if datetime is None:
-        datetime = Time('2024-01-01T11:00:00.000Z')
+    if obs_datetime is None:
+        obs_datetime = Time('2024-01-01T11:00:00.000Z')
 
     detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
 
@@ -1157,7 +1202,7 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
     for i in range(len(dataset.all_data)):
 
         # Save the date
-        dataset[i].ext_hdr['DATETIME'] = str(datetime)
+        dataset[i].ext_hdr['DATETIME'] = str(obs_datetime)
 
         # Pick random locations to add a cosmic ray
         for x in range(numCRs):
@@ -1173,7 +1218,13 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
                 cr_tail = [fwc/(j+1) for j in range(tail_len)]
                 dataset.all_data[i,loc[0],tail_start:] += cr_tail
 
-        dataset[i].filename = "simcal_cosmics_{0:04d}.fits"
+        # generate unique, properly formatted filename
+        visitid = dataset[i].pri_hdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_offset = datetime.timedelta(seconds=i)
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        dataset[i].filename = f"cgi_{visitid}_{time_str}_l1_.fits"
 
     # Save frame if desired
     if filedir is not None:
@@ -1208,10 +1259,6 @@ def create_prescan_files(filedir=None, numfiles=2, arrtype="SCI"):
     else:
         raise ValueError(f'Arrtype {arrtype} not in ["SCI","ENG","CAL"]')
 
-
-    filepattern = f"sim_prescan_{arrtype}"
-    filepattern = filepattern+"{0:04d}.fits"
-
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_L1_headers(arrtype=arrtype)
@@ -1219,7 +1266,14 @@ def create_prescan_files(filedir=None, numfiles=2, arrtype="SCI"):
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
         if filedir is not None:
-            frame.save(filedir=filedir, filename=filepattern.format(i))
+            # Generate unique, properly formatted filename
+            visitid = prihdr["VISITID"]
+            base_time = datetime.datetime.now()
+            time_offset = datetime.timedelta(seconds=i)
+            unique_time = base_time + time_offset
+            time_str = data.format_ftimeutc(unique_time.isoformat())
+            filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+            frame.save(filedir=filedir, filename=filename)
 
         frames.append(frame)
 
@@ -1258,7 +1312,12 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
     if filedir is not None:
-        frame.save(filedir=filedir, filename= "sim_bad_pixel.fits")
+        # Generate unique, properly formatted filename
+        visitid = prihdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_str = data.format_ftimeutc(base_time.isoformat())
+        filename = f"cgi_{visitid}_{time_str}_bpm_cal.fits"
+        frame.save(filedir=filedir, filename=filename)
 
     badpixelmap = data.Dataset([frame])
 
@@ -1396,7 +1455,10 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     image = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
         dq = dq)
     # Use a an expected filename
-    image.filename = 'cgi_0200001001001001001_20250415t0305102_l2b.fits'
+    visitid = prhd["VISITID"]
+    base_time = datetime.datetime.now()
+    time_str = data.format_ftimeutc(base_time.isoformat())
+    image.filename = f"cgi_{visitid}_{time_str}_l2b.fits"
     return image
 
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
@@ -1692,8 +1754,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         # image_frames.append(sim_data)
 
         # TO DO: Determine what level this image should be
-        prihdr, exthdr = create_default_L1_headers()
-        prihdr['VISTYPE'] = 'BORESITE'
+        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+        prihdr['VISTYPE'] = 'CGIVST_CAL_BORESIGHT'
         prihdr['RA'] = np.array(frame_targs).T[0][i]  # assume we will know something about the dither RA/DEC pointing
         prihdr['DEC'] = np.array(frame_targs).T[1][i]
         prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
@@ -1702,7 +1764,11 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         err_map = None if not sim_err_map else err_map
         dq_map = None if bpix_map is None else dq_map
         frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr, err=err_map, dq=dq_map)
-        filename = "simcal_astrom.fits"
+        # Generate unique, properly formatted filename
+        visitid = prihdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_str = data.format_ftimeutc(base_time.isoformat())
+        filename = f"cgi_{visitid}_{time_str}_l2b.fits"
         frame.filename = filename
         
         if filedir is not None:
@@ -1738,7 +1804,6 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
         corgidrp.data.Dataset:
             the simulated dataset
     """
-    filepattern = "simcall_not_normalized_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
         # TO DO: Determine what level this image should be
@@ -1750,7 +1815,14 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr, err=sim_err, dq=sim_dq, err_hdr = errhdr, dq_hdr = dqhdr)
         # frame = data.Image(sim_data, pri_hdr = prihdr, ext_hdr = exthdr, err = sim_err, dq = sim_dq)
         if filedir is not None:
-            frame.save(filedir=filedir, filename=filepattern.format(i))
+            # Generate CGI filename with incrementing datetime
+            visitid = prihdr["VISITID"]
+            base_time = datetime.datetime.now()
+            time_offset = datetime.timedelta(seconds=i)
+            unique_time = base_time + time_offset
+            time_str = data.format_ftimeutc(unique_time.isoformat())
+            filename = f"cgi_{visitid}_{time_str}_l2b.fits"
+            frame.save(filedir=filedir, filename=filename)
         frames.append(frame)
     dataset = data.Dataset(frames)
 
@@ -2589,21 +2661,22 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 #     str(temp)+'K'+'Scheme_'+str(sch)+'TPUMP_Npumps_10000_gain'+str(g)+'_phasetime'+
                 #     str(t)+'_2.fits'), overwrite = True)
                 # else: 
+                # Note: have to use old filename format for now and overwrite later because setting
+                # the filename affects data generation
                 mult_counter = 0
                 filename = Path(output_dir,
-                str(temp)+'K'+'Scheme_'+str(sc)+'TPUMP_Npumps'+str(int(num_pumps))+'_gain'+str(EMgain)+'_phasetime'+
-                str(t)+'.fits')
-                if multiple > 1:
-                    if not os.path.exists(filename):
-                        hdul.writeto(filename, overwrite = True)
-                    else:
-                        mult_counter += 1
-                        hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
+                    str(temp)+'K'+'Scheme_'+str(sc)+'TPUMP_Npumps_'+str(int(num_pumps))+'_gain'+str(EMgain)+'_phasetime'+str(t)+'.fits')
+                if os.path.exists(filename):
+                    mult_counter += 1
+                    hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
                 else:
                     hdul.writeto(filename, overwrite = True)
+    
+    # After all data generation is complete, rename files to CGI format, because changing the filename
+    # in the function above somehow affects the content of the file
+    rename_files_to_cgi_format(pattern=os.path.join(output_dir, "*K*Scheme_*TPUMP*.fits"), level_suffix="l1")
 
-
-def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0):
+def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0, cic=0.01, dark_current=8.33e-4, read_noise=100., bias=20000, qe=0.9):
     '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
     Used for unit tests for photon counting.  
     
@@ -2618,6 +2691,11 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         smear: (bool) If True, smear is simulated.  Defaults to True.
         flux: (float) Number of photons/s per pixel desired.  Defaults to 1.
         bad_frames (int): Number of simulated bad frames (with primary header keyword 'OVEREXP' set to True) to include in output datasets that frame_select would catch by default. Defaults to 0.
+        cic (float): simulated clock-induced charge (CIC) in e-/pix/frame.  Defaults to 0.01.
+        dark_current (float): simulated dark current in e-/pix/s.  Defaults to 8.33e-4.
+        read_noise (float): simulated read noise in e-/pix/frame.  Defaults to 100.
+        bias (float): simulated bias in e-.  Defaults to 20000.
+        qe (float): quantum efficiency, e-/photon.  Defaults to 0.9.
     
     Returns:
         ill_dataset (corgidrp.data.Dataset): Dataset containing the illuminated frames
@@ -2632,11 +2710,11 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         em_gain=EMgain,
         full_well_image=60000.,  # e-
         full_well_serial=100000.,  # e-
-        dark_current=8.33e-4,  # e-/pix/s
-        cic=0.01,  # e-/pix/frame
-        read_noise=100.,  # e-/pix/frame
-        bias=20000,  # e-
-        qe=0.9,  # quantum efficiency, e-/photon
+        dark_current=dark_current,  # e-/pix/s
+        cic=cic,  # e-/pix/frame
+        read_noise=read_noise,  # e-/pix/frame
+        bias=bias,  # e-
+        qe=qe,  # quantum efficiency, e-/photon
         cr_rate=cosmic_rate,  # cosmic rays incidence, hits/cm^2/s
         pixel_pitch=13e-6,  # m
         eperdn=kgain,  
@@ -2691,10 +2769,16 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame.ext_hdr['EXPTIME'] = exptime
         frame.ext_hdr['RN'] = 100
         frame.ext_hdr['KGAINPAR'] = kgain
-        frame.pri_hdr['PHTCNT'] = True
-        frame.ext_hdr['ISPC'] = True
-        frame.pri_hdr["VISTYPE"] = "TDEMO"
-        frame.filename = '_L1_for_pc_ill_{0}.fits'.format(i)
+        frame.pri_hdr['PHTCNT'] = 1
+        frame.ext_hdr['ISPC'] = 1
+        frame.pri_hdr["VISTYPE"] = "CGIVST_TDD_OBS"
+        # Generate CGI filename with incrementing datetime
+        visitid = frame.pri_hdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_offset = datetime.timedelta(seconds=i)
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        frame.filename = f'cgi_{visitid}_{time_str}_l1_.fits'
         frame_e_list.append(frame)
 
     for i in range(Ndarks):
@@ -2708,20 +2792,36 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark.ext_hdr['EXPTIME'] = exptime
         frame_dark.ext_hdr['RN'] = 100
         frame_dark.ext_hdr['KGAINPAR'] = kgain
-        frame_dark.pri_hdr['PHTCNT'] = True
-        frame_dark.ext_hdr['ISPC'] = True
-        frame_dark.pri_hdr["VISTYPE"] = "DARK"
-        frame_dark.filename = '_L1_for_pc_dark_{0}.fits'.format(i)
+        frame_dark.pri_hdr['PHTCNT'] = 1
+        frame_dark.ext_hdr['ISPC'] = 1
+        frame_dark.pri_hdr["VISTYPE"] = "CGIVST_CAL_DRK"
+        # Generate CGI filename with incrementing datetime for dark frames
+        visitid = frame_dark.pri_hdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_offset = datetime.timedelta(seconds=i + 1000)  # Offset to avoid conflicts with bright frames
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        frame_dark.filename = f'cgi_{visitid}_{time_str}_l1_.fits'
         frame_e_dark_list.append(frame_dark)
 
     for i in range(bad_frames):
         bad_frame = frame.copy()
         bad_frame.ext_hdr['OVEREXP'] = True
-        bad_frame.filename = '_L1_for_pc_ill_{0}.fits'.format(Nbrights+i)
+        # Generate CGI filename for bad bright frames
+        visitid = bad_frame.pri_hdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_offset = datetime.timedelta(seconds=Nbrights + i)
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        bad_frame.filename = f'cgi_{visitid}_{time_str}_l1_.fits'
         frame_e_list.append(bad_frame)
         bad_dark_frame = frame_dark.copy()
         bad_dark_frame.ext_hdr['OVEREXP'] = True
-        bad_dark_frame.filename = '_L1_for_pc_dark_{0}.fits'.format(Ndarks+i)
+        # Generate CGI filename for bad dark frames
+        time_offset = datetime.timedelta(seconds=Ndarks + i + 1000)  # Offset to avoid conflicts
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        bad_dark_frame.filename = f'cgi_{visitid}_{time_str}_l1_.fits'
         frame_e_dark_list.append(bad_dark_frame)
 
     ill_dataset = data.Dataset(frame_e_list)
@@ -2852,7 +2952,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
 
     # Create image object
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    prihdr['VISTYPE'] = 'ABSFLXBT'
+    prihdr['VISTYPE'] = 'CGIVST_CAL_ABSFLUX_BRIGHT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
     prihdr['TARGET'] = target_name
@@ -2872,13 +2972,16 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['CDELT2']   = (platescale * 0.001) / 3600
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
-    exthdr['BUNIT'] = 'photoelectron/s'
+    exthdr['BUNIT'] = 'photoelectron'
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
    
-    # Save file
+    # Set filename
+    ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
+    filename = f'cgi_{prihdr["VISITID"]}_{ftimeutc}_l2b.fits'
+    frame.filename = filename
+    
+    # Save file if requested
     if filedir is not None and file_save:
-        ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
-        filename = f'cgi_{prihdr["VISITID"]}_{ftimeutc}_l2b.fits'
         frame.save(filedir=filedir, filename=filename)
 
     return frame
@@ -3015,7 +3118,7 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
 
     # Create image object
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    prihdr['VISTYPE'] = 'ABSFLXBT'
+    prihdr['VISTYPE'] = 'CGIVST_CAL_ABSFLUX_BRIGHT'
     prihdr['TARGET'] = target_name
 
     exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
@@ -3036,13 +3139,15 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
     exthdr['CDELT2']   = (platescale * 0.001) / 3600
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
-    exthdr['BUNIT'] = 'photoelectron/s'
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
    
-    # Save file
+    # Set filename
+    ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
+    filename = f'cgi_{prihdr["VISITID"]}_{ftimeutc}_l2b.fits'
+    frame.filename = filename
+    
+    # Save file if requested
     if filedir is not None and file_save:
-        ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
-        filename = f'cgi_{prihdr["VISITID"]}_{ftimeutc}_l2b.fits'
         frame.save(filedir=filedir, filename=filename)
 
     return frame
@@ -3107,7 +3212,6 @@ def generate_reference_star_dataset_with_flux(
     elif len(roll_angles) != n_frames:
         raise ValueError("roll_angles must match n_frames or be None.")
 
-    from corgidrp.data import Dataset
     frames = []
     for i in range(n_frames):
         # 1) Create a single flux image with the star alone
@@ -3149,11 +3253,18 @@ def generate_reference_star_dataset_with_flux(
         frame.ext_hdr['PLTSCALE'] = pltscale_mas
         frame.ext_hdr["STARLOCX"] = x_center  
         frame.ext_hdr["STARLOCY"] = y_center  
-        frame.pri_hdr["FILENAME"] = f"mock_refstar_flux_{i:03d}.fits"
+        
+        # Generate CGI filename with incrementing datetime
+        visitid = frame.pri_hdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_offset = datetime.timedelta(seconds=i)
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        filename = f"cgi_{visitid}_{time_str}_l2b.fits"
+        frame.pri_hdr["FILENAME"] = filename
 
         # 5) Optionally save each file
         if filedir is not None and file_save:
-            filename = f"mock_refstar_flux_{i:03d}.fits"
             frame.save(filedir=filedir, filename=filename)
 
         frames.append(frame)
@@ -3183,7 +3294,7 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
     else:
         prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
     # These data are for CT calibration
-    prhd['VISTYPE'] = 'CORETPUT'
+    prhd['VISTYPE'] = 'CGIVST_CAL_CORETHRPT'
     # cfam filter
     exthd['CFAMNAME'] = cfam_name
     # Mock ERR
@@ -3636,7 +3747,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
     for i in range(n_sci+n_ref):
 
         # Create default headers
-        prihdr, exthdr = create_default_L1_headers()
+        prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers()
         
         # Read in darkhole data, if provided
         if i<n_sci and not darkhole_scifiles is None:
@@ -3683,7 +3794,14 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             label = 'ref' if i>= n_sci else 'sci'
             fwhm = ref_fwhm if i>= n_sci else sci_fwhm
             sigma = fwhm / (2 * np.sqrt(2. * np.log(2.)))
-            fname = f'MOCK_{label}_roll{roll_angles[i]}.fits'
+            
+            # Generate CGI filename with incrementing datetime
+            visitid = prihdr["VISITID"]
+            base_time = datetime.datetime.now()
+            time_offset = datetime.timedelta(seconds=i)
+            unique_time = base_time + time_offset
+            time_str = data.format_ftimeutc(unique_time.isoformat())
+            fname = f"cgi_{visitid}_{time_str}_l3_.fits"
             arr_center = np.array(data_shape[-2:]) / 2 - 0.5
             if centerxy is None:
                 psfcenty,psfcentx = arr_center
@@ -3765,14 +3883,25 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
     else:
         ref_dataset = None
 
-    # Save datasets if outdir was provided
-    if not outdir is None:
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
+        # Save datasets if outdir was provided
+        if not outdir is None:
+            if not os.path.exists(outdir):
+                os.makedirs(outdir)
+                
+            # Generate CGI filenames for dataset saves
+            visitid = prihdr["VISITID"]
+            base_time = datetime.datetime.now()
+            time_str = data.format_ftimeutc(base_time.isoformat())
+            sci_filename = f"cgi_{visitid}_{time_str}_l2b.fits"
+            ref_filename = f"cgi_{visitid}_{time_str}_l2b.fits"
             
-        sci_dataset.save(filedir=outdir, filenames=['mock_psfsub_L2b_sci_input_dataset.fits'])
-        if len(ref_frames) > 0:
-            ref_dataset.save(filedir=outdir, filenames=['mock_psfsub_L2b_ref_input_dataset.fits'])
+            sci_dataset.save(filedir=outdir, filenames=[sci_filename])
+            if len(ref_frames) > 0:
+                # Offset time for reference dataset to avoid filename conflict
+                ref_time = base_time + datetime.timedelta(seconds=1)
+                ref_time_str = data.format_ftimeutc(ref_time.isoformat())
+                ref_filename = f"cgi_{visitid}_{ref_time_str}_l2b.fits"
+                ref_dataset.save(filedir=outdir, filenames=[ref_filename])
 
     return sci_dataset,ref_dataset
 
@@ -3825,7 +3954,6 @@ def generate_coron_dataset_with_companions(
     Returns:
       Dataset: A dataset of frames (each an Image) with the star and companion(s) injected.
     """
-    import numpy as np
     ny, nx = shape
     if host_star_center is None:
         host_star_center = (nx / 2, ny / 2)  # (x, y)
@@ -3899,7 +4027,15 @@ def generate_coron_dataset_with_companions(
         # (E) Build headers and create the Image.
         # Assume create_default_L3_headers() and generate_wcs() are defined elsewhere.
         prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers()
-        prihdr["FILENAME"] = f"mock_coron_{i:03d}.fits"
+        
+        # Generate CGI filename with incrementing datetime
+        visitid = prihdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_offset = datetime.timedelta(seconds=i)
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        filename = f"cgi_{visitid}_{time_str}_l3_.fits"
+        prihdr["FILENAME"] = filename
         prihdr["ROLL"] = angle_i
         prihdr['TELESCOP'] = 'ROMAN'
         exthdr["CFAMNAME"] = filter
@@ -3919,18 +4055,26 @@ def generate_coron_dataset_with_companions(
             for key, value in companion_keywords.items():
                 exthdr[key] = value
 
-        from corgidrp.data import Image
         frame = Image(data_arr, pri_hdr=prihdr, ext_hdr=exthdr)
         frames.append(frame)
 
-    from corgidrp.data import Dataset
     dataset = Dataset(frames)
 
     # (F) Optionally save the dataset.
     if outdir is not None:
-        import os
         os.makedirs(outdir, exist_ok=True)
-        file_list = [f"mock_coron_{i:03d}.fits" for i in range(n_frames)]
+        
+        # Generate CGI filenames for all frames
+        visitid = prihdr["VISITID"]
+        base_time = datetime.datetime.now()
+        file_list = []
+        for i in range(n_frames):
+            time_offset = datetime.timedelta(seconds=i)
+            unique_time = base_time + time_offset
+            time_str = data.format_ftimeutc(unique_time.isoformat())
+            filename = f"cgi_{visitid}_{time_str}_l3_.fits"
+            file_list.append(filename)
+        
         dataset.save(filedir=outdir, filenames=file_list)
         print(f"Saved {n_frames} frames to {outdir}")
 
@@ -4035,7 +4179,13 @@ def create_mock_ct_dataset_and_cal_file(
     # A) Create the base headers
     # ----------------------------
     prihdr, exthd, errhdr, dqhdr = create_default_L3_headers()
-    prihdr["FILENAME"] = f"CoreThroughputCalibration_{Time.now().isot}.fits"
+    
+    # Generate CGI filename
+    visitid = prihdr["VISITID"]
+    base_time = datetime.datetime.now()
+    time_str = data.format_ftimeutc(base_time.isoformat())
+    filename = f"cgi_{visitid}_{time_str}_ctp_cal.fits"
+    prihdr["FILENAME"] = filename
     exthd['DRPCTIME'] = Time.now().isot
     exthd['DRPVERSN'] = corgidrp.__version__
     exthd['CFAMNAME'] = cfam_name
@@ -4094,7 +4244,11 @@ def create_mock_ct_dataset_and_cal_file(
 
     if save_cal_file:
         if not cal_filename:
-            cal_filename = f"CoreThroughputCalibration_{Time.now().isot}.fits"
+            # Generate CGI filename for calibration file
+            visitid = prihdr["VISITID"]
+            base_time = datetime.datetime.now()
+            time_str = data.format_ftimeutc(base_time.isoformat())
+            cal_filename = f"cgi_{visitid}_{time_str}_ctp_cal.fits"
         cal_filepath = os.path.join(corgidrp.default_cal_dir, cal_filename)
         ct_cal_tmp.save(filedir=corgidrp.default_cal_dir, filename=cal_filename)
         print(f"Saved CT cal file to: {cal_filepath}")
@@ -4137,9 +4291,6 @@ def generate_reference_star_dataset(
     Returns:
         dataset (corgidrp.Data.Dataset): A Dataset object containing the generated reference star frames.
     """
-    from corgidrp.data import Dataset, Image
-    import numpy as np
-    import os
 
     # We'll adapt the same logic but no companion injection
     ny, nx = shape
@@ -4169,7 +4320,15 @@ def generate_reference_star_dataset(
 
         # Build minimal headers
         prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers()
-        prihdr["FILENAME"] = f"mock_refstar_{i:03d}.fits"
+        
+        # Generate CGI filename with incrementing datetime
+        visitid = prihdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_offset = datetime.timedelta(seconds=i)
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        filename = f"cgi_{visitid}_{time_str}_l3_.fits"
+        prihdr["FILENAME"] = filename
         # Mark these frames as reference
         prihdr["PSFREF"] = 1 
         prihdr["ROLL"] = roll_angles[i]
@@ -4183,7 +4342,18 @@ def generate_reference_star_dataset(
     dataset = Dataset(frames)
     if outdir is not None:
         os.makedirs(outdir, exist_ok=True)
-        file_list = [f"mock_refstar_{i:03d}.fits" for i in range(n_frames)]
+        
+        # Generate CGI filenames for all frames
+        visitid = prihdr["VISITID"]
+        base_time = datetime.datetime.now()
+        file_list = []
+        for i in range(n_frames):
+            time_offset = datetime.timedelta(seconds=i)
+            unique_time = base_time + time_offset
+            time_str = data.format_ftimeutc(unique_time.isoformat())
+            filename = f"cgi_{visitid}_{time_str}_l3_.fits"
+            file_list.append(filename)
+        
         dataset.save(filedir=outdir, filenames=file_list)
     return dataset
 
@@ -4273,6 +4443,160 @@ def create_synthetic_satellite_spot_image(
     return image
 
 
+def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix="l1", pattern=None):
+    """
+    Renames FITS files to match CGI filename convention. Extracts visit ID and filetime 
+    from headers and creates proper CGI format filenames.
+    
+    Args:
+        list_of_fits (list, optional): List of FITS file paths or Image objects to rename.
+                                      If None, will search for files using pattern.
+        output_dir (str, optional): Directory to write renamed files to. 
+                                  If None, files are renamed in-place.
+        level_suffix (str, optional): Level suffix for filenames (e.g., "l1", "l2a", etc.)
+        pattern (str, optional): Glob pattern to find files if list_of_fits is None.
+                               Used for pump trap data renaming.
+    
+    Returns:
+        list: Updated list of file paths with new CGI filenames
+    """
+    
+    if list_of_fits is not None:
+        files_to_process = list_of_fits
+    elif pattern is not None:
+        files_to_process = glob.glob(pattern)
+        files_to_process.sort()  # Ensure consistent ordering
+    else:
+        raise ValueError("Either list_of_fits or pattern must be provided")
+    
+    renamed_files = []
+    
+    for i, file in enumerate(files_to_process):
+        # Handle both file paths and Image objects
+        if hasattr(file, 'pri_hdr') and hasattr(file, 'ext_hdr'):
+            # Image object
+            prihdr = file.pri_hdr
+            exthdr = file.ext_hdr
+            is_image_object = True
+        else:
+            # File path
+            fits_file = fits.open(file)
+            prihdr = fits_file[0].header
+            exthdr = fits_file[1].header
+            is_image_object = False
+        
+        # Visit ID from primary header VISITID keyword
+        visitid = prihdr.get('VISITID', None)
+        if visitid is not None:
+            # Convert to string and pad to 19 digits if necessary
+            visitid = str(visitid).zfill(19)
+        else:
+            # Fallback: try to extract from filename or use file index
+            if hasattr(file, 'filename'):
+                # Image object with filename attribute
+                current_filename = file.filename
+            else:
+                # File path string
+                current_filename = os.path.basename(file)
+            if f'_{level_suffix}_' in current_filename:
+                # Extract the frame number after the level suffix
+                frame_number = current_filename.split(f'_{level_suffix}_')[-1].replace('.fits', '')
+                visitid = frame_number.zfill(19)  
+            elif current_filename.replace('.fits', '').isdigit():
+                # Handle numbered files like 90500.fits
+                frame_number = current_filename.replace('.fits', '')
+                visitid = frame_number.zfill(19)  
+            else:
+                visitid = f"{i:019d}"  # Fallback: use file index padded to 19 digits
+        
+        # For pump trap data, create deterministic timestamps based on file metadata
+        # Use EXCAMT (temperature), TPSCHEM (scheme), and TPTAU (phase time) to create unique timestamps
+        excamt = exthdr.get('EXCAMT', None)
+        tptau = exthdr.get('TPTAU', None)
+        # Find which scheme this is (TPSCHEM1-4)
+        scheme = None
+        for j in range(1, 5):
+            if exthdr.get(f'TPSCHEM{j}', 0) > 0:
+                scheme = j
+                break
+        
+        # Use file index as primary increment, but if we have pump trap metadata, use that for better uniqueness
+        if excamt is not None and scheme is not None and tptau is not None:
+            # Create unique timestamp based on temperature, scheme, and phase time
+            # Start from a fixed base time
+            base_dt = datetime.datetime(2025, 1, 1, 0, 0, 0)
+            # Add seconds based on: temperature*10000 + scheme*1000 + file_index
+            # This spreads files across a wide timestamp range
+            temp_offset = int(float(excamt)) * 10  # e.g., 180K → 1800 seconds
+            scheme_offset = scheme * 2000  # Each scheme gets 2000 seconds
+            unique_dt = base_dt + datetime.timedelta(seconds=temp_offset + scheme_offset + i)
+        else:
+            # Fallback for non-pump-trap data
+            filetime_hdr = exthdr.get('FILETIME', prihdr.get('FILETIME', None))
+            if filetime_hdr and 'T' in filetime_hdr:
+                try:
+                    dt = datetime.datetime.fromisoformat(filetime_hdr.replace('Z', '+00:00'))
+                    base_dt = dt
+                except:
+                    base_dt = datetime.datetime(2025, 1, 1, 0, 0, 0)
+            else:
+                base_dt = datetime.datetime(2025, 1, 1, 0, 0, 0)
+            unique_dt = base_dt + datetime.timedelta(seconds=i)
+        
+        # Format as YYYYMMDDtHHMMSSd (deciseconds = 1 digit)
+        filetime = unique_dt.strftime('%Y%m%dt%H%M%S%f')[:-5]
+        
+        # Create new filename with correct convention
+        if level_suffix in ['l2a', 'l2b']:
+            filename_template = f'cgi_{visitid}_{filetime}_{level_suffix}.fits'
+        elif level_suffix.endswith('_cal'):
+            # Calibration files should not have trailing underscore
+            filename_template = f'cgi_{visitid}_{filetime}_{level_suffix}.fits'
+        else:
+            filename_template = f'cgi_{visitid}_{filetime}_{level_suffix}_.fits'
+        
+        if output_dir:
+            # Create output directory if it doesn't exist
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            new_filename = os.path.join(output_dir, filename_template)
+        else:
+            # Rename in same directory
+            file_dir = os.path.dirname(file)
+            new_filename = os.path.join(file_dir, filename_template)
+        
+        # Check if file already exists (collision detection)
+        if os.path.exists(new_filename):
+            warnings.warn(f"File collision detected: {os.path.basename(new_filename)} already exists! This file will be overwritten.")
+        
+        if is_image_object:
+            # Update headers in the Image object
+            file.pri_hdr['FILENAME'] = os.path.basename(new_filename)
+            file.pri_hdr['VISITID'] = visitid
+            
+            # Save the Image
+            file.save(filedir=output_dir or os.path.dirname(new_filename), 
+                     filename=os.path.basename(new_filename))
+        else:
+            # Update headers in the HDUList object
+            fits_file[0].header['FILENAME'] = os.path.basename(new_filename)
+            fits_file[0].header['VISITID'] = visitid
+            
+            # Update FITS file with new filename
+            fits_file.writeto(new_filename, overwrite=True)
+            fits_file.close()
+            
+            # Remove old file only if renaming in-place
+            # Don't remove original files when copying to a different directory
+            if file != new_filename and os.path.exists(file) and not output_dir:
+                os.remove(file)
+        
+        # Update the file in the list
+        renamed_files.append(new_filename)
+    
+    return renamed_files
+
+
 def create_satellite_spot_observing_sequence(
         n_sci_frames, n_satspot_frames, 
         image_shape=(201, 201), bg_sigma=1.0, bg_offset=10.0,
@@ -4344,7 +4668,14 @@ def create_satellite_spot_observing_sequence(
         )
         sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         sci_frame.pri_hdr["SATSPOTS"] = 0
-        sci_frame.filename = f"sci_frame_{i}.fits"
+        
+        # Generate CGI filename with incrementing datetime for science frames
+        visitid = sci_frame.pri_hdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_offset = datetime.timedelta(seconds=i)
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        sci_frame.filename = f"cgi_{visitid}_{time_str}_l3_.fits"
         sci_frames.append(sci_frame)
 
     # Make satellite spot images
@@ -4355,7 +4686,14 @@ def create_satellite_spot_observing_sequence(
         )
         satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         satspot_frame.pri_hdr["SATSPOTS"] = 1
-        satspot_frame.filename = f"plus_frame_{i}.fits"
+        
+        # Generate CGI filename with incrementing datetime for satellite spot frames
+        visitid = satspot_frame.pri_hdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_offset = datetime.timedelta(seconds=i + 1000)  # Offset to avoid conflicts with science frames
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        satspot_frame.filename = f"cgi_{visitid}_{time_str}_l3_.fits"
         satspot_frames.append(satspot_frame)
     
     all_frames = sci_frames + satspot_frames
@@ -4488,20 +4826,25 @@ def create_spatial_pol(dataset,filedir=None,nr=None,pfov_size=174,image_center_x
     WP_pol[start_right[1]:start_right[1]+pfov, start_right[0]:start_right[0]+pfov]=I_2[yc_init - (pfov//2):yc_init + (pfov//2),xc_init - (pfov//2):xc_init + (pfov//2)]* 0.5 * (1-(2*r_xy))
 
     # create the default headers and modify the header keywords
-    filepattern = "cgi_pppppccaaasssooovvv_yyyymmddt{0:02d}00_l2a.fits"
     prihdr, exthdr = create_default_L1_headers()
     prihdr['TARGET']=planet
     exthdr['DPAMNAME'] = dpamname
+    
+    # Generate proper filename with current timestamp
+    dt = datetime.datetime.now()
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    visitid = prihdr.get('VISITID', '0000000000000000000')
+    
     image = data.Image(WP_pol, pri_hdr=prihdr, ext_hdr=exthdr)
     image.pri_hdr.append(('FILTER',band), end=True)
-    i=len(image.data)
+    
+    # Set proper L2a filename
+    filename = f"cgi_{visitid}_{ftime}_l2a.fits"
+    
     if filedir is not None:
-            image.save(filedir=filedir, filename=filepattern.format(i))
+        image.save(filedir=filedir, filename=filename)
     else:
-        # fake filenumber as hours and minutes
-            hours = i // 60
-            minutes = i % 60
-            image.filename = filepattern.format(hours, minutes)
+        image.filename = filename
     pol_image=data.Dataset([image])
     return (pol_image) 
 
@@ -4530,16 +4873,27 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     # create initial blank frame
     image_data = np.zeros(shape=(1024, 1024))
 
+    pixel_scale = 0.0218 #arcsec/pixel
+    primary_d = 2.363114 #meters
+
+    image_separation_arcsec = 7.5
+
+    arcseconds_per_radian = 180 * 3600 / np.pi
+
     #determine radius of the images
     if observing_mode == 'NFOV':
         cfamname = '1F'
-        radius = int(round((9.7 * ((0.5738 * 1e-6) / 2.363114) * 206265) / 0.0218))
+        outer_radius_lambda_over_d = 9.7
+        central_wavelength = 0.5738e-6 #meters
+        radius = int(round((outer_radius_lambda_over_d * ((central_wavelength) / primary_d) * arcseconds_per_radian) / pixel_scale))
     elif observing_mode == 'WFOV':
         cfamname = '4F'
-        radius = int(round((20.1 * ((0.8255 * 1e-6) / 2.363114) * 206265) / 0.0218))
+        outer_radius_lambda_over_d = 20.1
+        central_wavelength = 0.8255e-6 #meters
+        radius = int(round((outer_radius_lambda_over_d * ((central_wavelength) / primary_d) * arcseconds_per_radian) / pixel_scale))
     else:
         cfamname = '1F'
-        radius = int(round(1.9 / 0.0218))
+        radius = int(round(1.9 / pixel_scale))
     
     #determine the center of the two images
     if alignment_angle is None:
@@ -4547,11 +4901,8 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
             alignment_angle = 0
         else:
             alignment_angle = 45
-    angle_rad = alignment_angle * (np.pi / 180)
-    displacement_x = int(round((image_separation_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
-    displacement_y = int(round((image_separation_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
-    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
-    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+   
+    center_left, center_right = get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale, image_center)
 
     #fill the location where the images are with 1s
     y, x = np.indices([1024, 1024])
@@ -4843,7 +5194,8 @@ def create_mock_polarization_l3_dataset(
         theta_deg=20.0,
         roll_angles=None,
         prisms=None,
-        seed=None
+        seed=None,
+        return_image_list=False
 ):
     """
     Generate mock L3 polarimetric datasets with controlled fractional polarization
@@ -4866,6 +5218,7 @@ def create_mock_polarization_l3_dataset(
         roll_angles (list of float, optional): Roll angles per prism. Defaults to [-15, 15, -15, 15].
         prisms (list of str, optional): Prism orientations ('POL0', 'POL45'). Defaults to ['POL0','POL0','POL45','POL45'].
         seed (int, optional): Random seed.
+        return_image_list (bool): If True, return list of Image objects instead of Dataset.
 
     Returns:
         Dataset: Synthetic Dataset object containing Image objects with data, error maps,
@@ -4960,8 +5313,108 @@ def create_mock_polarization_l3_dataset(
                 dq_hdr=dqhdr
             )
         )
-        
-    Dataset_out = Dataset(Image_out)
+    
+    if return_image_list:
+        return Image_out
+    else: 
+        Dataset_out = Dataset(Image_out)
+        return Dataset_out
 
-    # --- create Image object ---
-    return Dataset_out
+def get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale = 0.0218, image_center=(512, 512)):
+    """
+    Calculate the centers of the two polarized images based on the separation and alignment angle.
+
+    Args:
+        image_separation_arcsec (float): Separation between the two polarized images in arcseconds.
+        alignment_angle (float): Angle in degrees of how the two polarized images are aligned with respect to the horizontal.
+        pixel_scale (float): Plate scale in arcseconds per pixel.
+        image_center (tuple(int, int), optional): Pixel location of where the two images are centered on the detector.
+
+    Returns:
+        tuple: Pixel locations of the centers of the two polarized images.
+    """
+    angle_rad = alignment_angle * (np.pi / 180)
+    displacement_x = int(round((image_separation_arcsec * np.cos(angle_rad)) / (2 * pixel_scale)))
+    displacement_y = int(round((image_separation_arcsec * np.sin(angle_rad)) / (2 * pixel_scale)))
+    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+
+    return center_left, center_right
+
+def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
+                            image_separation_arcsec=7.5, q_inst=0.5,u_inst=-0.1,
+                            q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03):
+    '''
+    Generate a mock L2b polarimetric dataset for polcal testing
+
+    Args:
+        path_to_pol_ref_file (str): Path to the CSV file containing the reference polarization values
+        read_noise (float): Read noise to be added to the images
+        image_separation_arcsec (float): Separation between the two polarized images in arcseconds
+        q_inst (float): Instrumental Q polarization in percentage
+        u_inst (float): Instrumental U polarization in percentage
+        q_eff (float): Q efficiency
+        uq_ct (float): U to Q crosstalk
+        u_eff (float): U efficiency
+        qu_ct (float): Q to U crosstalk 
+
+    Returns:
+        corgidrp.data.Dataset: The simulated L2b polarimetric dataset for polcal testing
+    '''
+    
+    #Read in the test polarization stellar database from test_data/
+    pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
+    pol_ref_targets = pol_ref["TARGET"].tolist()
+    #Create mock data for three targets in the database - for each target inject known polarization
+    image_list = []
+    for i, target in enumerate(pol_ref_targets):
+        #create two mock L2b polarimetric images for each target, one for each Wollaston prism angle
+        #set left and right image values to zero so that only injected polarization is measured
+        pol0 = create_mock_l2b_polarimetric_image(dpamname='POL0', 
+                                                        observing_mode='NFOV', left_image_value=0, right_image_value=0)
+        pol0.pri_hdr['TARGET'] = target
+        pol45 = create_mock_l2b_polarimetric_image(dpamname='POL45', 
+observing_mode='NFOV', left_image_value=0, right_image_value=0)
+        pol45.pri_hdr['TARGET'] = target
+
+        pol0.err = (np.ones_like(pol0.data) * 1)[None,:]
+        pol45.err = (np.ones_like(pol45.data) * 1)[None,:]
+
+        #Add Random Roll - This should still work everywhere. 
+        random_roll = np.random.randint(0,360)
+        pol0.pri_hdr['ROLL'] = random_roll
+        pol45.pri_hdr['ROLL'] = random_roll
+
+        #get the q and u values from the reference polarization degree and angle
+        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_roll)
+        q_meas = q * q_eff + u * uq_ct + q_inst/100.0
+        u_meas = u * u_eff + q * qu_ct + u_inst/100.0
+        # generate four gaussians scaled appropriately for the target's polarization
+        gauss_array_shape = [26,26]
+        gauss1 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + q_meas)/2 #left image, POL0
+        gauss2 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - q_meas)/2 #right image, POL0
+        gauss3 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + u_meas)/2 #left image, POL45
+        gauss4 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - u_meas)/2 #right image, POL45
+        #add the gaussians to the mock images
+        center_left0, center_right0 = get_pol_image_centers(image_separation_arcsec, 0)
+        center_left45, center_right45 = get_pol_image_centers(image_separation_arcsec, 45)
+        pol0.data[center_left0[1]-gauss_array_shape[1]//2:center_left0[1]+gauss_array_shape[1]//2,
+                  center_left0[0]-gauss_array_shape[0]//2:center_left0[0]+gauss_array_shape[0]//2] += gauss1
+        pol0.data[center_right0[1]-gauss_array_shape[1]//2:center_right0[1]+gauss_array_shape[1]//2,
+                  center_right0[0]-gauss_array_shape[0]//2:center_right0[0]+gauss_array_shape[0]//2] += gauss2
+        pol45.data[center_left45[1]-gauss_array_shape[1]//2:center_left45[1]+gauss_array_shape[1]//2,
+                   center_left45[0]-gauss_array_shape[0]//2:center_left45[0]+gauss_array_shape[0]//2] += gauss3
+        pol45.data[center_right45[1]-gauss_array_shape[1]//2:center_right45[1]+gauss_array_shape[1]//2,
+                   center_right45[0]-gauss_array_shape[0]//2:center_right45[0]+gauss_array_shape[0]//2] += gauss4
+        
+        pol0.err = (np.sqrt(pol0.data+read_noise**2))[None,:]
+        pol45.err = (np.sqrt(pol45.data+read_noise**2))[None,:]
+
+        image_list.append(pol0)
+        image_list.append(pol45)
+
+    mock_dataset = data.Dataset(image_list)
+    for frame in mock_dataset.frames: 
+        frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_POL_SETUP"
+
+    return mock_dataset

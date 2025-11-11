@@ -195,7 +195,12 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         np.array: array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps 
         is the number of separations sampled. Index 0 contains the separations sampled, and each following index
         contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode 
-        truncation choice.
+        truncation choice. An example for 4 KL mode truncation choices, using r1 and r2 for separations and n_seps=2: 
+            [ [[r1,r1],[r2,r2]], 
+            [[KL_thpt_r1_KL1, FWHM_r1_KL1],[KL_thpt_r2_KL1, FWHM_r2_KL1]], 
+            [[KL_thpt_r1_KL2, FWHM_r1_KL2],[KL_thpt_r2_KL2, FWHM_r2_KL2]], 
+            [[KL_thpt_r1_KL3, FWHM_r1_KL3],[KL_thpt_r2_KL3, FWHM_r2_KL3]], 
+            [[KL_thpt_r1_KL4, FWHM_r1_KL4],[KL_thpt_r2_KL4, FWHM_r2_KL4]] ]
     """
     
     if sci_dataset_in[0].ext_hdr['CFAMNAME'] == '1F':
@@ -341,9 +346,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         # if klip_params['mode'] == 'RDI':
         #     analytical_result = rotate(sci_dataset[0].data - ref_dataset_in[0].data,-rolls[0],reshape=False,cval=np.nan)
         # elif klip_params['mode'] == 'ADI':
-        #     analytical_result = shift((rotate(sci_dataset[0].data - sci_dataset[1].data,-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - sci_dataset[0].data,-rolls[1],reshape=False,cval=0)) / 2,
-        #                     [0.5,0.5],
-        #                     cval=np.nan)
+        #     analytical_result = (rotate(sci_dataset[0].data - sci_dataset[1].data,-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - sci_dataset[0].data,-rolls[1],reshape=False,cval=0)) / 2
         # elif klip_params['mode'] == 'ADI+RDI':
         #     analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset_in[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset_in[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
 
@@ -365,11 +368,11 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         # plt.show()
         
         # After psf subtraction
-        # this_klmode_peakin = []
-        # this_klmode_peakout = []
-        # this_klmode_sumin = []
-        # this_klmode_influxs = []
-        # this_klmode_outfluxs = []
+        this_klmode_peakin = []
+        this_klmode_peakout = []
+        this_klmode_sumin = []
+        this_klmode_influxs = []
+        this_klmode_outfluxs = []
         this_klmode_infwhms = []
         this_klmode_outfwhms = []
         this_klmode_thrupts = []
@@ -430,19 +433,27 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                         cutout_startx:cutout_endx] = medsubtracted_data[data_starty:data_endy,
                                                             data_startx:data_endx]
             
+            # # Plot PSF Model
             # import matplotlib.pyplot as plt
-            # fig,ax = plt.subplots(1,2,
+            # fig,ax = plt.subplots(1,3,
             #                       sharey=True,
             #                       layout='constrained',
-            #                       figsize=(8,4))
-            # im0 = ax[0].imshow(psf_model_padded,origin='lower')
+            #                       figsize=(12,4))
+            # vmax = np.max(psf_model_padded)
+            # im0 = ax[0].imshow(psf_model_padded,origin='lower',
+            #                    vmax=vmax,vmin=-vmax)
             # plt.colorbar(im0,ax=ax[0])
             # ax[0].set_title('PSF Model')
-            # im1 = ax[1].imshow(cutout,origin='lower')
+            # im1 = ax[1].imshow(cutout,origin='lower',
+            #                    vmax=vmax,vmin=-vmax)
             # plt.colorbar(im1,ax=ax[1])
             # ax[1].set_title('Data Cutout')
+            # im2 = ax[2].imshow(cutout-psf_model_padded,origin='lower',
+            #                    vmax=vmax,vmin=-vmax)
+            # plt.colorbar(im2,ax=ax[2])
+            # ax[2].set_title('Residuals')
             # plt.show()
-            
+
             # Using pyklip.fakes.gaussfit2d
             preklip_peak, pre_fwhm, pre_xfit, pre_yfit = gaussfit2d(
                 psf_model_padded, 
@@ -461,6 +472,37 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                 guessfwhm=fwhm_pix, 
                 guesspeak=inject_peak, 
                 refinefit=True) 
+            
+            # # Plot Final PSF Model
+            # import matplotlib.pyplot as plt
+            # post_sigma = post_fwhm / (2 * np.sqrt(2. * np.log(2.)))
+            # from corgidrp.mocks import gaussian_array
+            # final_model = gaussian_array(array_shape=cutout_shape,
+            #                      sigma=post_sigma,
+            #                      amp=postklip_peak,
+            #                      xoffset=post_xfit-19.,
+            #                      yoffset=post_yfit-19.)
+            
+            # fig,ax = plt.subplots(1,3,
+            #                       sharey=True,
+            #                       layout='constrained',
+            #                       figsize=(12,4))
+            # vmax = np.max(psf_model_padded)
+            # im0 = ax[0].imshow(final_model,origin='lower',
+            #                    vmax=vmax,vmin=-vmax)
+            # plt.colorbar(im0,ax=ax[0])
+            # ax[0].set_title('Final PSF Model')
+            # im1 = ax[1].imshow(cutout,origin='lower',
+            #                    vmax=vmax,vmin=-vmax)
+            # plt.colorbar(im1,ax=ax[1])
+            # ax[1].set_title('Data Cutout')
+            # im2 = ax[2].imshow(cutout-final_model,origin='lower',
+            #                    vmax=vmax,vmin=-vmax)
+            # plt.colorbar(im2,ax=ax[2])
+            # ax[2].set_title('Residuals')
+            # plt.show()
+            
+
 
             # Get total counts from 2D gaussian fit
             preklip_counts = np.pi * preklip_peak * pre_fwhm**2 / 4. / np.log(2.)
@@ -468,11 +510,11 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             
             thrupt = postklip_counts/preklip_counts
 
-            # this_klmode_peakin.append(preklip_peak)
-            # this_klmode_peakout.append(postklip_peak)
-            # this_klmode_sumin.append(np.sum(psf_model))
-            # this_klmode_influxs.append(preklip_counts)
-            # this_klmode_outfluxs.append(postklip_counts)
+            this_klmode_peakin.append(preklip_peak)
+            this_klmode_peakout.append(postklip_peak)
+            this_klmode_sumin.append(np.sum(psf_model))
+            this_klmode_influxs.append(preklip_counts)
+            this_klmode_outfluxs.append(postklip_counts)
             this_klmode_infwhms.append(pre_fwhm)
             this_klmode_outfwhms.append(post_fwhm)
             this_klmode_thrupts.append(thrupt)
@@ -480,7 +522,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         seppas_arr = np.array(this_klmode_seppas[0])
         seps_arr = seppas_arr[:,0]
 
-        # # Plot injected and recovered peaks
+        # # Plot injected and recovered counts
         # import matplotlib.pyplot as plt
         # fig,ax = plt.subplots()
         # plt.scatter(seps_arr,this_klmode_influxs,label='Injected counts')
