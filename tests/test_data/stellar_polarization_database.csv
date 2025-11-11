@@ -1,0 +1,5 @@
+TARGET, P, P_err, PA, PA_err
+unpolarized1, 0.002, 0.03, 40, 1
+unpolarized2, 0.001, 0.005, 85, 1
+polarized1, 1.4, 0.1, 0, 1
+polarized2, 3.2, 0.3, 45, 1

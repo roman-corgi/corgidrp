@@ -1,4 +1,6 @@
 import os,math
+import warnings
+import astropy.io.fits as fits
 from corgidrp import data, mocks, astrom
 from corgidrp.l3_to_l4 import northup
 from corgidrp.l2b_to_l3 import create_wcs
@@ -134,7 +136,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 ylen, xlen = sci_input.shape
                 xcen, ycen = xlen / 2, ylen / 2
                 # check the angle offset
-                astr_hdr = WCS(sci_hd)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
+                    astr_hdr = WCS(sci_hd)
                 angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
                 # the location for test
                 x_value1 = input_dataset[0].ext_hdr['X_1VAL']
@@ -220,7 +224,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             ylen, xlen = sci_input.shape
             xcen, ycen = xlen / 2, ylen / 2
             # check the angle offset
-            astr_hdr = WCS(sci_hd)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
+                astr_hdr = WCS(sci_hd)
             angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
             # the location for test
             x_value1 = input_dataset[0].ext_hdr['X_1VAL']
@@ -331,7 +337,8 @@ def test_wcs_and_offset(save_mock_dataset=False):
    astrom_cal = astrom.boresight_calibration(mock_dataset_ori, fieldpath, find_threshold=10)
    mock_dataset =  mock_dataset_ori.copy()
    # add an angle offset
-   mock_dataset[0].pri_hdr['ROLL']=(ang,'roll angle (deg)')
+   mock_dataset[0].pri_hdr['ROLL']=(north_angle,'roll angle (deg)')
+
    # create the wcs
    test_offset = (3.3, 1.0)
    updated_dataset = create_wcs(mock_dataset,astrom_cal,offset=test_offset)
@@ -347,6 +354,7 @@ def test_wcs_and_offset(save_mock_dataset=False):
       updated_dataset[0].save(filedir='./',filename=f'mock_offset{ang+north_angle}deg_testoffset.fits')
 
 if __name__ == '__main__':
+   print('Running test_northup()...')
    test_northup()
    test_northup_pol()
    test_wcs_and_offset()
