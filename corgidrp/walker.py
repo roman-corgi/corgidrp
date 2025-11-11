@@ -80,6 +80,7 @@ all_steps = {
     "align_polarimetry_frames": corgidrp.l3_to_l4.align_polarimetry_frames,
     "combine_polarization_states": corgidrp.l3_to_l4.combine_polarization_states,
     "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization,
+    "align_2d_frames": corgidrp.l3_to_l4.align_2d_frames,
     "combine_spec": corgidrp.l3_to_l4.combine_spec
 }
 

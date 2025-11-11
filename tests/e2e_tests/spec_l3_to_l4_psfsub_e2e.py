@@ -236,7 +236,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
                                                "spec output product", logger)
         verify_header_keywords(hdul[1].header, {'WAVLEN0', 'WV0_X', 'WV0_Y', 'WV0_DIMX', 'WV0_DIMY'},
                                                "spec output product", logger)
-        verify_header_keywords(hdul[1].header, {'STARLOCX', 'STARLOCY'},
+        verify_header_keywords(hdul[1].header, {'STARLOCX', 'STARLOCY', 'CRPIX1', 'CRPIX2'},
                                                "spec output product", logger)
         verify_header_keywords(hdul[6].header, {'BUNIT' : 'photoelectron/s/bin'},
                                                "spec output product", logger)

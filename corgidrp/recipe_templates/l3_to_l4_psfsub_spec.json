@@ -23,6 +23,9 @@
             "name" : "spec_psf_subtraction"
         },
         {
+            "name" : "align_2d_frames"
+        },
+        {
             "name" : "combine_spec"
         },
         {
