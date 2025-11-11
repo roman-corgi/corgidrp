@@ -352,7 +352,7 @@ def save_data(dataset_or_image, outputdir, suffix=""):
 
 
 
-def run_recipe(recipe, save_recipe_file=True):
+def run_recipe(recipe, save_recipe_file=False):
     """
     Run the specified recipe
 

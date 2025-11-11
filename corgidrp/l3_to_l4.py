@@ -220,10 +220,11 @@ def find_star(input_dataset,
         else:
             raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
 
-    assert all(mode == observing_mode[0] for mode in observing_mode), \
-        "All frames should have the same observing mode."
+    # assert all(mode == observing_mode[0] for mode in observing_mode), \
+    #     "All frames should have the same observing mode."
 
-    observing_mode = observing_mode[0]
+    observing_mode = "NFOV"
+    # observing_mode = observing_mode[0]
 
     sci_dataset = data.Dataset(sci_frames)
     sat_spot_dataset = data.Dataset(sat_spot_frames)

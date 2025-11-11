@@ -462,6 +462,10 @@ class Image():
         for hdu in self.hdu_list:
             hdulist.append(hdu)
 
+        # create the folder if it doesn't exist
+        if not os.path.exists(self.filedir):
+            os.makedirs(self.filedir, exist_ok=True)
+
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
