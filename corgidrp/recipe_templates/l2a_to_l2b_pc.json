@@ -17,9 +17,18 @@
             }
         },
         {
+            "name" : "dark_subtraction",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC, OPTIONAL"
+            },
+            "keywords" : {
+                "outputdir" : "AUTOMATIC"
+            }
+        },
+        {
             "name": "get_pc_mean",
             "calibs" : {
-                "Dark" : "AUTOMATIC"
+                "Dark" : "AUTOMATIC, OPTIONAL"
             },
             "keywords" : {
                 "dataset_copy" : false
