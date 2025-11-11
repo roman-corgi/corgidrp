@@ -55,7 +55,7 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     # import psutil
     # process = psutil.Process()
 
-    if isinstance(dataset_or_image_list, list):
+    if not isinstance(dataset_or_image_list, data.Dataset):
         # if input is an np array or stack, try to accommodate
         if type(dataset_or_image_list) == np.ndarray:
             if dataset_or_image_list.ndim == 1: # pathological case of empty array
@@ -73,8 +73,6 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
                 bpmap_list = list(bpmap_list)
 
         # Check inputs
-        if not isinstance(dataset_or_image_list, list):
-            raise TypeError('image_list must be a list')
         if not isinstance(bpmap_list, list):
             raise TypeError('bpmap_list must be a list')
         if len(dataset_or_image_list) != len(bpmap_list):
@@ -107,9 +105,11 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
         del temp_fits
         sum_im = np.zeros(shape).astype(float)
         map_im = np.zeros(shape, dtype=int)
-    else: #list
+    elif isinstance(dataset_or_image_list, list) or isinstance(dataset_or_image_list, np.array):  
         sum_im = np.zeros_like(dataset_or_image_list[0]).astype(float)
         map_im = np.zeros_like(dataset_or_image_list[0], dtype=int)
+    else:
+        raise TypeError('image_list must be a list, array-like, or a Dataset')
 
     for i in range(len(dataset_or_image_list)):
         if isinstance(dataset_or_image_list, data.Dataset):
@@ -656,7 +656,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     # uncomment for RAM check 
     # import psutil
     # process = psutil.Process()
-    
+
     # flag value for those that are masked all the way through for all
     # but 3 (or fewer) stacks
     output_dq = np.bitwise_or.reduce(output_dqs, axis=0)
