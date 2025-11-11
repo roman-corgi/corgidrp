@@ -7,18 +7,17 @@ from pyklip.klip import rotate, collapse_data
 import scipy.ndimage
 from astropy.wcs import WCS
 
-from corgidrp import data
-from corgidrp.combine import derotate_arr, prop_err_dq
-from corgidrp import star_center
 import corgidrp
+from corgidrp import data
+from corgidrp.combine import derotate_arr, prop_err_dq, combine_subexposures
+from corgidrp import star_center
 from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
 from astropy.io import fits
 from scipy.ndimage import generic_filter, shift
-from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation
+from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation, star_pos_spec
 from corgidrp import pol
 from corgidrp import fluxcal
-from corgidrp.combine import combine_subexposures
 from astropy.io.fits.verify import VerifyWarning
 from astropy.wcs import FITSFixedWarning
 from pytest import approx
@@ -981,6 +980,41 @@ def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials
     dataset.update_after_processing_step(history_msg)
     return dataset
 
+def find_spec_star(input_dataset, r_lamD=3, phi_deg=0):
+    """ 
+      Find the position of the star using the information from the satellite
+      spot. The position of the satellite spot on EXCAM is given by the
+      zero-point solution. Using the information of the commanded position of
+      the satellite spot with respect the occulted star, one can infer the
+      location of the occulted star.
+      The relative of the satellite spot with respect the occulted star is given
+      in polar coordinates. The radial distance of the satellite spot is measured
+      in units lambda/D, with lambda the band reference wavelength, either 730 nm
+      (band 3) or 660 nm (band 2), and D=2.4 m. The polar angle is measured in
+      degrees, with 0 degrees meaning +X and 90 degrees meaning +Y. The polar
+      coordinates of the satellite spot are translated into (X,Y) EXCAM pixel
+      coordinates, which can then be subtracted from the zero-point solution to
+      infer the location of the occulted star.
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of spectroscopy Images (L3-level)
+        r_lamD (float): Radial distance of the satellite spot on EXCAM with respect
+        the occulted star in units of lambda/D.
+        phi_deg (float): Polar angle of the satellite spot on EXCAM with respect
+        the occulted star in degrees, with 0 degrees meaning +X and 90 degrees
+        meaning +Y.
+
+    Returns:
+        corgidrp.data.Dataset: Dataset with updated keywords recording the satellite position
+          in EXCAM pixels.
+    """
+    
+    dataset = input_dataset.copy()
+    dataset = star_pos_spec(dataset, r_lamD = r_lamD, phi_deg = phi_deg)
+    
+    history_msg = "star position on EXCAM added to the header"
+    dataset.update_after_processing_step(history_msg)
+    return dataset
 
 def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
     """
@@ -1028,16 +1062,74 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
         else:
             spec = np.nansum(image_cutout, axis=1)
             weight_str = "no weights applied"
-        image.data = spec
-        image.err = err
-        image.dq = dq_collapse
-        image.hdu_list["WAVE"].data = wave
-        image.hdu_list["WAVE_ERR"].data = wave_err
+        
+        spec_header = fits.Header()
+        spec_header['BUNIT'] = "photoelectron/s/bin"
+        image.add_extension_hdu("SPEC", data = spec, header=spec_header)
+        image.add_extension_hdu("SPEC_ERR", data = err, header=spec_header)
+        image.add_extension_hdu("SPEC_DQ", data = dq_collapse, header=None)
+        wave_header = fits.Header()
+        wave_header['BUNIT'] = 'nm'
+        image.add_extension_hdu("SPEC_WAVE", data = wave, header=wave_header)
+        image.add_extension_hdu("SPEC_WAVE_ERR", data = wave_err, header=wave_header)
         del(image.hdu_list["POSLOOKUP"])
     history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
-    dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
+    dataset.update_after_processing_step(history_msg)
     return dataset
 
+
+def align_2d_frames(input_dataset, center='first_frame'):
+    """
+    Aligns a dataset of 2D images by recentering them using the STARLOCX and STARLOCY header keywords
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): the L3-level dataset of 2D images with STARLOCX and STARLOCY
+        center (str or tuple): Can be one of three options. 
+                                1. 'first_frame' (default) - aligns all frames to the STARLOCX/Y of the first frame
+                                2. 'im_center' - aligns all frames to the center of the image
+                                3. (x,y) tuple - aligns all frames to the provided (x,y) pixel location
+    
+    Returns:
+        corgidrp.data.Dataset: L3 dataset where all the images are registered to the same pixel
+    """
+    output_dataset = input_dataset.copy()
+    if center == 'first_frame':
+        x_ref = output_dataset[0].ext_hdr['STARLOCX']
+        y_ref = output_dataset[0].ext_hdr['STARLOCY']
+    elif center == 'im_center':
+        x_ref = output_dataset[0].data.shape[-1] // 2
+        y_ref = output_dataset[0].data.shape[-2] // 2
+    elif isinstance(center, tuple) and len(center) == 2:
+        x_ref = center[0]
+        y_ref = center[1]
+    else:
+        raise ValueError("center parameter must be 'first_frame', 'im_center', or a tuple of (x,y) pixel coordinates")
+    
+    new_center = (x_ref, y_ref)
+    for i, frame in enumerate(output_dataset):
+        # use the deortation with angle=0 to do recentering
+        old_starx = frame.ext_hdr['STARLOCX']
+        old_stary = frame.ext_hdr['STARLOCY']
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+            astr_hdr = WCS(frame.ext_hdr)
+        new_data = derotate_arr(frame.data, 0, old_starx, old_stary, new_center=new_center, 
+                                        astr_hdr=astr_hdr, is_dq=False)
+        new_err = derotate_arr(frame.err, 0, old_starx, old_stary, new_center=new_center, is_dq=False)
+        new_dq = derotate_arr(frame.dq, 0, old_starx, old_stary, new_center=new_center, is_dq=True)
+        # update arrays, but ensure we are writing memory in place
+        frame.data[:] = new_data
+        frame.err[:] = new_err
+        frame.dq[:] = new_dq
+        frame.ext_hdr['STARLOCX'] = x_ref
+        frame.ext_hdr['STARLOCY'] = y_ref
+        frame.ext_hdr['CRPIX1'] += (x_ref - old_starx)
+        frame.ext_hdr['CRPIX2'] += (y_ref - old_stary)
+    
+    history_msg = f"Images aligned to pixel location x={x_ref}, y={y_ref}."
+    output_dataset.update_after_processing_step(history_msg)
+
+    return output_dataset
 
 def align_polarimetry_frames(input_dataset):  
     """
@@ -1502,63 +1594,6 @@ def combine_polarization_states(input_dataset,
     return updated_dataset
 
 
-def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
-    """
-    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
-    the wavelength zero point with units photoelectron/s/bin.
-    
-    Args:
-        input_dataset (corgidrp.data.Dataset): 
-        halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
-        halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
-        apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
-        
-    Returns:
-        corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
-    """
-    dataset = input_dataset.copy()
-    
-    for image in dataset:
-        xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
-        image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
-                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
-                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
-                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
-                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        err_cutout = image.err[:,ycent_round - halfheight:ycent_round + halfheight + 1,
-                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        bad_ind = np.where(dq_cutout > 0)
-        image_cutout[bad_ind] = np.nan
-        err_cutout[bad_ind] = np.nan
-        wave = np.mean(wave_cal_map_cutout, axis=1)
-        wave_err = np.mean(wave_err_cutout, axis=1)
-        err = np.sqrt(np.nansum(np.square(err_cutout), axis=2))
-        # dq collpase: keep all flags on
-        dq_collapse = np.bitwise_or.reduce(dq_cutout, axis=1)
- 
-        if apply_weights:
-            err_cutout[0][err_cutout[0] == 0] = np.nan
-            whts = 1./np.square(err_cutout[0])
-            spec = np.nansum(image_cutout * whts, axis = 1) / np.nansum (whts, axis = 1) * (2 * halfwidth + 1)
-            err[0] = 1./np.sqrt(np.nansum(whts, axis = 1))
-            weight_str = "weights applied"
-        else:
-            spec = np.nansum(image_cutout, axis=1)
-            weight_str = "no weights applied"
-        image.data = spec
-        image.err = err
-        image.dq = dq_collapse
-        image.hdu_list["WAVE"].data = wave
-        image.hdu_list["WAVE_ERR"].data = wave_err
-        del(image.hdu_list["POSLOOKUP"])
-    history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
-    dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
-    return dataset
-
-
 def spec_psf_subtraction(input_dataset):
     '''
     RDI PSF subtraction for spectroscopy mode.
@@ -1625,6 +1660,26 @@ def spec_psf_subtraction(input_dataset):
         out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 
+def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
+    '''
+    combination of psf subtracted frames for spectroscopy mode.
+    Assumes they all have the same alignment.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): L3 spectroscopy dataset.
+        collapse (str): "mean" or "median". (default: mean) 
+        num_frames_scaling (bool): Multiply by number of frames in sequence in order to ~conserve photons (default: True)
+        
+    Returns:
+        corgidrp.data.Dataset: dataset containing one frame of the PSF-subtracted science images
+    
+    '''
+    dataset = input_dataset.copy()
+    dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling)
+    history_msg = f"Combined psf subtracted spectroscopy frames by applying {collapse}, result is a dataset with one frame"
+    dataset.update_after_processing_step(history_msg)
+    return dataset
+
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
@@ -1658,7 +1713,7 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
             frame.ext_hdr['CTCALFN'] = ''
         frame.ext_hdr['FLXCALFN'] = flux_cal.filename.split("/")[-1] #Associate the flux calibration file
         # update filename convention. The file convention should be
-        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
+        # "CGI_[datalevel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
 
     history_msg = "Updated Data Level to L4"
