@@ -20,6 +20,12 @@
             "name" : "find_spec_star"
         },
         {
+            "name" : "align_2d_frames"
+        },
+        {
+            "name" : "combine_spec"
+        },
+        {
             "name" : "extract_spec"
         },
         {
