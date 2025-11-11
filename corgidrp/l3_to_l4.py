@@ -7,10 +7,10 @@ from pyklip.klip import rotate, collapse_data
 import scipy.ndimage
 from astropy.wcs import WCS
 
-from corgidrp import data
-from corgidrp.combine import derotate_arr, prop_err_dq
-from corgidrp import star_center
 import corgidrp
+from corgidrp import data
+from corgidrp.combine import derotate_arr, prop_err_dq, combine_subexposures
+from corgidrp import star_center
 from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
 from astropy.io import fits
@@ -18,7 +18,6 @@ from scipy.ndimage import generic_filter, shift
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation, star_pos_spec
 from corgidrp import pol
 from corgidrp import fluxcal
-from corgidrp.combine import combine_subexposures
 from astropy.io.fits.verify import VerifyWarning
 from astropy.wcs import FITSFixedWarning
 from pytest import approx
@@ -1078,6 +1077,59 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
     dataset.update_after_processing_step(history_msg)
     return dataset
 
+
+def align_2d_frames(input_dataset, center='first_frame'):
+    """
+    Aligns a dataset of 2D images by recentering them using the STARLOCX and STARLOCY header keywords
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): the L3-level dataset of 2D images with STARLOCX and STARLOCY
+        center (str or tuple): Can be one of three options. 
+                                1. 'first_frame' (default) - aligns all frames to the STARLOCX/Y of the first frame
+                                2. 'im_center' - aligns all frames to the center of the image
+                                3. (x,y) tuple - aligns all frames to the provided (x,y) pixel location
+    
+    Returns:
+        corgidrp.data.Dataset: L3 dataset where all the images are registered to the same pixel
+    """
+    output_dataset = input_dataset.copy()
+    if center == 'first_frame':
+        x_ref = output_dataset[0].ext_hdr['STARLOCX']
+        y_ref = output_dataset[0].ext_hdr['STARLOCY']
+    elif center == 'im_center':
+        x_ref = output_dataset[0].data.shape[-1] // 2
+        y_ref = output_dataset[0].data.shape[-2] // 2
+    elif isinstance(center, tuple) and len(center) == 2:
+        x_ref = center[0]
+        y_ref = center[1]
+    else:
+        raise ValueError("center parameter must be 'first_frame', 'im_center', or a tuple of (x,y) pixel coordinates")
+    
+    new_center = (x_ref, y_ref)
+    for i, frame in enumerate(output_dataset):
+        # use the deortation with angle=0 to do recentering
+        old_starx = frame.ext_hdr['STARLOCX']
+        old_stary = frame.ext_hdr['STARLOCY']
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+            astr_hdr = WCS(frame.ext_hdr)
+        new_data = derotate_arr(frame.data, 0, old_starx, old_stary, new_center=new_center, 
+                                        astr_hdr=astr_hdr, is_dq=False)
+        new_err = derotate_arr(frame.err, 0, old_starx, old_stary, new_center=new_center, is_dq=False)
+        new_dq = derotate_arr(frame.dq, 0, old_starx, old_stary, new_center=new_center, is_dq=True)
+        # update arrays, but ensure we are writing memory in place
+        frame.data[:] = new_data
+        frame.err[:] = new_err
+        frame.dq[:] = new_dq
+        frame.ext_hdr['STARLOCX'] = x_ref
+        frame.ext_hdr['STARLOCY'] = y_ref
+        frame.ext_hdr['CRPIX1'] += (x_ref - old_starx)
+        frame.ext_hdr['CRPIX2'] += (y_ref - old_stary)
+    
+    history_msg = f"Images aligned to pixel location x={x_ref}, y={y_ref}."
+    output_dataset.update_after_processing_step(history_msg)
+
+    return output_dataset
 
 def align_polarimetry_frames(input_dataset):  
     """
