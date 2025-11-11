@@ -36,6 +36,9 @@ def fix_str_for_tvac(
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         if type(exthdr['EMGAIN_C']) is str:
             exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+        prihdr = fits_file[0].header
+        if prihdr['VISTYPE'] == 'N/A':
+            prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -326,6 +329,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
 
     # modify headers from TVAC to in-flight headers
     #fix_headers_for_tvac(trad_dark_data_filelist)
+    fix_str_for_tvac(trad_dark_data_filelist)
 
 
     ###### Setup necessary calibration files
@@ -406,7 +410,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
-    walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir, template="build_trad_dark_image.json")
+    walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir) #, template="build_trad_dark_image.json")
 
     # find cal file (naming convention for data.Dark class)
     for f in os.listdir(build_trad_dark_outputdir):
@@ -497,5 +501,5 @@ if __name__ == "__main__":
     # args = ap.parse_args(args_here)
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_trad_dark(e2edata_dir, outputdir)
     test_trad_dark_im(e2edata_dir, outputdir)
+    test_trad_dark(e2edata_dir, outputdir)

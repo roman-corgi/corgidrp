@@ -262,10 +262,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     zero_inds = np.where(unmasked_num==0)
     nonzero_inds = np.where(unmasked_num!=0)
     if dataset[0].data is None:
-        with fits.open(dataset[0].filepath, 'readonly') as temp_fits:
-            shape = temp_fits[1].data.shape
-        del temp_fits
-        sum_squares = np.zeros(shape).astype(float)
+        sum_squares = np.zeros_like(mean_frame).astype(float)
         for f in dataset.frames:
             with fits.open(f.filepath, 'readonly') as temp_fits:
                 test_frame = temp_fits[1].data.astype(float)
@@ -306,7 +303,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         output_dq = output_dq.filled(0).astype(int)
     else:
         output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
-        output_dq[fittable_inds] = 0 
+    output_dq[fittable_inds] = 0 
     if not full_frame:
         dq = slice_section(output_dq, 'SCI', 'image', detector_regions)
         err = slice_section(total_err, 'SCI', 'image', detector_regions)
