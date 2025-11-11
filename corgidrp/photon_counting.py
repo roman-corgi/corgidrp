@@ -140,8 +140,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     Kevin Ludwick - UAH - 2023
 
     """
-    import psutil 
-    process = psutil.Process()
+    # uncomment for RAM check
+    # import psutil 
+    # process = psutil.Process()
 
     if not isinstance(niter, (int, np.integer)) or niter < 1:
             raise PhotonCountException('niter must be an integer greater than '
@@ -413,13 +414,14 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             list_err.append(combined_err)
             list_dq.append(combined_dq)
 
-        mem = process.memory_info()
-        # peak_wset is only available on Windows; fall back to rss on other platforms
-        if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
-            peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
-        else:
-            peak_memory = mem.rss / (1024 ** 2)  # convert to MB
-        print(f"get_pc_mean peak memory usage:  {peak_memory:.2f} MB")
+        # uncomment for RAM check
+        # mem = process.memory_info()
+        # # peak_wset is only available on Windows; fall back to rss on other platforms
+        # if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+        #     peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+        # else:
+        #     peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+        # print(f"get_pc_mean peak memory usage:  {peak_memory:.2f} MB")
 
     if val[0] != "CGIVST_CAL_DRK":
         pc_ill_dataset = data.Dataset(list_new_image)
