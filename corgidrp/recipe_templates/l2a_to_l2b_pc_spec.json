@@ -1,5 +1,5 @@
 {
-    "name" : "l2a_to_l2b_pc",
+    "name" : "l2a_to_l2b_pc_spec",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
@@ -17,18 +17,9 @@
             }
         },
         {
-            "name" : "dark_subtraction",
-            "calibs" : {
-                "DetectorNoiseMaps" : "AUTOMATIC, OPTIONAL"
-            },
-            "keywords" : {
-                "outputdir" : "AUTOMATIC"
-            }
-        },
-        {
             "name": "get_pc_mean",
             "calibs" : {
-                "Dark" : "AUTOMATIC, OPTIONAL"
+                "Dark" : "AUTOMATIC"
             },
             "keywords" : {
                 "dataset_copy" : false
@@ -47,12 +38,6 @@
             }
         },
         {
-            "name" : "flat_division",
-            "calibs" : {
-                "FlatField" : "AUTOMATIC"
-            }
-        },
-        {
             "name" : "correct_bad_pixels",
             "calibs" : {
                 "BadPixelMap" : "AUTOMATIC"
@@ -66,3 +51,4 @@
         }
     ]
 }
+

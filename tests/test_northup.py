@@ -337,7 +337,8 @@ def test_wcs_and_offset(save_mock_dataset=False):
    astrom_cal = astrom.boresight_calibration(mock_dataset_ori, fieldpath, find_threshold=10)
    mock_dataset =  mock_dataset_ori.copy()
    # add an angle offset
-   mock_dataset[0].pri_hdr['ROLL']=(ang,'roll angle (deg)')
+   mock_dataset[0].pri_hdr['ROLL']=(north_angle,'roll angle (deg)')
+
    # create the wcs
    test_offset = (3.3, 1.0)
    updated_dataset = create_wcs(mock_dataset,astrom_cal,offset=test_offset)
@@ -353,6 +354,7 @@ def test_wcs_and_offset(save_mock_dataset=False):
       updated_dataset[0].save(filedir='./',filename=f'mock_offset{ang+north_angle}deg_testoffset.fits')
 
 if __name__ == '__main__':
+   print('Running test_northup()...')
    test_northup()
    test_northup_pol()
    test_wcs_and_offset()

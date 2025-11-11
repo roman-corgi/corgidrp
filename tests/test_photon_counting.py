@@ -10,6 +10,7 @@ import corgidrp.caldb as caldb
 import corgidrp.data as data
 import corgidrp.detector as detector
 from corgidrp.photon_counting import get_pc_mean, photon_count, PhotonCountException
+import io, contextlib
 
 def test_negative():
     """Values at or below the 
@@ -184,10 +185,19 @@ def test_pc_subsets():
     assert pc_dataset.frames[0].ext_hdr['NUM_FR'] == 40
     assert pc_dataset.frames[-1].ext_hdr['NUM_FR'] == 40 # The 1 remainder frame ignored for consistent statistics among the PC-averaged output frames
     assert 'Number of subsets: 4' in pc_dataset.frames[0].ext_hdr['HISTORY'][-2]
-    with pytest.raises(Warning): #since number of frames in a dark subset would be less than that of a subset in illuminated
+    #since number of frames in a dark subset would be less than that of a subset in illuminated, warning statement is printed
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
         get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=51)
+    captured = buf.getvalue()
+    assert "Number of frames that created the photon-counted master dark should be greater than or equal to the number of illuminated frames in order for the result to be reliable.\n" in captured
     # but this is fine:
     get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=38)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=51)
+    captured2 = buf.getvalue()
+    assert captured2 == captured
 
 
 if __name__ == '__main__':

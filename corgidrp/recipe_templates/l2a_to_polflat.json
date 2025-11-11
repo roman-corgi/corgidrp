@@ -1,5 +1,5 @@
 {
-    "name" : "l2a_to_l2b_pc",
+    "name" : "l2a_to_polflat",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
@@ -8,30 +8,28 @@
     "outputdir" : "",
     "steps" : [
         {
-            "name" : "frame_select"
-        },
-        {
             "name" : "convert_to_electrons",
             "calibs" : {
                 "KGain" : "AUTOMATIC"
             }
         },
         {
-            "name" : "dark_subtraction",
+            "name" : "em_gain_division"
+        },
+        {
+            "name" : "add_shot_noise_to_err",
             "calibs" : {
-                "DetectorNoiseMaps" : "AUTOMATIC, OPTIONAL"
-            },
-            "keywords" : {
-                "outputdir" : "AUTOMATIC"
+                "KGain" : "AUTOMATIC",
+                "DetectorParams" : "AUTOMATIC"
             }
         },
         {
-            "name": "get_pc_mean",
+            "name" : "dark_subtraction",
             "calibs" : {
-                "Dark" : "AUTOMATIC, OPTIONAL"
+                "DetectorNoiseMaps" : "AUTOMATIC"
             },
             "keywords" : {
-                "dataset_copy" : false
+                "outputdir" : "AUTOMATIC"
             }
         },
         {
@@ -47,19 +45,7 @@
             }
         },
         {
-            "name" : "flat_division",
-            "calibs" : {
-                "FlatField" : "AUTOMATIC"
-            }
-        },
-        {
-            "name" : "correct_bad_pixels",
-            "calibs" : {
-                "BadPixelMap" : "AUTOMATIC"
-            }
-        },
-        {
-            "name" : "update_to_l2b"
+            "name" : "create_onsky_pol_flatfield"
         },
         {
             "name" : "save"

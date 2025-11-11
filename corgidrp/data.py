@@ -113,7 +113,8 @@ class Dataset():
             frame.err = self.all_err[i]
             frame.dq = self.all_dq[i]
 
-    def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None):
+    def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None,
+                                     update_err_header=True):
         """
         Updates the dataset after going through a processing step
 
@@ -123,6 +124,7 @@ class Dataset():
             new_all_err (np.array): (optional) Array of new err. Needs to be the same shape as `all_err` except of second dimension
             new_all_dq (np.array): (optional) Array of new dq. Needs to be the same shape as `all_dq`
             header_entries (dict): (optional) a dictionary {} of ext_hdr and err_hdr entries to add or update
+            update_err_header (bool): (optional) whether or not to add the new entry to the error header
         """
         # update data if necessary
         if new_all_data is not None:
@@ -146,7 +148,8 @@ class Dataset():
             if header_entries:
                 for key, value in header_entries.items():
                     img.ext_hdr[key] = value
-                    img.err_hdr[key] = value
+                    if update_err_header:
+                        img.err_hdr[key] = value
 
 
     def copy(self, copy_data=True):
@@ -856,8 +859,10 @@ class LineSpread(Image):
             self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
 
             # Generate default output filename
+            # Strip level suffix (e.g., _l2b) before adding calibration suffix
             base = input_dataset[0].filename.split(".fits")[0]
-            self.filename = f"{base}_line_spread.fits"
+            self.filename = f"{base}_lsf_cal.fits"
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             if gauss_par is not None:
                 if not (gauss_par.ndim == 1 and len(gauss_par) == 6):
                     raise ValueError('The LineSpread calibration gauss_par array must have 6 entries')

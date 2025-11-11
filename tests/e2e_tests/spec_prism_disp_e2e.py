@@ -223,7 +223,7 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     # Set up output directory and logging
     global logger
     
-    spec_prism_outputdir = os.path.join(e2eoutput_path, "spec_prism_disp_e2e")
+    spec_prism_outputdir = os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e")
     if not os.path.exists(spec_prism_outputdir):
         os.makedirs(spec_prism_outputdir)
     # clean out any files from a previous run

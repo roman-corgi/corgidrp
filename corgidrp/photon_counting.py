@@ -160,6 +160,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     msg = 'Dark subtracted using dark'
     if msg in lines:
         pc_master_dark = None # dark subtraction was already done, so override any input pc_master_dark
+        print("Dark subtraction already done in the dark_subtraction step, so no subtraction done in get_pc_mean.")
 
     list_new_image = []
     list_err = [] # only used for dark processing case
@@ -188,8 +189,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             if inputmode != 'illuminated':
                 raise PhotonCountException('Inputmode is not \'illuminated\', but the input dataset has \'VISTYPE\' not equal to \'CGIVST_CAL_DRK\'.')
         if 'ISPC' in datasets[0].frames[0].ext_hdr:
-            if datasets[0].frames[0].ext_hdr['ISPC'] != True:
-                raise PhotonCountException('\'ISPC\' header value must be True if these frames are to be processed as photon-counted.')
+            if datasets[0].frames[0].ext_hdr['ISPC'] != 1:
+                raise PhotonCountException('\'ISPC\' header value must be 1 if these frames are to be processed as photon-counted.')
 
         dataset = datasets[0]
         
@@ -214,6 +215,14 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
 
         # now get threshold to use for photon-counting
         read_noise = test_dataset[0].frames[0].ext_hdr['RN']
+        # Ensure RN is numeric (FITS headers can sometimes preserve string values)
+        if isinstance(read_noise, str):
+            try:
+                read_noise = float(read_noise.strip()) if read_noise.strip() else 100.0
+            except (ValueError, TypeError, AttributeError):
+                read_noise = 100.0
+        else:
+            read_noise = float(read_noise)
         thresh = T_factor*read_noise
         if thresh < 0:
             raise PhotonCountException('thresh must be nonnegative')
@@ -346,7 +355,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             if type(pc_master_dark) is not data.Dark:
                 raise Exception('Input type for pc_master_dark must be a Dataset of corgidrp.data.Dark instances.')
             if (pc_master_dark.ext_hdr['EXPTIME'], pc_master_dark.ext_hdr['EMGAIN_C']) != unique_vals[0][:2]:
-                raise PhotonCountException('Dark should have the same EXPTIME and EMGAIN_C as input_dataset.')
+                raise PhotonCountException('Dark should have the same EXPTIME and EMGAIN_C as input_dataset, which are {0} and {1} respectively.'.format(unique_vals[0][0], unique_vals[0][1]))
             if 'PC_STAT' not in pc_master_dark.ext_hdr:
                 raise PhotonCountException('\'PC_STAT\' must be a key in the extension header of each frame of pc_master_dark.')
             if pc_master_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark':
@@ -355,7 +364,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                 if pc_master_dark.ext_hdr['PCTHRESH'] != thresh:
                     raise PhotonCountException('Threshold used for photon-counted master dark should match the threshold to be used for the illuminated frames.')
                 if pc_master_dark.ext_hdr['NUM_FR'] < len(sub_dataset):
-                    raise Warning('Number of frames that created the photon-counted master dark should be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
+                    print('Number of frames that created the photon-counted master dark should be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
     
             # in case the number of subsets of darks < number of subsets of brights, which can happen since the number of darks within a subset can be bigger than the number in a bright subset
             j = np.mod(i, pc_master_dark.data.shape[0])
@@ -394,6 +403,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             new_image.filename = dataset[-1].filename.replace("L2a", "L2b")
             new_image.ext_hdr['PCTHRESH'] = thresh
             new_image.ext_hdr['NUM_FR'] = len(sub_dataset) 
+            # Set BUNIT to photoelectron after dark subtraction (same as dark_subtraction function for analog data)
+            if dark_sub == "yes":
+                new_image.ext_hdr['BUNIT'] = 'photoelectron'
             new_image._record_parent_filenames(sub_dataset) 
             list_new_image.append(new_image)
         else:
