@@ -176,7 +176,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     recipe = walker.autogen_recipe(l2a_files, l2a_to_l2b_output_dir)
     ### Modify they keywords of some of the steps
-    for step in recipe['steps']:
+    for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = master_dark_filepath_list[0] # to find PC dark
     walker.run_recipe(recipe, save_recipe_file=True)
@@ -325,7 +325,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # detects that dark-subtraction has already occurred (during the dark_subtraction() step)
     recipe = walker.autogen_recipe(l2a_files, output_dir)
     ### Modify they keywords of some of the steps
-    for step in recipe['steps']:
+    for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = trad_dark_cal.filepath # to find traditional dark
     walker.run_recipe(recipe, save_recipe_file=True)
