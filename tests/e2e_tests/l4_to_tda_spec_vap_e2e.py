@@ -16,7 +16,15 @@ from corgidrp import l4_to_tda, spec
 # ==============================================================================
 
 def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
-    """Execute the spectroscopy L4->TDA VAP validation with detailed logging."""
+    """Execute the spectroscopy L4->TDA VAP validation with detailed logging.
+
+    Args:
+        e2edata_path (str): Directory containing the pre-generated E2E input data.
+        e2eoutput_path (str): Directory where test artifacts and logs should be written.
+
+    Returns:
+        None
+    """
     logger = logging.getLogger('l4_to_tda_spec_vap')
     logger.info('=' * 80)
     logger.info('Pre-test: set up input files')
@@ -491,7 +499,15 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
 @pytest.mark.e2e
 def test_l4_to_tda_spec_vap(e2edata_path, e2eoutput_path):
-    """Pytest entry point for the spectroscopy VAP workflow."""
+    """Pytest entry point for the spectroscopy VAP workflow.
+
+    Args:
+        e2edata_path (str): Fixture-provided path to E2E input data products.
+        e2eoutput_path (str): Fixture-provided path where test outputs should be stored.
+
+    Returns:
+        None
+    """
     global logger
 
     output_top_level = os.path.join(e2eoutput_path, 'l4_to_tda_spec_vap')
