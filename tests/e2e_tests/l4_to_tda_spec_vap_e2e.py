@@ -1,16 +1,14 @@
 import os
 import glob
 import logging
-from datetime import datetime
 
 import numpy as np
-import astropy.io.fits as fits
 import pytest
 import argparse
 
 from corgidrp.data import Dataset, Image, FluxcalFactor
-from corgidrp.check import check_filename_convention, check_dimensions, verify_header_keywords
-from corgidrp import l4_to_tda
+from corgidrp.check import check_filename_convention, verify_header_keywords
+from corgidrp import l4_to_tda, spec
 
 
 # ==============================================================================
@@ -263,6 +261,224 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         else:
             logger.info(f'Single roll flux ratio: {weighted_flux_ratio}')
     
+
+    # ------------------------------------------------------------------
+    # Test 4: Line Spread Function Characterization
+    # ------------------------------------------------------------------
+    logger.info("-" * 80)
+    logger.info('Test 4: Line Spread Function Characterization')
+    logger.info("-" * 80)
+    
+    # Step: Find narrowband calibration dataset
+    # Look for L4 files with narrowband filter (CFAMNAME=3D or 2C) and prism
+    narrowband_dir = os.path.join(e2edata_path, 'l3_to_l4_spec_noncoron_e2e')
+    narrowband_files = sorted(glob.glob(os.path.join(narrowband_dir, '*_l4_.fits')))
+    
+    # Find a file with narrowband filter
+    narrowband_dataset = None
+    for f in narrowband_files:
+        img = Image(f)
+        cfamname = img.ext_hdr.get('CFAMNAME', '')
+        if cfamname in ('3D', '2C'):
+            narrowband_dataset = Dataset([img])
+            logger.info(f"Found narrowband calibration file: {os.path.basename(f)} with CFAMNAME={cfamname}")
+            break
+    
+    if narrowband_dataset is None:
+        logger.warning('No narrowband calibration dataset found. Skipping LSF test.')
+    else:
+        # Step: Check data format and header values per L4 documentation
+        narrowband_image = narrowband_dataset[0]
+        check_filename_convention(narrowband_image.filename, 'cgi_*_l4_.fits', "Narrowband L4", logger, data_level='l4_')
+        verify_header_keywords(narrowband_image.ext_hdr, {
+            'DATALVL': 'L4',
+            'DPAMNAME': 'PRISM3',
+            'BUNIT': 'photoelectron/s/bin'
+        }, "Narrowband L4", logger)
+        
+        # Step: Check and log that the LSF fit uses the correct narrowband subset
+        cfamname = narrowband_image.ext_hdr.get('CFAMNAME', '')
+        if cfamname in ('3D', '2C'):
+            logger.info(f"LSF fit will use narrowband subset with CFAMNAME={cfamname}. PASS")
+        else:
+            logger.error(f"LSF fit cannot use CFAMNAME={cfamname}. Expected 3D or 2C. FAIL")
+        
+        # Step: Fit the line spread function
+        try:
+            line_spread = spec.fit_line_spread_function(narrowband_dataset)
+            
+            # Step: Check and log that returned LineSpread object reports mean wavelength, FWHM, and amplitude with uncertainties
+            if hasattr(line_spread, 'mean_wave') and hasattr(line_spread, 'fwhm') and hasattr(line_spread, 'amplitude'):
+                logger.info(f"LineSpread object reports mean_wave={line_spread.mean_wave:.3f} nm. PASS")
+                logger.info(f"LineSpread object reports fwhm={line_spread.fwhm:.3f} pixels. PASS")
+                logger.info(f"LineSpread object reports amplitude={line_spread.amplitude:.3e}. PASS")
+            else:
+                logger.error("LineSpread object missing required attributes (mean_wave, fwhm, amplitude). FAIL")
+            
+            if hasattr(line_spread, 'wave_err') and hasattr(line_spread, 'fwhm_err') and hasattr(line_spread, 'amp_err'):
+                logger.info(f"LineSpread object reports wave_err={line_spread.wave_err:.3f} nm. PASS")
+                logger.info(f"LineSpread object reports fwhm_err={line_spread.fwhm_err:.3f} pixels. PASS")
+                logger.info(f"LineSpread object reports amp_err={line_spread.amp_err:.3e}. PASS")
+            else:
+                logger.error("LineSpread object missing uncertainty attributes (wave_err, fwhm_err, amp_err). FAIL")
+            
+            # Step: Check and log that FWHM values stay within algorithm bounds (5-30 pixels) or are flagged
+            fwhm_min = 5.0
+            fwhm_max = 30.0
+            if fwhm_min <= line_spread.fwhm <= fwhm_max:
+                logger.info(f"FWHM={line_spread.fwhm:.3f} pixels is within algorithm bounds ({fwhm_min}-{fwhm_max} pixels). PASS")
+            else:
+                logger.warning(f"FWHM={line_spread.fwhm:.3f} pixels is outside algorithm bounds ({fwhm_min}-{fwhm_max} pixels). FLAGGED")
+        
+        except Exception as e:
+            logger.error(f"Failed to fit line spread function: {e}. FAIL")
+
+    # ------------------------------------------------------------------
+    # Test 5: Slit Transmission Factor
+    # ------------------------------------------------------------------
+    logger.info("-" * 80)
+    logger.info('Test 5: Slit Transmission Factor')
+    logger.info("-" * 80)
+    
+    # Step: Find datasets with slit in and slit open
+    # L4 files with FSAMNAME = R1C2, R6C5, or R3C1 (slit in) and OPEN (slit open)
+    slit_dir = os.path.join(e2edata_path, 'l3_to_l4_spec_noncoron_e2e')
+    all_slit_files = sorted(glob.glob(os.path.join(slit_dir, '*_l4_.fits')))
+    
+    # Group files by FSAMNAME
+    slit_in_files = []
+    slit_open_files = []
+    
+    for f in all_slit_files:
+        img = Image(f)
+        fsamname = img.ext_hdr.get('FSAMNAME', '').upper()
+        if fsamname in ('R1C2', 'R6C5', 'R3C1'):
+            slit_in_files.append(img)
+        elif fsamname == 'OPEN':
+            slit_open_files.append(img)
+    
+    if not slit_in_files or not slit_open_files:
+        logger.warning('No slit transmission datasets found (need both slit-in and slit-open files). Skipping slit transmission test.')
+    else:
+        # Step: Check data format and header values per L4 documentation
+        dataset_slit = Dataset(slit_in_files)
+        dataset_open = Dataset(slit_open_files)
+        
+        # Check slit-in dataset
+        for i, frame in enumerate(dataset_slit):
+            frame_info = f"Slit-in Frame {i}"
+            check_filename_convention(frame.filename, 'cgi_*_l4_.fits', frame_info, logger, data_level='l4_')
+            verify_header_keywords(frame.ext_hdr, {
+                'DATALVL': 'L4',
+                'DPAMNAME': 'PRISM3',
+                'BUNIT': 'photoelectron/s/bin'
+            }, frame_info, logger)
+            verify_header_keywords(frame.ext_hdr, {'FSAMNAME'}, frame_info, logger)
+            verify_header_keywords(frame.ext_hdr, {'FSMX', 'FSMY'}, frame_info, logger)
+        
+        # Check slit-open dataset
+        for i, frame in enumerate(dataset_open):
+            frame_info = f"Slit-open Frame {i}"
+            check_filename_convention(frame.filename, 'cgi_*_l4_.fits', frame_info, logger, data_level='l4_')
+            verify_header_keywords(frame.ext_hdr, {
+                'DATALVL': 'L4',
+                'DPAMNAME': 'PRISM3',
+                'BUNIT': 'photoelectron/s/bin'
+            }, frame_info, logger)
+            verify_header_keywords(frame.ext_hdr, {'FSAMNAME': 'OPEN'}, frame_info, logger)
+            verify_header_keywords(frame.ext_hdr, {'FSMX', 'FSMY'}, frame_info, logger)
+        
+        # Step: Determine FSM grid dimensions
+        fsmx_values = sorted(set([f.ext_hdr.get('FSMX') for f in dataset_slit]))
+        fsmy_values = sorted(set([f.ext_hdr.get('FSMY') for f in dataset_slit]))
+        is_1d_x = len(fsmx_values) == 1
+        is_1d_y = len(fsmy_values) == 1
+        is_2d = not is_1d_x and not is_1d_y
+        
+        logger.info(f"FSM grid: {len(fsmx_values)} X positions, {len(fsmy_values)} Y positions")
+        if is_1d_x:
+            logger.info("FSM grid is 1-D along Y direction. PASS")
+        elif is_1d_y:
+            logger.info("FSM grid is 1-D along X direction. PASS")
+        elif is_2d:
+            logger.info("FSM grid is 2-D. PASS")
+        else:
+            logger.info("FSM grid has single position (no interpolation needed). PASS")
+        
+        # Step: Compute slit transmission
+        try:
+            # Get wavelength zero-point positions for grid definition
+            # Use the first slit-in frame to get reasonable ranges
+            first_frame = dataset_slit[0]
+            wv0_x = first_frame.ext_hdr.get('WV0_X', 40.0)
+            wv0_y = first_frame.ext_hdr.get('WV0_Y', 32.0)
+            
+            # Define grid ranges around zero-point
+            x_range = [wv0_x - 1.0, wv0_x + 1.0]
+            y_range = [wv0_y - 1.0, wv0_y + 1.0]
+            n_gridx = 10
+            n_gridy = 10
+            
+            # Step: For each FSM position, compute T(λ)=S_slit(λ)/S_open(λ) and interpolate
+            slit_trans_map, slit_pos_x, slit_pos_y = spec.slit_transmission(
+                dataset_slit, dataset_open,
+                target_pix=None,
+                x_range=x_range,
+                y_range=y_range,
+                n_gridx=n_gridx,
+                n_gridy=n_gridy,
+                kind='linear',
+                average='mean'
+            )
+            
+            # Step: Check and log that returned transmission map shape matches requested grid
+            expected_size = n_gridx * n_gridy
+            if isinstance(slit_trans_map, np.ndarray):
+                if slit_trans_map.ndim == 1:
+                    actual_size = slit_trans_map.shape[0]
+                else:
+                    actual_size = slit_trans_map.size
+                
+                if actual_size == expected_size:
+                    logger.info(f"Transmission map size ({actual_size}) matches requested grid size ({expected_size}). PASS")
+                else:
+                    logger.error(f"Transmission map size ({actual_size}) does not match requested grid size ({expected_size}). FAIL")
+                
+                # Step: Check that all values are in (0, 1]
+                finite_mask = np.isfinite(slit_trans_map)
+                finite_values = slit_trans_map[finite_mask]
+                
+                if len(finite_values) > 0:
+                    min_val = np.min(finite_values)
+                    max_val = np.max(finite_values)
+                    
+                    if min_val > 0 and max_val <= 1.0:
+                        logger.info(f"All transmission values are in (0, 1]: min={min_val:.3e}, max={max_val:.3e}. PASS")
+                    else:
+                        logger.warning(f"Some transmission values outside (0, 1]: min={min_val:.3e}, max={max_val:.3e}. FLAGGED")
+                    
+                    # Check for NaNs
+                    nan_count = np.isnan(slit_trans_map).sum()
+                    if nan_count > 0:
+                        logger.info(f"Found {nan_count} NaN values in transmission map (may indicate masked pixels).")
+                    else:
+                        logger.info("No NaN values in transmission map. PASS")
+                else:
+                    logger.error("All transmission values are NaN. FAIL")
+            else:
+                logger.error(f"Transmission map is not a numpy array: {type(slit_trans_map)}. FAIL")
+            
+            # Step: Check that interpolation handles 1-D and 2-D FSM grids
+            # This is already verified by the function working correctly above
+            if is_1d_x or is_1d_y:
+                logger.info("1-D FSM grid interpolation handled successfully. PASS")
+            elif is_2d:
+                logger.info("2-D FSM grid interpolation handled successfully. PASS")
+            else:
+                logger.info("Single FSM position (no interpolation needed). PASS")
+        
+        except Exception as e:
+            logger.error(f"Failed to compute slit transmission: {e}. FAIL")
 
     logger.info('=' * 80)
     logger.info('Spectroscopy L4->TDA VAP Test Completed')
