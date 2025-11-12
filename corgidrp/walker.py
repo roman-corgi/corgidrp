@@ -430,6 +430,8 @@ def run_recipe(recipe, save_recipe_file=True):
         recipe_filename = "{0}_{1}_recipe.json".format(recipe["name"], time.Time.now().isot)
         recipe_filename = recipe_filename.replace(":", ".")  # replace colons with periods for compatibility with Windows machines
         recipe_filepath = os.path.join(recipe["outputdir"], recipe_filename)
+        os.makedirs(recipe["outputdir"], exist_ok=True)
+        
         with open(recipe_filepath, "w") as json_file:
             json.dump(recipe, json_file, indent=4)
 

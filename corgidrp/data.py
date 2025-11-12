@@ -135,7 +135,12 @@ class Dataset():
             img.ext_hdr['HISTORY'] = history_entry
             if header_entries:
                 for key, value in header_entries.items():
-                    img.ext_hdr[key] = value
+                    try:
+                        if isinstance(value, (np.ndarray)):
+                            value = value.item()
+                        img.ext_hdr[key] = value                    
+                    except Exception as e:
+                        print(e)                    
                     img.err_hdr[key] = value
 
 
@@ -191,6 +196,11 @@ class Dataset():
           scale_factor (np.array or float): scale factor value or array
           scale_name (str): name of the scaling reason
         """
+        try:
+            if scale_factor.ndim == 0:
+                scale_factor = float(scale_factor.item())
+        except Exception as e:
+            print(e)        
         if isinstance(scale_factor, float):
             for frame in self.frames:
                 frame.rescale_error(scale_factor, scale_name)
@@ -1144,6 +1154,8 @@ class KGain(Image):
         if 'RN_ERR' not in self.ext_hdr:
             self.ext_hdr['RN_ERR'] = ''
         # File format checks
+        self.data = self.data[0]
+
         if self.data.shape != (1,):
             raise ValueError('The KGain calibration data should be just one float value')
         
@@ -1676,6 +1688,8 @@ class FluxcalFactor(Image):
         super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
         # if filepath passed in, just load in from disk as usual
         # File format checks
+        self.data = self.data[0]
+
         if self.data.shape != (1,):
             raise ValueError('The FluxcalFactor calibration data should be just one float value')
         
