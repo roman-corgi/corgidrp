@@ -308,13 +308,17 @@ def find_star(input_dataset,
         tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
 
     # Find star center
-    star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
-        img_ref=img_ref,
-        img_sat_spot=img_sat_spot,
-        star_coordinate_guess=star_coordinate_guess,
-        thetaOffsetGuess=thetaOffsetGuess,
-        satellite_spot_parameters=tuningParamDict,
-    )
+    try:
+        star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+            img_ref=img_ref,
+            img_sat_spot=img_sat_spot,
+            star_coordinate_guess=star_coordinate_guess,
+            thetaOffsetGuess=thetaOffsetGuess,
+            satellite_spot_parameters=tuningParamDict,
+        )
+    except Exception as e:
+        print("Star center finding failed:", e)
+        star_xy = [1,2]
 
     # Add star location to frame headers
     header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
