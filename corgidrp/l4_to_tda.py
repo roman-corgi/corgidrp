@@ -163,7 +163,7 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
 
     spec_dataset = input_dataset.copy()
 
-    # Normalise slit transmission input to per-frame list
+    # Normalize slit transmission input to per-frame list
     if slit_transmission is None:
         slit_per_frame = [None] * len(spec_dataset)
     elif isinstance(slit_transmission, (list, tuple)):
@@ -187,8 +187,8 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         spec_header = frame.hdu_list['SPEC'].header
         spec_err = frame.hdu_list['SPEC_ERR'].data.astype(float, copy=True)
 
-        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s/bin":
-            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s/bin' before flux calibration.")
+        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s":
+            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s' before flux calibration.")
 
         # Apply slit transmission correction if requested
         slit_vals = slit_per_frame[idx]
