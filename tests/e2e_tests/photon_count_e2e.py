@@ -15,6 +15,7 @@ import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 from corgidrp.darks import build_trad_dark
 import shutil
+import glob
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
@@ -29,7 +30,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     np.random.seed(1234)
     # using CIC and dark current average values which come from the corresponding values from cic_path and dark_path above; FPN mean is already 0 in fpn_path and simulated set below
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158)
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=3, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158)
     output_dir = os.path.join(e2eoutput_path, 'photon_count_e2e')
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
@@ -179,7 +180,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = master_dark_filepath_list[0] # to find PC dark
-    walker.run_recipe(recipe, save_recipe_file=True)
+    walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = glob.glob(os.path.join(recipe[0]['outputdir'], '*_l2a.fits'))
+    walker.run_recipe(recipe[1], save_recipe_file=True)
+    # files are overwritten with same filenames, so glob up the same filepaths
+    recipe[2]['inputs'] = glob.glob(os.path.join(recipe[1]['outputdir'], '*_l2a.fits'))
+    walker.run_recipe(recipe[2], save_recipe_file=True)
     
     # get photon-counted frame
     master_ill_filename_list = []
@@ -328,7 +334,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = trad_dark_cal.filepath # to find traditional dark
-    walker.run_recipe(recipe, save_recipe_file=True)
+    walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = glob.glob(os.path.join(recipe[0]['outputdir'], '*_l2a.fits'))
+    walker.run_recipe(recipe[1], save_recipe_file=True)
+    recipe[2]['inputs'] = glob.glob(os.path.join(recipe[1]['outputdir'], '*_l2a.fits'))
+    walker.run_recipe(recipe[2], save_recipe_file=True)
 
     # get photon-counted frame
     master_ill_filename_list = []
