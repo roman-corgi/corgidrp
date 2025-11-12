@@ -3,6 +3,7 @@ import warnings
 import os
 import numpy as np
 import corgidrp
+from astropy.io import fits
 from corgidrp.mocks import create_default_L3_headers
 from corgidrp.mocks import create_flux_image
 from corgidrp.mocks import create_pol_flux_image
@@ -187,6 +188,125 @@ def test_fluxcal_file():
     # JM: I moved this out of the fluxcal class and into fluxcal.py because, depending on the method you use to 
     # make the fluxcal factor, the BUNIT will vary. Doing a mock without running fluxcal methods won't update BUNIT
     #assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
+
+
+def make_1d_spec_image(spec_values, spec_err, spec_wave, col_cor=None):
+    """Create a mock L4 file with 1-D spectroscopy extensions.
+
+    Args:
+        spec_values (ndarray): flux values (photoelectron/s/bin) for `SPEC`.
+        spec_err (ndarray): uncertainty array matching `SPEC` shape.
+        spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
+        col_cor (float, optional): color-correction factor to record.
+
+    Returns:
+        corgidrp.data.Image: image with `SPEC`, `SPEC_ERR`, `SPEC_DQ`,
+        `SPEC_WAVE`, and `SPEC_WAVE_ERR` extensions populated.
+    """
+    data = np.zeros((10, 10))
+    err = np.ones((1, 10, 10))
+    dq = np.zeros((10, 10), dtype=int)
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
+    ext_hdr['BUNIT'] = 'photoelectron/s'
+    if col_cor is not None:
+        ext_hdr['COL_COR'] = col_cor
+    img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
+                err_hdr=err_hdr, dq_hdr=dq_hdr)
+
+    spec_hdr = fits.Header()
+    spec_hdr['BUNIT'] = 'photoelectron/s/bin'
+    img.add_extension_hdu('SPEC', data=spec_values, header=spec_hdr)
+    img.add_extension_hdu('SPEC_ERR', data=spec_err, header=spec_hdr.copy())
+    img.add_extension_hdu('SPEC_DQ', data=np.zeros_like(spec_values, dtype=int))
+
+    wave_hdr = fits.Header()
+    wave_hdr['BUNIT'] = 'nm'
+    img.add_extension_hdu('SPEC_WAVE', data=spec_wave, header=wave_hdr)
+    img.add_extension_hdu('SPEC_WAVE_ERR', data=np.zeros_like(spec_wave), header=wave_hdr.copy())
+    return img
+
+
+def make_mock_fluxcal_factor(value, err=0.0):
+    """Build a FluxcalFactor with minimal metadata for testing.
+
+    Args:
+        value (float): absolute flux calibration factor.
+        err (float, optional): uncertainty on the calibration factor.
+
+    Returns:
+        corgidrp.data.FluxcalFactor: calibration object referencing a dummy
+        dataset for history bookkeeping.
+    """
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
+    ext_hdr['CFAMNAME'] = '3D'
+    ext_hdr['DPAMNAME'] = 'PRISM3'
+    ext_hdr['FSAMNAME'] = 'R1C2'
+    dummy_data = np.zeros((2, 2))
+    dummy_err = np.zeros((1, 2, 2))
+    dummy_dq = np.zeros((2, 2), dtype=int)
+    dummy_img = Image(dummy_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(), err=dummy_err,
+                      dq=dummy_dq, err_hdr=err_hdr.copy(), dq_hdr=dq_hdr.copy())
+    return FluxcalFactor(value, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                          input_dataset=Dataset([dummy_img]))
+
+
+def test_convert_spec_to_flux_basic():
+    """Validate convert_spec_to_flux with slit correction and COL_COR applied."""
+    spec_vals = np.array([10.0, 12.0, 14.0, 16.0, 18.0])
+    spec_err = np.array([[0.5, 0.6, 0.7, 0.8, 0.9]])
+    wave = np.linspace(700, 800, len(spec_vals))
+    slit = np.array([0.8, 0.9, 1.0, 0.85, 0.95])
+
+    image = make_1d_spec_image(spec_vals, spec_err, wave, col_cor=2.0)
+    dataset = Dataset([image])
+    fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
+
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor, slit_transmission=slit)
+    frame = calibrated[0]
+    spec_out = frame.hdu_list['SPEC'].data
+    err_out = frame.hdu_list['SPEC_ERR'].data
+
+    expected_spec = (spec_vals / slit) * (fluxcal_factor.fluxcal_fac / 2.0)
+    expected_err = np.sqrt(((spec_err[0] / slit) * (fluxcal_factor.fluxcal_fac / 2.0))**2 +
+                           (((spec_vals / slit) * fluxcal_factor.fluxcal_err / 2.0))**2)
+
+    result = np.allclose(spec_out, expected_spec) and np.allclose(err_out[0], expected_err)
+    print('\nconvert_spec_to_flux basic case: ', end='')
+    print_pass() if result else print_fail()
+
+    assert result
+    assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
+    assert frame.hdu_list['SPEC_ERR'].header['BUNIT'] == "erg/(s*cm^2*AA)"
+    assert frame.hdu_list['SPEC'].header['SLITCOR'] is True
+    assert frame.ext_hdr['SPECUNIT'] == "erg/(s*cm^2*AA)"
+
+
+def test_convert_spec_to_flux_no_slit():
+    """Validate convert_spec_to_flux when no slit transmission vector is supplied."""
+    spec_vals = np.array([5.0, 6.0, 7.0])
+    spec_err = np.array([[0.2, 0.3, 0.4]])
+    wave = np.linspace(600, 650, len(spec_vals))
+
+    image = make_1d_spec_image(spec_vals, spec_err, wave)
+    dataset = Dataset([image])
+    fluxcal_factor = make_mock_fluxcal_factor(1.5, err=0.1)
+
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor)
+    frame = calibrated[0]
+
+    expected_spec = spec_vals * fluxcal_factor.fluxcal_fac
+    expected_err = np.sqrt((spec_err[0] * fluxcal_factor.fluxcal_fac) ** 2 +
+                           (spec_vals * fluxcal_factor.fluxcal_err) ** 2)
+
+    result = np.allclose(frame.hdu_list['SPEC'].data, expected_spec) and \
+             np.allclose(frame.hdu_list['SPEC_ERR'].data[0], expected_err)
+    print('\nconvert_spec_to_flux without slit: ', end='')
+    print_pass() if result else print_fail()
+
+    assert result
+    assert frame.hdu_list['SPEC'].header['SLITCOR'] is False
+    assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
+    assert frame.ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
 
 def test_abs_fluxcal():
     """ 
@@ -571,6 +691,8 @@ if __name__ == '__main__':
     test_fluxcal_file()
     test_abs_fluxcal()
     test_pol_abs_fluxcal()
+    test_convert_spec_to_flux_basic()
+    test_convert_spec_to_flux_no_slit()
 
 
 

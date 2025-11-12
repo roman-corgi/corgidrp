@@ -312,20 +312,19 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     global logger
     
     # Create the spec_l3_to_l4_e2e subfolder regardless
-    input_top_level = os.path.join(e2edata_path, 'spec_l3_to_l4_noncoron_e2e')
-    output_top_level = os.path.join(e2eoutput_path, 'spec_l3_to_l4_noncoron_e2e')
+    output_top_level = os.path.join(e2eoutput_path, "l3_to_l4_spec_noncoron_e2e")
+    if not os.path.exists(output_top_level):
+        os.makedirs(output_top_level)
+    # clean out any files from a previous run
+    for f in os.listdir(output_top_level):
+        file_path = os.path.join(output_top_level, f)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
     
-    os.makedirs(input_top_level, exist_ok=True)
-    os.makedirs(output_top_level, exist_ok=True)
-    
-    # Update paths to use the subfolder structure
-    e2edata_path = input_top_level
-    e2eoutput_path = output_top_level
-    
-    log_file = os.path.join(e2eoutput_path, 'spec_l3_to_l4_e2e.log')
+    log_file = os.path.join(output_top_level, 'l3_to_l4_spec_noncoron_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
-    logger = logging.getLogger('spec_l3_to_l4_e2e')
+    logger = logging.getLogger('l3_to_l4_spec_noncoron_e2e')
     logger.setLevel(logging.INFO)
     
     # Clear any existing handlers to avoid duplicates
@@ -349,12 +348,12 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.addHandler(console_handler)
     
     logger.info('='*80)
-    logger.info('SPECTROSCOPY L3 to L4 END-TO-END TEST')
+    logger.info('SPECTROSCOPY L3 to L4 NONCORON END-TO-END TEST')
     logger.info('='*80)
     logger.info("")
     
     # Run the complete end-to-end test
-    spec_out = run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path)
+    spec_out = run_spec_l3_to_l4_e2e_test(e2edata_path, output_top_level)
     
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
@@ -366,9 +365,8 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
-    top_level_dir = os.path.join(thisfile_dir, 'spec_l3_to_l4_noncoron_e2e')
-    outputdir = os.path.join(top_level_dir, 'output')
-    e2edata_dir = os.path.join(top_level_dir, 'input_data')
+    outputdir = thisfile_dir
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

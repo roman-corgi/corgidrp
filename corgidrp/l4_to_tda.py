@@ -5,7 +5,7 @@ from astropy.io import fits
 from scipy.interpolate import interp1d
 import warnings
 from photutils.psf import fit_2dgaussian
-from corgidrp.data import Dataset, Image
+from corgidrp.data import Dataset, Image, FluxcalFactor
 import corgidrp.fluxcal as fluxcal
 from corgidrp import check
 from corgidrp.klip_fm import measure_noise
@@ -135,6 +135,106 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     color_dataset.update_after_processing_step(history_msg, header_entries = {"LAM_REF": lambda_ref, "COL_COR": k})
     
     return color_dataset
+
+
+def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
+    """
+    Flux-calibrate 1-D spectroscopy spectra stored in the L4 `SPEC` extension.
+    The function applies COL_COR when present, propagates calibration
+    uncertainties, and records whether slit correction was applied.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): L4 dataset containing `SPEC`,
+            `SPEC_ERR`, `SPEC_DQ`, `SPEC_WAVE`, and `SPEC_WAVE_ERR` extensions.
+        fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration
+            product used to scale the spectrum.
+        slit_transmission (array-like or sequence, optional): wavelength-
+            dependent slit throughput to divide out prior to calibration. Can
+            be a single vector or one per frame.
+
+    Returns:
+        corgidrp.data.Dataset: copy of the input dataset with the
+        `SPEC`/`SPEC_ERR` data converted to erg/(s*cm^2*Å) and
+        headers/history updated.
+        
+    """
+    if not isinstance(fluxcal_factor, FluxcalFactor):
+        raise TypeError("fluxcal_factor must be a corgidrp.data.FluxcalFactor instance.")
+
+    spec_dataset = input_dataset.copy()
+
+    # Normalise slit transmission input to per-frame list
+    if slit_transmission is None:
+        slit_per_frame = [None] * len(spec_dataset)
+    elif isinstance(slit_transmission, (list, tuple)):
+        if len(slit_transmission) not in (1, len(spec_dataset)):
+            raise ValueError("slit_transmission list must have length 1 or match the dataset length.")
+        slit_per_frame = list(slit_transmission)
+        if len(slit_per_frame) == 1 and len(spec_dataset) > 1:
+            slit_per_frame = slit_per_frame * len(spec_dataset)
+    else:
+        slit_per_frame = [slit_transmission] * len(spec_dataset)
+
+    history_messages = []
+
+    for idx, frame in enumerate(spec_dataset):
+        if 'SPEC' not in frame.hdu_list:
+            raise ValueError("Input dataset does not contain a 'SPEC' extension. "
+                             "Run l3_to_l4.extract_spec before flux calibration.")
+
+        spec = frame.hdu_list['SPEC'].data.astype(float, copy=True)
+        spec_header = frame.hdu_list['SPEC'].header
+        spec_err = frame.hdu_list['SPEC_ERR'].data.astype(float, copy=True)
+
+        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s/bin":
+            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s/bin' before flux calibration.")
+
+        # Apply slit transmission correction if requested
+        slit_vals = slit_per_frame[idx]
+        slit_applied = False
+        if slit_vals is not None:
+            slit_vals = np.asarray(slit_vals, dtype=float)
+            if slit_vals.shape != spec.shape:
+                raise ValueError("slit_transmission array must match the SPEC data shape.")
+            with np.errstate(divide='ignore', invalid='ignore'):
+                spec = np.where(slit_vals != 0, spec / slit_vals, np.nan)
+                if spec_err.ndim == spec.ndim:
+                    spec_err = np.where(slit_vals != 0, spec_err / slit_vals, np.nan)
+                else:
+                    spec_err = np.where(slit_vals[np.newaxis, :] != 0, spec_err / slit_vals[np.newaxis, :], np.nan)
+            slit_applied = True
+            spec_header['SLITCOR'] = True
+        else:
+            spec_header['SLITCOR'] = False
+
+        color_cor_fac = frame.ext_hdr.get('COL_COR', 1.0)
+        factor = fluxcal_factor.fluxcal_fac / color_cor_fac
+        factor_error = fluxcal_factor.fluxcal_err / color_cor_fac
+
+        spec_flux = spec * factor
+        if spec_err.ndim == spec.ndim:
+            spec_flux_err = np.sqrt((spec_err * factor) ** 2 + (spec * factor_error) ** 2)
+        else:
+            spec_flux_err = np.sqrt((spec_err * factor) ** 2 + (spec[np.newaxis, :] * factor_error) ** 2)
+
+        frame.hdu_list['SPEC'].data[:] = spec_flux
+        frame.hdu_list['SPEC_ERR'].data[:] = spec_flux_err
+        spec_header['BUNIT'] = "erg/(s*cm^2*AA)"
+        if 'SPEC_ERR' in frame.hdu_list:
+            frame.hdu_list['SPEC_ERR'].header['BUNIT'] = "erg/(s*cm^2*AA)"
+
+        history_messages.append(
+            f"Calibrated 1D spectrum with fluxcal_factor={fluxcal_factor.fluxcal_fac}, "
+            f"COL_COR={color_cor_fac}, slit_correction={slit_applied}."
+        )
+
+    if history_messages:
+        spec_dataset.update_after_processing_step(
+            " ".join(history_messages),
+            header_entries={"SPECUNIT": "erg/(s*cm^2*AA)", "FLUXFAC": fluxcal_factor.fluxcal_fac}
+        )
+
+    return spec_dataset
 
 
 def convert_to_flux(input_dataset, fluxcal_factor):
