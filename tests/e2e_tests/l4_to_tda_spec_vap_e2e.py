@@ -60,10 +60,10 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     logger.info(f"Flux calibration file: {os.path.basename(fluxcal_path)}")
 
     # ------------------------------------------------------------------
-    # Test 1: Flux-Ratio vs Wavelength
+    # Test 1: L4 Spectroscopy Input Data Validation
     # ------------------------------------------------------------------
     logger.info("-" * 80)
-    logger.info('Test 1: Flux-Ratio vs Wavelength')
+    logger.info('Test 1: L4 Spectroscopy Input Data Validation')
     logger.info("-" * 80)
 
     # Step: Check CGI filename and L4 data-level keywords for non-coronagraphic L4
