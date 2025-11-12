@@ -5074,6 +5074,7 @@ def create_mock_stokes_image_l4(
         badpixel_fraction=1e-3,
         p=0.1,
         theta_deg=20.0,
+        rng=None,
         seed=None
 ):
     """
@@ -5086,12 +5087,14 @@ def create_mock_stokes_image_l4(
         badpixel_fraction (float): Fraction of bad pixels
         p (float): Fractional polarization
         theta_deg (float): Polarization angle in degrees
+        rng (numpy.random.Generator, optional): RNG instance for reproducibility. Defaults to None.
         seed (int, optional): Random seed
 
     Returns:
         Image: Stokes cube Image object with data, err, dq, and headers
     """
-    rng = np.random.default_rng(seed)
+    if rng is None:
+    	rng = np.random.default_rng(seed)
 
     # Gaussian source
     y, x = np.mgrid[0:image_size, 0:image_size]
@@ -5126,7 +5129,9 @@ def create_mock_stokes_image_l4(
         prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L4_headers()
     except:
         prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
-
+    exthdr['DATALVL'] = 'L4'
+    exthdr['BUNIT'] = 'photoelectron/s'
+    
     dq_out = np.broadcast_to(dq, stokes_cube.shape).copy()
 
     return Image(
@@ -5138,6 +5143,7 @@ def create_mock_stokes_image_l4(
         err_hdr=errhdr,
         dq_hdr=dqhdr
     )
+    
 def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
     """
     Create a mock Image with [I, Q, U, V] planes for testing.

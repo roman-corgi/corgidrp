@@ -161,7 +161,7 @@ def test_image_splitting():
     with pytest.raises(ValueError):
         invalid_output = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=682)
         
-def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3.):
+def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0, logger=None):
     """
     Test `calc_pol_p_and_pa_image` using mock L4 Stokes cubes.
 
@@ -185,25 +185,47 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3.):
     interval, e.g., `nsigma_tol=3` corresponds roughly to a 3-sigma limit
     on expected statistical deviations.
     """
+    # --- Helper for unified logging ---
+    def _log(msg):
+        """Log a message via logger if available, otherwise print to stdout.
+        Args:
+            msg (str): Message to log or print.
+        """
+        if logger is not None:
+            logger.info(msg)
+        #else:
+        #    print(msg)
+            
+    rng = np.random.default_rng(seed)
+
     # --- Simulation parameters ---
-    p_input = 0.1 + 0.2 * np.random.rand(n_sim)
-    theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
+    p_input = 0.1 + 0.2 * rng.random(n_sim)
+    theta_input = 10.0 + 20.0 * rng.random(n_sim)
 
     # --- Containers for chi statistics ---
     p_chi_mean, p_chi_std = [], []
     evpa_chi_mean, evpa_chi_std = [], []
 
-    for p, theta in zip(p_input, theta_input):
-
+    for i, p, theta in zip(range(n_sim), p_input, theta_input):
+        
         # Generate mock Stokes cube
         Image_polmock = mocks.create_mock_stokes_image_l4(
             badpixel_fraction=0.0,
             fwhm=1e2,
             I0=1e10,
             p=p,
-            theta_deg=theta
+            theta_deg=theta,
+            rng=rng
         )
 
+        if i == 0:
+            assert isinstance(Image_polmock, Image)
+            _log("l4_to_tda:test_calc_pol_p_and_pa_image, input check passed: CGI format")
+        
+            assert Image_polmock.ext_hdr['DATALVL'] == "L4"
+            assert Image_polmock.ext_hdr['BUNIT'] == "photoelectron/s"
+            _log("l4_to_tda:test_calc_pol_p_and_pa_image, Header checks passed: DATALVL=L4 and BUNIT=photoelectron/s")
+            
         # Compute polarization products
         Image_pol = l4_to_tda.calc_pol_p_and_pa_image(Image_polmock)
 
@@ -215,12 +237,18 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3.):
         # Compute chi statistics
         p_chi = (p_map - p) / p_map_err
         evpa_chi = (evpa_map - theta) / evpa_map_err
-
+        
+        # Compute mean values among pixels
         p_chi_mean.append(np.nanmedian(p_chi))
         p_chi_std.append(np.nanstd(p_chi))
         evpa_chi_mean.append(np.nanmedian(evpa_chi))
         evpa_chi_std.append(np.nanstd(evpa_chi))
-
+        
+    # Scale n_sim by number of pixels for statistical tolerance calculation
+    # Each pixel in the mock images is independent, so total samples = n_sim * n_pixels
+    n_sim *= np.shape(p_map)[0] * np.shape(p_map)[1]
+    
+    # --- Statistical consistency check ---
     #print(np.median(p_chi_mean), np.median(p_chi_std),
     #      np.median(evpa_chi_mean), np.median(evpa_chi_std))
     tol_mean = 1. / np.sqrt(n_sim) * nsigma_tol
@@ -229,7 +257,8 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3.):
     assert np.median(p_chi_std) == pytest.approx(1.0, abs=tol_std)
     assert np.median(evpa_chi_mean) == pytest.approx(0.0, abs=tol_mean)
     assert np.median(evpa_chi_std) == pytest.approx(1.0, abs=tol_std)
-
+    _log("l4_to_tda:test_calc_pol_p_and_pa_image PASSED, fractional polarization and EVPA match inputs within propagated errors")
+    
 def test_align_frames():
     """
     Test that polarimetric images are align correctly on the POL 0 subdataset

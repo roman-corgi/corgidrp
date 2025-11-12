@@ -579,7 +579,7 @@ def calc_pol_p_and_pa_image(input_Image):
 
     # --- Polarization angle (EVPA) and uncertainty ---
     evpa = 0.5 * np.arctan2(U, Q)  # radians
-    evpa_err = 0.5 * np.sqrt((Q * Uerr)**2 + (U * Qerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
+    evpa_err = 0.5 * np.sqrt((U * Qerr)**2 + (Q * Uerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
     evpa = np.degrees(evpa)
     evpa_err = np.degrees(evpa_err)
 
@@ -614,6 +614,7 @@ def calc_pol_p_and_pa_image(input_Image):
     )
 
     return Image_out
+
 def compute_QphiUphi(image, x_center=None, y_center=None):
     """
     Compute Q_phi and U_phi from Stokes Q and U, returning an Image with shape [6, n, m]:
