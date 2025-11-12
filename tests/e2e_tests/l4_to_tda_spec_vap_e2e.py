@@ -9,11 +9,7 @@ import pytest
 import argparse
 
 from corgidrp.data import Dataset, Image, FluxcalFactor
-from corgidrp.check import (
-    check_filename_convention,
-    check_dimensions,
-    verify_header_keywords,
-)
+from corgidrp.check import check_filename_convention, check_dimensions, verify_header_keywords
 from corgidrp import l4_to_tda
 
 
@@ -71,6 +67,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         'DPAMNAME': 'PRISM3',
         'BUNIT': 'photoelectron/s'
     }, "Non-coronagraphic L4", logger)
+    verify_header_keywords(noncoron_image.pri_hdr, {'ROLL'}, "Non-coronagraphic L4", logger)
     verify_header_keywords(noncoron_image.ext_hdr, {
         'WAVLEN0', 'WV0_X', 'WV0_XERR', 'WV0_Y', 'WV0_YERR', 'WV0_DIMX', 'WV0_DIMY'
     }, "Non-coronagraphic L4", logger)
@@ -82,6 +79,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         'DPAMNAME': 'PRISM3',
         'BUNIT': 'photoelectron/s'
     }, "PSF-subtracted L4", logger)
+    verify_header_keywords(psf_image.pri_hdr, {'ROLL'}, "PSF-subtracted L4", logger)
     verify_header_keywords(psf_image.ext_hdr, {
         'WAVLEN0', 'WV0_X', 'WV0_XERR', 'WV0_Y', 'WV0_YERR', 'WV0_DIMX', 'WV0_DIMY'
     }, "PSF-subtracted L4", logger)
@@ -141,7 +139,6 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     logger.info('Test 2: Unocculted Star in Astrophysical Units')
     logger.info("-" * 80)
 
-    verify_header_keywords(noncoron_image.pri_hdr, {'ROLL'}, "Non-coronagraphic L4 headers", logger)
     # Step: Verify spectroscopy headers and required extensions
     for ext in ['SPEC', 'SPEC_ERR', 'SPEC_WAVE']:
         if ext in noncoron_image.hdu_list:
@@ -149,17 +146,23 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         else:
             logger.error(f"Extension {ext} missing in non-coronagraphic spectrum. FAIL")
 
+    # Step: Check if COL_COR exists; if not, compute it using determine_color_cor
+    col_cor_val = noncoron_image.ext_hdr.get('COL_COR', None)
+    if col_cor_val is None:
+        # TODO: This requires reference and source star info
+        logger.warning('COL_COR not found in header. Using default value of 1.0.')
+        col_cor_val = 1.0
+    else:
+        logger.info(f"COL_COR found in header: {col_cor_val}")
+    
     # Step: Interpolate slit-transmission map onto SPEC_WAVE grid and log throughput
     slit_transmission_map = np.ones_like(noncoron_spec)
-    psf_slit_transmission_map = np.ones_like(psf_spec)
-    slit_transmission_host = np.interp(noncoron_wave, noncoron_wave, slit_transmission_map)
-    slit_transmission_comp = np.interp(noncoron_wave, psf_wave, psf_slit_transmission_map)
-    logger.info(f"Host slit transmission applied (first 5 bins): {slit_transmission_host[:5]}")
-    logger.info(f"Companion slit transmission applied (first 5 bins): {slit_transmission_comp[:5]}")
+    slit_transmission = np.interp(noncoron_wave, noncoron_wave, slit_transmission_map)
+    logger.info(f"Slit transmission applied (first 5 bins): {slit_transmission[:5]}")
 
     # Step: Flux-calibrate host spectrum with convert_spec_to_flux
     noncoron_dataset = Dataset([noncoron_image])
-    calibrated_noncoron = l4_to_tda.convert_spec_to_flux(noncoron_dataset, fluxcal_factor, slit_transmission=slit_transmission_host)
+    calibrated_noncoron = l4_to_tda.convert_spec_to_flux(noncoron_dataset, fluxcal_factor, slit_transmission=slit_transmission)
     noncoron_calibrated_spec = calibrated_noncoron[0].hdu_list['SPEC'].data
     noncoron_calibrated_err = calibrated_noncoron[0].hdu_list['SPEC_ERR'].data
 
@@ -173,12 +176,16 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
     # Step: Flux-calibrate companion spectrum with convert_spec_to_flux
     comp_dataset = Dataset([psf_image])
-    calibrated_comp = l4_to_tda.convert_spec_to_flux(comp_dataset, fluxcal_factor, slit_transmission=slit_transmission_comp)
+    calibrated_comp = l4_to_tda.convert_spec_to_flux(comp_dataset, fluxcal_factor, slit_transmission=slit_transmission)
     psf_calibrated_spec = calibrated_comp[0].hdu_list['SPEC'].data
 
     # Step: Log COL_COR usage and confirm non-coronagraphic wavelengths are monotonic
-    col_cor_val = noncoron_image.ext_hdr.get('COL_COR', 1.0)
-    logger.info(f"Non-coronagraphic COL_COR value: {col_cor_val}")
+    # Check the actual COL_COR value used (from header or default)
+    final_col_cor = calibrated_noncoron[0].ext_hdr.get('COL_COR', 1.0)
+    if final_col_cor != 1.0:
+        logger.info(f"Color correction applied: COL_COR={final_col_cor}")
+    else:
+        logger.info(f"No color correction applied: COL_COR={final_col_cor} (default)")
 
     if np.all(np.diff(noncoron_wave) >= 0) or np.all(np.diff(noncoron_wave) <= 0):
         logger.info('Non-coronagraphic wavelength grid is monotonic. PASS')
@@ -189,6 +196,73 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     astro_flux_ratio = np.divide(psf_calibrated_spec, noncoron_calibrated_spec, out=np.zeros_like(psf_calibrated_spec), where=noncoron_calibrated_spec != 0)
     logger.info(f"Converted companion spectrum to astrophysical units. Sample (first 5 bins): {psf_calibrated_spec[:5]}")
     logger.info(f"Astrophysical flux-ratio stats: min={np.nanmin(astro_flux_ratio):.3e}, max={np.nanmax(astro_flux_ratio):.3e}")
+
+    # ------------------------------------------------------------------
+    # Test 3: Companion-to-Host Flux-Ratio (PSF-subtracted)
+    # ------------------------------------------------------------------
+    logger.info("-" * 80)
+    logger.info('Test 3: Companion-to-Host Flux-Ratio (PSF-subtracted)')
+    logger.info("-" * 80)
+
+    # The following steps were already completed in previous tests:
+    # - Extract 1-D spectra from PSF-subtracted and non-PSF-subtracted cubes (Test 1)
+    # - Convert host and companion spectra to physical units via convert_spec_to_flux() (Test 2)
+    # - Apply slit-transmission loss to both host and companion fluxes (Test 2)
+    # - Apply color-correction via convert_spec_to_flux() (Test 2)
+
+    # Step: Compute flux-ratio per roll with optional roll-averaging
+    # Load all available files and group by roll
+    all_host_files = sorted(glob.glob(os.path.join(host_dir, '*_l4_.fits')))
+    all_comp_files = sorted(glob.glob(os.path.join(psf_dir, '*_l4_.fits')))
+    
+    host_by_roll = {}
+    comp_by_roll = {}
+    
+    for f in all_host_files:
+        img = Image(f)
+        roll = img.pri_hdr['ROLL']
+        if roll not in host_by_roll:
+            host_by_roll[roll] = []
+        host_by_roll[roll].append(img)
+    
+    for f in all_comp_files:
+        img = Image(f)
+        roll = img.pri_hdr['ROLL']
+        if roll not in comp_by_roll:
+            comp_by_roll[roll] = []
+        comp_by_roll[roll].append(img)
+    
+    logger.info(f'Found host files for roll angles: {list(host_by_roll.keys())}')
+    logger.info(f'Found companion files for roll angles: {list(comp_by_roll.keys())}')
+    
+    # Build datasets for each roll (matching host and companion)
+    host_datasets = []
+    comp_datasets = []
+    available_rolls = sorted(set(host_by_roll.keys()) & set(comp_by_roll.keys()))
+    
+    for roll in available_rolls:
+        host_datasets.append(Dataset(host_by_roll[roll]))
+        comp_datasets.append(Dataset(comp_by_roll[roll]))
+    
+    if not host_datasets:
+        logger.error('No matching rolls found between host and companion datasets. Cannot compute flux ratio. FAIL')
+        weighted_flux_ratio = np.full_like(noncoron_wave, np.nan)
+        wavelength = noncoron_wave
+    else:
+        # Call the flux ratio computation function
+        weighted_flux_ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
+            host_datasets, comp_datasets, fluxcal_factor,
+            slit_transmission=slit_transmission
+        )
+        
+        # Log results
+        logger.info(f'Computed flux ratio for roll angles: {metadata["rolls"]}')
+        logger.info(f'Exposure times: {metadata["exp_times"]}')
+        if metadata['weighted']:
+            logger.info(f'Exposure-time weighted average flux ratio: {weighted_flux_ratio}')
+        else:
+            logger.info(f'Single roll flux ratio: {weighted_flux_ratio}')
+    
 
     logger.info('=' * 80)
     logger.info('Spectroscopy L4->TDA VAP Test Completed')

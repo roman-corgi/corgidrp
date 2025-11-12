@@ -139,22 +139,22 @@ def determine_color_cor(input_dataset, ref_star, source_star):
 
 def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
     """
-    Flux-calibrate 1-D spectroscopy spectra stored in the L4 `SPEC` extension.
+    Flux calibrate 1-D spectroscopy spectra stored in the L4 SPEC extension.
     The function applies COL_COR when present, propagates calibration
     uncertainties, and records whether slit correction was applied.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): L4 dataset containing `SPEC`,
-            `SPEC_ERR`, `SPEC_DQ`, `SPEC_WAVE`, and `SPEC_WAVE_ERR` extensions.
+        input_dataset (corgidrp.data.Dataset): L4 dataset containing SPEC,
+            SPEC_ERR, SPEC_DQ, SPEC_WAVE, and SPEC_WAVE_ERR extensions.
         fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration
             product used to scale the spectrum.
-        slit_transmission (array-like or sequence, optional): wavelength-
+        slit_transmission (array-like, optional): wavelength-
             dependent slit throughput to divide out prior to calibration. Can
             be a single vector or one per frame.
 
     Returns:
         corgidrp.data.Dataset: copy of the input dataset with the
-        `SPEC`/`SPEC_ERR` data converted to erg/(s*cm^2*Å) and
+        SPEC/SPEC_ERR data converted to erg/(s*cm^2*Å) and
         headers/history updated.
         
     """
@@ -169,8 +169,10 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
     elif isinstance(slit_transmission, (list, tuple)):
         if len(slit_transmission) not in (1, len(spec_dataset)):
             raise ValueError("slit_transmission list must have length 1 or match the dataset length.")
+        # Convert to list so it can be modified if needed
         slit_per_frame = list(slit_transmission)
         if len(slit_per_frame) == 1 and len(spec_dataset) > 1:
+            # Repeat single value for all frames
             slit_per_frame = slit_per_frame * len(spec_dataset)
     else:
         slit_per_frame = [slit_transmission] * len(spec_dataset)
@@ -179,8 +181,7 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
 
     for idx, frame in enumerate(spec_dataset):
         if 'SPEC' not in frame.hdu_list:
-            raise ValueError("Input dataset does not contain a 'SPEC' extension. "
-                             "Run l3_to_l4.extract_spec before flux calibration.")
+            raise ValueError("Input dataset does not contain a 'SPEC' extension.")
 
         spec = frame.hdu_list['SPEC'].data.astype(float, copy=True)
         spec_header = frame.hdu_list['SPEC'].header
@@ -195,27 +196,26 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         if slit_vals is not None:
             slit_vals = np.asarray(slit_vals, dtype=float)
             if slit_vals.shape != spec.shape:
-                raise ValueError("slit_transmission array must match the SPEC data shape.")
-            with np.errstate(divide='ignore', invalid='ignore'):
-                spec = np.where(slit_vals != 0, spec / slit_vals, np.nan)
-                if spec_err.ndim == spec.ndim:
-                    spec_err = np.where(slit_vals != 0, spec_err / slit_vals, np.nan)
-                else:
-                    spec_err = np.where(slit_vals[np.newaxis, :] != 0, spec_err / slit_vals[np.newaxis, :], np.nan)
+                raise ValueError(f"slit_transmission array shape {slit_vals.shape} must match SPEC data shape {spec.shape}.")
+            
+            # Divide by slit transmission, handling division by zero
+            nonzero_mask = slit_vals != 0
+            spec = np.divide(spec, slit_vals, out=np.full_like(spec, np.nan), where=nonzero_mask)
+            spec_err = np.divide(spec_err, slit_vals, out=np.full_like(spec_err, np.nan), where=nonzero_mask)
+            
             slit_applied = True
             spec_header['SLITCOR'] = True
         else:
             spec_header['SLITCOR'] = False
 
+        # Apply flux calibration factor and color correction
         color_cor_fac = frame.ext_hdr.get('COL_COR', 1.0)
         factor = fluxcal_factor.fluxcal_fac / color_cor_fac
         factor_error = fluxcal_factor.fluxcal_err / color_cor_fac
 
+        # Convert to flux units and propagate uncertainties
         spec_flux = spec * factor
-        if spec_err.ndim == spec.ndim:
-            spec_flux_err = np.sqrt((spec_err * factor) ** 2 + (spec * factor_error) ** 2)
-        else:
-            spec_flux_err = np.sqrt((spec_err * factor) ** 2 + (spec[np.newaxis, :] * factor_error) ** 2)
+        spec_flux_err = np.sqrt((spec_err * factor) ** 2 + (spec * factor_error) ** 2)
 
         frame.hdu_list['SPEC'].data[:] = spec_flux
         frame.hdu_list['SPEC_ERR'].data[:] = spec_flux_err
@@ -235,6 +235,167 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         )
 
     return spec_dataset
+
+
+def compute_spec_flux_ratio(host_dataset, companion_dataset, fluxcal_factor, 
+                            slit_transmission=None):
+    """
+    Compute the flux ratio of companion to host star spectra, with optional
+    exposure-time weighted roll-averaging if datasets contain multiple rolls.
+
+    Args:
+        host_dataset (corgidrp.data.Dataset or list): L4 dataset(s) containing
+            the host star spectrum. If a list, each element should be a Dataset
+            for a different roll (eg, [roll_a_dataset, roll_b_dataset]).
+        companion_dataset (corgidrp.data.Dataset or list): L4 dataset(s) containing
+            the companion spectrum. Must match the structure of host_dataset.
+            The roll orderings in host_dataset and companion_dataset must match-
+            corresponding indices must contain datasets with matching ROLL header values.
+        fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration
+            product used to scale the spectra.
+        slit_transmission (array-like, optional): wavelength-dependent slit
+            throughput to apply to both host and companion spectra. Can be a
+            single vector or one per frame/roll.
+
+    Returns:
+        tuple: (flux_ratio, wavelength, metadata) where:
+            - flux_ratio (numpy.ndarray): flux ratio spectrum R(λ). If multiple
+              rolls were provided, this is the exposure-time weighted average.
+            - wavelength (numpy.ndarray): wavelength array in nm, matching flux_ratio.
+            - metadata (dict): dictionary containing:
+                - 'rolls': list of roll identifiers found
+                - 'exp_times': list of exposure times per roll
+                - 'ratios_per_roll': dict mapping roll to flux ratio array
+                - 'weighted': bool indicating if roll-averaging was performed
+    """
+    if not isinstance(fluxcal_factor, FluxcalFactor):
+        raise TypeError("fluxcal_factor must be a corgidrp.data.FluxcalFactor instance.")
+
+    # Convert inputs to lists for consistency
+    if isinstance(host_dataset, Dataset):
+        host_datasets = [host_dataset]
+    else:
+        host_datasets = list(host_dataset)
+    
+    if isinstance(companion_dataset, Dataset):
+        companion_datasets = [companion_dataset]
+    else:
+        companion_datasets = list(companion_dataset)
+
+    if len(host_datasets) != len(companion_datasets):
+        raise ValueError(f"Number of host datasets ({len(host_datasets)}) must match "
+                         f"number of companion datasets ({len(companion_datasets)}).")
+
+    # Do flux calibration on all datasets
+    host_calibrated = []
+    companion_calibrated = []
+    rolls = []
+    exp_times = []
+    ratios_per_roll = {}
+
+    for i in range(len(host_datasets)):
+        host_ds = host_datasets[i]
+        comp_ds = companion_datasets[i]
+        
+        # Get roll and verify host and companion match
+        roll_id = host_ds[0].pri_hdr['ROLL']
+        comp_roll = comp_ds[0].pri_hdr['ROLL']
+        
+        if roll_id != comp_roll:
+            raise ValueError(f"Roll mismatch: host roll={roll_id}, companion roll={comp_roll}")
+
+        # Get slit transmission for this roll
+        slit = slit_transmission
+        if isinstance(slit_transmission, (list, tuple)):
+            slit = slit_transmission[i] if i < len(slit_transmission) else slit_transmission[0]
+
+        # Calibrate spectra 
+        host_cal = convert_spec_to_flux(host_ds, fluxcal_factor, slit_transmission=slit)
+        comp_cal = convert_spec_to_flux(comp_ds, fluxcal_factor, slit_transmission=slit)
+
+        host_calibrated.append(host_cal)
+        companion_calibrated.append(comp_cal)
+
+        # Extract spectra and wavelengths
+        host_spec = host_cal[0].hdu_list['SPEC'].data
+        comp_spec = comp_cal[0].hdu_list['SPEC'].data
+        host_wave = host_cal[0].hdu_list['SPEC_WAVE'].data
+        comp_wave = comp_cal[0].hdu_list['SPEC_WAVE'].data
+
+        # Check if wavelength grids match; if not, interpolate companion onto host grid
+        if not np.allclose(host_wave, comp_wave):
+            # Interpolate companion spectrum onto host wavelength grid
+            # np.interp requires x-coordinates to be strictly increasing
+            # Check if arrays are decreasing and reverse if necessary
+            host_decreasing = host_wave[0] > host_wave[-1]
+            comp_decreasing = comp_wave[0] > comp_wave[-1]
+            
+            if host_decreasing:
+                # Reverse host arrays for interpolation
+                host_wave_interp = host_wave[::-1]
+            else:
+                host_wave_interp = host_wave
+            
+            if comp_decreasing:
+                # Reverse companion arrays for interpolation
+                comp_wave_interp = comp_wave[::-1]
+                comp_spec_interp = comp_spec[::-1]
+            else:
+                comp_wave_interp = comp_wave
+                comp_spec_interp = comp_spec
+            
+            # Perform interpolation on arrays
+            # Use edge values for extrapolation instead of NaN to handle range mismatches
+            comp_spec_interpolated = np.interp(host_wave_interp, comp_wave_interp, comp_spec_interp, 
+                                               left=comp_spec_interp[0], right=comp_spec_interp[-1])
+            
+            # Reverse back if host was reversed
+            if host_decreasing:
+                comp_spec = comp_spec_interpolated[::-1]
+            else:
+                comp_spec = comp_spec_interpolated
+
+        # Compute flux ratio for this roll: R(λ) = companion(λ) / host(λ)
+        # Allow division even if companion is negative (PSF-subtracted data may be?)
+        # Only exclude where host is zero or non-finite
+        with np.errstate(divide='ignore', invalid='ignore'):
+            flux_ratio = comp_spec / host_spec
+            # Set to NaN where host is zero or non-finite, or companion is non-finite
+            invalid_mask = (host_spec == 0) | ~np.isfinite(host_spec) | ~np.isfinite(comp_spec)
+            flux_ratio[invalid_mask] = np.nan
+        
+        rolls.append(roll_id)
+        exp_times.append(host_ds[0].pri_hdr.get('EXP_TIME', 1.0))
+        ratios_per_roll[roll_id] = flux_ratio
+
+    # If multiple rolls, compute exposure-time weighted average
+    if len(rolls) > 1:
+        total_exp_time = sum(exp_times)
+        weighted_ratio = np.zeros_like(ratios_per_roll[rolls[0]])
+        
+        for i in range(len(rolls)):
+            roll = rolls[i]
+            exp_time = exp_times[i]
+            weighted_ratio += ratios_per_roll[roll] * exp_time
+        
+        weighted_ratio /= total_exp_time
+        final_ratio = weighted_ratio
+        weighted = True
+    else:
+        final_ratio = ratios_per_roll[rolls[0]]
+        weighted = False
+
+    # Use wavelength from first dataset (should be same for all)
+    wavelength = host_calibrated[0][0].hdu_list['SPEC_WAVE'].data
+
+    metadata = {
+        'rolls': rolls,
+        'exp_times': exp_times,
+        'ratios_per_roll': ratios_per_roll,
+        'weighted': weighted
+    }
+
+    return final_ratio, wavelength, metadata
 
 
 def convert_to_flux(input_dataset, fluxcal_factor):
