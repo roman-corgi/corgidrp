@@ -249,7 +249,20 @@ def make_mock_fluxcal_factor(value, err=0.0):
                           input_dataset=Dataset([dummy_img]))
 
 def build_mock_spec_dataset(spec_values, spec_err, spec_wave, roll, exp_time, col_cor=1.0):
-    """Construct a single-frame Dataset with spectroscopy headers for a given roll."""
+    """Construct a single-frame Dataset with spectroscopy headers for a given roll.
+
+    Args:
+        spec_values (ndarray): Spectral values to populate the `SPEC` extension.
+        spec_err (ndarray): Uncertainty array aligned with `spec_values`.
+        spec_wave (ndarray): Wavelength grid in nanometers for `SPEC_WAVE`.
+        roll (str): Roll identifier to record in the primary header.
+        exp_time (float): Exposure time in seconds to store in the primary header.
+        col_cor (float, optional): Color-correction keyword value to set on the image.
+
+    Returns:
+        corgidrp.data.Dataset: Dataset containing a single spectroscopy frame with
+        populated `SPEC`, `SPEC_ERR`, and wavelength extensions.
+    """
     image = make_1d_spec_image(spec_values, spec_err, spec_wave, col_cor=col_cor)
     image.pri_hdr['ROLL'] = roll
     image.pri_hdr['EXP_TIME'] = exp_time
@@ -314,7 +327,6 @@ def test_convert_spec_to_flux_no_slit():
     assert frame.hdu_list['SPEC'].header['SLITCOR'] is False
     assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
-
 
 def test_compute_spec_flux_ratio_single_roll():
     """Flux ratio for one roll should match the direct companion/host ratio."""
