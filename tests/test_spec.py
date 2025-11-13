@@ -3,7 +3,6 @@ import numpy as np
 import pytest
 import logging
 import warnings
-import sys
 from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread

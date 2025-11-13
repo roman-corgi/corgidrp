@@ -48,11 +48,11 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
         
-    psfref_satspot_path = os.path.join(e2edata_path, "SPEC_refstar_satspot", "L1", "analog")
+    psfref_satspot_path = os.path.join(e2edata_path, "SPEC_refstar_satspot", "Analog", "L1")
     target_satspot_path = os.path.join(e2edata_path, "SPEC_targetstar_satspot", "L1", "analog")
     psfref_satspot_files = sorted(glob.glob(os.path.join(psfref_satspot_path, "cgi_*l1_.fits")))
     target_satspot_files = sorted(glob.glob(os.path.join(target_satspot_path, "cgi_*l1_.fits")))
-    psfref_files_path = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L1", "analog")
+    psfref_files_path = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "Analog", "L1")
     psfref_files = sorted(glob.glob(os.path.join(psfref_files_path, "cgi_*l1_.fits")))
     target_files_path = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1", "analog")
     target_files = sorted(glob.glob(os.path.join(target_files_path, "cgi_*l1_.fits")))
@@ -236,7 +236,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
                                                "spec output product", logger)
         verify_header_keywords(hdul[1].header, {'WAVLEN0', 'WV0_X', 'WV0_Y', 'WV0_DIMX', 'WV0_DIMY'},
                                                "spec output product", logger)
-        verify_header_keywords(hdul[1].header, {'STARLOCX', 'STARLOCY', 'CRPIX1', 'CRPIX2'},
+        verify_header_keywords(hdul[1].header, {'STARLOCX', 'STARLOCY', 'CRPIX1', 'CRPIX2', 'CTCALFN', 'FLXCALFN'},
                                                "spec output product", logger)
         verify_header_keywords(hdul[6].header, {'BUNIT' : 'photoelectron/s/bin'},
                                                "spec output product", logger)
