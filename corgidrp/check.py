@@ -755,6 +755,8 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
                         is_optional = True
                     elif datalvl == 'L2b' and keyword in l2b_optional_keywords:
                         is_optional = True
+                    elif keyword == 'COMMENT' or (keyword.startswith('FILE') and keyword[4:].isdigit()):
+                        is_optional = True
                     
                     header_data.append({
                         'Keyword': keyword,
