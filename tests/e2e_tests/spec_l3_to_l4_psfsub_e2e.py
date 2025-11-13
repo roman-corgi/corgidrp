@@ -66,6 +66,8 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     target_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3")
     ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L3", "satspot")
     target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3", "satspot")
+
+    cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "cpgs_mock.xml")
     
     run_l1_to_l3_e2e_test(psfref_satspot_path, ref_spot_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
@@ -151,7 +153,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Running e2e recipe...')
     recipe = walk_corgidrp(
         filelist=l3_files_input, 
-        CPGS_XML_filepath="",
+        CPGS_XML_filepath=cpgs_xml_filepath,
         outputdir=e2eoutput_path
     )
     logger.info("")

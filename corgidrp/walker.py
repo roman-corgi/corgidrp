@@ -2,6 +2,7 @@ import os
 import json
 import astropy.time as time
 import warnings
+import xml.etree.ElementTree as ET
 import corgidrp
 import corgidrp.astrom
 import corgidrp.bad_pixel_calibration
@@ -127,6 +128,16 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
         if i > 0 and  len(recipe['inputs']) == 0:
             for filename in output_filelist:
                 recipe["inputs"].append(filename)
+
+        # check for functions that require CPGS XML info
+        for step in recipe['steps']:
+            if step['name'].lower() == 'find_spec_star' and 'keywords' in step:
+                if "r_lamD" not in step['keywords']: # if not already specified.
+                    # need to populate satellite spot info from XML
+                    cpgs_xml = ET.prase(CPGS_XML_filepath)
+                    sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
+                    step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
+                    step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
 
         output_filelist = run_recipe(recipe)
 
@@ -544,3 +555,37 @@ def run_recipe(recipe, save_recipe_file=True):
     
     return output_filepaths
 
+
+def _get_satellite_spot_info_from_xml(xml_tree):
+    """
+    Extracts satellite spot information from the CPGS XML file
+
+    Args:
+        xml_tree (ElementTree): loaded in CPGS XML file
+        
+    Returns:
+        dict: dictionary with satellite spot information
+            "num_spots": int, number of satellite spots
+            "spot1_contrast": float, contrast of spot 1
+            "spot1_sep": float, separation of spot 1 in lam/D
+            "spo1_angle": float, angle of spot 1 in degrees
+            "spot2_contrast": float, contrast of spot 2
+            "spot2_sep": float, separation of spot 2 in lam/D
+            "spo2_angle": float, angle of spot 2 in degrees
+    """
+    obs_specification = xml_tree.getroot()
+    sat_spot_info = obs_specification.find("satellite_spots")
+    sat_spot_output = {}
+    sat_spot_output['num_spots'] = 0
+    for i, pair in enumerate(sat_spot_info.finall("pair")):
+        sat_spot_output['num_spots'] += 1
+        if i == 0:
+            sat_spot_output['spot1_contrast'] = float(pair.find("intensity").text)
+            sat_spot_output['spot1_sep'] = float(pair.find("radial_distance").text)
+            sat_spot_output['spot1_angle'] = float(pair.find("clocking_angle").text)
+        elif i == 1:
+            sat_spot_output['spot2_contrast'] = float(pair.find("intensity").text)
+            sat_spot_output['spot2_sep'] = float(pair.find("radial_distance").text)
+            sat_spot_output['spot2_angle'] = float(pair.find("clocking_angle").text)
+
+    return sat_spot_output

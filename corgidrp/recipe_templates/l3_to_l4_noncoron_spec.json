@@ -17,7 +17,10 @@
             }
         },
         {
-            "name" : "find_spec_star"
+            "name" : "find_spec_star",
+            "keywords" : {
+                "r_lamD" : 0
+            }
         },
         {
             "name" : "align_2d_frames"
