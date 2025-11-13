@@ -238,7 +238,7 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
     return (full_residuals,err_residuals,cent_n)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=3,rad_mask=None, planet_rad=None, n_pix=44, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=44, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
 
