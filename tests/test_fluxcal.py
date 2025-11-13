@@ -366,7 +366,7 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     comp_b = np.array([1.0, 2.0, 3.0, 4.0])
     err_b = np.full((1, host_b.size), 0.4)
     wave_b_host = np.array([800.0, 780.0, 760.0, 740.0])
-    wave_b_comp = wave_b_host[::-1]
+    wave_b_comp = np.array([790.0, 770.0, 750.0, 730.0])
 
     host_ds_b = build_mock_spec_dataset(host_b, err_b, wave_b_host, roll='ROLL_B', exp_time=15.0)
     comp_ds_b = build_mock_spec_dataset(comp_b, err_b, wave_b_comp, roll='ROLL_B', exp_time=15.0)
@@ -382,7 +382,24 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     )
 
     ratio_roll_a = comp_a / host_a
-    ratio_roll_b = np.array([1.0/8.0, 2.0/6.0, 3.0/4.0, 4.0/2.0])
+    # Reproduce the interpolation 
+    host_cal_b = l4_to_tda.convert_spec_to_flux(host_ds_b, fluxcal_factor, slit_transmission=slit_vectors[1])
+    comp_cal_b = l4_to_tda.convert_spec_to_flux(comp_ds_b, fluxcal_factor, slit_transmission=slit_vectors[1])
+    host_wave_b = host_cal_b[0].hdu_list['SPEC_WAVE'].data
+    comp_wave_b = comp_cal_b[0].hdu_list['SPEC_WAVE'].data
+    host_spec_b = host_cal_b[0].hdu_list['SPEC'].data
+    comp_spec_b = comp_cal_b[0].hdu_list['SPEC'].data
+    host_wave_interp = host_wave_b[::-1]
+    comp_wave_interp = comp_wave_b[::-1]
+    comp_spec_interp = comp_spec_b[::-1]
+    comp_spec_on_host = np.interp(
+        host_wave_interp,
+        comp_wave_interp,
+        comp_spec_interp,
+        left=comp_spec_interp[0],
+        right=comp_spec_interp[-1]
+    )[::-1]
+    ratio_roll_b = comp_spec_on_host / host_spec_b
     expected_weighted = (ratio_roll_a * 5.0 + ratio_roll_b * 15.0) / 20.0
 
     result = np.allclose(ratio, expected_weighted) and np.array_equal(wavelength, wave_a)
@@ -782,6 +799,8 @@ if __name__ == '__main__':
     test_pol_abs_fluxcal()
     test_convert_spec_to_flux_basic()
     test_convert_spec_to_flux_no_slit()
+    test_compute_spec_flux_ratio_single_roll()
+    test_compute_spec_flux_ratio_weighted_rolls_with_interp()
 
 
 
