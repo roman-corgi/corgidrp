@@ -1,0 +1,90 @@
+{
+    "name" : "l1_to_polflat",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "prescan_biassub",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
+            },
+            "keywords" : {
+                "return_full_frame" : false,
+                "dataset_copy" : false
+            }
+        },
+        {
+            "name" : "detect_cosmic_rays",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC",
+                "KGain" : "AUTOMATIC, OPTIONAL"
+            }
+        },
+        {
+            "name" : "correct_nonlinearity",
+            "calibs" : {
+                "NonLinearityCalibration" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "update_to_l2a"
+        },
+        {
+            "name" : "save"
+        },
+        {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "em_gain_division"
+        },
+        {
+            "name" : "add_shot_noise_to_err",
+            "calibs" : {
+                "KGain" : "AUTOMATIC",
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "dark_subtraction",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "outputdir" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "cti_correction",
+            "calibs" : {
+                "TrapCalibration" : "AUTOMATIC,OPTIONAL"
+            }
+        },
+        {
+            "name" : "combine_subexposures",
+            "keywords" : {
+                "num_frames_per_group" : 6
+            }
+        },
+        {
+            "name" : "create_onsky_pol_flatfield"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}
+
