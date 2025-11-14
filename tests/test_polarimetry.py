@@ -7,6 +7,7 @@ import warnings
 from astropy.io.fits import Header
 
 import pytest
+import logging
 
 from corgidrp.data import Dataset, Image
 import corgidrp.data as data
@@ -161,7 +162,8 @@ def test_image_splitting():
     with pytest.raises(ValueError):
         invalid_output = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=682)
         
-def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3.):
+def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
+                                 logger=None, log_head=""):
     """
     Test `calc_pol_p_and_pa_image` using mock L4 Stokes cubes.
 
@@ -185,50 +187,178 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3.):
     interval, e.g., `nsigma_tol=3` corresponds roughly to a 3-sigma limit
     on expected statistical deviations.
     """
+    
+    # ================================================================================
+    # Logger Setup
+    # ================================================================================
+    def setup_logger(output_dir, name='my_e2e_logger', log_file_name=None):
+        """
+        Setup a logger that prints to console and optionally to a file.
+        
+        Args:
+            output_dir (str): Directory for log file (if log_file_name is provided).
+            name (str): Logger name.
+            log_file_name (str or None): File name for log file. If None, only console output.
+
+        Returns:
+            logging.Logger: Configured logger instance.
+        """
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.INFO)
+        logger.handlers.clear()
+
+        # console handler
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        fmt = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        ch.setFormatter(fmt)
+        logger.addHandler(ch)
+
+        # file handler only if log_file_name is given
+        if log_file_name:
+            log_file = os.path.join(output_dir, log_file_name)
+            fh = logging.FileHandler(log_file)
+            fh.setLevel(logging.INFO)
+            fh.setFormatter(fmt)
+            logger.addHandler(fh)
+
+        return logger
+    
+    if logger is None:
+        logger = setup_logger('./', name='polVAP')
+        
+    # ================================================================================
+    # (0) Setup Input L4 Image
+    # ================================================================================
+    rng = np.random.default_rng(seed)
+
     # --- Simulation parameters ---
-    p_input = 0.1 + 0.2 * np.random.rand(n_sim)
-    theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
+    p_input = 0.1 + 0.2 * rng.random(n_sim)
+    theta_input = 10.0 + 20.0 * rng.random(n_sim)
 
     # --- Containers for chi statistics ---
+    P_chi_mean, P_chi_std = [], []
     p_chi_mean, p_chi_std = [], []
     evpa_chi_mean, evpa_chi_std = [], []
 
-    for p, theta in zip(p_input, theta_input):
-
-        # Generate mock Stokes cube
-        Image_polmock = mocks.create_mock_stokes_image_l4(
-            badpixel_fraction=0.0,
+    for i, p, theta in zip(range(n_sim), p_input, theta_input):
+        
+        # Generate mock Stokes cube 
+        common_kwargs = dict(
             fwhm=1e2,
             I0=1e10,
             p=p,
-            theta_deg=theta
+            theta_deg=theta,
+            rng=rng,
         )
+        
+        # Generate mock Stokes cube
+        Image_input = mocks.create_mock_stokes_image_l4(badpixel_fraction=1e-3, **common_kwargs)
+    
+        Image_input_noerr = mocks.create_mock_stokes_image_l4(badpixel_fraction=0.0, add_noise=False, **common_kwargs)
+        P_input = np.sqrt(Image_input_noerr.data[1]**2. + Image_input_noerr.data[2]**2.)
+        idx = np.where( Image_input.dq[0] != 0 )
+        P_input[idx] = np.nan
 
-        # Compute polarization products
-        Image_pol = l4_to_tda.calc_pol_p_and_pa_image(Image_polmock)
+        if i == 0:
+            # ================================================================================
+            # (1) Validate Input Image and Header
+            # ================================================================================
+            # Check/log that L4 data input complies with cgi format
+            if isinstance(Image_input, Image): logger.info(log_head + "Input check passed: CGI format")
+            else: logger.info(log_head + "Input check FAILED: non-CGI format")
+            
+            ext_hdr = Image_input.ext_hdr
 
+            # Check/log that DATALVL = L4
+            if ext_hdr['DATALVL'] == "L4": logger.info(log_head + "Header check passed: DATALVL=L4")
+            else: logger.info(log_head + "Header check FAILED, Expected:DATALVL=4, but "+ext_hdr['DATALVL'])
+            
+            # Check/log that BUNIT = photoelectron/s
+            if ext_hdr['BUNIT'] == "photoelectron/s": logger.info(log_head + "Header check passed: BUNIT=photoelectron/s")
+            else: logger.info(log_head + "Header check FAILED: Expected:BUNIT=photoelectron/s, but "+ext_hdr['BUNIT'])
+
+        # ================================================================================
+        # (2) Compute polarization products
+        # ================================================================================
+        Image_pol = l4_to_tda.calc_pol_p_and_pa_image(Image_input)
+
+        P_map = Image_pol.data[0]       # Polarized intensity
         p_map = Image_pol.data[1]       # fractional polarization
         evpa_map = Image_pol.data[2]    # EVPA
+        P_map_err = Image_pol.err[0][0]
         p_map_err = Image_pol.err[0][1]
         evpa_map_err = Image_pol.err[0][2]
+        P_dq = Image_pol.dq[0]
+        p_dq = Image_pol.dq[1]
+        evpa_dq = Image_pol.dq[2]
 
+        if i == 0:
+            # Check/log that Output shape is [3, H, W]
+            shape_expected = (3, Image_input.data.shape[1], Image_input.data.shape[2])
+            if Image_pol.data.shape == shape_expected:
+                logger.info(log_head + f"Output check passed: Image size {shape_expected}")
+            else:
+                logger.info(log_head + f"Output check FAILED: Image size, expected:{shape_expected}, but {Image_pol.data.shape}")
+
+            # Check/log that DQ flags propagate correctly
+            dq_input = np.bitwise_or(np.bitwise_or(Image_input.dq[0], Image_input.dq[1]), Image_input.dq[2])
+            dq_sets = [
+                (P_dq, "Polarized intensity"),
+                (p_dq, "Polarized fraction"),
+                (evpa_dq, "Polarization angle"),
+            ]
+            for dq, label in dq_sets:
+                idx = np.where( dq_input != dq )[0]
+                if idx.size == 0:
+                    logger.info(log_head + f"Output check passed: DQ for {label} was propagated correctly")
+                else:
+                    logger.info(log_head + f"Output check FAILED: DQ for {label} was not propagated correctly")
+                    
         # Compute chi statistics
+        P_chi = (P_map - P_input) / P_map_err
         p_chi = (p_map - p) / p_map_err
         evpa_chi = (evpa_map - theta) / evpa_map_err
+        
+        idx_P = np.where( P_dq == 0 )
+        idx_p = np.where( p_dq == 0 )
+        idx_evpa = np.where( evpa_dq == 0 )
+        
+        # Compute mean values among pixels
+        P_chi_mean.append(np.nanmedian(P_chi[idx_P]))
+        P_chi_std.append(np.nanstd(P_chi[idx_P]))
+        p_chi_mean.append(np.nanmedian(p_chi[idx_p]))
+        p_chi_std.append(np.nanstd(p_chi[idx_p]))
+        evpa_chi_mean.append(np.nanmedian(evpa_chi[idx_evpa]))
+        evpa_chi_std.append(np.nanstd(evpa_chi[idx_evpa]))
+        
+    # Scale n_sim by number of pixels for statistical tolerance calculation
+    # Each pixel in the mock images is independent, so total samples = n_sim * n_pixels
+    n_sim *= P_map.size
+    
+    chi_sets = [
+        (P_chi_mean, P_chi_std, "Polarized intensity"),
+        (p_chi_mean, p_chi_std, "Polarized fraction"),
+        (evpa_chi_mean, evpa_chi_std, "Polarization angle"),
+    ]
 
-        p_chi_mean.append(np.nanmedian(p_chi))
-        p_chi_std.append(np.nanstd(p_chi))
-        evpa_chi_mean.append(np.nanmedian(evpa_chi))
-        evpa_chi_std.append(np.nanstd(evpa_chi))
-
-    #print(np.median(p_chi_mean), np.median(p_chi_std),
-    #      np.median(evpa_chi_mean), np.median(evpa_chi_std))
+    # Check/log that P computed correctly from Q, U
+    # Check/log that p = P/I matches input polarization fraction
+    # Check/log that EVPA matches input polarization angle
+    # Check/log error propagation through sqrt and division
     tol_mean = 1. / np.sqrt(n_sim) * nsigma_tol
     tol_std = 1. / np.sqrt(2.*(n_sim-1.)) * nsigma_tol
-    assert np.median(p_chi_mean) == pytest.approx(0.0, abs=tol_mean)
-    assert np.median(p_chi_std) == pytest.approx(1.0, abs=tol_std)
-    assert np.median(evpa_chi_mean) == pytest.approx(0.0, abs=tol_mean)
-    assert np.median(evpa_chi_std) == pytest.approx(1.0, abs=tol_std)
+    for chi_mean, chi_std, label in chi_sets:
+        mean_ok = np.median(chi_mean) == pytest.approx(0.0, abs=tol_mean)
+        std_ok =  np.median(chi_std)  == pytest.approx(1.0, abs=tol_std)
+        assert mean_ok
+        assert std_ok
+        if mean_ok and std_ok:
+            logger.info(log_head + f"Output check passed: {label} matches input within errors")
+        else:
+            logger.info(log_head + f"Output check FAILED: {label} outside propagated errors")
+
+    return
 
 def test_align_frames():
     """
