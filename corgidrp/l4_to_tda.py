@@ -141,7 +141,9 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
     """
     Flux calibrate 1-D spectroscopy spectra stored in the L4 SPEC extension.
     The function applies COL_COR when present, propagates calibration
-    uncertainties, and records whether slit correction was applied.
+    uncertainties, and records whether slit correction was applied. Requires
+    the input dataset to have already been core-throughput corrected
+    (ie SPEC header contains CTCOR=True).
 
     Args:
         input_dataset (corgidrp.data.Dataset): L4 dataset containing SPEC,
@@ -152,10 +154,6 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
             information from spec.slit_transmission(). Provide either a single
             (slit_map, slit_x, slit_y) tuple applied to every frame or a list
             containing one tuple per frame in input_dataset.
-        Note:
-            For coronagraphic data (ISCORON == 1) this function expects the
-            input spectra to have already been core-throughput corrected
-            (i.e. SPEC header contains CTCOR=True and CTFAC).
 
     Returns:
         corgidrp.data.Dataset: copy of the input dataset with the
@@ -375,165 +373,278 @@ def interpolate_slit_transmission(frame, slit_tuple):
     return float(factor)
 
 
-def compute_spec_flux_ratio(host_dataset, companion_dataset, fluxcal_factor, 
+def compute_spec_flux_ratio(host_image, companion_image, fluxcal_factor,
                             slit_transmission=None):
     """
-    Compute the flux ratio of companion to host star spectra, with optional
-    exposure-time weighted roll-averaging if datasets contain multiple rolls.
+    Compute the flux ratio of a single companion spectrum relative to a single
+    host spectrum.
 
     Args:
-        host_dataset (corgidrp.data.Dataset or list): L4 dataset(s) containing
-            the host star spectrum. If a list, each element should be a Dataset
-            for a different roll (eg, [roll_a_dataset, roll_b_dataset]).
-        companion_dataset (corgidrp.data.Dataset or list): L4 dataset(s) containing
-            the companion spectrum. Must match the structure of host_dataset.
-            The roll orderings in host_dataset and companion_dataset must match-
-            corresponding indices must contain datasets with matching ROLL header values.
-        fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration
-            product used to scale the spectra.
-        slit_transmission (array-like, optional): wavelength-dependent slit
-            throughput to apply to both host and companion spectra. Can be a
-            single vector or one per frame/roll.
+        host_image (corgidrp.data.Image): L4 image containing the host spectrum.
+        companion_image (corgidrp.data.Image): L4 image containing the companion spectrum.
+        fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration product.
+        slit_transmission (tuple, optional): slit throughput tuple
+            (slit_map, slit_x, slit_y) to apply during flux calibration.
 
     Returns:
         tuple: (flux_ratio, wavelength, metadata) where:
-            - flux_ratio (numpy.ndarray): flux ratio spectrum R(λ). If multiple
-              rolls were provided, this is the exposure-time weighted average.
-            - wavelength (numpy.ndarray): wavelength array in nm, matching flux_ratio.
-            - metadata (dict): dictionary containing:
-                - 'rolls': list of roll identifiers found
-                - 'exp_times': list of exposure times per roll
-                - 'ratios_per_roll': dict mapping roll to flux ratio array
-                - 'weighted': bool indicating if roll-averaging was performed
+            - flux_ratio (numpy.ndarray): companion/host spectrum R(λ).
+            - wavelength (numpy.ndarray): wavelength array in nm.
+            - metadata (dict): contains the host roll, companion roll, exposure
+              time, and 'weighted' flag (always False for the single-frame case).
     """
-    if not isinstance(fluxcal_factor, FluxcalFactor):
-        raise TypeError("fluxcal_factor must be a corgidrp.data.FluxcalFactor instance.")
 
-    # Convert inputs to lists for consistency
-    if isinstance(host_dataset, Dataset):
-        host_datasets = [host_dataset]
-    else:
-        host_datasets = list(host_dataset)
-    
-    if isinstance(companion_dataset, Dataset):
-        companion_datasets = [companion_dataset]
-    else:
-        companion_datasets = list(companion_dataset)
+    # Flux calibrate both spectra so the ratio is computed in physical units.
+    host_ds = Dataset([host_image])
+    comp_ds = Dataset([companion_image])
+    host_cal = convert_spec_to_flux(host_ds, fluxcal_factor, slit_transmission=slit_transmission)
+    comp_cal = convert_spec_to_flux(comp_ds, fluxcal_factor, slit_transmission=slit_transmission)
 
-    if len(host_datasets) != len(companion_datasets):
-        raise ValueError(f"Number of host datasets ({len(host_datasets)}) must match "
-                         f"number of companion datasets ({len(companion_datasets)}).")
+    host_spec = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
+    comp_spec = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
+    host_err = np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float)
+    comp_err = np.array(comp_cal[0].hdu_list['SPEC_ERR'].data, dtype=float)
+    host_err = np.squeeze(host_err)
+    comp_err = np.squeeze(comp_err)
+    host_wave = host_cal[0].hdu_list['SPEC_WAVE'].data
+    comp_wave = comp_cal[0].hdu_list['SPEC_WAVE'].data
 
-    # Do flux calibration on all datasets
-    host_calibrated = []
-    companion_calibrated = []
+    # Align wavelength grids if the host/companion spectra were sampled in opposite directions
+    # (np.interp requires increasing x-coordinates).
+    if not np.allclose(host_wave, comp_wave):
+        host_decreasing = host_wave[0] > host_wave[-1]
+        comp_decreasing = comp_wave[0] > comp_wave[-1]
+
+        host_wave_interp = host_wave[::-1] if host_decreasing else host_wave
+        if comp_decreasing:
+            comp_wave_interp = comp_wave[::-1]
+            comp_spec_interp = comp_spec[::-1]
+            comp_err_interp = comp_err[::-1]
+        else:
+            comp_wave_interp = comp_wave
+            comp_spec_interp = comp_spec
+            comp_err_interp = comp_err
+
+        comp_spec_aligned = np.interp(
+            host_wave_interp,
+            comp_wave_interp,
+            comp_spec_interp,
+            left=comp_spec_interp[0],
+            right=comp_spec_interp[-1]
+        )
+        comp_err_aligned = np.interp(
+            host_wave_interp,
+            comp_wave_interp,
+            comp_err_interp,
+            left=comp_err_interp[0],
+            right=comp_err_interp[-1]
+        )
+        comp_spec = comp_spec_aligned[::-1] if host_decreasing else comp_spec_aligned
+        comp_err = comp_err_aligned[::-1] if host_decreasing else comp_err_aligned
+
+    # Ratio calculation - invalid host/companion values become NaN rather than raising warnings.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        flux_ratio = comp_spec / host_spec
+        invalid_mask = (host_spec == 0) | ~np.isfinite(host_spec) | ~np.isfinite(comp_spec)
+        flux_ratio[invalid_mask] = np.nan
+
+    # Propagate uncertainties for comp/host division:
+    # σ_R^2 = (σ_C / H)^2 + (C * σ_H / H^2)^2
+    ratio_unc = np.full_like(flux_ratio, np.nan, dtype=float)
+    valid_unc = (
+        (host_spec != 0) &
+        np.isfinite(host_spec) &
+        np.isfinite(comp_spec) &
+        np.isfinite(host_err) &
+        np.isfinite(comp_err)
+    )
+    if np.any(valid_unc):
+        comp_term = np.zeros_like(flux_ratio, dtype=float)
+        host_term = np.zeros_like(flux_ratio, dtype=float)
+        comp_term[valid_unc] = (comp_err[valid_unc] / host_spec[valid_unc]) ** 2
+        host_term[valid_unc] = (
+            (comp_spec[valid_unc] * host_err[valid_unc]) / (host_spec[valid_unc] ** 2)
+        ) ** 2
+        variance = comp_term + host_term
+        ratio_unc[valid_unc] = np.sqrt(variance[valid_unc])
+
+    metadata = {
+        'roll': host_image.pri_hdr.get('ROLL'),
+        'companion_roll': companion_image.pri_hdr.get('ROLL'),
+        'exp_time': host_image.pri_hdr.get('EXP_TIME', 1.0),
+        'weighted': False,
+        'ratio_err': ratio_unc,
+    }
+
+    return flux_ratio, host_wave, metadata
+
+
+def compute_weighted_spec_flux_ratio(host_datasets, companion_datasets, fluxcal_factor,
+                                     slit_transmission=None):
+    """
+    Compute weighted flux ratios across multiple rolls by calling
+    compute_spec_flux_ratio for each host/companion frame pair and interpolating
+    every ratio onto a common wavelength axis. Ratios are combined using
+    weights (1/σ²) derived from the ratio uncertainties, and the resulting
+    flux-ratio noise (σ_R) is returned alongside the spectrum.
+
+    Args:
+        host_datasets (corgidrp.data.Dataset or list): host spectra grouped per roll.
+            Must contain at least one entry and can be fewer than the companion datasets.
+            If fewer, the final host dataset is reused for the remaining companions.
+        companion_datasets (corgidrp.data.Dataset or list): companion spectra grouped per roll.
+        fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration product.
+        slit_transmission (tuple or list, optional): slit throughput tuple applied to each frame
+            or a list of tuples (length 1 allowed, otherwise reused when the list
+            is shorter than the number of host/companion pairs).
+
+    Returns:
+        tuple: (flux_ratio, wavelength, metadata) where metadata contains:
+            - rolls: list of host rolls used
+            - companion_rolls: list of companion rolls used
+            - exp_times: exposure times pulled from the host frames
+            - ratios_per_roll: dict mapping host roll -> ratio on the common wavelength grid
+            - ratio_errs_per_roll: dict mapping host roll -> ratio uncertainty array on that grid
+            - ratio_noise: combined (weighted) flux-ratio uncertainty array
+            - weighted: True if more than one ratio contributed
+    """
+
+    host_list = [host_datasets] if isinstance(host_datasets, Dataset) else list(host_datasets)
+    comp_list = [companion_datasets] if isinstance(companion_datasets, Dataset) else list(companion_datasets)
+
+    if len(host_list) == 0 or len(comp_list) == 0:
+        raise ValueError("At least one host dataset and one companion dataset are required.")
+
+    # Allow more companions than hosts by reusing the last host entry.
+    pair_count = len(comp_list)
+    entries = []
+    reference_wave = None
+
+    for idx in range(pair_count):
+        host_ds = host_list[idx] if idx < len(host_list) else host_list[-1]
+        comp_ds = comp_list[idx]
+        if len(host_ds) == 0 or len(comp_ds) == 0:
+            raise ValueError("Each dataset must contain at least one Image.")
+
+        host_image = host_ds[0]
+        companion_image = comp_ds[0]
+
+        # Pass through the original slit tuple, lists can be length 1 (shared) or per frame
+        if isinstance(slit_transmission, list):
+            if len(slit_transmission) == 1:
+                slit_entry = slit_transmission[0]
+            elif len(slit_transmission) == pair_count:
+                slit_entry = slit_transmission[idx]
+            else:
+                raise ValueError("slit_transmission list length must be 1 or match companion dataset count.")
+        else:
+            slit_entry = slit_transmission
+
+        ratio, wavelength, metadata = compute_spec_flux_ratio(
+            host_image,
+            companion_image,
+            fluxcal_factor,
+            slit_transmission=slit_entry
+        )
+
+        if reference_wave is None:
+            reference_wave = wavelength
+
+        # Store everything needed for later regridding/weighting.
+        entries.append((host_image, companion_image, ratio, metadata['ratio_err'], wavelength))
+
+    aligned_ratios = {}
+    aligned_ratio_errs = {}
     rolls = []
+    companion_rolls = []
     exp_times = []
-    ratios_per_roll = {}
+    weighted_numer = np.zeros_like(reference_wave, dtype=float)
+    weighted_denom = np.zeros_like(reference_wave, dtype=float)
+    ref_decreasing = reference_wave[0] > reference_wave[-1]
+    reference_wave_ordered = reference_wave[::-1] if ref_decreasing else reference_wave
 
-    for i in range(len(host_datasets)):
-        host_ds = host_datasets[i]
-        comp_ds = companion_datasets[i]
-        
-        # Get roll and verify host and companion match
-        roll_id = host_ds[0].pri_hdr['ROLL']
-        comp_roll = comp_ds[0].pri_hdr['ROLL']
-        
-        if roll_id != comp_roll:
-            raise ValueError(f"Roll mismatch: host roll={roll_id}, companion roll={comp_roll}")
-
-        # Get slit transmission for this roll
-        slit = slit_transmission
-        if isinstance(slit_transmission, (list, tuple)):
-            slit = slit_transmission[i] if i < len(slit_transmission) else slit_transmission[0]
-
-        # Calibrate spectra 
-        host_cal = convert_spec_to_flux(host_ds, fluxcal_factor, slit_transmission=slit)
-        comp_cal = convert_spec_to_flux(comp_ds, fluxcal_factor, slit_transmission=slit)
-
-        host_calibrated.append(host_cal)
-        companion_calibrated.append(comp_cal)
-
-        # Extract spectra and wavelengths
-        host_spec = host_cal[0].hdu_list['SPEC'].data
-        comp_spec = comp_cal[0].hdu_list['SPEC'].data
-        host_wave = host_cal[0].hdu_list['SPEC_WAVE'].data
-        comp_wave = comp_cal[0].hdu_list['SPEC_WAVE'].data
-
-        # Check if wavelength grids match; if not, interpolate companion onto host grid
-        if not np.allclose(host_wave, comp_wave):
-            # Interpolate companion spectrum onto host wavelength grid
-            # np.interp requires x-coordinates to be strictly increasing
-            # Check if arrays are decreasing and reverse if necessary
-            host_decreasing = host_wave[0] > host_wave[-1]
-            comp_decreasing = comp_wave[0] > comp_wave[-1]
-            
-            if host_decreasing:
-                # Reverse host arrays for interpolation
-                host_wave_interp = host_wave[::-1]
+    for host_image, companion_image, ratio, ratio_err, wavelength in entries:
+        # If the ratio already is on the reference grid, keep it otherwise regrid
+        # both the ratio and its uncertainty on to reference_wave
+        if np.allclose(wavelength, reference_wave):
+            aligned_ratio = ratio
+            aligned_err = ratio_err
+        else:
+            finite = np.isfinite(ratio)
+            if np.count_nonzero(finite) < 2:
+                aligned_ratio = np.full_like(reference_wave, np.nan, dtype=float)
+                aligned_err = np.full_like(reference_wave, np.nan, dtype=float)
             else:
-                host_wave_interp = host_wave
-            
-            if comp_decreasing:
-                # Reverse companion arrays for interpolation
-                comp_wave_interp = comp_wave[::-1]
-                comp_spec_interp = comp_spec[::-1]
-            else:
-                comp_wave_interp = comp_wave
-                comp_spec_interp = comp_spec
-            
-            # Perform interpolation on arrays
-            # Use edge values for extrapolation instead of NaN to handle range mismatches
-            comp_spec_interpolated = np.interp(host_wave_interp, comp_wave_interp, comp_spec_interp, 
-                                               left=comp_spec_interp[0], right=comp_spec_interp[-1])
-            
-            # Reverse back if host was reversed
-            if host_decreasing:
-                comp_spec = comp_spec_interpolated[::-1]
-            else:
-                comp_spec = comp_spec_interpolated
+                # Sort the source grid so np.interp sees increasing wavelengths.
+                wave_valid = wavelength[finite]
+                ratio_valid = ratio[finite]
+                src_decreasing = wave_valid[0] > wave_valid[-1]
+                wave_ordered = wave_valid[::-1] if src_decreasing else wave_valid
+                ratio_ordered = ratio_valid[::-1] if src_decreasing else ratio_valid
+                interp = np.interp(
+                    reference_wave_ordered,
+                    wave_ordered,
+                    ratio_ordered,
+                    left=ratio_ordered[0],
+                    right=ratio_ordered[-1]
+                )
+                aligned_ratio = interp[::-1] if ref_decreasing else interp
 
-        # Compute flux ratio for this roll: R(λ) = companion(λ) / host(λ)
-        # Allow division even if companion is negative (PSF-subtracted data may be?)
-        # Only exclude where host is zero or non-finite
-        with np.errstate(divide='ignore', invalid='ignore'):
-            flux_ratio = comp_spec / host_spec
-            # Set to NaN where host is zero or non-finite, or companion is non-finite
-            invalid_mask = (host_spec == 0) | ~np.isfinite(host_spec) | ~np.isfinite(comp_spec)
-            flux_ratio[invalid_mask] = np.nan
-        
+                err_finite = np.isfinite(ratio_err)
+                if np.count_nonzero(err_finite) < 2:
+                    aligned_err = np.full_like(reference_wave, np.nan, dtype=float)
+                else:
+                    # Apply the same ordering/interpolation to the uncertainty array.
+                    err_wave_valid = wavelength[err_finite]
+                    err_valid = ratio_err[err_finite]
+                    err_src_decreasing = err_wave_valid[0] > err_wave_valid[-1]
+                    err_wave_ordered = err_wave_valid[::-1] if err_src_decreasing else err_wave_valid
+                    err_ordered = err_valid[::-1] if err_src_decreasing else err_valid
+                    err_interp = np.interp(
+                        reference_wave_ordered,
+                        err_wave_ordered,
+                        err_ordered,
+                        left=err_ordered[0],
+                        right=err_ordered[-1]
+                    )
+                    aligned_err = err_interp[::-1] if ref_decreasing else err_interp
+
+        roll_id = host_image.pri_hdr.get('ROLL')
+        aligned_ratios[roll_id] = aligned_ratio
+        aligned_ratio_errs[roll_id] = aligned_err
         rolls.append(roll_id)
-        exp_times.append(host_ds[0].pri_hdr.get('EXP_TIME', 1.0))
-        ratios_per_roll[roll_id] = flux_ratio
+        companion_rolls.append(companion_image.pri_hdr.get('ROLL'))
+        exp_time = host_image.pri_hdr.get('EXP_TIME', 1.0)
+        exp_times.append(exp_time)
 
-    # If multiple rolls, compute exposure-time weighted average
-    if len(rolls) > 1:
-        total_exp_time = sum(exp_times)
-        weighted_ratio = np.zeros_like(ratios_per_roll[rolls[0]])
-        
-        for i in range(len(rolls)):
-            roll = rolls[i]
-            exp_time = exp_times[i]
-            weighted_ratio += ratios_per_roll[roll] * exp_time
-        
-        weighted_ratio /= total_exp_time
-        final_ratio = weighted_ratio
-        weighted = True
+        # Inverse-variance weights- larger uncertainties contribute less.
+        valid_weights = np.isfinite(aligned_err) & (aligned_err > 0)
+        weights = np.zeros_like(reference_wave, dtype=float)
+        weights[valid_weights] = 1.0 / (aligned_err[valid_weights] ** 2)
+        weighted_numer[valid_weights] += aligned_ratio[valid_weights] * weights[valid_weights]
+        weighted_denom[valid_weights] += weights[valid_weights]
+
+    if pair_count > 1:
+        with np.errstate(invalid='ignore'):
+            final_ratio = np.where(weighted_denom > 0, weighted_numer / weighted_denom, np.nan)
+            final_noise = np.where(weighted_denom > 0, np.sqrt(1.0 / weighted_denom), np.nan)
+        weighted_flag = True
     else:
-        final_ratio = ratios_per_roll[rolls[0]]
-        weighted = False
-
-    # Use wavelength from first dataset (should be same for all)
-    wavelength = host_calibrated[0][0].hdu_list['SPEC_WAVE'].data
+        final_ratio = aligned_ratios[rolls[0]]
+        final_noise = aligned_ratio_errs[rolls[0]]
+        weighted_flag = False
 
     metadata = {
         'rolls': rolls,
+        'companion_rolls': companion_rolls,
         'exp_times': exp_times,
-        'ratios_per_roll': ratios_per_roll,
-        'weighted': weighted
+        'ratios_per_roll': aligned_ratios,
+        'ratio_errs_per_roll': aligned_ratio_errs,
+        'ratio_noise': final_noise,
+        'weighted': weighted_flag,
     }
 
-    return final_ratio, wavelength, metadata
+    return final_ratio, reference_wave, metadata
 
 
 def convert_to_flux(input_dataset, fluxcal_factor):

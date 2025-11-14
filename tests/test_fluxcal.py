@@ -445,23 +445,50 @@ def test_compute_spec_flux_ratio_single_roll():
     wave = np.linspace(700, 760, host_spec.size)
 
     host_ds = build_mock_spec_dataset(host_spec, spec_err, wave, roll='ROLL_A', exp_time=10.0)
-    comp_ds = build_mock_spec_dataset(comp_spec, spec_err, wave, roll='ROLL_A', exp_time=10.0)
+    comp_ds = build_mock_spec_dataset(comp_spec, spec_err, wave, roll='ROLL_B', exp_time=10.0)
     # Set CTCOR flag before calling compute_spec_flux_ratio (required for coronagraphic images)
     host_ds[0].hdu_list['SPEC'].header['CTCOR'] = True
     comp_ds[0].hdu_list['SPEC'].header['CTCOR'] = True
     fluxcal_factor = make_mock_fluxcal_factor(2.5, err=0.1)
 
-    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_ds, comp_ds, fluxcal_factor)
+    host_cal = l4_to_tda.convert_spec_to_flux(host_ds, fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(comp_ds, fluxcal_factor)
+    host_spec_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
+    comp_spec_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
+    host_err_flux = np.squeeze(np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+    comp_err_flux = np.squeeze(np.array(comp_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+    ratio_err_expected = np.full_like(host_spec_flux, np.nan, dtype=float)
+    valid_err = (
+        (host_spec_flux != 0) &
+        np.isfinite(host_spec_flux) &
+        np.isfinite(comp_spec_flux) &
+        np.isfinite(host_err_flux) &
+        np.isfinite(comp_err_flux)
+    )
+    ratio_err_expected[valid_err] = np.sqrt(
+        (comp_err_flux[valid_err] / host_spec_flux[valid_err]) ** 2 +
+        ((comp_spec_flux[valid_err] * host_err_flux[valid_err]) / (host_spec_flux[valid_err] ** 2)) ** 2
+    )
+
+    host_image = host_ds[0]
+    comp_image = comp_ds[0]
+    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_image, comp_image, fluxcal_factor)
     expected = comp_spec / host_spec
 
-    result = np.allclose(ratio, expected) and np.array_equal(wavelength, wave)
+    result = (
+        np.allclose(ratio, expected) and
+        np.array_equal(wavelength, wave) and
+        metadata['weighted'] is False and
+        metadata['roll'] == 'ROLL_A' and
+        metadata['companion_roll'] == 'ROLL_B' and
+        np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
+    )
     print('\ncompute_spec_flux_ratio single roll: ', end='')
     print_pass() if result else print_fail()
 
     assert result
-    assert metadata['weighted'] is False
-    assert metadata['rolls'] == ['ROLL_A']
-    assert np.allclose(metadata['ratios_per_roll']['ROLL_A'], expected)
+    assert metadata['exp_time'] == pytest.approx(10.0)
+    assert np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
 
 
 def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
@@ -472,7 +499,7 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     wave_a = np.array([700.0, 710.0, 720.0, 730.0])
 
     host_ds_a = build_mock_spec_dataset(host_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0)
-    comp_ds_a = build_mock_spec_dataset(comp_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0)
+    comp_ds_a = build_mock_spec_dataset(comp_a, err_a, wave_a, roll='ROLL_C', exp_time=5.0)
 
     host_b = np.array([8.0, 6.0, 4.0, 2.0])
     comp_b = np.array([1.0, 2.0, 3.0, 4.0])
@@ -481,7 +508,7 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     wave_b_comp = np.array([790.0, 770.0, 750.0, 730.0])
 
     host_ds_b = build_mock_spec_dataset(host_b, err_b, wave_b_host, roll='ROLL_B', exp_time=15.0)
-    comp_ds_b = build_mock_spec_dataset(comp_b, err_b, wave_b_comp, roll='ROLL_B', exp_time=15.0)
+    comp_ds_b = build_mock_spec_dataset(comp_b, err_b, wave_b_comp, roll='ROLL_D', exp_time=15.0)
 
     # Set CTCOR flag before calling compute_spec_flux_ratio (required for coronagraphic images)
     host_ds_a[0].hdu_list['SPEC'].header['CTCOR'] = True
@@ -494,46 +521,95 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     slit_tuple_b = (np.array([np.full_like(host_b, 0.9)]), np.array([0.0]), np.array([0.0]))
     slit_vectors = [slit_tuple_a, slit_tuple_b]
 
-    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
+    ratio, wavelength, metadata = l4_to_tda.compute_weighted_spec_flux_ratio(
         [host_ds_a, host_ds_b],
         [comp_ds_a, comp_ds_b],
         fluxcal_factor,
         slit_transmission=slit_vectors
     )
 
-    ratio_roll_a = comp_a / host_a
-    # Set CTCOR flag before calling convert_spec_to_flux (required for coronagraphic images)
-    host_ds_b[0].hdu_list['SPEC'].header['CTCOR'] = True
-    comp_ds_b[0].hdu_list['SPEC'].header['CTCOR'] = True
-    host_cal_b = l4_to_tda.convert_spec_to_flux(host_ds_b, fluxcal_factor, slit_transmission=slit_tuple_b)
-    comp_cal_b = l4_to_tda.convert_spec_to_flux(comp_ds_b, fluxcal_factor, slit_transmission=slit_tuple_b)
-    host_wave_b = host_cal_b[0].hdu_list['SPEC_WAVE'].data
-    comp_wave_b = comp_cal_b[0].hdu_list['SPEC_WAVE'].data
-    host_spec_b = host_cal_b[0].hdu_list['SPEC'].data
-    comp_spec_b = comp_cal_b[0].hdu_list['SPEC'].data
-    host_wave_interp = host_wave_b[::-1]
-    comp_wave_interp = comp_wave_b[::-1]
-    comp_spec_interp = comp_spec_b[::-1]
-    comp_spec_on_host = np.interp(
-        host_wave_interp,
-        comp_wave_interp,
-        comp_spec_interp,
-        left=comp_spec_interp[0],
-        right=comp_spec_interp[-1]
-    )[::-1]
-    ratio_roll_b = comp_spec_on_host / host_spec_b
-    expected_weighted = (ratio_roll_a * 5.0 + ratio_roll_b * 15.0) / 20.0
+    single_ratio_a, single_wave_a, meta_a = l4_to_tda.compute_spec_flux_ratio(
+        host_ds_a[0], comp_ds_a[0], fluxcal_factor, slit_transmission=slit_tuple_a
+    )
+    single_ratio_b, single_wave_b, meta_b = l4_to_tda.compute_spec_flux_ratio(
+        host_ds_b[0], comp_ds_b[0], fluxcal_factor, slit_transmission=slit_tuple_b
+    )
+    ratio_err_a = meta_a['ratio_err']
+    ratio_err_b = meta_b['ratio_err']
 
-    result = np.allclose(ratio, expected_weighted) and np.array_equal(wavelength, wave_a)
+    if np.allclose(single_wave_b, single_wave_a):
+        ratio_b_on_a = single_ratio_b
+        ratio_err_b_on_a = ratio_err_b
+    else:
+        wave_a_desc = single_wave_a[0] > single_wave_a[-1]
+        wave_b_desc = single_wave_b[0] > single_wave_b[-1]
+        wave_b_grid = single_wave_b[::-1] if wave_b_desc else single_wave_b
+        ratio_b_grid = single_ratio_b[::-1] if wave_b_desc else single_ratio_b
+        err_b_grid = ratio_err_b[::-1] if wave_b_desc else ratio_err_b
+        wave_target = single_wave_a[::-1] if wave_a_desc else single_wave_a
+        ratio_interp = np.interp(
+            wave_target,
+            wave_b_grid,
+            ratio_b_grid,
+            left=ratio_b_grid[0],
+            right=ratio_b_grid[-1]
+        )
+        err_interp = np.interp(
+            wave_target,
+            wave_b_grid,
+            err_b_grid,
+            left=err_b_grid[0],
+            right=err_b_grid[-1]
+        )
+        if wave_a_desc:
+            ratio_b_on_a = ratio_interp[::-1]
+            ratio_err_b_on_a = err_interp[::-1]
+        else:
+            ratio_b_on_a = ratio_interp
+            ratio_err_b_on_a = err_interp
+
+    weight_a = np.zeros_like(single_ratio_a)
+    valid_a = np.isfinite(ratio_err_a) & (ratio_err_a > 0)
+    weight_a[valid_a] = 1.0 / (ratio_err_a[valid_a] ** 2)
+
+    weight_b = np.zeros_like(ratio_b_on_a)
+    valid_b = np.isfinite(ratio_err_b_on_a) & (ratio_err_b_on_a > 0)
+    weight_b[valid_b] = 1.0 / (ratio_err_b_on_a[valid_b] ** 2)
+
+    weight_total = weight_a + weight_b
+    expected_weighted = np.where(
+        weight_total > 0,
+        (single_ratio_a * weight_a + ratio_b_on_a * weight_b) / weight_total,
+        np.nan
+    )
+    expected_noise = np.where(weight_total > 0, np.sqrt(1.0 / weight_total), np.nan)
+
+    result = (
+        np.allclose(ratio, expected_weighted, equal_nan=True) and
+        np.array_equal(wavelength, single_wave_a) and
+        metadata['weighted'] is True and
+        metadata['rolls'] == ['ROLL_A', 'ROLL_B'] and
+        metadata['companion_rolls'] == ['ROLL_C', 'ROLL_D'] and
+        metadata['exp_times'] == [5.0, 15.0] and
+        np.allclose(metadata['ratios_per_roll']['ROLL_A'], single_ratio_a) and
+        np.allclose(metadata['ratios_per_roll']['ROLL_B'], ratio_b_on_a) and
+        np.allclose(metadata['ratio_errs_per_roll']['ROLL_A'], ratio_err_a) and
+        np.allclose(metadata['ratio_errs_per_roll']['ROLL_B'], ratio_err_b_on_a) and
+        np.allclose(metadata['ratio_noise'], expected_noise, equal_nan=True)
+    )
     print('\ncompute_spec_flux_ratio weighted rolls: ', end='')
     print_pass() if result else print_fail()
 
     assert result
     assert metadata['weighted'] is True
     assert metadata['rolls'] == ['ROLL_A', 'ROLL_B']
+    assert metadata['companion_rolls'] == ['ROLL_C', 'ROLL_D']
     assert metadata['exp_times'] == [5.0, 15.0]
-    assert np.allclose(metadata['ratios_per_roll']['ROLL_A'], ratio_roll_a)
-    assert np.allclose(metadata['ratios_per_roll']['ROLL_B'], ratio_roll_b)
+    assert np.allclose(metadata['ratios_per_roll']['ROLL_A'], single_ratio_a)
+    assert np.allclose(metadata['ratios_per_roll']['ROLL_B'], ratio_b_on_a)
+    assert np.allclose(metadata['ratio_errs_per_roll']['ROLL_A'], ratio_err_a)
+    assert np.allclose(metadata['ratio_errs_per_roll']['ROLL_B'], ratio_err_b_on_a)
+    assert np.allclose(metadata['ratio_noise'], expected_noise, equal_nan=True)
 
 
 def test_abs_fluxcal():
