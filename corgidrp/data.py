@@ -3195,40 +3195,25 @@ def get_bit_to_flag_map():
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
 
 def get_stokes_intensity_image(stokes_image):
-    """Return a copy containing only the Stokes-I plane for photometry.
+    """Return a copy containing only the Stokes I plane for photometry.
 
     Args:
-        stokes_image (Image): L4 polarimetry `Image` whose first plane (Stokes I)
-            should be extracted for scalar photometry work.
+        stokes_image (Image): L4 polarimetry Image to extract first plane 
+            (Stokes I) from
 
     Returns:
-        Image: New Image instance containing the Stokes-I data, a matching
-        error layer, and the corresponding DQ plane.
+        Image: New Image containing the Stokes I data and all required extensions
     """
-    data = stokes_image.data[0]
-    err = stokes_image.err[0]
-    dq = stokes_image.dq[0]
-    err_layer = err if err.ndim == 3 else np.array([err])
+    intensity_image = stokes_image.copy(copy_data=True)
+    intensity_image.data = stokes_image.data[0].copy()
+
+    err_slice = stokes_image.err[0]
+    err_layer = err_slice if err_slice.ndim == 3 else np.array([err_slice])
     if err_layer.shape[0] != 1:
         err_layer = err_layer[:1]
-    err_copy = err_layer.copy()
-    intensity_image = Image(
-        data.copy(),
-        pri_hdr=stokes_image.pri_hdr.copy(),
-        ext_hdr=stokes_image.ext_hdr.copy(),
-        err=err_copy,
-        dq=dq.copy(),
-        err_hdr=stokes_image.err_hdr,
-        dq_hdr=stokes_image.dq_hdr,
-    )
+    intensity_image.err = err_layer.copy()
+    intensity_image.dq = stokes_image.dq[0].copy()
 
-    # Propagate throughput extensions required by downstream L4->TDA steps
-    for hdu_name in ("KL_THRU", "CT_THRU"):
-        if hdu_name not in stokes_image.hdu_list:
-            raise KeyError(f"Expected extension '{hdu_name}' missing from Stokes cube.")
-        src_hdu = stokes_image.hdu_list[hdu_name]
-        intensity_image.add_extension_hdu(
-            hdu_name, data=np.array(src_hdu.data, copy=True), header=src_hdu.header.copy()
-        )
+    intensity_image.ext_hdr.add_history("Extracted Stokes-I plane via get_stokes_intensity_image.")
 
     return intensity_image
