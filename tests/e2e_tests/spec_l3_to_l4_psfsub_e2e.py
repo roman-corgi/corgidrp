@@ -6,11 +6,11 @@ import logging
 import pytest
 import argparse
 
-
+from corgidrp import corethroughput
 from corgidrp.data import Dataset
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_calibration_product_headers
-from corgidrp.mocks import rename_files_to_cgi_format
+from corgidrp.mocks import rename_files_to_cgi_format, create_ct_psfs
 from corgidrp.walker import walk_corgidrp
 import corgidrp
 import corgidrp.caldb as caldb
@@ -137,6 +137,35 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
 
     rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
+    
+    ###########################
+    #### Make dummy CT cal ####
+    ###########################
+
+    # Dataset with some CT profile defined in create_ct_interp
+    # Pupil image
+    pupil_image = np.zeros([1024, 1024])
+    # Set it to some known value for a selected range of pixels
+    pupil_image[510:530, 510:530]=1
+    # Add specific values for pupil images:
+    # DPAM = PUPIL, FSAM = OPEN, LSAM=OPEN and FPAM=OPEN_12
+    exthd['DPAMNAME'] = 'PUPIL'
+    exthd['LSAMNAME'] = 'OPEN'
+    exthd['FSAMNAME'] = 'OPEN'
+    exthd['FPAMNAME'] = 'OPEN_12'
+
+    data_psf, psf_loc_in, half_psf = create_ct_psfs(50, cfam_name='3', n_psfs=10)
+    
+    err = np.ones([1024,1024]) 
+    data_ct_interp = [Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd, err = err)]
+    # Set of off-axis PSFs with a CT profile defined in create_ct_interp
+    # First, we need the CT FPM center to create the CT radial profile
+    # We can use a miminal dataset to get to know it
+    data_ct_interp += [data_psf[0]]
+    ct_cal_tmp = corethroughput.generate_ct_cal(Dataset(data_ct_interp))
+    rename_files_to_cgi_format(list_of_fits=[ct_cal_tmp], output_dir=calibrations_dir, level_suffix="ctm_cal")
+    this_caldb.create_entry(ct_cal_tmp)
     
     # Scan for default calibrations
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
