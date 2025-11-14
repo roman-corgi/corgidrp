@@ -1490,29 +1490,6 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     image.filename = f"cgi_{visitid}_{time_str}_l2b.fits"
     return image
 
-def make_mock_fluxcal_factor(value, err=0.0):
-    """Build a FluxcalFactor with minimal metadata for testing.
-
-    Args:
-        value (float): absolute flux calibration factor.
-        err (float, optional): uncertainty on the calibration factor.
-
-    Returns:
-        corgidrp.data.FluxcalFactor: fluxcal factorcalibration object.
-        
-    """
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
-    ext_hdr['CFAMNAME'] = '3D'
-    ext_hdr['DPAMNAME'] = 'PRISM3'
-    ext_hdr['FSAMNAME'] = 'R1C2'
-    dummy_data = np.zeros((2, 2))
-    dummy_err = np.zeros((1, 2, 2))
-    dummy_dq = np.zeros((2, 2), dtype=int)
-    dummy_img = Image(dummy_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(), err=dummy_err,
-                      dq=dummy_dq, err_hdr=err_hdr.copy(), dq_hdr=dq_hdr.copy())
-    return FluxcalFactor(value, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
-                          input_dataset=Dataset([dummy_img]))
-
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
                        distortion_coeffs_path=None, dither_pointings=0, bpix_map=None, sim_err_map=False):
     """
@@ -5181,7 +5158,7 @@ def create_mock_stokes_image_l4(
 
     dq_out = np.broadcast_to(dq, stokes_cube.shape).copy()
 
-    return Image(
+    stokes_image = Image(
         stokes_cube,
         pri_hdr=prihdr,
         ext_hdr=exthdr,
@@ -5190,6 +5167,58 @@ def create_mock_stokes_image_l4(
         err_hdr=errhdr,
         dq_hdr=dqhdr
     )
+
+    # add throughput extensions
+    kl_thru = np.ones((image_size, image_size), dtype=float)
+    ct_thru = np.ones((image_size, image_size), dtype=float)
+    # not adding any particular extra keywords to the headers for now
+    stokes_image.add_extension_hdu('KL_THRU', data=kl_thru, header=fits.Header())
+    stokes_image.add_extension_hdu('CT_THRU', data=ct_thru, header=fits.Header())
+
+    return stokes_image
+
+def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=0.0, wv0_y=0.0, is_coronagraphic=False):
+    """Create a mock L4 Stokes cube whose I-plane integrates to total_counts."""
+    base_img = create_mock_stokes_image_l4(
+        image_size=64,
+        fwhm=3,
+        I0=1e4,
+        badpixel_fraction=0.0,
+        p=0.0,
+        theta_deg=0.0,
+        seed=seed,
+    )
+    profile = gaussian_array(
+        array_shape=(base_img.data.shape[1], base_img.data.shape[2]),
+        sigma=3.0,
+        amp=total_counts / (2.0 * np.pi * 3.0**2),
+        xoffset=0.0,
+        yoffset=0.0,
+    )
+    base_img.data[0] = profile
+    base_img.data[1:] = 0.0
+    base_img.err[0] = np.maximum(np.sqrt(np.abs(base_img.data[0])), 1.0)
+    base_img.err[1:] = base_img.err[0]
+    base_img.dq[:] = 0
+    base_img.pri_hdr['TARGET'] = target_name
+    base_img.ext_hdr['BUNIT'] = 'photoelectron/s'
+    base_img.ext_hdr['DATALVL'] = 'L4'
+    base_img.ext_hdr.setdefault('CFAMNAME', '3C')
+    base_img.ext_hdr.setdefault('DPAMNAME', 'POL0')
+    base_img.ext_hdr.setdefault('LSAMNAME', 'NFOV')
+    base_img.ext_hdr['WV0_X'] = wv0_x
+    base_img.ext_hdr['WV0_Y'] = wv0_y
+    base_img.ext_hdr.setdefault('STARLOCX', 0.0)
+    base_img.ext_hdr.setdefault('STARLOCY', 0.0)
+    base_img.ext_hdr.setdefault('FPAM_H', 0.0)
+    base_img.ext_hdr.setdefault('FPAM_V', 0.0)
+    base_img.ext_hdr.setdefault('FSAM_H', 0.0)
+    base_img.ext_hdr.setdefault('FSAM_V', 0.0)
+    base_img.ext_hdr['FSMLOS'] = 1 if is_coronagraphic else 0
+    if col_cor is not None:
+        base_img.ext_hdr['COL_COR'] = col_cor
+    return base_img
+
 def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
     """
     Create a mock Image with [I, Q, U, V] planes for testing.

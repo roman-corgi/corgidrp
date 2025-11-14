@@ -10,7 +10,7 @@ from corgidrp.mocks import (
     create_default_L3_headers,
     create_flux_image,
     create_pol_flux_image,
-    create_mock_stokes_image_l4,
+    create_mock_stokes_i_image,
     gaussian_array,
     create_ct_cal,
     create_mock_fpamfsam_cal,
@@ -201,47 +201,7 @@ def test_fluxcal_file():
 
 
 
-def _make_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=0.0, wv0_y=0.0, is_coronagraphic=False):
-    """Create a mock L4 Stokes cube whose I-plane integrates to total_counts."""
-    base_img = create_mock_stokes_image_l4(
-        image_size=64,
-        fwhm=3,
-        I0=1e4,
-        badpixel_fraction=0.0,
-        p=0.0,
-        theta_deg=0.0,
-        seed=seed,
-    )
-    profile = gaussian_array(
-        array_shape=(base_img.data.shape[1], base_img.data.shape[2]),
-        sigma=3.0,
-        amp=total_counts / (2.0 * np.pi * 3.0**2),
-        xoffset=0.0,
-        yoffset=0.0,
-    )
-    base_img.data[0] = profile
-    base_img.data[1:] = 0.0
-    base_img.err[0] = np.maximum(np.sqrt(np.abs(base_img.data[0])), 1.0)
-    base_img.err[1:] = base_img.err[0]
-    base_img.dq[:] = 0
-    base_img.pri_hdr['TARGET'] = target_name
-    base_img.ext_hdr['BUNIT'] = 'photoelectron/s'
-    base_img.ext_hdr['DATALVL'] = 'L4'
-    base_img.ext_hdr.setdefault('CFAMNAME', '3C')
-    base_img.ext_hdr.setdefault('DPAMNAME', 'PRISM3')
-    base_img.ext_hdr.setdefault('LSAMNAME', 'SPEC')
-    base_img.ext_hdr['WV0_X'] = wv0_x
-    base_img.ext_hdr['WV0_Y'] = wv0_y
-    base_img.ext_hdr.setdefault('STARLOCX', 0.0)
-    base_img.ext_hdr.setdefault('STARLOCY', 0.0)
-    base_img.ext_hdr.setdefault('FPAM_H', 0.0)
-    base_img.ext_hdr.setdefault('FPAM_V', 0.0)
-    base_img.ext_hdr.setdefault('FSAM_H', 0.0)
-    base_img.ext_hdr.setdefault('FSAM_V', 0.0)
-    base_img.ext_hdr['FSMLOS'] = 1 if is_coronagraphic else 0
-    if col_cor is not None:
-        base_img.ext_hdr['COL_COR'] = col_cor
-    return base_img
+
 
 
 
@@ -654,8 +614,8 @@ def test_l4_companion_photometry():
     host_counts = 2.5e5
     companion_counts = 5.0e4
     col_cor = 1.2
-    host_image = _make_stokes_i_image(host_counts, 'HOST', seed=1, wv0_x=-1.0, wv0_y=0.5, is_coronagraphic=True)
-    companion_image = _make_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, wv0_x=2.0, wv0_y=-1.0, is_coronagraphic=True)
+    host_image = create_mock_stokes_i_image(host_counts, 'HOST', seed=1, wv0_x=-1.0, wv0_y=0.5, is_coronagraphic=True)
+    companion_image = create_mock_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, wv0_x=2.0, wv0_y=-1.0, is_coronagraphic=True)
 
     ct_cal = create_ct_cal(fwhm_mas=50, cfam_name='3C', cenx=0.0, ceny=0.0, nx=11, ny=11)
     fpamfsam_cal = create_mock_fpamfsam_cal()
@@ -717,6 +677,7 @@ def test_l4_companion_photometry():
     logger.info(f"{message} | {flux_details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
+    # Confirm the fluxcal factor (with color correction) predicts the measured companion flux
     factor = fluxcal_factor.fluxcal_fac / col_cor
     factor_err = fluxcal_factor.fluxcal_err / col_cor
     expected_comp_flux = comp_ap * factor
@@ -741,11 +702,10 @@ def test_l4_companion_photometry():
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
-    host_expected_flux = host_ap * fluxcal_factor.fluxcal_fac
+    # Check that companion/host flux ratio matches the injected counts after color correction
     ratio_measured = comp_flux / host_flux
     ratio_expected = (comp_ap / col_cor) / host_ap
     ratio_tolerance = max(expected_comp_flux_err / comp_flux, 0.05)
-    # Check that companion/host flux ratio matches the injected counts after color correction
     message = "Flux ratio matches expected value"
     condition = np.isclose(ratio_measured, ratio_expected, rtol=ratio_tolerance)
     details = f"measured={ratio_measured:.3f}, expected={ratio_expected:.3f}"

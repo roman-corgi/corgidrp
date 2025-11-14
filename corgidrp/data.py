@@ -3212,7 +3212,7 @@ def get_stokes_intensity_image(stokes_image):
     if err_layer.shape[0] != 1:
         err_layer = err_layer[:1]
     err_copy = err_layer.copy()
-    return Image(
+    intensity_image = Image(
         data.copy(),
         pri_hdr=stokes_image.pri_hdr.copy(),
         ext_hdr=stokes_image.ext_hdr.copy(),
@@ -3221,3 +3221,14 @@ def get_stokes_intensity_image(stokes_image):
         err_hdr=stokes_image.err_hdr,
         dq_hdr=stokes_image.dq_hdr,
     )
+
+    # Propagate throughput extensions required by downstream L4->TDA steps
+    for hdu_name in ("KL_THRU", "CT_THRU"):
+        if hdu_name not in stokes_image.hdu_list:
+            raise KeyError(f"Expected extension '{hdu_name}' missing from Stokes cube.")
+        src_hdu = stokes_image.hdu_list[hdu_name]
+        intensity_image.add_extension_hdu(
+            hdu_name, data=np.array(src_hdu.data, copy=True), header=src_hdu.header.copy()
+        )
+
+    return intensity_image
