@@ -5071,7 +5071,8 @@ def create_mock_stokes_image_l4(
         image_size=256,
         fwhm=3,
         I0=1e4,
-        badpixel_fraction=1e-3,
+        badpixel_fraction=0.0,
+        add_noise=True,
         p=0.1,
         theta_deg=20.0,
         rng=None,
@@ -5085,6 +5086,7 @@ def create_mock_stokes_image_l4(
         fwhm (float): Gaussian FWHM in pixels
         I0 (float): Peak intensity
         badpixel_fraction (float): Fraction of bad pixels
+        add_noise (bool): If True, add random noise to the Stokes cube; if False, return a noiseless realization (errors remain).
         p (float): Fractional polarization
         theta_deg (float): Polarization angle in degrees
         rng (numpy.random.Generator, optional): RNG instance for reproducibility. Defaults to None.
@@ -5122,7 +5124,8 @@ def create_mock_stokes_image_l4(
         I_map_err,
         I_map_err
     ])
-    stokes_cube += rng.normal(0.0, stokes_err)
+    if add_noise:
+        stokes_cube += rng.normal(0.0, stokes_err)
 
     # headers
     try:
