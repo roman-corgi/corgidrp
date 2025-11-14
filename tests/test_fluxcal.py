@@ -6,14 +6,18 @@ import logging
 from pathlib import Path
 import corgidrp
 from astropy.io import fits
-from corgidrp.mocks import create_default_L3_headers
-from corgidrp.mocks import create_flux_image
-from corgidrp.mocks import create_pol_flux_image
-from corgidrp.mocks import create_mock_stokes_image_l4
-from corgidrp.mocks import gaussian_array
-from corgidrp.mocks import create_ct_cal
-from corgidrp.mocks import create_mock_fpamfsam_cal
-from corgidrp.data import Image, Dataset, FluxcalFactor
+from corgidrp.mocks import (
+    create_default_L3_headers,
+    create_flux_image,
+    create_pol_flux_image,
+    create_mock_stokes_image_l4,
+    gaussian_array,
+    create_ct_cal,
+    create_mock_fpamfsam_cal,
+    make_mock_fluxcal_factor,
+)
+from corgidrp.data import Image, Dataset, FluxcalFactor, get_stokes_intensity_image
+from corgidrp.check import verify_header_keywords
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
@@ -197,30 +201,6 @@ def test_fluxcal_file():
 
 
 
-def make_mock_fluxcal_factor(value, err=0.0):
-    """Build a FluxcalFactor with minimal metadata for testing.
-
-    Args:
-        value (float): absolute flux calibration factor.
-        err (float, optional): uncertainty on the calibration factor.
-
-    Returns:
-        corgidrp.data.FluxcalFactor: calibration object referencing a dummy
-        dataset for history bookkeeping.
-    """
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
-    ext_hdr['CFAMNAME'] = '3D'
-    ext_hdr['DPAMNAME'] = 'PRISM3'
-    ext_hdr['FSAMNAME'] = 'R1C2'
-    dummy_data = np.zeros((2, 2))
-    dummy_err = np.zeros((1, 2, 2))
-    dummy_dq = np.zeros((2, 2), dtype=int)
-    dummy_img = Image(dummy_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(), err=dummy_err,
-                      dq=dummy_dq, err_hdr=err_hdr.copy(), dq_hdr=dq_hdr.copy())
-    return FluxcalFactor(value, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
-                          input_dataset=Dataset([dummy_img]))
-
-
 def _make_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=0.0, wv0_y=0.0, is_coronagraphic=False):
     """Create a mock L4 Stokes cube whose I-plane integrates to total_counts."""
     base_img = create_mock_stokes_image_l4(
@@ -264,24 +244,7 @@ def _make_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=
     return base_img
 
 
-def _get_intensity_image(stokes_image):
-    """Return a copy containing only the Stokes-I plane for photometry."""
-    data = stokes_image.data[0]
-    err = stokes_image.err[0]
-    dq = stokes_image.dq[0]
-    err_layer = err if err.ndim == 3 else np.array([err])
-    if err_layer.shape[0] != 1:
-        err_layer = err_layer[:1]
-    err_copy = err_layer.copy()
-    return Image(
-        data.copy(),
-        pri_hdr=stokes_image.pri_hdr.copy(),
-        ext_hdr=stokes_image.ext_hdr.copy(),
-        err=err_copy,
-        dq=dq.copy(),
-        err_hdr=stokes_image.err_hdr,
-        dq_hdr=stokes_image.dq_hdr,
-    )
+
 
 
 def _setup_vap_logger(test_name):
@@ -710,27 +673,16 @@ def test_l4_companion_photometry():
     companion_image.err = companion_image.err / ct_factor
     companion_image.ext_hdr['CTCOR'] = True
     companion_image.ext_hdr['CTFACT'] = ct_factor
-    host_intensity_ds = Dataset([_get_intensity_image(host_image)])
-    companion_intensity_ds = Dataset([_get_intensity_image(companion_image)])
+    host_intensity_ds = Dataset([get_stokes_intensity_image(host_image)])
+    companion_intensity_ds = Dataset([get_stokes_intensity_image(companion_image)])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.05)
 
     checks = []
     ext_hdr = companion_image.ext_hdr
     cgi_keys = ['CFAMNAME', 'DPAMNAME', 'LSAMNAME']
-    message = "Input dataset has CGI format keywords"
-    condition = all(k in ext_hdr for k in cgi_keys)
-    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
-    checks.append(condition)
-
-    message = "DATALVL = L4"
-    condition = ext_hdr.get('DATALVL') == 'L4'
-    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
-    checks.append(condition)
-
-    message = "BUNIT = photoelectron/s"
-    condition = ext_hdr.get('BUNIT') == 'photoelectron/s'
-    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
-    checks.append(condition)
+    checks.append(verify_header_keywords(ext_hdr, cgi_keys, frame_info="Companion header", logger=logger))
+    checks.append(verify_header_keywords(ext_hdr, {'DATALVL': 'L4'}, frame_info="Companion header", logger=logger))
+    checks.append(verify_header_keywords(ext_hdr, {'BUNIT': 'photoelectron/s'}, frame_info="Companion header", logger=logger))
 
     message = "Core throughput correction applied to companion"
     condition = np.isfinite(ct_factor) and companion_image.ext_hdr.get('CTCOR', False)
@@ -775,12 +727,14 @@ def test_l4_companion_photometry():
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
+    # Confirm that enabling COL_COR actually reduces the measured flux relative to the aperture sum
     message = "Color correction applied when COL_COR present"
     condition = comp_flux < comp_ap * fluxcal_factor.fluxcal_fac
     details = f"flux_with_col_cor={comp_flux:.2f}, no_col_cor={comp_ap * fluxcal_factor.fluxcal_fac:.2f}"
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
+    # Confirm that the flux uncertainty matches what is propagated from aperture and calibration errors
     message = "Flux uncertainty propagated from aperture sum"
     condition = np.isclose(comp_flux_err, expected_comp_flux_err, rtol=5e-3)
     details = f"measured={comp_flux_err:.2f}, expected={expected_comp_flux_err:.2f}"
@@ -791,6 +745,7 @@ def test_l4_companion_photometry():
     ratio_measured = comp_flux / host_flux
     ratio_expected = (comp_ap / col_cor) / host_ap
     ratio_tolerance = max(expected_comp_flux_err / comp_flux, 0.05)
+    # Check that companion/host flux ratio matches the injected counts after color correction
     message = "Flux ratio matches expected value"
     condition = np.isclose(ratio_measured, ratio_expected, rtol=ratio_tolerance)
     details = f"measured={ratio_measured:.3f}, expected={ratio_expected:.3f}"
@@ -803,12 +758,14 @@ def test_l4_companion_photometry():
     expected_mag = fluxcal.calculate_vega_mag(expected_comp_flux, filter_file)
     expected_mag_err = 2.5 / np.log(10) * expected_comp_flux_err / expected_comp_flux
 
+    # Convert the measured companion flux into a Vega magnitude and compare against expectation
     message = "Apparent magnitude derived from measured companion flux"
     condition = np.isclose(companion_mag, expected_mag, rtol=5e-3)
     details = f"measured={companion_mag:.3f}, expected={expected_mag:.3f}"
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
+    # Check that magnitude uncertainty is the flux-error propagation scaled into magnitudes
     message = "Magnitude uncertainty propagated from flux error"
     condition = np.isclose(companion_mag_err, expected_mag_err, rtol=5e-3)
     details = f"measured={companion_mag_err:.3f}, expected={expected_mag_err:.3f}"

@@ -3193,3 +3193,22 @@ def get_bit_to_flag_map():
         dict: A dictionary with bit positions (int) as keys and flag names as values.
     """
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
+
+def get_stokes_intensity_image(stokes_image):
+    """Return a copy containing only the Stokes-I plane for photometry."""
+    data = stokes_image.data[0]
+    err = stokes_image.err[0]
+    dq = stokes_image.dq[0]
+    err_layer = err if err.ndim == 3 else np.array([err])
+    if err_layer.shape[0] != 1:
+        err_layer = err_layer[:1]
+    err_copy = err_layer.copy()
+    return Image(
+        data.copy(),
+        pri_hdr=stokes_image.pri_hdr.copy(),
+        ext_hdr=stokes_image.ext_hdr.copy(),
+        err=err_copy,
+        dq=dq.copy(),
+        err_hdr=stokes_image.err_hdr,
+        dq_hdr=stokes_image.dq_hdr,
+    )
