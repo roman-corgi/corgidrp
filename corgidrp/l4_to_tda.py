@@ -152,6 +152,10 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
             information from spec.slit_transmission(). Provide either a single
             (slit_map, slit_x, slit_y) tuple applied to every frame or a list
             containing one tuple per frame in input_dataset.
+        Note:
+            For coronagraphic data (ISCORON == 1) this function expects the
+            input spectra to have already been core-throughput corrected
+            (i.e. SPEC header contains CTCOR=True and CTFAC).
 
     Returns:
         corgidrp.data.Dataset: copy of the input dataset with the
@@ -188,6 +192,12 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
     for idx, frame in enumerate(spec_dataset):
         if 'SPEC' not in frame.hdu_list:
             raise ValueError("Input dataset does not contain a 'SPEC' extension.")
+
+        mask_loc_x = frame.ext_hdr.get('MASKLOCX') # using MASKLOCX to check if the image is coronagraphic
+        is_coron = mask_loc_x is not None
+        if is_coron:
+            if not frame.hdu_list['SPEC'].header.get('CTCOR', False):
+                raise ValueError("Core throughput correction must be applied before convert_spec_to_flux for coronagraphic images (missing CTCOR flag).")
 
         spec = frame.hdu_list['SPEC'].data.astype(float, copy=True)
         spec_header = frame.hdu_list['SPEC'].header
@@ -242,6 +252,57 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
     return spec_dataset
 
 
+def apply_core_throughput_correction(frame,
+                                     core_throughput_cal,
+                                     coron_dataset,
+                                     fpam_fsam_cal,
+                                     logr=False):
+    """
+    Apply a core-throughput correction to a single L4 spectroscopy frame.
+
+    Args:
+        frame (corgidrp.data.Image): L4 spectroscopy frame containing SPEC/SPEC_ERR HDUs.
+        core_throughput_cal (corgidrp.data.CoreThroughputCalibration): calibration product
+            providing InterpolateCT().
+        coron_dataset (corgidrp.data.Dataset): dataset describing the coronagraphic
+            observation (needed so InterpolateCT can locate the FPM center).
+        fpam_fsam_cal (corgidrp.data.FpamFsamCal): calibration relating FPAM/FSAM motions
+            to EXCAM coordinates.
+        logr (bool): passed through to InterpolateCT (logarithmic radii interpolation).
+
+    Returns:
+        float: core-throughput factor applied to the frame.
+    """
+    if coron_dataset is None or fpam_fsam_cal is None:
+        raise ValueError("coron_dataset and fpam_fsam_cal are required for core throughput correction.")
+
+    try:
+        wv0_x = float(frame.ext_hdr['WV0_X'])
+        wv0_y = float(frame.ext_hdr['WV0_Y'])
+    except KeyError as exc:
+        raise ValueError("Frame is missing WV0_X/WV0_Y required for core throughput correction.") from exc
+
+    ct_values = core_throughput_cal.InterpolateCT(
+        wv0_x,
+        wv0_y,
+        coron_dataset,
+        fpam_fsam_cal,
+        logr=logr,
+    )
+    ct_value = float(np.atleast_1d(ct_values)[0])
+    if not np.isfinite(ct_value) or ct_value <= 0:
+        raise ValueError(f"Invalid core throughput value {ct_value}.")
+
+    frame.hdu_list['SPEC'].data[:] /= ct_value
+    if 'SPEC_ERR' in frame.hdu_list:
+        frame.hdu_list['SPEC_ERR'].data[:] /= ct_value
+        frame.hdu_list['SPEC_ERR'].header['CTCOR'] = True
+        frame.hdu_list['SPEC_ERR'].header['CTFAC'] = ct_value
+    frame.hdu_list['SPEC'].header['CTCOR'] = True
+    frame.hdu_list['SPEC'].header['CTFAC'] = ct_value
+    return ct_value
+
+
 def interpolate_slit_transmission(frame, slit_tuple):
     """
     Convert the slit-transmission tuple returned by spec.slit_transmission
@@ -262,16 +323,17 @@ def interpolate_slit_transmission(frame, slit_tuple):
     slit_y = np.asarray(slit_y, dtype=float)
 
     if slit_map.ndim == 2:
-        # Collapse the per-wavelength transmission profiles into a single scalar per position.
+        # TODO: check what to do here. 
         # The spectrum being corrected is 1-D in wavelength, so slit corrections must reduce
-        # to one factor per spatial location.
+        # to one factor per spatial location. Currently collapsing the per-wavelength transmission 
+        # into a single mean per position.
         per_position = np.nanmean(slit_map, axis=1)
     elif slit_map.ndim == 1:
         per_position = slit_map
     else:
         raise ValueError("slit_transmission map must be 1-D or 2-D.")
 
-    # Make sure that the collapsed slit transmissions align with the coordinate vectors
+    # Make sure that the slit transmissions align with the coordinate arrays
     if per_position.shape[0] != slit_x.size or slit_x.size != slit_y.size:
         raise ValueError("slit_map, slit_x, and slit_y lengths must match.")
 

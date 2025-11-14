@@ -4,9 +4,13 @@ import os
 import numpy as np
 import corgidrp
 from astropy.io import fits
-from corgidrp.mocks import create_default_L3_headers
-from corgidrp.mocks import create_flux_image
-from corgidrp.mocks import create_pol_flux_image
+from corgidrp.mocks import (
+    create_default_L3_headers,
+    create_flux_image,
+    create_pol_flux_image,
+    create_ct_cal,
+    create_mock_fpamfsam_cal,
+)
 from corgidrp.data import Image, Dataset, FluxcalFactor
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
@@ -210,6 +214,8 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, col_cor=None):
     ext_hdr['BUNIT'] = 'photoelectron/s'
     ext_hdr['WV0_X'] = 0.0
     ext_hdr['WV0_Y'] = 0.0
+    ext_hdr['MASKLOCX'] = 512  # coronagraphic image
+    ext_hdr['MASKLOCY'] = 512
     if col_cor is not None:
         ext_hdr['COL_COR'] = col_cor
     img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
@@ -281,6 +287,7 @@ def test_convert_spec_to_flux_basic():
     slit_tuple = (np.array([np.full_like(spec_vals, slit_factor)]), np.array([0.0]), np.array([0.0]))
 
     image = make_1d_spec_image(spec_vals, spec_err, wave, col_cor=2.0)
+    image.hdu_list['SPEC'].header['CTCOR'] = True  # Core throughput correction already applied
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
 
@@ -311,6 +318,7 @@ def test_convert_spec_to_flux_no_slit():
     wave = np.linspace(600, 650, len(spec_vals))
 
     image = make_1d_spec_image(spec_vals, spec_err, wave)
+    image.hdu_list['SPEC'].header['CTCOR'] = True  # core throughput correction already applied
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(1.5, err=0.1)
 
@@ -341,6 +349,7 @@ def test_convert_spec_to_flux_slit_scalar_map():
     image = make_1d_spec_image(spec_vals, spec_err, wave)
     image.ext_hdr['WV0_X'] = 25.0
     image.ext_hdr['WV0_Y'] = 0.0
+    image.hdu_list['SPEC'].header['CTCOR'] = True  # Core throughput correction already applied
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
 
@@ -377,6 +386,57 @@ def test_convert_spec_to_flux_slit_scalar_map():
     assert result
 
 
+def test_apply_core_throughput_correction():
+    # Build a mock spectrum and put WV0 inside the CT calibration grid
+    spec_vals = np.array([10.0, 15.0, 20.0])
+    original_spec = spec_vals.copy()
+    spec_err = np.array([[0.5, 0.6, 0.7]])
+    original_err = spec_err.copy()
+    wave = np.linspace(700, 760, spec_vals.size)
+    frame = make_1d_spec_image(spec_vals, spec_err, wave)
+    frame.ext_hdr['WV0_X'] = 70.0
+    frame.ext_hdr['WV0_Y'] = 0.0
+
+    # Use CT calibration + FPAM/FSAM calibration
+    ct_cal = create_ct_cal(fwhm_mas=50)
+    coron_dataset = Dataset([frame.copy()])
+    fpam_fsam_cal = create_mock_fpamfsam_cal()
+
+    for img in coron_dataset:
+        img.ext_hdr.setdefault('STARLOCX', 0.0)
+        img.ext_hdr.setdefault('STARLOCY', 0.0)
+
+    # Get the interpolated factor for this location.
+    ct_values = ct_cal.InterpolateCT(
+        frame.ext_hdr['WV0_X'],
+        frame.ext_hdr['WV0_Y'],
+        coron_dataset,
+        fpam_fsam_cal
+    )
+    ct_factor = np.asarray(ct_values).ravel()[0]
+
+    # Apply correction
+    applied = l4_to_tda.apply_core_throughput_correction(
+        frame, ct_cal, coron_dataset, fpam_fsam_cal
+    )
+
+    spec_ok = np.allclose(frame.hdu_list['SPEC'].data, original_spec / ct_factor)
+    err_ok = np.allclose(frame.hdu_list['SPEC_ERR'].data[0], original_err[0] / ct_factor)
+    applied_ok = np.isclose(applied, ct_factor)
+
+    print('\napply_core_throughput_correction: ', end='')
+    if applied_ok and spec_ok and err_ok:
+        print_pass()
+    else:
+        print_fail()
+
+    assert applied_ok
+    assert spec_ok
+    assert err_ok
+    assert frame.hdu_list['SPEC'].header['CTCOR'] is True
+    assert np.isclose(frame.hdu_list['SPEC'].header['CTFAC'], ct_factor)
+
+
 def test_compute_spec_flux_ratio_single_roll():
     """Flux ratio for one roll should match the direct companion/host ratio."""
     host_spec = np.array([10.0, 12.0, 14.0, 16.0])
@@ -386,6 +446,9 @@ def test_compute_spec_flux_ratio_single_roll():
 
     host_ds = build_mock_spec_dataset(host_spec, spec_err, wave, roll='ROLL_A', exp_time=10.0)
     comp_ds = build_mock_spec_dataset(comp_spec, spec_err, wave, roll='ROLL_A', exp_time=10.0)
+    # Set CTCOR flag before calling compute_spec_flux_ratio (required for coronagraphic images)
+    host_ds[0].hdu_list['SPEC'].header['CTCOR'] = True
+    comp_ds[0].hdu_list['SPEC'].header['CTCOR'] = True
     fluxcal_factor = make_mock_fluxcal_factor(2.5, err=0.1)
 
     ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_ds, comp_ds, fluxcal_factor)
@@ -420,6 +483,12 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     host_ds_b = build_mock_spec_dataset(host_b, err_b, wave_b_host, roll='ROLL_B', exp_time=15.0)
     comp_ds_b = build_mock_spec_dataset(comp_b, err_b, wave_b_comp, roll='ROLL_B', exp_time=15.0)
 
+    # Set CTCOR flag before calling compute_spec_flux_ratio (required for coronagraphic images)
+    host_ds_a[0].hdu_list['SPEC'].header['CTCOR'] = True
+    comp_ds_a[0].hdu_list['SPEC'].header['CTCOR'] = True
+    host_ds_b[0].hdu_list['SPEC'].header['CTCOR'] = True
+    comp_ds_b[0].hdu_list['SPEC'].header['CTCOR'] = True
+
     fluxcal_factor = make_mock_fluxcal_factor(1.8, err=0.05)
     slit_tuple_a = (np.array([np.full_like(host_a, 1.0)]), np.array([0.0]), np.array([0.0]))
     slit_tuple_b = (np.array([np.full_like(host_b, 0.9)]), np.array([0.0]), np.array([0.0]))
@@ -433,6 +502,9 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     )
 
     ratio_roll_a = comp_a / host_a
+    # Set CTCOR flag before calling convert_spec_to_flux (required for coronagraphic images)
+    host_ds_b[0].hdu_list['SPEC'].header['CTCOR'] = True
+    comp_ds_b[0].hdu_list['SPEC'].header['CTCOR'] = True
     host_cal_b = l4_to_tda.convert_spec_to_flux(host_ds_b, fluxcal_factor, slit_transmission=slit_tuple_b)
     comp_cal_b = l4_to_tda.convert_spec_to_flux(comp_ds_b, fluxcal_factor, slit_transmission=slit_tuple_b)
     host_wave_b = host_cal_b[0].hdu_list['SPEC_WAVE'].data
@@ -850,5 +922,6 @@ if __name__ == '__main__':
     test_convert_spec_to_flux_basic()
     test_convert_spec_to_flux_no_slit()
     test_convert_spec_to_flux_slit_scalar_map()
+    test_apply_core_throughput_correction()
     test_compute_spec_flux_ratio_single_roll()
     test_compute_spec_flux_ratio_weighted_rolls_with_interp()
