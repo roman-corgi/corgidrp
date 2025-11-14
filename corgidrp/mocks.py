@@ -187,7 +187,7 @@ def make_mock_fluxcal_factor(value, err=0.0, cfam_name='3D',
 
     Returns:
         FluxcalFactor: Calibration object referencing a dummy dataset so tests
-        can exercise downstream logic without building full calibration files.
+            can exercise downstream logic without building full calibration files.
     """
     pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
     ext_hdr['CFAMNAME'] = cfam_name
