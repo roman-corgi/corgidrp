@@ -199,6 +199,9 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
             output_dir (str): Directory for log file (if log_file_name is provided).
             name (str): Logger name.
             log_file_name (str or None): File name for log file. If None, only console output.
+
+        Returns:
+            logging.Logger: Configured logger instance.
         """
         logger = logging.getLogger(name)
         logger.setLevel(logging.INFO)
