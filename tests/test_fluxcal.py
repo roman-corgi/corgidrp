@@ -208,6 +208,8 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, col_cor=None):
     dq = np.zeros((10, 10), dtype=int)
     pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
     ext_hdr['BUNIT'] = 'photoelectron/s'
+    ext_hdr['WV0_X'] = 0.0
+    ext_hdr['WV0_Y'] = 0.0
     if col_cor is not None:
         ext_hdr['COL_COR'] = col_cor
     img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
@@ -275,20 +277,21 @@ def test_convert_spec_to_flux_basic():
     spec_vals = np.array([10.0, 12.0, 14.0, 16.0, 18.0])
     spec_err = np.array([[0.5, 0.6, 0.7, 0.8, 0.9]])
     wave = np.linspace(700, 800, len(spec_vals))
-    slit = np.array([0.8, 0.9, 1.0, 0.85, 0.95])
+    slit_factor = 0.85
+    slit_tuple = (np.array([np.full_like(spec_vals, slit_factor)]), np.array([0.0]), np.array([0.0]))
 
     image = make_1d_spec_image(spec_vals, spec_err, wave, col_cor=2.0)
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
 
-    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor, slit_transmission=slit)
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor, slit_transmission=slit_tuple)
     frame = calibrated[0]
     spec_out = frame.hdu_list['SPEC'].data
     err_out = frame.hdu_list['SPEC_ERR'].data
 
-    expected_spec = (spec_vals / slit) * (fluxcal_factor.fluxcal_fac / 2.0)
-    expected_err = np.sqrt(((spec_err[0] / slit) * (fluxcal_factor.fluxcal_fac / 2.0))**2 +
-                           (((spec_vals / slit) * fluxcal_factor.fluxcal_err / 2.0))**2)
+    expected_spec = (spec_vals / slit_factor) * (fluxcal_factor.fluxcal_fac / 2.0)
+    expected_err = np.sqrt(((spec_err[0] / slit_factor) * (fluxcal_factor.fluxcal_fac / 2.0))**2 +
+                           (((spec_vals / slit_factor) * fluxcal_factor.fluxcal_err / 2.0))**2)
 
     result = np.allclose(spec_out, expected_spec) and np.allclose(err_out[0], expected_err)
     print('\nconvert_spec_to_flux basic case: ', end='')
@@ -327,6 +330,52 @@ def test_convert_spec_to_flux_no_slit():
     assert frame.hdu_list['SPEC'].header['SLITCOR'] is False
     assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
+
+
+def test_convert_spec_to_flux_slit_scalar_map():
+    """Tuple slit transmission should reduce to a single scale factor."""
+    spec_vals = np.array([10.0, 12.0, 14.0, 16.0])
+    spec_err = np.full((1, spec_vals.size), 0.5)
+    wave = np.linspace(700, 730, spec_vals.size)
+
+    image = make_1d_spec_image(spec_vals, spec_err, wave)
+    image.ext_hdr['WV0_X'] = 25.0
+    image.ext_hdr['WV0_Y'] = 0.0
+    dataset = Dataset([image])
+    fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
+
+    slit_map = np.array([
+        np.full_like(spec_vals, 0.5, dtype=float),
+        np.full_like(spec_vals, 0.4, dtype=float),
+        np.full_like(spec_vals, 0.3, dtype=float),
+    ])
+    slit_x = np.array([0.0, 50.0, 100.0])
+    slit_y = np.zeros_like(slit_x)
+
+    calibrated = l4_to_tda.convert_spec_to_flux(
+        dataset,
+        fluxcal_factor,
+        slit_transmission=(slit_map, slit_x, slit_y),
+    )
+    frame = calibrated[0]
+    slit_factor = 0.45
+    expected_spec = (spec_vals / slit_factor) * fluxcal_factor.fluxcal_fac
+    expected_err = np.sqrt(
+        ((spec_err[0] / slit_factor) * fluxcal_factor.fluxcal_fac) ** 2 +
+        ((spec_vals / slit_factor) * fluxcal_factor.fluxcal_err) ** 2
+    )
+
+    result = (
+        np.allclose(frame.hdu_list['SPEC'].data, expected_spec) and
+        np.allclose(frame.hdu_list['SPEC_ERR'].data[0], expected_err) and
+        frame.hdu_list['SPEC'].header['SLITCOR'] is True and
+        np.isclose(frame.hdu_list['SPEC'].header['SLITFAC'], slit_factor)
+    )
+    print('\nconvert_spec_to_flux slit tuple: ', end='')
+    print_pass() if result else print_fail()
+
+    assert result
+
 
 def test_compute_spec_flux_ratio_single_roll():
     """Flux ratio for one roll should match the direct companion/host ratio."""
@@ -372,7 +421,9 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     comp_ds_b = build_mock_spec_dataset(comp_b, err_b, wave_b_comp, roll='ROLL_B', exp_time=15.0)
 
     fluxcal_factor = make_mock_fluxcal_factor(1.8, err=0.05)
-    slit_vectors = [np.ones_like(host_a), np.array([0.95, 0.9, 0.85, 0.8])]
+    slit_tuple_a = (np.array([np.full_like(host_a, 1.0)]), np.array([0.0]), np.array([0.0]))
+    slit_tuple_b = (np.array([np.full_like(host_b, 0.9)]), np.array([0.0]), np.array([0.0]))
+    slit_vectors = [slit_tuple_a, slit_tuple_b]
 
     ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
         [host_ds_a, host_ds_b],
@@ -382,9 +433,8 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     )
 
     ratio_roll_a = comp_a / host_a
-    # Reproduce the interpolation 
-    host_cal_b = l4_to_tda.convert_spec_to_flux(host_ds_b, fluxcal_factor, slit_transmission=slit_vectors[1])
-    comp_cal_b = l4_to_tda.convert_spec_to_flux(comp_ds_b, fluxcal_factor, slit_transmission=slit_vectors[1])
+    host_cal_b = l4_to_tda.convert_spec_to_flux(host_ds_b, fluxcal_factor, slit_transmission=slit_tuple_b)
+    comp_cal_b = l4_to_tda.convert_spec_to_flux(comp_ds_b, fluxcal_factor, slit_transmission=slit_tuple_b)
     host_wave_b = host_cal_b[0].hdu_list['SPEC_WAVE'].data
     comp_wave_b = comp_cal_b[0].hdu_list['SPEC_WAVE'].data
     host_spec_b = host_cal_b[0].hdu_list['SPEC'].data
@@ -799,8 +849,6 @@ if __name__ == '__main__':
     test_pol_abs_fluxcal()
     test_convert_spec_to_flux_basic()
     test_convert_spec_to_flux_no_slit()
+    test_convert_spec_to_flux_slit_scalar_map()
     test_compute_spec_flux_ratio_single_roll()
     test_compute_spec_flux_ratio_weighted_rolls_with_interp()
-
-
-
