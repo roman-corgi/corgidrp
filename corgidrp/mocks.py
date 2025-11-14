@@ -1496,8 +1496,7 @@ def make_mock_fluxcal_factor(value, err=0.0):
         value (float): absolute flux calibration factor.
         err (float, optional): uncertainty on the calibration factor.
     Returns:
-        corgidrp.data.FluxcalFactor: calibration object referencing a dummy
-        dataset for history bookkeeping.
+        corgidrp.data.FluxcalFactor: fluxcal factorcalibration object.
     """
     pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
     ext_hdr['CFAMNAME'] = '3D'
