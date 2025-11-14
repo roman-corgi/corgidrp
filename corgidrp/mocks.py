@@ -1492,11 +1492,14 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
 
 def make_mock_fluxcal_factor(value, err=0.0):
     """Build a FluxcalFactor with minimal metadata for testing.
+
     Args:
         value (float): absolute flux calibration factor.
         err (float, optional): uncertainty on the calibration factor.
+
     Returns:
         corgidrp.data.FluxcalFactor: fluxcal factorcalibration object.
+        
     """
     pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
     ext_hdr['CFAMNAME'] = '3D'
