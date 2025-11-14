@@ -806,24 +806,29 @@ def test_l4_companion_photometry():
     companion_intensity_ds = Dataset([_get_intensity_image(companion_image)])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.05)
 
-    def log_check(message, condition, details=None):
-        prefix = f"{message}"
-        if details is not None:
-            prefix += f" | {details}"
-        logger.info(f"{prefix}: {'PASS' if condition else 'FAIL'}")
-        return condition
-
     checks = []
     ext_hdr = companion_image.ext_hdr
     cgi_keys = ['CFAMNAME', 'DPAMNAME', 'LSAMNAME']
-    checks.append(log_check("Input dataset has CGI format keywords", all(k in ext_hdr for k in cgi_keys)))
-    checks.append(log_check("DATALVL = L4", ext_hdr.get('DATALVL') == 'L4'))
-    checks.append(log_check("BUNIT = photoelectron/s", ext_hdr.get('BUNIT') == 'photoelectron/s'))
-    checks.append(log_check(
-        "Core throughput correction applied to companion",
-        np.isfinite(ct_factor) and companion_image.ext_hdr.get('CTCOR', False),
-        details=f"CTFACT={ct_factor:.4f}"
-    ))
+    message = "Input dataset has CGI format keywords"
+    condition = all(k in ext_hdr for k in cgi_keys)
+    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "DATALVL = L4"
+    condition = ext_hdr.get('DATALVL') == 'L4'
+    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "BUNIT = photoelectron/s"
+    condition = ext_hdr.get('BUNIT') == 'photoelectron/s'
+    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "Core throughput correction applied to companion"
+    condition = np.isfinite(ct_factor) and companion_image.ext_hdr.get('CTCOR', False)
+    details = f"CTFACT={ct_factor:.4f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
 
     comp_intensity = companion_intensity_ds[0]
     host_intensity = host_intensity_ds[0]
@@ -847,41 +852,42 @@ def test_l4_companion_photometry():
     comp_flux_err = comp_flux_ds[0].ext_hdr['FLUXERR']
     flux_logged = comp_flux_ds[0].ext_hdr.get('FLUX')
     flux_details = f"FLUX={flux_logged:.3f}" if flux_logged is not None else "FLUX missing"
-    checks.append(log_check(
-        "Companion flux recorded in header",
-        'FLUX' in comp_flux_ds[0].ext_hdr,
-        details=flux_details
-    ))
+    message = "Companion flux recorded in header"
+    condition = 'FLUX' in comp_flux_ds[0].ext_hdr
+    logger.info(f"{message} | {flux_details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
 
     factor = fluxcal_factor.fluxcal_fac / col_cor
     factor_err = fluxcal_factor.fluxcal_err / col_cor
     expected_comp_flux = comp_ap * factor
     expected_comp_flux_err = np.sqrt((comp_ap_err * factor) ** 2 + (comp_ap * factor_err) ** 2)
-    checks.append(log_check(
-        "Companion flux matches expected scaling",
-        np.isclose(comp_flux, expected_comp_flux, rtol=5e-3),
-        details=f"measured={comp_flux:.2f}, expected={expected_comp_flux:.2f}"
-    ))
-    checks.append(log_check(
-        "Color correction applied when COL_COR present",
-        comp_flux < comp_ap * fluxcal_factor.fluxcal_fac,
-        details=f"flux_with_col_cor={comp_flux:.2f}, no_col_cor={comp_ap * fluxcal_factor.fluxcal_fac:.2f}"
-    ))
-    checks.append(log_check(
-        "Flux uncertainty propagated from aperture sum",
-        np.isclose(comp_flux_err, expected_comp_flux_err, rtol=5e-3),
-        details=f"measured={comp_flux_err:.2f}, expected={expected_comp_flux_err:.2f}"
-    ))
+    message = "Companion flux matches expected scaling"
+    condition = np.isclose(comp_flux, expected_comp_flux, rtol=5e-3)
+    details = f"measured={comp_flux:.2f}, expected={expected_comp_flux:.2f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "Color correction applied when COL_COR present"
+    condition = comp_flux < comp_ap * fluxcal_factor.fluxcal_fac
+    details = f"flux_with_col_cor={comp_flux:.2f}, no_col_cor={comp_ap * fluxcal_factor.fluxcal_fac:.2f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "Flux uncertainty propagated from aperture sum"
+    condition = np.isclose(comp_flux_err, expected_comp_flux_err, rtol=5e-3)
+    details = f"measured={comp_flux_err:.2f}, expected={expected_comp_flux_err:.2f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
 
     host_expected_flux = host_ap * fluxcal_factor.fluxcal_fac
     ratio_measured = comp_flux / host_flux
     ratio_expected = (comp_ap / col_cor) / host_ap
     ratio_tolerance = max(expected_comp_flux_err / comp_flux, 0.05)
-    checks.append(log_check(
-        "Flux ratio matches expected value",
-        np.isclose(ratio_measured, ratio_expected, rtol=ratio_tolerance),
-        details=f"measured={ratio_measured:.3f}, expected={ratio_expected:.3f}"
-    ))
+    message = "Flux ratio matches expected value"
+    condition = np.isclose(ratio_measured, ratio_expected, rtol=ratio_tolerance)
+    details = f"measured={ratio_measured:.3f}, expected={ratio_expected:.3f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
 
     # TODO/ note: determine_app_mag compares source SED to Vega SED, it does not use the measured flux.
     # The actual apparent magnitude from measured flux is already calculated by determine_flux
@@ -893,16 +899,17 @@ def test_l4_companion_photometry():
     filter_file = fluxcal.get_filter_name(comp_flux_ds[0])
     expected_mag = 0.0  # Vega SED 
     expected_mag_err = 2.5 / np.log(10) * comp_flux_err / comp_flux
-    checks.append(log_check(
-        "Apparent magnitude computed from Vega zeropoint (SED comparison)",
-        np.isclose(app_mag, expected_mag, rtol=5e-3),
-        details=f"measured={app_mag:.3f}, expected={expected_mag:.3f} (Vega vs Vega SED)"
-    ))
-    checks.append(log_check(
-        "Magnitude uncertainty matches propagated error",
-        np.isclose(mag_err, expected_mag_err, rtol=5e-3),
-        details=f"measured={mag_err:.3f}, expected={expected_mag_err:.3f}"
-    ))
+    message = "Apparent magnitude computed from Vega zeropoint (SED comparison)"
+    condition = np.isclose(app_mag, expected_mag, rtol=5e-3)
+    details = f"measured={app_mag:.3f}, expected={expected_mag:.3f} (Vega vs Vega SED)"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "Magnitude uncertainty matches propagated error"
+    condition = np.isclose(mag_err, expected_mag_err, rtol=5e-3)
+    details = f"measured={mag_err:.3f}, expected={expected_mag_err:.3f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
 
     result = all(checks)
     if result:
