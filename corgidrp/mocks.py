@@ -5178,7 +5178,20 @@ def create_mock_stokes_image_l4(
     return stokes_image
 
 def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=0.0, wv0_y=0.0, is_coronagraphic=False):
-    """Create a mock L4 Stokes cube whose I-plane integrates to total_counts."""
+    """Create a mock L4 Stokes I image from a mock L4 Stokes cube.
+    
+    Args:
+        total_counts (float): Total counts in the image
+        target_name (str): Name of the target
+        col_cor (float, optional): Color correction factor
+        seed (int, optional): Random seed
+        wv0_x (float, optional): Wavelength of the x-axis
+        wv0_y (float, optional): Wavelength of the y-axis
+        is_coronagraphic (bool, optional): Whether the image is coronagraphic
+
+    Returns:
+        Image: Mock Image object with data of shape [4, n, m], err and dq arrays included.
+    """
     base_img = create_mock_stokes_image_l4(
         image_size=64,
         fwhm=3,
