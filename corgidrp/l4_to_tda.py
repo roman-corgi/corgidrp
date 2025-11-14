@@ -2,7 +2,7 @@
 import os
 import numpy as np
 from astropy.io import fits
-from scipy.interpolate import interp1d, LinearNDInterpolator
+from scipy.interpolate import interp1d
 import warnings
 from photutils.psf import fit_2dgaussian
 from corgidrp.data import Dataset, Image, FluxcalFactor
@@ -148,10 +148,9 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
             SPEC_ERR, SPEC_DQ, SPEC_WAVE, and SPEC_WAVE_ERR extensions.
         fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration
             product used to scale the spectrum.
-        slit_transmission (tuple or list of tuples, optional): slit throughput
-            information from `spec.slit_transmission()`. Provide either a single
-            `(slit_map, slit_x, slit_y)` tuple applied to every frame or a list
-            containing one tuple per frame in input_dataset.
+        slit_transmission (array-like, optional): wavelength-
+            dependent slit throughput to divide out prior to calibration. Can
+            be a single vector or one per frame.
 
     Returns:
         corgidrp.data.Dataset: copy of the input dataset with the
@@ -167,21 +166,16 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
     # Normalize slit transmission input to per-frame list
     if slit_transmission is None:
         slit_per_frame = [None] * len(spec_dataset)
-    elif isinstance(slit_transmission, tuple):
-        if len(slit_transmission) != 3:
-            raise TypeError("slit_transmission tuples must be (slit_map, slit_x, slit_y).")
-        slit_per_frame = [slit_transmission] * len(spec_dataset)
-    elif isinstance(slit_transmission, list):
+    elif isinstance(slit_transmission, (list, tuple)):
         if len(slit_transmission) not in (1, len(spec_dataset)):
-            raise ValueError("slit_transmission must have length 1 or match the dataset length.")
+            raise ValueError("slit_transmission list must have length 1 or match the dataset length.")
+        # Convert to list so it can be modified if needed
         slit_per_frame = list(slit_transmission)
-        for tup in slit_per_frame:
-            if not (isinstance(tup, tuple) and len(tup) == 3):
-                raise TypeError("Each slit_transmission entry must be a (slit_map, slit_x, slit_y) tuple.")
         if len(slit_per_frame) == 1 and len(spec_dataset) > 1:
+            # Repeat single value for all frames
             slit_per_frame = slit_per_frame * len(spec_dataset)
     else:
-        raise TypeError("slit_transmission must be None, a (slit_map, slit_x, slit_y) tuple, or a list of such tuples.")
+        slit_per_frame = [slit_transmission] * len(spec_dataset)
 
     history_messages = []
 
@@ -200,18 +194,19 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         slit_vals = slit_per_frame[idx]
         slit_applied = False
         if slit_vals is not None:
+            slit_vals = np.asarray(slit_vals, dtype=float)
+            if slit_vals.shape != spec.shape:
+                raise ValueError(f"slit_transmission array shape {slit_vals.shape} must match SPEC data shape {spec.shape}.")
+            
+            # Divide by slit transmission, handling division by zero
+            nonzero_mask = slit_vals != 0
+            spec = np.divide(spec, slit_vals, out=np.full_like(spec, np.nan), where=nonzero_mask)
+            spec_err = np.divide(spec_err, slit_vals, out=np.full_like(spec_err, np.nan), where=nonzero_mask)
+            
             slit_applied = True
-            slit_factor = interpolate_slit_transmission(frame, slit_vals)
-            if not np.isfinite(slit_factor) or slit_factor == 0:
-                raise ValueError("Invalid slit transmission factor.")
-            spec = spec / slit_factor
-            spec_err = spec_err / slit_factor
-            spec_header['SLITFAC'] = slit_factor
             spec_header['SLITCOR'] = True
         else:
             spec_header['SLITCOR'] = False
-            if 'SLITFAC' in spec_header:
-                del spec_header['SLITFAC']
 
         # Apply flux calibration factor and color correction
         color_cor_fac = frame.ext_hdr.get('COL_COR', 1.0)
@@ -240,68 +235,6 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         )
 
     return spec_dataset
-
-
-def interpolate_slit_transmission(frame, slit_tuple):
-    """
-    Determine a scalar slit throughput factor for a frame using the tuple
-    returned by spec.slit_transmission().
-    """
-    slit_map, slit_x, slit_y = slit_tuple
-    slit_map = np.asarray(slit_map, dtype=float)
-    slit_x = np.asarray(slit_x, dtype=float)
-    slit_y = np.asarray(slit_y, dtype=float)
-
-    if slit_map.ndim == 2:
-        # Collapse the per-wavelength transmission profiles into a single scalar per position.
-        # The spectrum being corrected is 1-D in wavelength, so slit corrections must reduce
-        # to one factor per spatial location.
-        per_position = np.nanmean(slit_map, axis=1)
-    elif slit_map.ndim == 1:
-        per_position = slit_map
-    else:
-        raise ValueError("slit_transmission map must be 1-D or 2-D.")
-
-    # Make sure that the collapsed slit transmissions align with the coordinate vectors
-    if per_position.shape[0] != slit_x.size or slit_x.size != slit_y.size:
-        raise ValueError("slit_map, slit_x, and slit_y lengths must match.")
-
-    try:
-        wv0_x = float(frame.ext_hdr['WV0_X'])
-        wv0_y = float(frame.ext_hdr['WV0_Y'])
-    except KeyError as exc:
-        raise ValueError("Frame must contain WV0_X and WV0_Y for slit correction.") from exc
-
-    unique_x = np.unique(slit_x)
-    unique_y = np.unique(slit_y)
-
-    # single point
-    if unique_x.size == 1 and unique_y.size == 1:
-        factor = per_position[0]
-    # 1D along Y
-    elif unique_x.size == 1:
-        order = np.argsort(slit_y)
-        factor = np.interp(wv0_y, slit_y[order], per_position[order],
-                           left=per_position[order[0]], right=per_position[order[-1]])
-    # 1D along X
-    elif unique_y.size == 1:
-        order = np.argsort(slit_x)
-        factor = np.interp(wv0_x, slit_x[order], per_position[order],
-                           left=per_position[order[0]], right=per_position[order[-1]])
-    # 2D
-    elif per_position.size >= 3:
-        coords = np.column_stack([slit_x, slit_y])
-        interpolant = LinearNDInterpolator(coords, per_position, fill_value=np.nan)
-        factor = float(interpolant(wv0_x, wv0_y))
-        if not np.isfinite(factor):
-            idx = np.argmin(np.hypot(slit_x - wv0_x, slit_y - wv0_y))
-            factor = per_position[idx]
-    # Not enough values for interpolation, fall back to nearest neighbor
-    else:
-        idx = np.argmin(np.hypot(slit_x - wv0_x, slit_y - wv0_y))
-        factor = per_position[idx]
-
-    return float(factor)
 
 
 def compute_spec_flux_ratio(host_dataset, companion_dataset, fluxcal_factor, 
