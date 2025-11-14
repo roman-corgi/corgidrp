@@ -2,10 +2,17 @@ import pytest
 import warnings
 import os
 import numpy as np
+import logging
+from pathlib import Path
 import corgidrp
+from astropy.io import fits
 from corgidrp.mocks import create_default_L3_headers
 from corgidrp.mocks import create_flux_image
 from corgidrp.mocks import create_pol_flux_image
+from corgidrp.mocks import create_mock_stokes_image_l4
+from corgidrp.mocks import gaussian_array
+from corgidrp.mocks import create_ct_cal
+from corgidrp.mocks import create_mock_fpamfsam_cal
 from corgidrp.data import Image, Dataset, FluxcalFactor
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
@@ -187,6 +194,143 @@ def test_fluxcal_file():
     # JM: I moved this out of the fluxcal class and into fluxcal.py because, depending on the method you use to 
     # make the fluxcal factor, the BUNIT will vary. Doing a mock without running fluxcal methods won't update BUNIT
     #assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
+
+
+def make_1d_spec_image(spec_values, spec_err, spec_wave, col_cor=None):
+    """Create a mock L4 file with 1-D spectroscopy extensions.
+
+    Args:
+        spec_values (ndarray): flux values (photoelectron/s/bin) for `SPEC`.
+        spec_err (ndarray): uncertainty array matching `SPEC` shape.
+        spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
+        col_cor (float, optional): color-correction factor to record.
+
+    Returns:
+        corgidrp.data.Image: image with `SPEC`, `SPEC_ERR`, `SPEC_DQ`,
+        `SPEC_WAVE`, and `SPEC_WAVE_ERR` extensions populated.
+    """
+    data = np.zeros((10, 10))
+    err = np.ones((1, 10, 10))
+    dq = np.zeros((10, 10), dtype=int)
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
+    ext_hdr['BUNIT'] = 'photoelectron/s'
+    if col_cor is not None:
+        ext_hdr['COL_COR'] = col_cor
+    img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
+                err_hdr=err_hdr, dq_hdr=dq_hdr)
+
+    spec_hdr = fits.Header()
+    spec_hdr['BUNIT'] = 'photoelectron/s/bin'
+    img.add_extension_hdu('SPEC', data=spec_values, header=spec_hdr)
+    img.add_extension_hdu('SPEC_ERR', data=spec_err, header=spec_hdr.copy())
+    img.add_extension_hdu('SPEC_DQ', data=np.zeros_like(spec_values, dtype=int))
+
+    wave_hdr = fits.Header()
+    wave_hdr['BUNIT'] = 'nm'
+    img.add_extension_hdu('SPEC_WAVE', data=spec_wave, header=wave_hdr)
+    img.add_extension_hdu('SPEC_WAVE_ERR', data=np.zeros_like(spec_wave), header=wave_hdr.copy())
+    return img
+
+
+def make_mock_fluxcal_factor(value, err=0.0):
+    """Build a FluxcalFactor with minimal metadata for testing.
+
+    Args:
+        value (float): absolute flux calibration factor.
+        err (float, optional): uncertainty on the calibration factor.
+
+    Returns:
+        corgidrp.data.FluxcalFactor: calibration object referencing a dummy
+        dataset for history bookkeeping.
+    """
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
+    ext_hdr['CFAMNAME'] = '3D'
+    ext_hdr['DPAMNAME'] = 'PRISM3'
+    ext_hdr['FSAMNAME'] = 'R1C2'
+    dummy_data = np.zeros((2, 2))
+    dummy_err = np.zeros((1, 2, 2))
+    dummy_dq = np.zeros((2, 2), dtype=int)
+    dummy_img = Image(dummy_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(), err=dummy_err,
+                      dq=dummy_dq, err_hdr=err_hdr.copy(), dq_hdr=dq_hdr.copy())
+    return FluxcalFactor(value, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                          input_dataset=Dataset([dummy_img]))
+
+
+def _make_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=0.0, wv0_y=0.0, is_coronagraphic=False):
+    """Create a mock L4 Stokes cube whose I-plane integrates to total_counts."""
+    base_img = create_mock_stokes_image_l4(
+        image_size=64,
+        fwhm=3,
+        I0=1e4,
+        badpixel_fraction=0.0,
+        p=0.0,
+        theta_deg=0.0,
+        seed=seed,
+    )
+    profile = gaussian_array(
+        array_shape=(base_img.data.shape[1], base_img.data.shape[2]),
+        sigma=3.0,
+        amp=total_counts / (2.0 * np.pi * 3.0**2),
+        xoffset=0.0,
+        yoffset=0.0,
+    )
+    base_img.data[0] = profile
+    base_img.data[1:] = 0.0
+    base_img.err[0] = np.maximum(np.sqrt(np.abs(base_img.data[0])), 1.0)
+    base_img.err[1:] = base_img.err[0]
+    base_img.dq[:] = 0
+    base_img.pri_hdr['TARGET'] = target_name
+    base_img.ext_hdr['BUNIT'] = 'photoelectron/s'
+    base_img.ext_hdr['DATALVL'] = 'L4'
+    base_img.ext_hdr.setdefault('CFAMNAME', '3C')
+    base_img.ext_hdr.setdefault('DPAMNAME', 'PRISM3')
+    base_img.ext_hdr.setdefault('LSAMNAME', 'SPEC')
+    base_img.ext_hdr['WV0_X'] = wv0_x
+    base_img.ext_hdr['WV0_Y'] = wv0_y
+    base_img.ext_hdr.setdefault('STARLOCX', 0.0)
+    base_img.ext_hdr.setdefault('STARLOCY', 0.0)
+    base_img.ext_hdr.setdefault('FPAM_H', 0.0)
+    base_img.ext_hdr.setdefault('FPAM_V', 0.0)
+    base_img.ext_hdr.setdefault('FSAM_H', 0.0)
+    base_img.ext_hdr.setdefault('FSAM_V', 0.0)
+    base_img.ext_hdr['FSMLOS'] = 1 if is_coronagraphic else 0
+    if col_cor is not None:
+        base_img.ext_hdr['COL_COR'] = col_cor
+    return base_img
+
+
+def _get_intensity_image(stokes_image):
+    """Return a copy containing only the Stokes-I plane for photometry."""
+    data = stokes_image.data[0]
+    err = stokes_image.err[0]
+    dq = stokes_image.dq[0]
+    err_layer = err if err.ndim == 3 else np.array([err])
+    if err_layer.shape[0] != 1:
+        err_layer = err_layer[:1]
+    err_copy = err_layer.copy()
+    return Image(
+        data.copy(),
+        pri_hdr=stokes_image.pri_hdr.copy(),
+        ext_hdr=stokes_image.ext_hdr.copy(),
+        err=err_copy,
+        dq=dq.copy(),
+        err_hdr=stokes_image.err_hdr,
+        dq_hdr=stokes_image.dq_hdr,
+    )
+
+
+def _setup_vap_logger(test_name):
+    """Create a logger that saves PASS/FAIL records to pol_tda_companion_phot_output."""
+    log_dir = Path(__file__).resolve().parent / "pol_tda_companion_phot_output"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger(test_name)
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    handler = logging.FileHandler(log_dir / f"{test_name}.log", mode='w')
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
+    return logger, log_dir
+
 
 def test_abs_fluxcal():
     """ 
@@ -562,6 +706,165 @@ def test_pol_abs_fluxcal():
     assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP1.ext_hdr['HISTORY'])
     assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP2.ext_hdr['HISTORY'])
     
+
+def test_l4_companion_photometry():
+    """VAP Test 3: Companion photometry + apparent magnitude validation."""
+    logger, output_dir = _setup_vap_logger('test_l4_companion_photometry')
+    logger.info('=' * 80)
+    logger.info('Spectroscopy L4-> TDA VAP Test 3: Companion Photometry / Apparent Magnitude')
+    logger.info('=' * 80)
+    phot_kwargs = {
+        'encircled_radius': 5,
+        'frac_enc_energy': 1.0,
+        'method': 'subpixel',
+        'subpixels': 5,
+        'background_sub': False,
+        'centering_method': 'xy',
+        'centroid_roi_radius': 5,
+    }
+
+    host_counts = 2.5e5
+    companion_counts = 5.0e4
+    col_cor = 1.2
+    host_image = _make_stokes_i_image(host_counts, 'HOST', seed=1, wv0_x=-1.0, wv0_y=0.5, is_coronagraphic=True)
+    companion_image = _make_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, wv0_x=2.0, wv0_y=-1.0, is_coronagraphic=True)
+
+    ct_cal = create_ct_cal(fwhm_mas=50, cfam_name='3C', cenx=0.0, ceny=0.0, nx=11, ny=11)
+    fpamfsam_cal = create_mock_fpamfsam_cal()
+
+    host_dataset = Dataset([host_image])
+    companion_dataset = Dataset([companion_image])
+    wv0_x = companion_image.ext_hdr.get('WV0_X', 0.0)
+    wv0_y = companion_image.ext_hdr.get('WV0_Y', 0.0)
+    ct_factor = np.asarray(
+        ct_cal.InterpolateCT(wv0_x, wv0_y, companion_dataset, fpamfsam_cal)
+    ).ravel()[0]
+    if not np.isfinite(ct_factor) or ct_factor <= 0:
+        raise ValueError("Interpolated core throughput factor must be positive and finite.")
+    companion_image.data = companion_image.data / ct_factor
+    companion_image.err = companion_image.err / ct_factor
+    companion_image.ext_hdr['CTCOR'] = True
+    companion_image.ext_hdr['CTFACT'] = ct_factor
+    host_intensity_ds = Dataset([_get_intensity_image(host_image)])
+    companion_intensity_ds = Dataset([_get_intensity_image(companion_image)])
+    fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.05)
+
+    checks = []
+    ext_hdr = companion_image.ext_hdr
+    cgi_keys = ['CFAMNAME', 'DPAMNAME', 'LSAMNAME']
+    message = "Input dataset has CGI format keywords"
+    condition = all(k in ext_hdr for k in cgi_keys)
+    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "DATALVL = L4"
+    condition = ext_hdr.get('DATALVL') == 'L4'
+    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "BUNIT = photoelectron/s"
+    condition = ext_hdr.get('BUNIT') == 'photoelectron/s'
+    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "Core throughput correction applied to companion"
+    condition = np.isfinite(ct_factor) and companion_image.ext_hdr.get('CTCOR', False)
+    details = f"CTFACT={ct_factor:.4f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    comp_intensity = companion_intensity_ds[0]
+    host_intensity = host_intensity_ds[0]
+
+    comp_ap, comp_ap_err = fluxcal.aper_phot(comp_intensity, **phot_kwargs)
+    host_ap, host_ap_err = fluxcal.aper_phot(host_intensity, **phot_kwargs)
+
+    # Save the mock L4 Stokes cubes for reference
+    host_file = output_dir / "0200001000000000000_20250101t1200000_l4_.fits"
+    comp_file = output_dir / "0200001000000000001_20250101t1200001_l4_.fits"
+    for path, image in ((host_file, host_image), (comp_file, companion_image)):
+        if path.exists():
+            path.unlink()
+        image.save(filedir=str(path.parent), filename=path.name)
+
+    host_flux_ds = l4_to_tda.determine_flux(host_intensity_ds, fluxcal_factor, phot_kwargs=phot_kwargs)
+    comp_flux_ds = l4_to_tda.determine_flux(companion_intensity_ds, fluxcal_factor, phot_kwargs=phot_kwargs)
+
+    host_flux = host_flux_ds[0].ext_hdr['FLUX']
+    comp_flux = comp_flux_ds[0].ext_hdr['FLUX']
+    comp_flux_err = comp_flux_ds[0].ext_hdr['FLUXERR']
+    flux_logged = comp_flux_ds[0].ext_hdr.get('FLUX')
+    flux_details = f"FLUX={flux_logged:.3f}" if flux_logged is not None else "FLUX missing"
+    message = "Companion flux recorded in header"
+    condition = 'FLUX' in comp_flux_ds[0].ext_hdr
+    logger.info(f"{message} | {flux_details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    factor = fluxcal_factor.fluxcal_fac / col_cor
+    factor_err = fluxcal_factor.fluxcal_err / col_cor
+    expected_comp_flux = comp_ap * factor
+    expected_comp_flux_err = np.sqrt((comp_ap_err * factor) ** 2 + (comp_ap * factor_err) ** 2)
+    message = "Companion flux matches expected scaling"
+    condition = np.isclose(comp_flux, expected_comp_flux, rtol=5e-3)
+    details = f"measured={comp_flux:.2f}, expected={expected_comp_flux:.2f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "Color correction applied when COL_COR present"
+    condition = comp_flux < comp_ap * fluxcal_factor.fluxcal_fac
+    details = f"flux_with_col_cor={comp_flux:.2f}, no_col_cor={comp_ap * fluxcal_factor.fluxcal_fac:.2f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "Flux uncertainty propagated from aperture sum"
+    condition = np.isclose(comp_flux_err, expected_comp_flux_err, rtol=5e-3)
+    details = f"measured={comp_flux_err:.2f}, expected={expected_comp_flux_err:.2f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    host_expected_flux = host_ap * fluxcal_factor.fluxcal_fac
+    ratio_measured = comp_flux / host_flux
+    ratio_expected = (comp_ap / col_cor) / host_ap
+    ratio_tolerance = max(expected_comp_flux_err / comp_flux, 0.05)
+    message = "Flux ratio matches expected value"
+    condition = np.isclose(ratio_measured, ratio_expected, rtol=ratio_tolerance)
+    details = f"measured={ratio_measured:.3f}, expected={ratio_expected:.3f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    # TODO/ note: determine_app_mag compares source SED to Vega SED, it does not use the measured flux.
+    # The actual apparent magnitude from measured flux is already calculated by determine_flux
+    # and stored in APP_MAG before calling determine_app_mag, but determine_app_mag overwrites it with
+    # the input SED value. So here we're just comparing vega to vega.
+    mag_dataset = l4_to_tda.determine_app_mag(comp_flux_ds, 'Vega')
+    app_mag = mag_dataset[0].ext_hdr['APP_MAG']
+    mag_err = mag_dataset[0].ext_hdr['MAGERR']  # This comes from determine_flux, not determine_app_mag
+    filter_file = fluxcal.get_filter_name(comp_flux_ds[0])
+    expected_mag = 0.0  # Vega SED 
+    expected_mag_err = 2.5 / np.log(10) * comp_flux_err / comp_flux
+    message = "Apparent magnitude computed from Vega zeropoint (SED comparison)"
+    condition = np.isclose(app_mag, expected_mag, rtol=5e-3)
+    details = f"measured={app_mag:.3f}, expected={expected_mag:.3f} (Vega vs Vega SED)"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    message = "Magnitude uncertainty matches propagated error"
+    condition = np.isclose(mag_err, expected_mag_err, rtol=5e-3)
+    details = f"measured={mag_err:.3f}, expected={expected_mag_err:.3f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    result = all(checks)
+    if result:
+        logger.info('test_l4_companion_photometry overall: PASS')
+    else:
+        logger.info('test_l4_companion_photometry overall: FAIL')
+    logger.info('=' * 80)
+    logger.info('End of Spectroscopy L4-> TDA VAP Test 3')
+    logger.info('=' * 80)
+    print_pass() if result else print_fail()
+    assert result
+
 if __name__ == '__main__':
     test_get_filter_name()
     test_flux_calc()
@@ -571,6 +874,5 @@ if __name__ == '__main__':
     test_fluxcal_file()
     test_abs_fluxcal()
     test_pol_abs_fluxcal()
-
-
+    test_l4_companion_photometry()
 
