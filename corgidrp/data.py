@@ -3195,7 +3195,16 @@ def get_bit_to_flag_map():
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
 
 def get_stokes_intensity_image(stokes_image):
-    """Return a copy containing only the Stokes-I plane for photometry."""
+    """Return a copy containing only the Stokes-I plane for photometry.
+
+    Args:
+        stokes_image (Image): L4 polarimetry `Image` whose first plane (Stokes I)
+            should be extracted for scalar photometry work.
+
+    Returns:
+        Image: New Image instance containing the Stokes-I data, a matching
+        error layer, and the corresponding DQ plane.
+    """
     data = stokes_image.data[0]
     err = stokes_image.err[0]
     dq = stokes_image.dq[0]
