@@ -196,41 +196,6 @@ def test_fluxcal_file():
     #assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
 
 
-def make_1d_spec_image(spec_values, spec_err, spec_wave, col_cor=None):
-    """Create a mock L4 file with 1-D spectroscopy extensions.
-
-    Args:
-        spec_values (ndarray): flux values (photoelectron/s/bin) for `SPEC`.
-        spec_err (ndarray): uncertainty array matching `SPEC` shape.
-        spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
-        col_cor (float, optional): color-correction factor to record.
-
-    Returns:
-        corgidrp.data.Image: image with `SPEC`, `SPEC_ERR`, `SPEC_DQ`,
-        `SPEC_WAVE`, and `SPEC_WAVE_ERR` extensions populated.
-    """
-    data = np.zeros((10, 10))
-    err = np.ones((1, 10, 10))
-    dq = np.zeros((10, 10), dtype=int)
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
-    ext_hdr['BUNIT'] = 'photoelectron/s'
-    if col_cor is not None:
-        ext_hdr['COL_COR'] = col_cor
-    img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
-                err_hdr=err_hdr, dq_hdr=dq_hdr)
-
-    spec_hdr = fits.Header()
-    spec_hdr['BUNIT'] = 'photoelectron/s/bin'
-    img.add_extension_hdu('SPEC', data=spec_values, header=spec_hdr)
-    img.add_extension_hdu('SPEC_ERR', data=spec_err, header=spec_hdr.copy())
-    img.add_extension_hdu('SPEC_DQ', data=np.zeros_like(spec_values, dtype=int))
-
-    wave_hdr = fits.Header()
-    wave_hdr['BUNIT'] = 'nm'
-    img.add_extension_hdu('SPEC_WAVE', data=spec_wave, header=wave_hdr)
-    img.add_extension_hdu('SPEC_WAVE_ERR', data=np.zeros_like(spec_wave), header=wave_hdr.copy())
-    return img
-
 
 def make_mock_fluxcal_factor(value, err=0.0):
     """Build a FluxcalFactor with minimal metadata for testing.
@@ -832,25 +797,21 @@ def test_l4_companion_photometry():
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
-    # TODO/ note: determine_app_mag compares source SED to Vega SED, it does not use the measured flux.
-    # The actual apparent magnitude from measured flux is already calculated by determine_flux
-    # and stored in APP_MAG before calling determine_app_mag, but determine_app_mag overwrites it with
-    # the input SED value. So here we're just comparing vega to vega.
-    mag_dataset = l4_to_tda.determine_app_mag(comp_flux_ds, 'Vega')
-    app_mag = mag_dataset[0].ext_hdr['APP_MAG']
-    mag_err = mag_dataset[0].ext_hdr['MAGERR']  # This comes from determine_flux, not determine_app_mag
     filter_file = fluxcal.get_filter_name(comp_flux_ds[0])
-    expected_mag = 0.0  # Vega SED 
-    expected_mag_err = 2.5 / np.log(10) * comp_flux_err / comp_flux
-    message = "Apparent magnitude computed from Vega zeropoint (SED comparison)"
-    condition = np.isclose(app_mag, expected_mag, rtol=5e-3)
-    details = f"measured={app_mag:.3f}, expected={expected_mag:.3f} (Vega vs Vega SED)"
+    companion_mag = fluxcal.calculate_vega_mag(comp_flux, filter_file)
+    companion_mag_err = 2.5 / np.log(10) * comp_flux_err / comp_flux
+    expected_mag = fluxcal.calculate_vega_mag(expected_comp_flux, filter_file)
+    expected_mag_err = 2.5 / np.log(10) * expected_comp_flux_err / expected_comp_flux
+
+    message = "Apparent magnitude derived from measured companion flux"
+    condition = np.isclose(companion_mag, expected_mag, rtol=5e-3)
+    details = f"measured={companion_mag:.3f}, expected={expected_mag:.3f}"
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
-    message = "Magnitude uncertainty matches propagated error"
-    condition = np.isclose(mag_err, expected_mag_err, rtol=5e-3)
-    details = f"measured={mag_err:.3f}, expected={expected_mag_err:.3f}"
+    message = "Magnitude uncertainty propagated from flux error"
+    condition = np.isclose(companion_mag_err, expected_mag_err, rtol=5e-3)
+    details = f"measured={companion_mag_err:.3f}, expected={expected_mag_err:.3f}"
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
