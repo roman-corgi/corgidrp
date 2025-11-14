@@ -23,7 +23,7 @@ import astropy.units as u
 from astropy.modeling.models import Gaussian2D
 import photutils.centroids as centr
 import corgidrp.data as data
-from corgidrp.data import Image, Dataset, DetectorParams, FpamFsamCal
+from corgidrp.data import Image, Dataset, DetectorParams, FpamFsamCal, FluxcalFactor
 import corgidrp.detector as detector
 import corgidrp.flat as flat
 from corgidrp.detector import imaging_area_geom, unpack_geom
@@ -172,6 +172,35 @@ def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
             out[key] = val
 
     return out
+
+
+def make_mock_fluxcal_factor(value, err=0.0, cfam_name='3D',
+                             dpam_name='PRISM3', fsam_name='R1C2'):
+    """Create a lightweight FluxcalFactor for unit testing.
+
+    Args:
+        value (float): Absolute flux calibration factor to store.
+        err (float, optional): Uncertainty on the calibration factor.
+        cfam_name (str, optional): CFAM filter name recorded in the header.
+        dpam_name (str, optional): DPAM name recorded in the header.
+        fsam_name (str, optional): FSAM name recorded in the header.
+
+    Returns:
+        FluxcalFactor: Calibration object referencing a dummy dataset so tests
+        can exercise downstream logic without building full calibration files.
+    """
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
+    ext_hdr['CFAMNAME'] = cfam_name
+    ext_hdr['DPAMNAME'] = dpam_name
+    ext_hdr['FSAMNAME'] = fsam_name
+    dummy_data = np.zeros((2, 2))
+    dummy_err = np.zeros((1, 2, 2))
+    dummy_dq = np.zeros((2, 2), dtype=int)
+    dummy_img = Image(dummy_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                      err=dummy_err, dq=dummy_dq, err_hdr=err_hdr.copy(),
+                      dq_hdr=dq_hdr.copy())
+    return FluxcalFactor(value, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                         input_dataset=Dataset([dummy_img]))
 
 
 def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS"):
@@ -1460,6 +1489,27 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     time_str = data.format_ftimeutc(base_time.isoformat())
     image.filename = f"cgi_{visitid}_{time_str}_l2b.fits"
     return image
+
+def make_mock_fluxcal_factor(value, err=0.0):
+    """Build a FluxcalFactor with minimal metadata for testing.
+    Args:
+        value (float): absolute flux calibration factor.
+        err (float, optional): uncertainty on the calibration factor.
+    Returns:
+        corgidrp.data.FluxcalFactor: calibration object referencing a dummy
+        dataset for history bookkeeping.
+    """
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
+    ext_hdr['CFAMNAME'] = '3D'
+    ext_hdr['DPAMNAME'] = 'PRISM3'
+    ext_hdr['FSAMNAME'] = 'R1C2'
+    dummy_data = np.zeros((2, 2))
+    dummy_err = np.zeros((1, 2, 2))
+    dummy_dq = np.zeros((2, 2), dtype=int)
+    dummy_img = Image(dummy_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(), err=dummy_err,
+                      dq=dummy_dq, err_hdr=err_hdr.copy(), dq_hdr=dq_hdr.copy())
+    return FluxcalFactor(value, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                          input_dataset=Dataset([dummy_img]))
 
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
                        distortion_coeffs_path=None, dither_pointings=0, bpix_map=None, sim_err_map=False):
