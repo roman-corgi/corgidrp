@@ -1,0 +1,24 @@
+{
+    "name" : "l2a_to_corethroughput_map",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name": "divide_by_exptime"
+        },
+        {
+            "name" : "create_ct_map",
+            "calibs": {
+                "FpamFsamCal": "AUTOMATIC",
+                "CoreThroughputCalibration" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

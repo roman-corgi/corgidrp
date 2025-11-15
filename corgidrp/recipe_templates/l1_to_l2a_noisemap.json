@@ -1,0 +1,55 @@
+{
+    "name" : "noisemap_generation",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "prescan_biassub",
+            "keywords" : {
+                "return_full_frame" : true,
+                "dataset_copy" : false
+            }
+        },
+        {
+            "name" : "detect_cosmic_rays",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC",
+                "KGain" : "AUTOMATIC, OPTIONAL"
+            },
+            "keywords" : {
+                "mode" : "full"
+            }
+        },
+        {
+            "name" : "correct_nonlinearity",
+            "calibs" : {
+                "NonLinearityCalibration" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "update_to_l2a"
+        },
+        {
+            "name" : "save"
+        },
+        {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "calibrate_darks",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

@@ -1,0 +1,29 @@
+{
+    "name": "l2b_to_l3",
+    "template": true, 
+    "drpconfig": {
+        "track_individual_errors": false
+    },
+    "inputs": [],
+    "outputdir": "",
+    "steps": [
+        {
+            "name": "create_wcs",
+            "calibs": {
+                "AstrometricCalibration": "AUTOMATIC"
+            }
+        },
+        {
+            "name": "divide_by_exptime"
+        },
+        {
+            "name": "crop"
+        },
+        {
+            "name": "update_to_l3"
+        }, 
+        {
+            "name": "save"
+        }
+    ]
+}

@@ -1,0 +1,69 @@
+{
+    "name" : "l2a_to_l2b",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "frame_select"
+        },
+        {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "em_gain_division"
+        },
+        {
+            "name" : "add_shot_noise_to_err",
+            "calibs" : {
+                "KGain" : "AUTOMATIC",
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "dark_subtraction",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "outputdir" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "cti_correction",
+            "calibs" : {
+                "TrapCalibration" : "AUTOMATIC,OPTIONAL"
+            }
+        },
+        {
+            "name" : "flat_division",
+            "calibs" : {
+                "FlatField" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "correct_bad_pixels",
+            "calibs" : {
+                "BadPixelMap" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "update_to_l2b"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

@@ -1,0 +1,39 @@
+{
+    "name": "l3_to_l4_noncoron",
+    "template": true, 
+    "drpconfig": {
+        "track_individual_errors": false
+    },
+    "inputs": [],
+    "outputdir": "",
+    "steps": [
+        {
+            "name": "replace_bad_pixels"
+        },
+        {
+            "name": "distortion_correction", 
+            "calibs": {
+                "AstrometricCalibration": "AUTOMATIC"
+            }
+        },
+        {
+            "name": "northup"
+        },
+        {
+            "name": "combine_subexposures",
+            "keywords" :{
+                "num_frames_scaling": false
+            }
+        },
+        {
+            "name": "update_to_l4",
+            "calibs": {
+                "CoreThroughputCalibration": "AUTOMATIC,OPTIONAL",
+                "FluxcalFactor": "AUTOMATIC"
+            }
+        },
+        {
+            "name": "save"
+        }
+    ]
+}

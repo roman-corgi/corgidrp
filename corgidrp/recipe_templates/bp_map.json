@@ -1,0 +1,21 @@
+{
+    "name": "bp_map",
+    "template": true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "create_bad_pixel_map",
+            "calibs": {
+                "Dark": "AUTOMATIC",
+                "FlatField" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

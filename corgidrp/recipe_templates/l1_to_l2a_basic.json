@@ -1,0 +1,40 @@
+{
+    "name" : "l1_to_l2a_basic",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "prescan_biassub",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
+            },
+            "keywords" : {
+                "return_full_frame" : false,
+                "dataset_copy" : false
+            }
+        },
+        {
+            "name" : "detect_cosmic_rays",
+            "calibs" : {
+				"DetectorParams" : "AUTOMATIC",
+                "KGain" : "AUTOMATIC, OPTIONAL"
+            }
+        },
+        {
+            "name" : "correct_nonlinearity",
+            "calibs" : {
+                "NonLinearityCalibration" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "update_to_l2a"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}
