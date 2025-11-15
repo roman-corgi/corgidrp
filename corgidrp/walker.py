@@ -155,8 +155,10 @@ def autogen_recipe(filelist, outputdir, template=None):
         first_frame = None
     else:
         # load the data to check what kind of recipe it is
-        dataset = data.Dataset(filelist)
-        first_frame = dataset[0]
+        dataset0 = data.Dataset([filelist[0]])
+        first_frame = dataset0[0]
+        # don't need the actual data, especially if it would take up a lot of RAM just to hold it in cache
+        dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
 
     # if user didn't pass in template
     if template is None:
@@ -303,13 +305,15 @@ def guess_template(dataset):
                 recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            # explicitly check if ISPC is True or 1 (in case this value is overloaded/ assigned other integer values)
             if image.ext_hdr['ISPC'] in (True, 1):
-                recipe_filename = "l1_to_l2b_pc_dark.json"
+                recipe_filename = ["l1_to_l2b_pc_dark_1.json", "l1_to_l2b_pc_dark_2.json"]# "l1_to_l2b_pc_dark.json"
+                chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
-                recipe_filename = "l1_to_l2a_noisemap.json"
+                recipe_filename = ["l1_to_l2a_noisemap_1.json", "l1_to_l2a_noisemap_2.json"]#"l1_to_l2a_noisemap.json"
+                chained = True
             else: # then len(unique_vals) is 1 and not PC: traditional darks
-                recipe_filename = "build_trad_dark_image.json"
+                recipe_filename = ["build_trad_dark_image_1.json", "build_trad_dark_image_2.json"] #"build_trad_dark_image.json"
+                chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
@@ -330,11 +334,14 @@ def guess_template(dataset):
         if image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
             if image.ext_hdr['ISPC'] in (True, 1):
-                recipe_filename = "l2a_to_l2b_pc_dark.json"
+                recipe_filename = ["l2a_to_l2b_pc_dark_1.json", "l2a_to_l2b_pc_dark_2.json"]#"l2a_to_l2b_pc_dark.json"
+                chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
-                recipe_filename = "l2a_to_l2a_noisemap.json"
+                recipe_filename = ["l2a_to_l2a_noisemap_1.json", "l2a_to_l2a_noisemap_2.json"] # "l2a_to_l2a_noisemap.json"
+                chained = True
             else: # then len(unique_vals) is 1 and not PC: traditional darks
-                recipe_filename = "l2a_build_trad_dark_image.json"
+                recipe_filename = ["l2a_build_trad_dark_image_1.json", "l2a_build_trad_dark_image_2.json"] #"l2a_build_trad_dark_image.json" 
+                chained = True
         else:
             # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
             is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
@@ -346,7 +353,8 @@ def guess_template(dataset):
                     recipe_filename = "l2a_to_l2b_spec.json"
             else:
                 if image.ext_hdr['ISPC'] in (True, 1):
-                    recipe_filename = "l2a_to_l2b_pc.json"
+                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
+                    chained = True
                 else:
                     recipe_filename = "l2a_to_l2b.json"  # science data and all else
     # L2b -> L3 data processing
@@ -454,16 +462,6 @@ def run_recipe(recipe, save_recipe_file=True):
         # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
         setattr(corgidrp, setting, recipe['drpconfig'][setting])
 
-    # read in data, if not doing bp map
-    if recipe["inputs"]:
-        filelist = recipe["inputs"]
-        curr_dataset = data.Dataset(filelist)
-        # write the recipe into the image extension header
-        for frame in curr_dataset:
-            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
-    else:
-        curr_dataset = []
-
     # save recipe before running recipe
     if save_recipe_file:
         recipe_filename = "{0}_{1}_recipe.json".format(recipe["name"], time.Time.now().isot)
@@ -472,75 +470,120 @@ def run_recipe(recipe, save_recipe_file=True):
         with open(recipe_filepath, "w") as json_file:
             json.dump(recipe, json_file, indent=4)
 
+    # determine if this is a RAM-heavy recipe which needs crop-stack processing
+    #sort_pupilimg_frames included here b/c it sorts through a large number of frame (>700) b/c 
+    # EM gain cal files (sorted here and excluded, processed by SSC) are included in the visits
+    ram_heavy_bool = (recipe['name'] == 'noisemap_generation_2' or 
+                recipe['name'] == 'build_trad_dark_2' or 
+                recipe['name'] == 'trad_dark_image_2' or
+                recipe['name'] == '_pc_2' or
+                recipe['name'] == 'pc_dark_2' or 
+                recipe['steps'][0]['name'] == 'sort_pupilimg_frames') 
+
+    ram_increment_bool = (recipe['name'] == 'noisemap_generation_1' or 
+                recipe['name'] == 'build_trad_dark_1' or 
+                recipe['name'] == 'trad_dark_image_1' or
+                recipe['name'] == '_pc_1' or
+                recipe['name'] == 'pc_dark_1')
+    # read in data, if not doing bp map
+    if not recipe["inputs"]:
+        curr_dataset = []
+        ram_heavy_bool = False
+        total_dset_length = 1 #for loop purposes later
+        ram_increment = 1
+    else:
+        filelist = recipe["inputs"]
+        total_dset_length = len(filelist)
+        if ram_increment_bool:
+        # how many frames to process at a time (before getting the RAM-heaviest function in the recipe) if RAM-heavy
+            ram_increment = 200 
+        else:
+            ram_increment = len(filelist)
+
     tot_steps = len(recipe["steps"])
     save_step = False
-
-    # execute each pipeline step
-    for i, step in enumerate(recipe["steps"]):
-        print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
-        if step["name"].lower() == "save":
-            # special save instruction
-            
-            # see if suffix is specified as a keyword
-            if "keywords" in step and "suffix" in step["keywords"]:
-                suffix =  step["keywords"]["suffix"]
+    
+    for n in range(0, total_dset_length, ram_increment):
+        if n == 1 and ram_heavy_bool:
+            break # exit for loop b/c all frames already accounted for 
+        if recipe["inputs"]:
+            if ram_heavy_bool:
+                if recipe['steps'][0]['name'] == 'sort_pupilimg_frames': 
+                    #in this case, the frames are L1 and don't yet have err and dq, so don't set those 
+                    # to None so that each frame is given the default starting err and dq for further pipeline processes
+                    curr_dataset = data.Dataset(filelist, no_data=True)
+                else:
+                    curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
             else:
-                suffix = ''
+                curr_dataset = data.Dataset(filelist[n:n+ram_increment])
+                # write the recipe into the image extension header
+            for frame in curr_dataset:
+                frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+        # execute each pipeline step
+        for i, step in enumerate(recipe["steps"]):
+            print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
+            if step["name"].lower() == "save":
+                # special save instruction
+                
+                # see if suffix is specified as a keyword
+                if "keywords" in step and "suffix" in step["keywords"]:
+                    suffix =  step["keywords"]["suffix"]
+                else:
+                    suffix = ''
+                
+                save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
+                save_step = True
 
-            save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
-            save_step = True
-
-        else:
-            step_func = all_steps[step["name"]]
-
-            # edge case if this step has been specified to be skipped
-            if "skip" in step and step["skip"]:
-                continue
-
-            other_args = ()
-            if "calibs" in step:
-                # if JIT calibration resolving is toggled, figure out the calibrations here
-                # by default, this is false
-                if (corgidrp.jit_calib_id and ("jit_calib_id" not in recipe['drpconfig'])) or (("jit_calib_id" in recipe['drpconfig']) and recipe['drpconfig']["jit_calib_id"]) :
-                    this_caldb = caldb.CalDB()
-                    # dataset may have turned into a single image. handle this case. 
-                    if isinstance(curr_dataset, data.Dataset):
-                        ref_image = curr_dataset[0]
-                        list_of_frames = curr_dataset
-                    else:
-                        ref_image = curr_dataset
-                        list_of_frames = [curr_dataset]
-                    _fill_in_calib_files(step, this_caldb, ref_image)
-
-                    # also update the recipe we used in the headers
-                    for frame in list_of_frames:
-                        frame.ext_hdr["RECIPE"] = json.dumps(recipe)
-
-
-                # load the calibration files in from disk
-                for calib in step["calibs"]:
-                    calib_dtype = data.datatypes[calib]
-                    if step["calibs"][calib] is not None:
-                        cal_file = calib_dtype(step["calibs"][calib])
-                    else:
-                        cal_file = None
-                    other_args += (cal_file,)
-
-
-            if "keywords" in step:
-                kwargs = step["keywords"]
             else:
-                kwargs = {}
+                step_func = all_steps[step["name"]]
 
-            # run the step!
-            curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
+                # edge case if this step has been specified to be skipped
+                if "skip" in step and step["skip"]:
+                    continue
 
-    output_filepaths = None
-    if save_step:
-        if isinstance(curr_dataset, data.Dataset):
-            output_filepaths = [frame.filepath for frame in curr_dataset]
-        else:
-            output_filepaths = [curr_dataset.filepath]
+                other_args = ()
+                if "calibs" in step:
+                    # if JIT calibration resolving is toggled, figure out the calibrations here
+                    # by default, this is false
+                    if (corgidrp.jit_calib_id and ("jit_calib_id" not in recipe['drpconfig'])) or (("jit_calib_id" in recipe['drpconfig']) and recipe['drpconfig']["jit_calib_id"]) :
+                        this_caldb = caldb.CalDB()
+                        # dataset may have turned into a single image. handle this case. 
+                        if isinstance(curr_dataset, data.Dataset):
+                            ref_image = curr_dataset[0]
+                            list_of_frames = curr_dataset
+                        else:
+                            ref_image = curr_dataset
+                            list_of_frames = [curr_dataset]
+                        _fill_in_calib_files(step, this_caldb, ref_image)
+
+                        # also update the recipe we used in the headers
+                        for frame in list_of_frames:
+                            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+
+
+                    # load the calibration files in from disk
+                    for calib in step["calibs"]:
+                        calib_dtype = data.datatypes[calib]
+                        if step["calibs"][calib] is not None:
+                            cal_file = calib_dtype(step["calibs"][calib])
+                        else:
+                            cal_file = None
+                        other_args += (cal_file,)
+
+
+                if "keywords" in step:
+                    kwargs = step["keywords"]
+                else:
+                    kwargs = {}
+
+                # run the step!
+                curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
+
+        output_filepaths = None
+        if save_step:
+            if isinstance(curr_dataset, data.Dataset):
+                output_filepaths = [frame.filepath for frame in curr_dataset]
+            else:
+                output_filepaths = [curr_dataset.filepath]
     
     return output_filepaths
-

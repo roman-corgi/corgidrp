@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import time
 from datetime import datetime
+from astropy.io import fits
 
 import corgidrp.data as data
 
@@ -409,6 +410,17 @@ def sort_pupilimg_frames(
     # free up memory
     del split_exptime, split_cmdgain, dataset_in
     dataset_sorted = data.Dataset(mean_frame_list + cal_frame_list)
+    # now load into memory the actual data
+    if dataset_sorted[0].data is None:
+        for frame in dataset_sorted.frames:
+            with fits.open(frame.filepath, 'readonly') as hdulist:
+                if frame.data is None:
+                    frame.data = hdulist[1].data
+                    # no err or dq to worry about here since these frames are L1
+        # get .all_data and .data restored and linked up
+        dataset_sorted.all_data = np.array([frame.data for frame in dataset_sorted.frames])
+        for i, frame in enumerate(dataset_sorted.frames):
+            frame.data = dataset_sorted.all_data[i]
     dataset_sorted.update_after_processing_step(history)
     # Return Dataset with mean frame and cal type
     return dataset_sorted
