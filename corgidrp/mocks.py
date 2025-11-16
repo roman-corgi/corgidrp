@@ -5169,19 +5169,19 @@ def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
 
     cube = np.stack([I, Q, U, V], axis=0)
 
-    pri_hdr = Header()
-    ext_hdr = Header()
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
+    ext_hdr=exthdr
     ext_hdr["STARLOCX"] = float(x0)
     ext_hdr["STARLOCY"] = float(y0)
 
     return Image(
         cube,
-        pri_hdr=pri_hdr,
+        pri_hdr=prihdr,
         ext_hdr=ext_hdr,
         err=np.zeros_like(cube),
         dq=np.zeros(cube.shape, dtype=np.uint16),
-        err_hdr=Header(),
-        dq_hdr=Header(),
+        err_hdr=errhdr,
+        dq_hdr=dqhdr,
     )
 
 def create_mock_polarization_l3_dataset(
