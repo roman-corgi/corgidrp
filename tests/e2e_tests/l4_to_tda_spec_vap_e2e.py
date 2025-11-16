@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 import argparse
 
-from corgidrp.data import Dataset, Image, FluxcalFactor
+from corgidrp.data import Dataset, Image
 from corgidrp.check import check_filename_convention, verify_header_keywords
-from corgidrp import l4_to_tda, spec
+from corgidrp import l4_to_tda, spec, mocks
 
 
 # ==============================================================================
@@ -28,33 +28,40 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     logger.info('=' * 80)
 
     # ------------------------------------------------------------------
-    # Find required data products
+    # Create required calibration products on the fly
     # ------------------------------------------------------------------
-    host_dir = os.path.join(e2edata_path, 'l3_to_l4_spec_noncoron_e2e')
-    psf_dir = os.path.join(e2edata_path, 'l3_to_l4_spec_psfsub_e2e')
+    # Build a lightweight mock FluxcalFactor instead of reading an abf_cal file.
+    fluxcal_factor = mocks.make_mock_fluxcal_factor(
+        value=1.0,
+        err=0.0,
+        cfam_name='3D',
+        dpam_name='PRISM3',
+        fsam_name='R1C2',
+    )
+    logger.info("Mock flux calibration factor created")
 
+    host_dir = os.path.join(e2edata_path, 'non-coron')
+    psf_dir = os.path.join(e2edata_path, 'coron')
     host_file = sorted(glob.glob(os.path.join(host_dir, '*_l4_.fits')))
     comp_file = sorted(glob.glob(os.path.join(psf_dir, '*_l4_.fits')))
-    fluxcal_files = sorted(glob.glob(os.path.join(host_dir, 'calibrations', '*_abf_cal.fits')))
 
     if not host_file:
         raise FileNotFoundError("No non-coronagraphic L4 files found for VAP test.")
     if not comp_file:
         raise FileNotFoundError("No PSF-subtracted L4 files found for VAP test.")
-    if not fluxcal_files:
-        raise FileNotFoundError("No FluxcalFactor file located for spectroscopy VAP test.")
 
     noncoron_path = host_file[-1]
     psf_path = comp_file[-1]
-    fluxcal_path = fluxcal_files[-1]
 
     noncoron_image = Image(noncoron_path)
     psf_image = Image(psf_path)
-    fluxcal_factor = FluxcalFactor(fluxcal_path)
 
     logger.info(f"Non-coronagraphic L4 cube: {os.path.basename(noncoron_path)}")
     logger.info(f"PSF-subtracted L4 cube: {os.path.basename(psf_path)}")
-    logger.info(f"Flux calibration file: {os.path.basename(fluxcal_path)}")
+
+    # Build mock core-throughput and FPAM/FSAM calibrations
+    ct_cal = mocks.create_ct_cal(fwhm_mas=50.0, cfam_name='3D', cenx=0.0, ceny=0.0, nx=11, ny=11)
+    fpamfsam_cal = mocks.create_mock_fpamfsam_cal()
 
     # ------------------------------------------------------------------
     # Test 1: L4 Spectroscopy Input Data Validation
@@ -157,7 +164,25 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         col_cor_val = 1.0
     else:
         logger.info(f"COL_COR found in header: {col_cor_val}")
-    
+
+    # Step: Apply core-throughput correction to PSF-subtracted L4 cube
+    try:
+        ct_factor = l4_to_tda.apply_core_throughput_correction(
+            psf_image, ct_cal, fpamfsam_cal, logr=False
+        )
+        spec_hdr = psf_image.hdu_list['SPEC'].header
+        ctcor_flag = spec_hdr.get('CTCOR', False)
+        ok = ctcor_flag and np.isfinite(ct_factor) and (ct_factor > 0)
+        message = (
+            f"Core throughput correction applied to PSF-subtracted L4 cube. "
+            f"CTCOR={ctcor_flag}, CTFAC={ct_factor}"
+        )
+        logger.info(f"{message}. {'PASS' if ok else 'FAIL'}")
+    except Exception as exc:
+        logger.error(
+            f"Core throughput correction failed for PSF-subtracted L4 cube: {exc}. FAIL"
+        )
+
     # Step: Build a slit-transmission map (map, x, y)
     slit_map = np.ones((1, noncoron_wave.size), dtype=float)
     slit_x = np.array([noncoron_image.ext_hdr.get('WV0_X', 0.0)])
@@ -165,23 +190,22 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     slit_transmission = (slit_map, slit_x, slit_y)
     logger.info(f"Slit transmission map sample (first 5 bins): {slit_map[0][:5]}")
 
-    # Step: Check SPEC BUNIT and (if appropriate) flux-calibrate host and companion spectra
+    # Step: Check SPEC BUNIT and flux-calibrate host and companion spectra
     spec_bunit_input = noncoron_image.hdu_list['SPEC'].header.get('BUNIT')
-    logger.info(
-        f"Non-coronagraphic SPEC BUNIT before flux calibration: {spec_bunit_input}"
-    )
 
     noncoron_calibrated_spec = None
     noncoron_calibrated_err = None
     psf_calibrated_spec = None
 
-    if spec_bunit_input != "photoelectron/s":
+    if spec_bunit_input != "photoelectron/s/bin":
         logger.error(
-            "Non-coronagraphic SPEC BUNIT is not 'photoelectron/s'; "
-            "skipping flux-calibration step in Test 2. FAIL"
+            f"Non-coronagraphic SPEC BUNIT before flux calibration: {spec_bunit_input}. FAIL."
         )
     else:
         # Flux-calibrate host spectrum with convert_spec_to_flux
+        logger.info(
+            f"Non-coronagraphic SPEC BUNIT before flux calibration: {spec_bunit_input}. PASS."
+        )
         noncoron_dataset = Dataset([noncoron_image])
         calibrated_noncoron = l4_to_tda.convert_spec_to_flux(
             noncoron_dataset, fluxcal_factor, slit_transmission=slit_transmission
@@ -208,10 +232,25 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
         # Flux-calibrate companion spectrum with convert_spec_to_flux
         comp_dataset = Dataset([psf_image])
-        calibrated_comp = l4_to_tda.convert_spec_to_flux(
-            comp_dataset, fluxcal_factor, slit_transmission=slit_transmission
-        )
-        psf_calibrated_spec = calibrated_comp[0].hdu_list['SPEC'].data
+        comp_ctcor = psf_image.hdu_list['SPEC'].header.get('CTCOR', False)
+
+        if not comp_ctcor:
+            logger.error(
+                "PSF-subtracted SPEC header missing CTCOR=True after attempted "
+                "core throughput correction; skipping convert_spec_to_flux for "
+                "companion spectrum. FAIL"
+            )
+            calibrated_comp = None
+            psf_calibrated_spec = None
+        else:
+            logger.info(
+                "PSF-subtracted SPEC header has CTCOR=True; proceeding with "
+                "convert_spec_to_flux for companion spectrum. PASS"
+            )
+            calibrated_comp = l4_to_tda.convert_spec_to_flux(
+                comp_dataset, fluxcal_factor, slit_transmission=slit_transmission
+            )
+            psf_calibrated_spec = calibrated_comp[0].hdu_list['SPEC'].data
 
     # Step: Log COL_COR usage and confirm non-coronagraphic wavelengths are monotonic
     # Check the actual COL_COR value used (from header or default).
@@ -471,7 +510,7 @@ def test_l4_to_tda_spec_vap(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir = thisfile_dir
+    e2edata_dir = "/Users/jmilton/Documents/CGI/E2E_Test_Data2/SPEC_sims"
 
     ap = argparse.ArgumentParser(description="run the spectroscopy L4->TDA VAP test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
