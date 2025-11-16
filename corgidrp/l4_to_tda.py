@@ -146,7 +146,7 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
     """
     Flux calibrate 1-D spectroscopy spectra stored in the L4 SPEC extension.
     The function applies COL_COR when present, propagates calibration
-    uncertainties, and records whether slit correction was applied. Requires
+    uncertainties, and applies slit transmission correction if requested. Requires
     the input dataset to have already been core-throughput corrected
     (ie SPEC header contains CTCOR=True).
 
@@ -208,18 +208,18 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s":
             raise ValueError("SPEC extension must have BUNIT 'photoelectron/s' before flux calibration.")
 
-        # Apply slit transmission correction if requested
+        # Apply slit transmission correction
         slit_vals = slit_per_frame[idx]
         slit_applied = False
         slit_curve = None
         if slit_vals is not None:
             slit_applied = True
-            slit_curve = np.asarray(interpolate_slit_transmission(frame, slit_vals), dtype=float)
+            slit_curve = np.asarray(select_slit_transmission_curve(frame, slit_vals), dtype=float)
             if slit_curve.shape != spec.shape:
                 raise ValueError(
                     f"slit_transmission curve shape {slit_curve.shape} must match SPEC shape {spec.shape}."
                 )
-            # Divide by wavelength-dependent slit transmission, guarding zeros/non-finite
+            # Divide by wavelength-dependent slit transmission, accounting for zeros/non-finite
             valid = np.isfinite(slit_curve) & (slit_curve != 0)
             spec = np.divide(spec, slit_curve, out=np.full_like(spec, np.nan), where=valid)
             spec_err = np.divide(spec_err, slit_curve, out=np.full_like(spec_err, np.nan), where=valid)
@@ -307,10 +307,10 @@ def apply_core_throughput_correction(frame,
     return ct_value
 
 
-def interpolate_slit_transmission(frame, slit_tuple):
+def select_slit_transmission_curve(frame, slit_tuple):
     """
-    Convert the slit-transmission tuple returned by spec.slit_transmission
-    into a wavelength-dependent throughput curve for the frame.
+    Select the slit-transmission curve for the frame from the tuple returned by
+    spec.slit_transmission.
 
     Args:
         frame (corgidrp.data.Image): L4 spectroscopy frame whose WV0_X/WV0_Y
