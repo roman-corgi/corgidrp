@@ -287,6 +287,24 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         logger.info(f'Host rolls: {[img.pri_hdr.get("ROLL") for img in host_images]}')
         logger.info(f'Companion rolls: {[img.pri_hdr.get("ROLL") for img in comp_images]}')
 
+        # If any PSF-subtracted spectra are missing CTCOR=True cannot run compute_spec_flux_ratio
+        comp_ctcor_flags = [
+            img.hdu_list['SPEC'].header.get('CTCOR', False) for img in comp_images
+        ]
+        if not all(comp_ctcor_flags):
+            logger.error(
+                "One or more PSF-subtracted L4 spectra are missing CTCOR=True after "
+                "core-throughput correction attempts; skipping compute_spec_flux_ratio "
+                "in Test 3. FAIL"
+            )
+            flux_ratio = np.array([])
+            ratio_err = np.array([])
+            wavelength = np.array([])
+            logger.info('=' * 80)
+            logger.info('Spectroscopy L4->TDA VAP Test Completed')
+            logger.info('=' * 80)
+            return
+
         # Check that all host and companion cubes contain a SPEC_WAVE (wavelength) extension.
         host_wave_ext = all('SPEC_WAVE' in img.hdu_list for img in host_images)
         comp_wave_ext = all('SPEC_WAVE' in img.hdu_list for img in comp_images)
@@ -297,9 +315,9 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
             f"All companion cubes contain SPEC_WAVE extension: {'PASS' if comp_wave_ext else 'FAIL'}"
         )
 
-        # Combine all host and all companion spectra (raw units) using inverse-variance weighting.
-        # This produces a single 1-D host spectrum and a single 1-D companion spectrum
-        # that can be passed into compute_spec_flux_ratio for flux calibration and ratio.
+        # Combine all host and all companion images using inverse-variance weighting.
+        # This produces a single 1-D host image and a single 1-D companion image
+        # that can be passed into compute_spec_flux_ratio.
         host_ds = Dataset(host_images)
         comp_ds = Dataset(comp_images)
 
