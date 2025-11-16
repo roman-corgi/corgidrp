@@ -68,9 +68,9 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     # ------------------------------------------------------------------
     # Test 1: L4 Spectroscopy Input Data Validation
     # ------------------------------------------------------------------
-    logger.info("-" * 80)
+    logger.info("=" * 80)
     logger.info('Test 1: L4 Spectroscopy Input Data Validation')
-    logger.info("-" * 80)
+    logger.info("=" * 80)
 
     # Step: Check CGI filename, headers, and wavelength grids for all L4 images
     image_groups = [
@@ -111,9 +111,9 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     # ------------------------------------------------------------------
     # Test 2: Unocculted Star in Astrophysical Units
     # ------------------------------------------------------------------
-    logger.info("-" * 80)
+    logger.info("=" * 80)
     logger.info('Test 2: Unocculted Star in Astrophysical Units')
-    logger.info("-" * 80)
+    logger.info("=" * 80)
 
     # Step: Build a slit-transmission map (map, x, y) using the first non-coronagraphic wavelength grid
     reference_wave = noncoron_images[0].hdu_list['SPEC_WAVE'].data
@@ -195,13 +195,13 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
                     # If CT fails, cannot flux-calibrate the companion spectrum
                     continue
 
-                # CT_THRU grid alignment
+                # CT_THRU grid shape
                 if 'CT_THRU' in img.hdu_list:
                     ct_grid = img.hdu_list['CT_THRU'].data
                     image_shape = img.data.shape
                     if ct_grid.ndim >= 2 and ct_grid.shape[-2:] == image_shape[-2:]:
                         logger.info(
-                            "    Core throughput grid matches PSF-subtracted image WCS. PASS"
+                            "    Core throughput grid shape matches PSF-subtracted image shape. PASS"
                         )
                     else:
                         logger.error(
@@ -210,7 +210,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
                         )
                 else:
                     logger.error(
-                        "    PSF-subtracted L4 cube missing CT_THRU extension; "
+                        "    PSF-subtracted L4 image missing CT_THRU extension; "
                         "cannot validate throughput grid alignment. FAIL"
                     )
 
@@ -259,9 +259,9 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     # ------------------------------------------------------------------
     # Test 3: Companion-to-Host Flux-Ratio (PSF-subtracted)
     # ------------------------------------------------------------------
-    logger.info("-" * 80)
+    logger.info("=" * 80)
     logger.info('Test 3: Companion-to-Host Flux-Ratio (PSF-subtracted)')
-    logger.info("-" * 80)
+    logger.info("=" * 80)
 
     # The following steps were already completed in previous tests:
     # - Extract 1-D spectra from PSF-subtracted and non-PSF-subtracted cubes (Test 1)
@@ -287,24 +287,6 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         logger.info(f'Host rolls: {[img.pri_hdr.get("ROLL") for img in host_images]}')
         logger.info(f'Companion rolls: {[img.pri_hdr.get("ROLL") for img in comp_images]}')
 
-        # If any PSF-subtracted spectra are missing CTCOR=True cannot run compute_spec_flux_ratio
-        comp_ctcor_flags = [
-            img.hdu_list['SPEC'].header.get('CTCOR', False) for img in comp_images
-        ]
-        if not all(comp_ctcor_flags):
-            logger.error(
-                "One or more PSF-subtracted L4 spectra are missing CTCOR=True after "
-                "core-throughput correction attempts; skipping compute_spec_flux_ratio "
-                "in Test 3. FAIL"
-            )
-            flux_ratio = np.array([])
-            ratio_err = np.array([])
-            wavelength = np.array([])
-            logger.info('=' * 80)
-            logger.info('Spectroscopy L4->TDA VAP Test Completed')
-            logger.info('=' * 80)
-            return
-
         # Check that all host and companion cubes contain a SPEC_WAVE (wavelength) extension.
         host_wave_ext = all('SPEC_WAVE' in img.hdu_list for img in host_images)
         comp_wave_ext = all('SPEC_WAVE' in img.hdu_list for img in comp_images)
@@ -323,9 +305,6 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
         host_spec, host_wave, host_err, host_rolls = l4_to_tda.combine_spectra(host_ds)
         comp_spec, comp_wave, comp_err, comp_rolls = l4_to_tda.combine_spectra(comp_ds)
-
-        logger.info(f'Host rolls contributing to combined spectrum: {host_rolls}')
-        logger.info(f'Companion rolls contributing to combined spectrum: {comp_rolls}')
 
         # Check monotonicity and length of the combined wavelength grids.
         host_mono = np.all(np.diff(host_wave) >= 0) or np.all(np.diff(host_wave) <= 0)
@@ -374,6 +353,42 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         comp_comb.hdu_list['SPEC'].data = comp_spec
         comp_comb.hdu_list['SPEC_ERR'].data = comp_err
         comp_comb.hdu_list['SPEC_WAVE'].data = comp_wave
+
+        # Apply core throughput correction to the combined companion spectrum if coronagraphic
+        is_coron_comb = comp_comb.ext_hdr.get('FSMLOS', 0) == 1
+        if is_coron_comb:
+            try:
+                ct_factor_comb = l4_to_tda.apply_core_throughput_correction(
+                    comp_comb, ct_cal, fpamfsam_cal, logr=False
+                )
+                spec_hdr_comb = comp_comb.hdu_list['SPEC'].header
+                ctcor_flag_comb = spec_hdr_comb.get('CTCOR', False)
+                ok_comb = ctcor_flag_comb and np.isfinite(ct_factor_comb) and (ct_factor_comb > 0)
+                logger.info(
+                    "Core throughput correction applied to combined companion spectrum. "
+                    f"CTCOR={ctcor_flag_comb}, CTFAC={ct_factor_comb:.4f}. "
+                    f"{'PASS' if ok_comb else 'FAIL'}"
+                )
+                if not ok_comb:
+                    # Do not attempt flux ratio if CT correction looks invalid
+                    flux_ratio = np.array([])
+                    ratio_err = np.array([])
+                    wavelength = np.array([])
+                    logger.info('=' * 80)
+                    logger.info('Spectroscopy L4->TDA VAP Test Completed')
+                    logger.info('=' * 80)
+                    return
+            except Exception as exc:
+                logger.error(
+                    f"Core throughput correction failed for combined companion spectrum: {exc}. FAIL"
+                )
+                flux_ratio = np.array([])
+                ratio_err = np.array([])
+                wavelength = np.array([])
+                logger.info('=' * 80)
+                logger.info('Spectroscopy L4->TDA VAP Test Completed')
+                logger.info('=' * 80)
+                return
 
         # Before computing the flux ratio, confirm that the combined host spectrum
         # is in correct units 
