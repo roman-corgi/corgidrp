@@ -72,68 +72,40 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     logger.info('Test 1: L4 Spectroscopy Input Data Validation')
     logger.info("-" * 80)
 
-    # Step: Check CGI filename and L4 data-level keywords for non-coronagraphic L4
-    for idx, img in enumerate(noncoron_images, start=1):
-        label = f"Non-coronagraphic L4 image {idx}"
-        check_filename_convention(img.filename, 'cgi_*_l4_.fits', label, logger, data_level='l4_')
-        verify_header_keywords(img.ext_hdr, {
-            'DATALVL': 'L4',
-            'DPAMNAME': 'PRISM3',
-            'BUNIT': 'photoelectron/s'
-        }, label, logger)
-        verify_header_keywords(img.pri_hdr, {'ROLL'}, label, logger)
-        verify_header_keywords(img.ext_hdr, {
-            'WAVLEN0', 'WV0_X', 'WV0_XERR', 'WV0_Y', 'WV0_YERR', 'WV0_DIMX', 'WV0_DIMY'
-        }, label, logger)
+    # Step: Check CGI filename, headers, and wavelength grids for all L4 images
+    image_groups = [
+        ("Non-coronagraphic L4 image", noncoron_images),
+        ("PSF-subtracted L4 image", psf_images),
+    ]
 
-        # Step: Extract spectra and wavelength grids; check length, NaNs, monotonicity
-        noncoron_spec = img.hdu_list['SPEC'].data.copy()
-        noncoron_wave = img.hdu_list['SPEC_WAVE'].data.copy()
+    for group_label, images in image_groups:
+        for idx, img in enumerate(images, start=1):
+            base_label = f"{group_label} {idx}"
 
-        logger.info(f"Non-coronagraphic image {idx} wavelength grid (nm): {noncoron_wave}")
+            # Header for this image
+            logger.info("-" * 80)
+            logger.info(base_label)
+            logger.info("-" * 80)
 
-        # Confirm wavelengths match and are monotonic
-        if np.all(np.diff(noncoron_wave) >= 0) or np.all(np.diff(noncoron_wave) <= 0):
-            logger.info(f'Non-coronagraphic L4 image {idx} wavelength grid is monotonic. PASS')
-        else:
-            logger.error(f'Non-coronagraphic L4 image {idx} wavelength grid is not monotonic. FAIL')
+            # Filename + basic header checks
+            check_filename_convention(img.filename, 'cgi_*_l4_.fits', f"    ", logger, data_level='l4_')
+            verify_header_keywords(img.ext_hdr, {'DATALVL': 'L4', 'DPAMNAME': 'PRISM3', 'BUNIT': 'photoelectron/s'}, f"    ", logger)
+            verify_header_keywords(img.pri_hdr, {'ROLL'}, f"    ", logger)
+            verify_header_keywords(img.ext_hdr, {'WAVLEN0', 'WV0_X', 'WV0_XERR', 'WV0_Y', 'WV0_YERR', 'WV0_DIMX', 'WV0_DIMY'}, f"    ", logger)
 
-        if np.isnan(noncoron_wave).any():
-            logger.error(f'Detected NaNs in non-coronagraphic image {idx} wavelength grid. FAIL')
-        else:
-            logger.info(f'No NaNs detected in non-coronagraphic image {idx} wavelength grid. PASS')
+            # Wavelength grid checks (monotonicity + NaNs)
+            wave = img.hdu_list['SPEC_WAVE'].data.copy()
+            logger.info(f"    wavelength grid (nm): {wave}")
 
-    # Step: Check CGI filename and L4 data-level keywords for PSF-subtracted L4
-    for idx, img in enumerate(psf_images, start=1):
-        label = f"PSF-subtracted L4 image {idx}"
-        check_filename_convention(img.filename, 'cgi_*_l4_.fits', label, logger, data_level='l4_')
-        verify_header_keywords(img.ext_hdr, {
-            'DATALVL': 'L4',
-            'DPAMNAME': 'PRISM3',
-            'BUNIT': 'photoelectron/s'
-        }, label, logger)
-        verify_header_keywords(img.pri_hdr, {'ROLL'}, label, logger)
-        verify_header_keywords(img.ext_hdr, {
-            'WAVLEN0', 'WV0_X', 'WV0_XERR', 'WV0_Y', 'WV0_YERR', 'WV0_DIMX', 'WV0_DIMY'
-        }, label, logger)
+            if np.all(np.diff(wave) >= 0) or np.all(np.diff(wave) <= 0):
+                logger.info("    wavelength grid is monotonic: PASS")
+            else:
+                logger.error("    wavelength grid is monotonic: FAIL")
 
-        # Step: Extract spectra and wavelength grids; check length, NaNs, monotonicity
-        psf_spec = img.hdu_list['SPEC'].data.copy()
-        psf_wave = img.hdu_list['SPEC_WAVE'].data.copy()
-
-        logger.info(f"PSF-subtracted L4 image {idx} wavelength grid (nm): {psf_wave}")
-
-        # Confirm wavelengths are monotonic
-
-        if np.all(np.diff(psf_wave) >= 0) or np.all(np.diff(psf_wave) <= 0):
-            logger.info(f'PSF-subtracted L4 image {idx} wavelength grid is monotonic. PASS')
-        else:
-            logger.error(f'PSF-subtracted L4 image {idx} wavelength grid is not monotonic. FAIL')
-
-        if np.isnan(psf_wave).any():
-            logger.error(f'Detected NaNs in PSF-subtracted L4 image {idx} wavelength grid. FAIL')
-        else:
-            logger.info(f'No NaNs detected in PSF-subtracted L4 image {idx} wavelength grid. PASS')
+            if np.isnan(wave).any():
+                logger.error("    No NaNs in wavelength grid: FAIL")
+            else:
+                logger.info("    No NaNs in wavelength grid: PASS")
 
 
     # ------------------------------------------------------------------
@@ -143,156 +115,142 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     logger.info('Test 2: Unocculted Star in Astrophysical Units')
     logger.info("-" * 80)
 
-    # Step: Verify spectroscopy headers and required extensions
-    required_exts = ['SPEC', 'SPEC_ERR', 'SPEC_WAVE']
-
-    for idx, img in enumerate(noncoron_images, start=1):
-
-        label = f"Non-coronagraphic L4 image {idx}"
-        present = [ext for ext in required_exts if ext in img.hdu_list]
-        missing = [ext for ext in required_exts if ext not in img.hdu_list]
-
-        if missing:
-            logger.error(
-                f"{label}: Extensions present {present}, missing {missing}. FAIL"
-            )
-        else:
-            logger.info(
-                f"{label}: Extensions {present} present. PASS"
-            )
-
-        # Step: Check if COL_COR exists; if not, compute it using determine_color_cor
-        col_cor_val = img.ext_hdr.get('COL_COR', None)
-        if col_cor_val is None:
-            # TODO: This requires reference and source star info
-            logger.warning('COL_COR not found in header. Using default value of 1.0.')
-            col_cor_val = 1.0
-        else:
-            logger.info(f"COL_COR found in header: {col_cor_val}")
-
-    # Step: Apply core-throughput correction to PSF-subtracted L4 cube
-    for idx, img in enumerate(psf_images, start=1):
-        label = f"PSF-subtracted L4 image {idx}"
-        present = [ext for ext in required_exts if ext in img.hdu_list]
-        missing = [ext for ext in required_exts if ext not in img.hdu_list]
-
-        if missing:
-            logger.error(
-                f"{label}: Extensions present {present}, missing {missing}. FAIL"
-            )
-        else:
-            logger.info(
-                f"{label}: Extensions {present} present. PASS"
-            )
-        # Step: Check if COL_COR exists; if not, compute it using determine_color_cor
-        col_cor_val = img.ext_hdr.get('COL_COR', None)
-        if col_cor_val is None:
-            # TODO: This requires reference and source star info
-            logger.warning(f'{label}: COL_COR not found in header. Using default value of 1.0.')
-            col_cor_val = 1.0
-        else:
-            logger.info(f"{label}: COL_COR found in header: {col_cor_val}")
-
-        try:
-            ct_factor = l4_to_tda.apply_core_throughput_correction(
-                img, ct_cal, fpamfsam_cal, logr=False
-            )
-            spec_hdr = img.hdu_list['SPEC'].header
-            ctcor_flag = spec_hdr.get('CTCOR', False)
-            ok = ctcor_flag and np.isfinite(ct_factor) and (ct_factor > 0)
-            message = (
-                f"{label}: Core throughput correction applied. "
-                f"CTCOR={ctcor_flag}, CTFAC={ct_factor}"
-            )
-            logger.info(f"{message}. {'PASS' if ok else 'FAIL'}")
-        except Exception as exc:
-            logger.error(
-                f"{label}: Core throughput correction failed: {exc}. FAIL"
-            )
-    
-        # Step: Validate core throughput grid matches image WCS extent
-        if 'CT_THRU' in img.hdu_list:
-            ct_grid = img.hdu_list['CT_THRU'].data
-            image_shape = img.data.shape
-            if ct_grid.ndim >= 2 and ct_grid.shape[-2:] == image_shape[-2:]:
-                logger.info(f'{label}: Core throughput grid matches PSF-subtracted image WCS. PASS')
-            else:
-                logger.error(f'{label}: Core throughput grid shape {ct_grid.shape} does not match image shape {image_shape}. FAIL')
-        else:
-            logger.error(f'{label}: PSF-subtracted L4 cube missing CT_THRU extension; cannot validate throughput grid alignment. FAIL')
-
-
-    # Step: Build a slit-transmission map (map, x, y)
-    slit_map = np.ones((1, noncoron_wave.size), dtype=float)
+    # Step: Build a slit-transmission map (map, x, y) using the first non-coronagraphic wavelength grid
+    reference_wave = noncoron_images[0].hdu_list['SPEC_WAVE'].data
+    slit_map = np.ones((1, reference_wave.size), dtype=float)
     slit_x = np.array([noncoron_images[0].ext_hdr.get('WV0_X', 0.0)])
     slit_y = np.array([noncoron_images[0].ext_hdr.get('WV0_Y', 0.0)])
     slit_transmission = (slit_map, slit_x, slit_y)
     logger.info(f"Slit transmission map sample (first 5 bins): {slit_map[0][:5]}")
 
-    # Step: Check SPEC BUNIT and flux-calibrate host and companion spectra
-    for idx, img in enumerate(noncoron_images, start=1):
-        label = f"Non-coronagraphic L4 image {idx}"
-        spec_bunit_input = img.hdu_list['SPEC'].header.get('BUNIT')
-        if spec_bunit_input != "photoelectron/s/bin":
-            logger.error(
-                f"{label}: SPEC BUNIT before flux calibration: {spec_bunit_input}. FAIL."
-            )
-        else:
-            logger.info(
-                f"{label}: SPEC BUNIT before flux calibration: {spec_bunit_input}. PASS."
-            )
+    # Step: Verify spectroscopy headers, extensions, COL_COR, and core throughput
+    required_exts = ['SPEC', 'SPEC_ERR', 'SPEC_WAVE']
+    image_groups = [
+        ("Non-coronagraphic L4 image", noncoron_images, False),
+        ("PSF-subtracted L4 image", psf_images, True),
+    ]
 
-            noncoron_dataset = Dataset([img])
-            calibrated_noncoron = l4_to_tda.convert_spec_to_flux(
-                noncoron_dataset, fluxcal_factor, slit_transmission=slit_transmission
-            )
-            noncoron_calibrated_spec = calibrated_noncoron[0].hdu_list['SPEC'].data
-            noncoron_calibrated_err = calibrated_noncoron[0].hdu_list['SPEC_ERR'].data
+    for group_label, images, is_coron in image_groups:
+        for idx, img in enumerate(images, start=1):
+            base_label = f"{group_label} {idx}"
 
-            bunit = calibrated_noncoron[0].hdu_list['SPEC'].header.get('BUNIT')
+            logger.info("-" * 80)
+            logger.info(base_label)
+            logger.info("-" * 80)
+
+            # Extensions
+            present = [ext for ext in required_exts if ext in img.hdu_list]
+            missing = [ext for ext in required_exts if ext not in img.hdu_list]
+
+            if missing:
+                logger.error(
+                    f"    Extensions present {present}, missing {missing}. FAIL"
+                )
+            else:
+                logger.info(
+                    f"    Extensions {present} present. PASS"
+                )
+
+            # COL_COR
+            col_cor_val = img.ext_hdr.get('COL_COR', None)
+            if col_cor_val is None:
+                logger.warning(
+                    "    COL_COR not found in header. Using default value of 1.0."
+                )
+                col_cor_val = 1.0
+            else:
+                logger.info(f"    COL_COR found in header: {col_cor_val}")
+
+            # SPEC BUNIT precondition
+            spec_bunit_input = img.hdu_list['SPEC'].header.get('BUNIT')
+            if spec_bunit_input != "photoelectron/s/bin":
+                logger.error(
+                    f"    SPEC BUNIT before flux calibration: {spec_bunit_input}. FAIL."
+                )
+                # Skip further flux calibration for this image
+                continue
+            else:
+                logger.info(
+                    f"    SPEC BUNIT before flux calibration: {spec_bunit_input}. PASS."
+                )
+
+            # PSF-subtracted images: core throughput + CT_THRU grid + CTCOR 
+            if is_coron:
+                try:
+                    ct_factor = l4_to_tda.apply_core_throughput_correction(
+                        img, ct_cal, fpamfsam_cal, logr=False
+                    )
+                    spec_hdr = img.hdu_list['SPEC'].header
+                    ctcor_flag = spec_hdr.get('CTCOR', False)
+                    ok = ctcor_flag and np.isfinite(ct_factor) and (ct_factor > 0)
+                    logger.info(
+                        f"    Core throughput correction applied. "
+                        f"CTCOR={ctcor_flag}, CTFAC={ct_factor:.4f}. "
+                        f"{'PASS' if ok else 'FAIL'}"
+                    )
+                except Exception as exc:
+                    logger.error(
+                        f"    Core throughput correction failed: {exc}. FAIL"
+                    )
+                    # If CT fails, cannot flux-calibrate the companion spectrum
+                    continue
+
+                # CT_THRU grid alignment
+                if 'CT_THRU' in img.hdu_list:
+                    ct_grid = img.hdu_list['CT_THRU'].data
+                    image_shape = img.data.shape
+                    if ct_grid.ndim >= 2 and ct_grid.shape[-2:] == image_shape[-2:]:
+                        logger.info(
+                            "    Core throughput grid matches PSF-subtracted image WCS. PASS"
+                        )
+                    else:
+                        logger.error(
+                            f"    Core throughput grid shape {ct_grid.shape} does not "
+                            f"match image shape {image_shape}. FAIL"
+                        )
+                else:
+                    logger.error(
+                        "    PSF-subtracted L4 cube missing CT_THRU extension; "
+                        "cannot validate throughput grid alignment. FAIL"
+                    )
+
+                # Check CTCOR for convert_spec_to_flux
+                comp_ctcor = img.hdu_list['SPEC'].header.get('CTCOR', False)
+                if not comp_ctcor:
+                    logger.error(
+                        "    SPEC header missing CTCOR=True after attempted core "
+                        "throughput correction; skipping convert_spec_to_flux for "
+                        "companion spectrum. FAIL"
+                    )
+                    continue
+                else:
+                    logger.info(
+                        "    SPEC header has CTCOR=True; proceeding with "
+                        "convert_spec_to_flux. PASS"
+                    )
+
+            # Flux calibration 
+            calibrated_img = l4_to_tda.convert_spec_to_flux(
+                Dataset([img]), fluxcal_factor, slit_transmission=slit_transmission
+            )
+            calibrated_spec = calibrated_img[0].hdu_list['SPEC'].data
+            calibrated_err = calibrated_img[0].hdu_list['SPEC_ERR'].data
+
+            bunit = calibrated_img[0].hdu_list['SPEC'].header.get('BUNIT')
             if bunit == "erg/(s*cm^2*AA)":
-                logger.info(f"{label}: Non-coronagraphic spectrum calibrated. BUNIT=erg/(s*cm^2*AA). PASS")
+                logger.info(
+                    "    Spectrum calibrated. BUNIT=erg/(s*cm^2*AA). PASS"
+                )
             else:
                 logger.error(
-                    f"{label}: Non-coronagraphic spectrum BUNIT={bunit}. "
-                    "Expected erg/(s*cm^2*AA). FAIL"
+                    f"    Spectrum BUNIT={bunit}. Expected erg/(s*cm^2*AA). FAIL"
                 )
-            logger.info(f"{label}: Non-coronagraphic spectrum sample (first 5 bins): {noncoron_calibrated_spec[:5]}")
-            logger.info(f"{label}: Non-coronagraphic flux uncertainties (first 5 bins): {noncoron_calibrated_err[0][:5]}")
 
-    # Flux-calibrate companion spectrum with convert_spec_to_flux
-    for idx, img in enumerate(psf_images, start=1):
-        label = f"PSF-subtracted L4 image {idx}"
-        comp_dataset = Dataset([img])
-        comp_ctcor = img.hdu_list['SPEC'].header.get('CTCOR', False)
-
-        if not comp_ctcor:
-            logger.error(
-                "PSF-subtracted SPEC header missing CTCOR=True after attempted "
-                "core throughput correction; skipping convert_spec_to_flux for "
-                "companion spectrum. FAIL"
-            )
-        else:
             logger.info(
-                "PSF-subtracted SPEC header has CTCOR=True; proceeding with "
-                "convert_spec_to_flux for companion spectrum. PASS"
+                f"    Spectrum sample (first 5 bins): {calibrated_spec[:5]}"
             )
-            calibrated_comp = l4_to_tda.convert_spec_to_flux(
-                comp_dataset, fluxcal_factor, slit_transmission=slit_transmission
-            )
-            psf_calibrated_spec = calibrated_comp[0].hdu_list['SPEC'].data
-        
-            bunit = calibrated_noncoron[0].hdu_list['SPEC'].header.get('BUNIT')
-            if bunit == "erg/(s*cm^2*AA)":
-                logger.info(f"{label}: Non-coronagraphic spectrum calibrated. BUNIT=erg/(s*cm^2*AA). PASS")
-            else:
-                logger.error(
-                    f"{label}: Non-coronagraphic spectrum BUNIT={bunit}. "
-                    "Expected erg/(s*cm^2*AA). FAIL"
-                )
             logger.info(
-                f"{label}: Converted companion spectrum to astrophysical units. "
-                f"Sample (first 5 bins): {psf_calibrated_spec[:5]}"
+                f"    Flux uncertainties (first 5 bins): {calibrated_err[0][:5]}"
             )
 
 
@@ -317,9 +275,9 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
     if not all_host_files or not all_comp_files:
         logger.error('No host and/or companion L4 files found. Cannot compute flux ratio. FAIL')
-        flux_ratio = np.full_like(noncoron_wave, np.nan)
-        ratio_err = np.full_like(noncoron_wave, np.nan)
-        wavelength = noncoron_wave
+        flux_ratio = np.array([])
+        ratio_err = np.array([])
+        wavelength = np.array([])
     else:
         host_images = [Image(f) for f in all_host_files]
         comp_images = [Image(f) for f in all_comp_files]
@@ -406,9 +364,9 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
             f"Combined host SPEC BUNIT before flux-ratio computation: {host_spec_bunit}"
         )
 
-        if host_spec_bunit != "photoelectron/s":
+        if host_spec_bunit != "photoelectron/s/bin":
             logger.error(
-                "Combined host SPEC BUNIT is not 'photoelectron/s'; "
+                "Combined host SPEC BUNIT is not 'photoelectron/s/bin'; "
                 "skipping compute_spec_flux_ratio in Test 3. FAIL"
             )
             flux_ratio = np.full_like(host_wave, np.nan, dtype=float)
