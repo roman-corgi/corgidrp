@@ -6,14 +6,18 @@ import logging
 from pathlib import Path
 import corgidrp
 from astropy.io import fits
-from corgidrp.mocks import create_default_L3_headers
-from corgidrp.mocks import create_flux_image
-from corgidrp.mocks import create_pol_flux_image
-from corgidrp.mocks import create_mock_stokes_image_l4
-from corgidrp.mocks import gaussian_array
-from corgidrp.mocks import create_ct_cal
-from corgidrp.mocks import create_mock_fpamfsam_cal
-from corgidrp.data import Image, Dataset, FluxcalFactor
+from corgidrp.mocks import (
+    create_default_L3_headers,
+    create_flux_image,
+    create_pol_flux_image,
+    create_mock_stokes_i_image,
+    gaussian_array,
+    create_ct_cal,
+    create_mock_fpamfsam_cal,
+    make_mock_fluxcal_factor,
+)
+from corgidrp.data import Image, Dataset, FluxcalFactor, get_stokes_intensity_image
+from corgidrp.check import verify_header_keywords
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
@@ -196,127 +200,11 @@ def test_fluxcal_file():
     #assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
 
 
-def make_1d_spec_image(spec_values, spec_err, spec_wave, col_cor=None):
-    """Create a mock L4 file with 1-D spectroscopy extensions.
-
-    Args:
-        spec_values (ndarray): flux values (photoelectron/s/bin) for `SPEC`.
-        spec_err (ndarray): uncertainty array matching `SPEC` shape.
-        spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
-        col_cor (float, optional): color-correction factor to record.
-
-    Returns:
-        corgidrp.data.Image: image with `SPEC`, `SPEC_ERR`, `SPEC_DQ`,
-        `SPEC_WAVE`, and `SPEC_WAVE_ERR` extensions populated.
-    """
-    data = np.zeros((10, 10))
-    err = np.ones((1, 10, 10))
-    dq = np.zeros((10, 10), dtype=int)
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
-    ext_hdr['BUNIT'] = 'photoelectron/s'
-    if col_cor is not None:
-        ext_hdr['COL_COR'] = col_cor
-    img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
-                err_hdr=err_hdr, dq_hdr=dq_hdr)
-
-    spec_hdr = fits.Header()
-    spec_hdr['BUNIT'] = 'photoelectron/s/bin'
-    img.add_extension_hdu('SPEC', data=spec_values, header=spec_hdr)
-    img.add_extension_hdu('SPEC_ERR', data=spec_err, header=spec_hdr.copy())
-    img.add_extension_hdu('SPEC_DQ', data=np.zeros_like(spec_values, dtype=int))
-
-    wave_hdr = fits.Header()
-    wave_hdr['BUNIT'] = 'nm'
-    img.add_extension_hdu('SPEC_WAVE', data=spec_wave, header=wave_hdr)
-    img.add_extension_hdu('SPEC_WAVE_ERR', data=np.zeros_like(spec_wave), header=wave_hdr.copy())
-    return img
 
 
-def make_mock_fluxcal_factor(value, err=0.0):
-    """Build a FluxcalFactor with minimal metadata for testing.
-
-    Args:
-        value (float): absolute flux calibration factor.
-        err (float, optional): uncertainty on the calibration factor.
-
-    Returns:
-        corgidrp.data.FluxcalFactor: calibration object referencing a dummy
-        dataset for history bookkeeping.
-    """
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
-    ext_hdr['CFAMNAME'] = '3D'
-    ext_hdr['DPAMNAME'] = 'PRISM3'
-    ext_hdr['FSAMNAME'] = 'R1C2'
-    dummy_data = np.zeros((2, 2))
-    dummy_err = np.zeros((1, 2, 2))
-    dummy_dq = np.zeros((2, 2), dtype=int)
-    dummy_img = Image(dummy_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(), err=dummy_err,
-                      dq=dummy_dq, err_hdr=err_hdr.copy(), dq_hdr=dq_hdr.copy())
-    return FluxcalFactor(value, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
-                          input_dataset=Dataset([dummy_img]))
 
 
-def _make_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=0.0, wv0_y=0.0, is_coronagraphic=False):
-    """Create a mock L4 Stokes cube whose I-plane integrates to total_counts."""
-    base_img = create_mock_stokes_image_l4(
-        image_size=64,
-        fwhm=3,
-        I0=1e4,
-        badpixel_fraction=0.0,
-        p=0.0,
-        theta_deg=0.0,
-        seed=seed,
-    )
-    profile = gaussian_array(
-        array_shape=(base_img.data.shape[1], base_img.data.shape[2]),
-        sigma=3.0,
-        amp=total_counts / (2.0 * np.pi * 3.0**2),
-        xoffset=0.0,
-        yoffset=0.0,
-    )
-    base_img.data[0] = profile
-    base_img.data[1:] = 0.0
-    base_img.err[0] = np.maximum(np.sqrt(np.abs(base_img.data[0])), 1.0)
-    base_img.err[1:] = base_img.err[0]
-    base_img.dq[:] = 0
-    base_img.pri_hdr['TARGET'] = target_name
-    base_img.ext_hdr['BUNIT'] = 'photoelectron/s'
-    base_img.ext_hdr['DATALVL'] = 'L4'
-    base_img.ext_hdr.setdefault('CFAMNAME', '3C')
-    base_img.ext_hdr.setdefault('DPAMNAME', 'PRISM3')
-    base_img.ext_hdr.setdefault('LSAMNAME', 'SPEC')
-    base_img.ext_hdr['WV0_X'] = wv0_x
-    base_img.ext_hdr['WV0_Y'] = wv0_y
-    base_img.ext_hdr.setdefault('STARLOCX', 0.0)
-    base_img.ext_hdr.setdefault('STARLOCY', 0.0)
-    base_img.ext_hdr.setdefault('FPAM_H', 0.0)
-    base_img.ext_hdr.setdefault('FPAM_V', 0.0)
-    base_img.ext_hdr.setdefault('FSAM_H', 0.0)
-    base_img.ext_hdr.setdefault('FSAM_V', 0.0)
-    base_img.ext_hdr['FSMLOS'] = 1 if is_coronagraphic else 0
-    if col_cor is not None:
-        base_img.ext_hdr['COL_COR'] = col_cor
-    return base_img
 
-
-def _get_intensity_image(stokes_image):
-    """Return a copy containing only the Stokes-I plane for photometry."""
-    data = stokes_image.data[0]
-    err = stokes_image.err[0]
-    dq = stokes_image.dq[0]
-    err_layer = err if err.ndim == 3 else np.array([err])
-    if err_layer.shape[0] != 1:
-        err_layer = err_layer[:1]
-    err_copy = err_layer.copy()
-    return Image(
-        data.copy(),
-        pri_hdr=stokes_image.pri_hdr.copy(),
-        ext_hdr=stokes_image.ext_hdr.copy(),
-        err=err_copy,
-        dq=dq.copy(),
-        err_hdr=stokes_image.err_hdr,
-        dq_hdr=stokes_image.dq_hdr,
-    )
 
 
 def _setup_vap_logger(test_name):
@@ -331,25 +219,74 @@ def _setup_vap_logger(test_name):
     logger.addHandler(handler)
     return logger, log_dir
 
+
+
+def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=None, col_cor=None):
+    """Create a mock L4 file with 1-D spectroscopy extensions.
+
+    Args:
+        spec_values (ndarray): flux values (photoelectron/s) for `SPEC`.
+        spec_err (ndarray): uncertainty array matching `SPEC` shape.
+        spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
+        roll (str, optional): telescope roll angle
+        exp_time (float, optional): exposure time in seconds
+        col_cor (float, optional): color-correction factor to record.
+
+    Returns:
+        corgidrp.data.Image: image with `SPEC`, `SPEC_ERR`, `SPEC_DQ`,
+        `SPEC_WAVE`, and `SPEC_WAVE_ERR` extensions populated.
+    """
+    data = np.zeros((10, 10))
+    err = np.ones((1, 10, 10))
+    dq = np.zeros((10, 10), dtype=int)
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
+    ext_hdr['BUNIT'] = 'photoelectron/s'
+    ext_hdr['WV0_X'] = 0.0
+    ext_hdr['WV0_Y'] = 0.0
+    ext_hdr['MASKLOCX'] = 512  # coronagraphic image
+    ext_hdr['MASKLOCY'] = 512
+    pri_hdr['ROLL'] = roll
+    pri_hdr['EXP_TIME'] = exp_time
+    ext_hdr['COL_COR'] = col_cor
+    if col_cor is not None:
+        ext_hdr['COL_COR'] = col_cor
+    img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
+                err_hdr=err_hdr, dq_hdr=dq_hdr)
+
+    spec_hdr = fits.Header()
+    spec_hdr['BUNIT'] = 'photoelectron/s'
+    img.add_extension_hdu('SPEC', data=spec_values, header=spec_hdr)
+    img.add_extension_hdu('SPEC_ERR', data=spec_err, header=spec_hdr.copy())
+    img.add_extension_hdu('SPEC_DQ', data=np.zeros_like(spec_values, dtype=int))
+
+    wave_hdr = fits.Header()
+    wave_hdr['BUNIT'] = 'nm'
+    img.add_extension_hdu('SPEC_WAVE', data=spec_wave, header=wave_hdr)
+    img.add_extension_hdu('SPEC_WAVE_ERR', data=np.zeros_like(spec_wave), header=wave_hdr.copy())
+    return img
+
+
 def test_convert_spec_to_flux_basic():
     """Validate convert_spec_to_flux with slit correction and COL_COR applied."""
     spec_vals = np.array([10.0, 12.0, 14.0, 16.0, 18.0])
     spec_err = np.array([[0.5, 0.6, 0.7, 0.8, 0.9]])
     wave = np.linspace(700, 800, len(spec_vals))
-    slit = np.array([0.8, 0.9, 1.0, 0.85, 0.95])
+    slit_factor = 0.85
+    slit_tuple = (np.array([np.full_like(spec_vals, slit_factor)]), np.array([0.0]), np.array([0.0]))
 
     image = make_1d_spec_image(spec_vals, spec_err, wave, col_cor=2.0)
+    image.hdu_list['SPEC'].header['CTCOR'] = True  # Core throughput correction already applied
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
 
-    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor, slit_transmission=slit)
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor, slit_transmission=slit_tuple)
     frame = calibrated[0]
     spec_out = frame.hdu_list['SPEC'].data
     err_out = frame.hdu_list['SPEC_ERR'].data
 
-    expected_spec = (spec_vals / slit) * (fluxcal_factor.fluxcal_fac / 2.0)
-    expected_err = np.sqrt(((spec_err[0] / slit) * (fluxcal_factor.fluxcal_fac / 2.0))**2 +
-                           (((spec_vals / slit) * fluxcal_factor.fluxcal_err / 2.0))**2)
+    expected_spec = (spec_vals / slit_factor) * (fluxcal_factor.fluxcal_fac / 2.0)
+    expected_err = np.sqrt(((spec_err[0] / slit_factor) * (fluxcal_factor.fluxcal_fac / 2.0))**2 +
+                           (((spec_vals / slit_factor) * fluxcal_factor.fluxcal_err / 2.0))**2)
 
     result = np.allclose(spec_out, expected_spec) and np.allclose(err_out[0], expected_err)
     print('\nconvert_spec_to_flux basic case: ', end='')
@@ -369,6 +306,7 @@ def test_convert_spec_to_flux_no_slit():
     wave = np.linspace(600, 650, len(spec_vals))
 
     image = make_1d_spec_image(spec_vals, spec_err, wave)
+    image.hdu_list['SPEC'].header['CTCOR'] = True  # core throughput correction already applied
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(1.5, err=0.1)
 
@@ -388,6 +326,212 @@ def test_convert_spec_to_flux_no_slit():
     assert frame.hdu_list['SPEC'].header['SLITCOR'] is False
     assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
+
+
+def test_convert_spec_to_flux_slit_scalar_map():
+    """Tuple slit transmission should produce a wavelength-dependent correction."""
+    spec_vals = np.array([10.0, 12.0, 14.0, 16.0])
+    spec_err = np.full((1, spec_vals.size), 0.5)
+    wave = np.linspace(700, 730, spec_vals.size)
+
+    image = make_1d_spec_image(spec_vals, spec_err, wave)
+    image.ext_hdr['WV0_X'] = 25.0
+    image.ext_hdr['WV0_Y'] = 0.0
+    image.hdu_list['SPEC'].header['CTCOR'] = True  # Core throughput correction already applied
+    dataset = Dataset([image])
+    fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
+
+    # Build a slit map where the nearest position to WV0_X has a flat 0.45 curve
+    slit_row_nearest = np.full_like(spec_vals, 0.45, dtype=float)
+    slit_map = np.array([
+        np.full_like(spec_vals, 0.5, dtype=float),
+        slit_row_nearest,
+        np.full_like(spec_vals, 0.3, dtype=float),
+    ])
+    slit_x = np.array([0.0, 20.0, 100.0])
+    slit_y = np.zeros_like(slit_x)
+
+    calibrated = l4_to_tda.convert_spec_to_flux(
+        dataset,
+        fluxcal_factor,
+        slit_transmission=(slit_map, slit_x, slit_y),
+    )
+    frame = calibrated[0]
+    slit_factor = 0.45
+    expected_spec = (spec_vals / slit_row_nearest) * fluxcal_factor.fluxcal_fac
+    expected_err = np.sqrt(
+        ((spec_err[0] / slit_factor) * fluxcal_factor.fluxcal_fac) ** 2 +
+        ((spec_vals / slit_factor) * fluxcal_factor.fluxcal_err) ** 2
+    )
+
+    result = (
+        np.allclose(frame.hdu_list['SPEC'].data, expected_spec) and
+        np.allclose(frame.hdu_list['SPEC_ERR'].data[0], expected_err) and
+        frame.hdu_list['SPEC'].header['SLITCOR'] is True and
+        np.isclose(frame.hdu_list['SPEC'].header['SLITFAC'], slit_factor)
+    )
+    print('\nconvert_spec_to_flux slit tuple: ', end='')
+    print_pass() if result else print_fail()
+
+    assert result
+
+
+def test_apply_core_throughput_correction():
+    # Build a mock spectrum and put WV0 inside the CT calibration grid
+    spec_vals = np.array([10.0, 15.0, 20.0])
+    original_spec = spec_vals.copy()
+    spec_err = np.array([[0.5, 0.6, 0.7]])
+    original_err = spec_err.copy()
+    wave = np.linspace(700, 760, spec_vals.size)
+    frame = make_1d_spec_image(spec_vals, spec_err, wave)
+    frame.ext_hdr['WV0_X'] = 70.0
+    frame.ext_hdr['WV0_Y'] = 0.0
+
+    # Use CT calibration + FPAM/FSAM calibration
+    ct_cal = create_ct_cal(fwhm_mas=50)
+    fpam_fsam_cal = create_mock_fpamfsam_cal()
+
+    frame.ext_hdr.setdefault('STARLOCX', 0.0)
+    frame.ext_hdr.setdefault('STARLOCY', 0.0)
+
+    # Get the interpolated factor for this location using a single-frame dataset.
+    ct_values = ct_cal.InterpolateCT(
+        frame.ext_hdr['WV0_X'],
+        frame.ext_hdr['WV0_Y'],
+        Dataset([frame.copy()]),
+        fpam_fsam_cal,
+    )
+    ct_factor = np.asarray(ct_values).ravel()[0]
+
+    # Apply correction
+    applied = l4_to_tda.apply_core_throughput_correction(frame, ct_cal, fpam_fsam_cal)
+
+    spec_ok = np.allclose(frame.hdu_list['SPEC'].data, original_spec / ct_factor)
+    err_ok = np.allclose(frame.hdu_list['SPEC_ERR'].data[0], original_err[0] / ct_factor)
+    applied_ok = np.isclose(applied, ct_factor)
+
+    print('\napply_core_throughput_correction: ', end='')
+    if applied_ok and spec_ok and err_ok:
+        print_pass()
+    else:
+        print_fail()
+
+    assert applied_ok
+    assert spec_ok
+    assert err_ok
+    assert frame.hdu_list['SPEC'].header['CTCOR'] is True
+    assert np.isclose(frame.hdu_list['SPEC'].header['CTFAC'], ct_factor)
+
+
+def test_compute_spec_flux_ratio_single_roll():
+    """Flux ratio for one roll."""
+    host_spec = np.array([10.0, 12.0, 14.0, 16.0])
+    comp_spec = np.array([5.0, 6.0, 7.0, 8.0])
+    spec_err = np.full((1, host_spec.size), 0.2)
+    wave = np.linspace(700, 760, host_spec.size)
+
+    host_ds = make_1d_spec_image(host_spec, spec_err, wave, roll='ROLL_A', exp_time=10.0, col_cor=True)
+    comp_ds = make_1d_spec_image(comp_spec, spec_err, wave, roll='ROLL_B', exp_time=10.0, col_cor=True)
+    fluxcal_factor = make_mock_fluxcal_factor(2.5, err=0.1)
+
+    host_cal = l4_to_tda.convert_spec_to_flux(host_ds, fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(comp_ds, fluxcal_factor)
+    host_spec_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
+    comp_spec_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
+    host_err_flux = np.squeeze(np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+    comp_err_flux = np.squeeze(np.array(comp_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+    # Expected ratio uncertainty using the same propagation as compute_spec_flux_ratio
+    ratio_err_expected = np.sqrt(
+        (comp_err_flux / host_spec_flux) ** 2 +
+        ((comp_spec_flux * host_err_flux) / (host_spec_flux ** 2)) ** 2
+    )
+
+    host_image = host_ds[0]
+    comp_image = comp_ds[0]
+    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_image, comp_image, fluxcal_factor)
+    expected = comp_spec / host_spec
+
+    result = (
+        np.allclose(ratio, expected) and
+        np.array_equal(wavelength, wave) and
+        metadata['roll'] == 'ROLL_A' and
+        metadata['companion_roll'] == 'ROLL_B' and
+        np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
+    )
+    print('\ncompute_spec_flux_ratio single roll: ', end='')
+    print_pass() if result else print_fail()
+
+    assert result
+    assert np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
+
+
+def test_compute_spec_flux_ratio_weighted():
+    """Combine spectra from multiple rolls, then compute a single flux ratio."""
+    host_a = np.array([12.0, 14.0, 16.0, 18.0])
+    comp_a = host_a * 0.5
+    err_a = np.full((1, host_a.size), 0.3)
+    wave_a = np.array([700.0, 710.0, 720.0, 730.0])
+
+    host_ds_a = make_1d_spec_image(host_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0, col_cor=True)
+    comp_ds_a = make_1d_spec_image(comp_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0, col_cor=True)
+
+    host_b = np.array([8.0, 6.0, 4.0, 2.0])
+    comp_b = np.array([1.0, 2.0, 3.0, 4.0])
+    err_b = np.full((1, host_b.size), 0.4)
+    wave_b_host = np.array([800.0, 780.0, 760.0, 740.0])
+    wave_b_comp = np.array([790.0, 770.0, 750.0, 730.0])
+
+    host_ds_b = make_1d_spec_image(host_b, err_b, wave_b_host, roll='ROLL_B', exp_time=15.0, col_cor=True)
+    comp_ds_b = make_1d_spec_image(comp_b, err_b, wave_b_comp, roll='ROLL_B', exp_time=15.0, col_cor=True)
+
+    fluxcal_factor = make_mock_fluxcal_factor(1.8, err=0.05)
+
+    # Combine host spectra from rolls A and B
+    host_comb_spec, host_comb_wave, host_comb_err, host_rolls = l4_to_tda.combine_spectra(
+        Dataset([host_ds_a[0], host_ds_b[0]])
+    )
+
+    # Combine companion spectra from rolls A and B
+    comp_comb_spec, comp_comb_wave, comp_comb_err, comp_rolls = l4_to_tda.combine_spectra(
+        Dataset([comp_ds_a[0], comp_ds_b[0]])
+    )
+
+    # Build combined host and companion Images
+    host_comb_image = make_1d_spec_image(
+        host_comb_spec,
+        host_comb_err.reshape(1, -1),
+        host_comb_wave,
+    )
+    comp_comb_image = make_1d_spec_image(
+        comp_comb_spec,
+        comp_comb_err.reshape(1, -1),
+        comp_comb_wave,
+    )
+    # Combined products are still coronagraphic
+    host_comb_image.hdu_list['SPEC'].header['CTCOR'] = True
+    comp_comb_image.hdu_list['SPEC'].header['CTCOR'] = True
+
+    # Compute flux ratio using the combined spectra
+    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
+        host_comb_image, comp_comb_image, fluxcal_factor
+    )
+
+    # Expected ratio and uncertainty
+    expected_ratio = comp_comb_spec / host_comb_spec
+    expected_ratio_err = np.sqrt(
+        (comp_comb_err / host_comb_spec) ** 2
+        + ((comp_comb_spec * host_comb_err) / (host_comb_spec ** 2)) ** 2
+    )
+
+    result = (
+        np.allclose(ratio, expected_ratio, equal_nan=True)
+        and np.array_equal(wavelength, host_comb_wave)
+        and np.allclose(metadata['ratio_err'], expected_ratio_err, equal_nan=True)
+    )
+    print('\ncompute_spec_flux_ratio weighted rolls: ', end='')
+    print_pass() if result else print_fail()
+
+    assert result
 
 def test_abs_fluxcal():
     """ 
@@ -783,8 +927,8 @@ def test_l4_companion_photometry():
     host_counts = 2.5e5
     companion_counts = 5.0e4
     col_cor = 1.2
-    host_image = _make_stokes_i_image(host_counts, 'HOST', seed=1, wv0_x=-1.0, wv0_y=0.5, is_coronagraphic=True)
-    companion_image = _make_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, wv0_x=2.0, wv0_y=-1.0, is_coronagraphic=True)
+    host_image = create_mock_stokes_i_image(host_counts, 'HOST', seed=1, wv0_x=-1.0, wv0_y=0.5, is_coronagraphic=True)
+    companion_image = create_mock_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, wv0_x=2.0, wv0_y=-1.0, is_coronagraphic=True)
 
     ct_cal = create_ct_cal(fwhm_mas=50, cfam_name='3C', cenx=0.0, ceny=0.0, nx=11, ny=11)
     fpamfsam_cal = create_mock_fpamfsam_cal()
@@ -802,27 +946,16 @@ def test_l4_companion_photometry():
     companion_image.err = companion_image.err / ct_factor
     companion_image.ext_hdr['CTCOR'] = True
     companion_image.ext_hdr['CTFACT'] = ct_factor
-    host_intensity_ds = Dataset([_get_intensity_image(host_image)])
-    companion_intensity_ds = Dataset([_get_intensity_image(companion_image)])
+    host_intensity_ds = Dataset([get_stokes_intensity_image(host_image)])
+    companion_intensity_ds = Dataset([get_stokes_intensity_image(companion_image)])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.05)
 
     checks = []
     ext_hdr = companion_image.ext_hdr
     cgi_keys = ['CFAMNAME', 'DPAMNAME', 'LSAMNAME']
-    message = "Input dataset has CGI format keywords"
-    condition = all(k in ext_hdr for k in cgi_keys)
-    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
-    checks.append(condition)
-
-    message = "DATALVL = L4"
-    condition = ext_hdr.get('DATALVL') == 'L4'
-    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
-    checks.append(condition)
-
-    message = "BUNIT = photoelectron/s"
-    condition = ext_hdr.get('BUNIT') == 'photoelectron/s'
-    logger.info(f"{message}: {'PASS' if condition else 'FAIL'}")
-    checks.append(condition)
+    checks.append(verify_header_keywords(ext_hdr, cgi_keys, frame_info="Companion header", logger=logger))
+    checks.append(verify_header_keywords(ext_hdr, {'DATALVL': 'L4'}, frame_info="Companion header", logger=logger))
+    checks.append(verify_header_keywords(ext_hdr, {'BUNIT': 'photoelectron/s'}, frame_info="Companion header", logger=logger))
 
     message = "Core throughput correction applied to companion"
     condition = np.isfinite(ct_factor) and companion_image.ext_hdr.get('CTCOR', False)
@@ -857,6 +990,7 @@ def test_l4_companion_photometry():
     logger.info(f"{message} | {flux_details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
+    # Confirm the fluxcal factor (with color correction) predicts the measured companion flux
     factor = fluxcal_factor.fluxcal_fac / col_cor
     factor_err = fluxcal_factor.fluxcal_err / col_cor
     expected_comp_flux = comp_ap * factor
@@ -867,19 +1001,21 @@ def test_l4_companion_photometry():
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
+    # Confirm that enabling COL_COR actually reduces the measured flux relative to the aperture sum
     message = "Color correction applied when COL_COR present"
     condition = comp_flux < comp_ap * fluxcal_factor.fluxcal_fac
     details = f"flux_with_col_cor={comp_flux:.2f}, no_col_cor={comp_ap * fluxcal_factor.fluxcal_fac:.2f}"
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
+    # Confirm that the flux uncertainty matches what is propagated from aperture and calibration errors
     message = "Flux uncertainty propagated from aperture sum"
     condition = np.isclose(comp_flux_err, expected_comp_flux_err, rtol=5e-3)
     details = f"measured={comp_flux_err:.2f}, expected={expected_comp_flux_err:.2f}"
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
-    host_expected_flux = host_ap * fluxcal_factor.fluxcal_fac
+    # Check that companion/host flux ratio matches the injected counts after color correction
     ratio_measured = comp_flux / host_flux
     ratio_expected = (comp_ap / col_cor) / host_ap
     ratio_tolerance = max(expected_comp_flux_err / comp_flux, 0.05)
@@ -889,25 +1025,23 @@ def test_l4_companion_photometry():
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
-    # TODO/ note: determine_app_mag compares source SED to Vega SED, it does not use the measured flux.
-    # The actual apparent magnitude from measured flux is already calculated by determine_flux
-    # and stored in APP_MAG before calling determine_app_mag, but determine_app_mag overwrites it with
-    # the input SED value. So here we're just comparing vega to vega.
-    mag_dataset = l4_to_tda.determine_app_mag(comp_flux_ds, 'Vega')
-    app_mag = mag_dataset[0].ext_hdr['APP_MAG']
-    mag_err = mag_dataset[0].ext_hdr['MAGERR']  # This comes from determine_flux, not determine_app_mag
     filter_file = fluxcal.get_filter_name(comp_flux_ds[0])
-    expected_mag = 0.0  # Vega SED 
-    expected_mag_err = 2.5 / np.log(10) * comp_flux_err / comp_flux
-    message = "Apparent magnitude computed from Vega zeropoint (SED comparison)"
-    condition = np.isclose(app_mag, expected_mag, rtol=5e-3)
-    details = f"measured={app_mag:.3f}, expected={expected_mag:.3f} (Vega vs Vega SED)"
+    companion_mag = fluxcal.calculate_vega_mag(comp_flux, filter_file)
+    companion_mag_err = 2.5 / np.log(10) * comp_flux_err / comp_flux
+    expected_mag = fluxcal.calculate_vega_mag(expected_comp_flux, filter_file)
+    expected_mag_err = 2.5 / np.log(10) * expected_comp_flux_err / expected_comp_flux
+
+    # Convert the measured companion flux into a Vega magnitude and compare against expectation
+    message = "Apparent magnitude derived from measured companion flux"
+    condition = np.isclose(companion_mag, expected_mag, rtol=5e-3)
+    details = f"measured={companion_mag:.3f}, expected={expected_mag:.3f}"
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
-    message = "Magnitude uncertainty matches propagated error"
-    condition = np.isclose(mag_err, expected_mag_err, rtol=5e-3)
-    details = f"measured={mag_err:.3f}, expected={expected_mag_err:.3f}"
+    # Check that magnitude uncertainty is the flux-error propagation scaled into magnitudes
+    message = "Magnitude uncertainty propagated from flux error"
+    condition = np.isclose(companion_mag_err, expected_mag_err, rtol=5e-3)
+    details = f"measured={companion_mag_err:.3f}, expected={expected_mag_err:.3f}"
     logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
     checks.append(condition)
 
@@ -931,9 +1065,10 @@ if __name__ == '__main__':
     test_fluxcal_file()
     test_abs_fluxcal()
     test_pol_abs_fluxcal()
-    test_l4_companion_photometry()
     test_convert_spec_to_flux_basic()
     test_convert_spec_to_flux_no_slit()
-
-
-
+    test_convert_spec_to_flux_slit_scalar_map()
+    test_apply_core_throughput_correction()
+    test_compute_spec_flux_ratio_single_roll()
+    test_compute_spec_flux_ratio_weighted()
+    test_l4_companion_photometry()
