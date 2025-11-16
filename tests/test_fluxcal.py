@@ -368,7 +368,7 @@ def test_convert_spec_to_flux_no_slit():
 
 
 def test_convert_spec_to_flux_slit_scalar_map():
-    """Tuple slit transmission should reduce to a single scale factor."""
+    """Tuple slit transmission should produce a wavelength-dependent correction."""
     spec_vals = np.array([10.0, 12.0, 14.0, 16.0])
     spec_err = np.full((1, spec_vals.size), 0.5)
     wave = np.linspace(700, 730, spec_vals.size)
@@ -380,12 +380,14 @@ def test_convert_spec_to_flux_slit_scalar_map():
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
 
+    # Build a slit map where the nearest position to WV0_X has a flat 0.45 curve
+    slit_row_nearest = np.full_like(spec_vals, 0.45, dtype=float)
     slit_map = np.array([
         np.full_like(spec_vals, 0.5, dtype=float),
-        np.full_like(spec_vals, 0.4, dtype=float),
+        slit_row_nearest,
         np.full_like(spec_vals, 0.3, dtype=float),
     ])
-    slit_x = np.array([0.0, 50.0, 100.0])
+    slit_x = np.array([0.0, 20.0, 100.0])
     slit_y = np.zeros_like(slit_x)
 
     calibrated = l4_to_tda.convert_spec_to_flux(
@@ -395,7 +397,7 @@ def test_convert_spec_to_flux_slit_scalar_map():
     )
     frame = calibrated[0]
     slit_factor = 0.45
-    expected_spec = (spec_vals / slit_factor) * fluxcal_factor.fluxcal_fac
+    expected_spec = (spec_vals / slit_row_nearest) * fluxcal_factor.fluxcal_fac
     expected_err = np.sqrt(
         ((spec_err[0] / slit_factor) * fluxcal_factor.fluxcal_fac) ** 2 +
         ((spec_vals / slit_factor) * fluxcal_factor.fluxcal_err) ** 2
@@ -426,26 +428,22 @@ def test_apply_core_throughput_correction():
 
     # Use CT calibration + FPAM/FSAM calibration
     ct_cal = create_ct_cal(fwhm_mas=50)
-    coron_dataset = Dataset([frame.copy()])
     fpam_fsam_cal = create_mock_fpamfsam_cal()
 
-    for img in coron_dataset:
-        img.ext_hdr.setdefault('STARLOCX', 0.0)
-        img.ext_hdr.setdefault('STARLOCY', 0.0)
+    frame.ext_hdr.setdefault('STARLOCX', 0.0)
+    frame.ext_hdr.setdefault('STARLOCY', 0.0)
 
-    # Get the interpolated factor for this location.
+    # Get the interpolated factor for this location using a single-frame dataset.
     ct_values = ct_cal.InterpolateCT(
         frame.ext_hdr['WV0_X'],
         frame.ext_hdr['WV0_Y'],
-        coron_dataset,
-        fpam_fsam_cal
+        Dataset([frame.copy()]),
+        fpam_fsam_cal,
     )
     ct_factor = np.asarray(ct_values).ravel()[0]
 
     # Apply correction
-    applied = l4_to_tda.apply_core_throughput_correction(
-        frame, ct_cal, coron_dataset, fpam_fsam_cal
-    )
+    applied = l4_to_tda.apply_core_throughput_correction(frame, ct_cal, fpam_fsam_cal)
 
     spec_ok = np.allclose(frame.hdu_list['SPEC'].data, original_spec / ct_factor)
     err_ok = np.allclose(frame.hdu_list['SPEC_ERR'].data[0], original_err[0] / ct_factor)
@@ -505,7 +503,6 @@ def test_compute_spec_flux_ratio_single_roll():
     result = (
         np.allclose(ratio, expected) and
         np.array_equal(wavelength, wave) and
-        metadata['weighted'] is False and
         metadata['roll'] == 'ROLL_A' and
         metadata['companion_roll'] == 'ROLL_B' and
         np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
@@ -514,19 +511,18 @@ def test_compute_spec_flux_ratio_single_roll():
     print_pass() if result else print_fail()
 
     assert result
-    assert metadata['exp_time'] == pytest.approx(10.0)
     assert np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
 
 
-def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
-    """Exposure-time weighting and interpolation should combine multiple rolls."""
+def test_compute_spec_flux_ratio_weighted():
+    """Combine spectra from multiple rolls, then compute a single flux ratio."""
     host_a = np.array([12.0, 14.0, 16.0, 18.0])
     comp_a = host_a * 0.5
     err_a = np.full((1, host_a.size), 0.3)
     wave_a = np.array([700.0, 710.0, 720.0, 730.0])
 
     host_ds_a = build_mock_spec_dataset(host_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0)
-    comp_ds_a = build_mock_spec_dataset(comp_a, err_a, wave_a, roll='ROLL_C', exp_time=5.0)
+    comp_ds_a = build_mock_spec_dataset(comp_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0)
 
     host_b = np.array([8.0, 6.0, 4.0, 2.0])
     comp_b = np.array([1.0, 2.0, 3.0, 4.0])
@@ -535,109 +531,80 @@ def test_compute_spec_flux_ratio_weighted_rolls_with_interp():
     wave_b_comp = np.array([790.0, 770.0, 750.0, 730.0])
 
     host_ds_b = build_mock_spec_dataset(host_b, err_b, wave_b_host, roll='ROLL_B', exp_time=15.0)
-    comp_ds_b = build_mock_spec_dataset(comp_b, err_b, wave_b_comp, roll='ROLL_D', exp_time=15.0)
+    comp_ds_b = build_mock_spec_dataset(comp_b, err_b, wave_b_comp, roll='ROLL_B', exp_time=15.0)
 
-    # Set CTCOR flag before calling compute_spec_flux_ratio (required for coronagraphic images)
+    # Set CTCOR flag before calling convert_spec_to_flux (required for coronagraphic images)
     host_ds_a[0].hdu_list['SPEC'].header['CTCOR'] = True
     comp_ds_a[0].hdu_list['SPEC'].header['CTCOR'] = True
     host_ds_b[0].hdu_list['SPEC'].header['CTCOR'] = True
     comp_ds_b[0].hdu_list['SPEC'].header['CTCOR'] = True
 
     fluxcal_factor = make_mock_fluxcal_factor(1.8, err=0.05)
-    slit_tuple_a = (np.array([np.full_like(host_a, 1.0)]), np.array([0.0]), np.array([0.0]))
-    slit_tuple_b = (np.array([np.full_like(host_b, 0.9)]), np.array([0.0]), np.array([0.0]))
-    slit_vectors = [slit_tuple_a, slit_tuple_b]
 
-    ratio, wavelength, metadata = l4_to_tda.compute_weighted_spec_flux_ratio(
-        [host_ds_a, host_ds_b],
-        [comp_ds_a, comp_ds_b],
-        fluxcal_factor,
-        slit_transmission=slit_vectors
+    # Combine host spectra from rolls A and B
+    host_comb_spec, host_comb_wave, host_comb_err, host_rolls = l4_to_tda.combine_spectra(
+        Dataset([host_ds_a[0], host_ds_b[0]])
     )
 
-    single_ratio_a, single_wave_a, meta_a = l4_to_tda.compute_spec_flux_ratio(
-        host_ds_a[0], comp_ds_a[0], fluxcal_factor, slit_transmission=slit_tuple_a
+    # Combine companion spectra from rolls A and B
+    comp_comb_spec, comp_comb_wave, comp_comb_err, comp_rolls = l4_to_tda.combine_spectra(
+        Dataset([comp_ds_a[0], comp_ds_b[0]])
     )
-    single_ratio_b, single_wave_b, meta_b = l4_to_tda.compute_spec_flux_ratio(
-        host_ds_b[0], comp_ds_b[0], fluxcal_factor, slit_transmission=slit_tuple_b
+
+    # Build combined host and companion Images
+    host_comb_image = make_1d_spec_image(
+        host_comb_spec,
+        host_comb_err.reshape(1, -1),
+        host_comb_wave,
     )
-    ratio_err_a = meta_a['ratio_err']
-    ratio_err_b = meta_b['ratio_err']
-
-    if np.allclose(single_wave_b, single_wave_a):
-        ratio_b_on_a = single_ratio_b
-        ratio_err_b_on_a = ratio_err_b
-    else:
-        wave_a_desc = single_wave_a[0] > single_wave_a[-1]
-        wave_b_desc = single_wave_b[0] > single_wave_b[-1]
-        wave_b_grid = single_wave_b[::-1] if wave_b_desc else single_wave_b
-        ratio_b_grid = single_ratio_b[::-1] if wave_b_desc else single_ratio_b
-        err_b_grid = ratio_err_b[::-1] if wave_b_desc else ratio_err_b
-        wave_target = single_wave_a[::-1] if wave_a_desc else single_wave_a
-        ratio_interp = np.interp(
-            wave_target,
-            wave_b_grid,
-            ratio_b_grid,
-            left=ratio_b_grid[0],
-            right=ratio_b_grid[-1]
-        )
-        err_interp = np.interp(
-            wave_target,
-            wave_b_grid,
-            err_b_grid,
-            left=err_b_grid[0],
-            right=err_b_grid[-1]
-        )
-        if wave_a_desc:
-            ratio_b_on_a = ratio_interp[::-1]
-            ratio_err_b_on_a = err_interp[::-1]
-        else:
-            ratio_b_on_a = ratio_interp
-            ratio_err_b_on_a = err_interp
-
-    weight_a = np.zeros_like(single_ratio_a)
-    valid_a = np.isfinite(ratio_err_a) & (ratio_err_a > 0)
-    weight_a[valid_a] = 1.0 / (ratio_err_a[valid_a] ** 2)
-
-    weight_b = np.zeros_like(ratio_b_on_a)
-    valid_b = np.isfinite(ratio_err_b_on_a) & (ratio_err_b_on_a > 0)
-    weight_b[valid_b] = 1.0 / (ratio_err_b_on_a[valid_b] ** 2)
-
-    weight_total = weight_a + weight_b
-    expected_weighted = np.where(
-        weight_total > 0,
-        (single_ratio_a * weight_a + ratio_b_on_a * weight_b) / weight_total,
-        np.nan
+    comp_comb_image = make_1d_spec_image(
+        comp_comb_spec,
+        comp_comb_err.reshape(1, -1),
+        comp_comb_wave,
     )
-    expected_noise = np.where(weight_total > 0, np.sqrt(1.0 / weight_total), np.nan)
+    # Combined products are still coronagraphic
+    host_comb_image.hdu_list['SPEC'].header['CTCOR'] = True
+    comp_comb_image.hdu_list['SPEC'].header['CTCOR'] = True
+
+    # Compute flux ratio using the combined spectra
+    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
+        host_comb_image, comp_comb_image, fluxcal_factor
+    )
+
+    # Independently compute the expected ratio and uncertainty from the combined spectra
+    host_ds_comb = Dataset([host_comb_image.copy()])
+    comp_ds_comb = Dataset([comp_comb_image.copy()])
+    host_cal = l4_to_tda.convert_spec_to_flux(host_ds_comb, fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(comp_ds_comb, fluxcal_factor)
+
+    host_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
+    comp_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
+    host_flux_err = np.squeeze(np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+    comp_flux_err = np.squeeze(np.array(comp_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+
+    expected_ratio = comp_flux / host_flux
+    expected_ratio_err = np.full_like(expected_ratio, np.nan, dtype=float)
+    valid = (
+        (host_flux != 0)
+        & np.isfinite(host_flux)
+        & np.isfinite(comp_flux)
+        & np.isfinite(host_flux_err)
+        & np.isfinite(comp_flux_err)
+    )
+    expected_ratio_err[valid] = np.sqrt(
+        (comp_flux_err[valid] / host_flux[valid]) ** 2
+        + ((comp_flux[valid] * host_flux_err[valid]) / (host_flux[valid] ** 2)) ** 2
+    )
 
     result = (
-        np.allclose(ratio, expected_weighted, equal_nan=True) and
-        np.array_equal(wavelength, single_wave_a) and
-        metadata['weighted'] is True and
-        metadata['rolls'] == ['ROLL_A', 'ROLL_B'] and
-        metadata['companion_rolls'] == ['ROLL_C', 'ROLL_D'] and
-        metadata['exp_times'] == [5.0, 15.0] and
-        np.allclose(metadata['ratios_per_roll']['ROLL_A'], single_ratio_a) and
-        np.allclose(metadata['ratios_per_roll']['ROLL_B'], ratio_b_on_a) and
-        np.allclose(metadata['ratio_errs_per_roll']['ROLL_A'], ratio_err_a) and
-        np.allclose(metadata['ratio_errs_per_roll']['ROLL_B'], ratio_err_b_on_a) and
-        np.allclose(metadata['ratio_noise'], expected_noise, equal_nan=True)
+        np.allclose(ratio, expected_ratio, equal_nan=True)
+        and np.array_equal(wavelength, host_comb_wave)
+        and np.allclose(metadata['ratio_err'], expected_ratio_err, equal_nan=True)
     )
-    print('\ncompute_spec_flux_ratio weighted rolls: ', end='')
+    print('\ncompute_spec_flux_ratio weighted rolls (via combine_spectra): ', end='')
     print_pass() if result else print_fail()
 
     assert result
-    assert metadata['weighted'] is True
-    assert metadata['rolls'] == ['ROLL_A', 'ROLL_B']
-    assert metadata['companion_rolls'] == ['ROLL_C', 'ROLL_D']
-    assert metadata['exp_times'] == [5.0, 15.0]
-    assert np.allclose(metadata['ratios_per_roll']['ROLL_A'], single_ratio_a)
-    assert np.allclose(metadata['ratios_per_roll']['ROLL_B'], ratio_b_on_a)
-    assert np.allclose(metadata['ratio_errs_per_roll']['ROLL_A'], ratio_err_a)
-    assert np.allclose(metadata['ratio_errs_per_roll']['ROLL_B'], ratio_err_b_on_a)
-    assert np.allclose(metadata['ratio_noise'], expected_noise, equal_nan=True)
-
 
 def test_abs_fluxcal():
     """ 
@@ -1176,5 +1143,5 @@ if __name__ == '__main__':
     test_convert_spec_to_flux_slit_scalar_map()
     test_apply_core_throughput_correction()
     test_compute_spec_flux_ratio_single_roll()
-    test_compute_spec_flux_ratio_weighted_rolls_with_interp()
+    test_compute_spec_flux_ratio_weighted()
     test_l4_companion_photometry()
