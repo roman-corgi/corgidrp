@@ -228,6 +228,8 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=Non
         spec_values (ndarray): flux values (photoelectron/s) for `SPEC`.
         spec_err (ndarray): uncertainty array matching `SPEC` shape.
         spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
+        roll (str, optional): telescope roll angle
+        exp_time (float, optional): exposure time in seconds
         col_cor (float, optional): color-correction factor to record.
 
     Returns:
