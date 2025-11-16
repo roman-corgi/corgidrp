@@ -499,17 +499,17 @@ def test_compute_spec_flux_ratio_weighted():
 
     fluxcal_factor = make_mock_fluxcal_factor(1.8, err=0.05)
 
-    # Combine host spectra from rolls A and B
+    # Combine host spectra from rolls A and B (raw units)
     host_comb_spec, host_comb_wave, host_comb_err, host_rolls = l4_to_tda.combine_spectra(
         Dataset([host_ds_a, host_ds_b])
     )
 
-    # Combine companion spectra from rolls A and B
+    # Combine companion spectra from rolls A and B (raw units)
     comp_comb_spec, comp_comb_wave, comp_comb_err, comp_rolls = l4_to_tda.combine_spectra(
         Dataset([comp_ds_a, comp_ds_b])
     )
 
-    # Build combined host and companion Images
+    # Build combined host and companion Images in raw units
     host_comb_image = make_1d_spec_image(
         host_comb_spec,
         host_comb_err.reshape(1, -1),
@@ -520,20 +520,38 @@ def test_compute_spec_flux_ratio_weighted():
         comp_comb_err.reshape(1, -1),
         comp_comb_wave,
     )
-    # Combined products are still coronagraphic
-    host_comb_image.hdu_list['SPEC'].header['CTCOR'] = True
-    comp_comb_image.hdu_list['SPEC'].header['CTCOR'] = True
 
-    # Compute flux ratio using the combined spectra
+    host_comb_image.ext_hdr['FSMLOS'] = 0
+    comp_comb_image.ext_hdr['FSMLOS'] = 1
+
+    # Apply core-throughput correction to the combined companion spectrum
+    ct_cal = create_ct_cal(fwhm_mas=50)
+    fpam_fsam_cal = create_mock_fpamfsam_cal()
+    comp_comb_image.ext_hdr.setdefault('STARLOCX', 0.0)
+    comp_comb_image.ext_hdr.setdefault('STARLOCY', 0.0)
+    comp_comb_image.ext_hdr['WV0_X'] = 70.0
+    comp_comb_image.ext_hdr['WV0_Y'] = 0.0
+    _ = l4_to_tda.apply_core_throughput_correction(comp_comb_image, ct_cal, fpam_fsam_cal)
+
+    # Compute flux-calibrated combined spectra to build the expected ratio and error
+    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_comb_image]), fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_comb_image]), fluxcal_factor)
+
+    host_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
+    comp_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
+    host_err_flux = np.squeeze(np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+    comp_err_flux = np.squeeze(np.array(comp_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+
+    # Compute flux ratio using the combined spectra (production path)
     ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
         host_comb_image, comp_comb_image, fluxcal_factor
     )
 
-    # Expected ratio and uncertainty
-    expected_ratio = comp_comb_spec / host_comb_spec
+    # Expected ratio and uncertainty in flux units
+    expected_ratio = comp_flux / host_flux
     expected_ratio_err = np.sqrt(
-        (comp_comb_err / host_comb_spec) ** 2
-        + ((comp_comb_spec * host_comb_err) / (host_comb_spec ** 2)) ** 2
+        (comp_err_flux / host_flux) ** 2
+        + ((comp_flux * host_err_flux) / (host_flux ** 2)) ** 2
     )
 
     result = (
