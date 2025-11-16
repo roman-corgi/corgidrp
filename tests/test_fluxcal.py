@@ -228,8 +228,8 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=Non
         spec_values (ndarray): flux values (photoelectron/s) for `SPEC`.
         spec_err (ndarray): uncertainty array matching `SPEC` shape.
         spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
-        roll (str, optional): telescope roll angle.
-        exp_time (float, optional): exposure time in seconds.
+        roll (str, optional): telescope roll angle
+        exp_time (float, optional): exposure time in seconds
         col_cor (float, optional): color-correction factor to record.
 
     Returns:
@@ -247,7 +247,6 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=Non
     ext_hdr['MASKLOCY'] = 512
     pri_hdr['ROLL'] = roll
     pri_hdr['EXP_TIME'] = exp_time
-    ext_hdr['COL_COR'] = col_cor
     if col_cor is not None:
         ext_hdr['COL_COR'] = col_cor
     img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
@@ -430,12 +429,28 @@ def test_compute_spec_flux_ratio_single_roll():
     spec_err = np.full((1, host_spec.size), 0.2)
     wave = np.linspace(700, 760, host_spec.size)
 
-    host_ds = make_1d_spec_image(host_spec, spec_err, wave, roll='ROLL_A', exp_time=10.0, col_cor=True)
-    comp_ds = make_1d_spec_image(comp_spec, spec_err, wave, roll='ROLL_B', exp_time=10.0, col_cor=True)
+    host_ds = make_1d_spec_image(host_spec, spec_err, wave, roll='ROLL_A',
+                                 exp_time=10.0, col_cor=True)
+    comp_ds = make_1d_spec_image(comp_spec, spec_err, wave, roll='ROLL_B',
+                                 exp_time=10.0, col_cor=True)
+
+    host_ds.ext_hdr['FSMLOS'] = 0
+    comp_ds.ext_hdr['FSMLOS'] = 1
+
+    # Place the companion at a valid WV0 location 
+    comp_ds.ext_hdr.setdefault('STARLOCX', 0.0)
+    comp_ds.ext_hdr.setdefault('STARLOCY', 0.0)
+    comp_ds.ext_hdr['WV0_X'] = 70.0
+    comp_ds.ext_hdr['WV0_Y'] = 0.0
     fluxcal_factor = make_mock_fluxcal_factor(2.5, err=0.1)
 
-    host_cal = l4_to_tda.convert_spec_to_flux(host_ds, fluxcal_factor)
-    comp_cal = l4_to_tda.convert_spec_to_flux(comp_ds, fluxcal_factor)
+    # Apply CT correction to comp
+    ct_cal = create_ct_cal(fwhm_mas=50)
+    fpam_fsam_cal = create_mock_fpamfsam_cal()
+    applied = l4_to_tda.apply_core_throughput_correction(comp_ds, ct_cal, fpam_fsam_cal)
+
+    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_ds]), fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_ds]), fluxcal_factor)
     host_spec_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
     comp_spec_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
     host_err_flux = np.squeeze(np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
@@ -446,9 +461,7 @@ def test_compute_spec_flux_ratio_single_roll():
         ((comp_spec_flux * host_err_flux) / (host_spec_flux ** 2)) ** 2
     )
 
-    host_image = host_ds[0]
-    comp_image = comp_ds[0]
-    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_image, comp_image, fluxcal_factor)
+    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_ds, comp_ds, fluxcal_factor)
     expected = comp_spec / host_spec
 
     result = (
@@ -486,17 +499,17 @@ def test_compute_spec_flux_ratio_weighted():
 
     fluxcal_factor = make_mock_fluxcal_factor(1.8, err=0.05)
 
-    # Combine host spectra from rolls A and B
+    # Combine host spectra from rolls A and B (raw units)
     host_comb_spec, host_comb_wave, host_comb_err, host_rolls = l4_to_tda.combine_spectra(
-        Dataset([host_ds_a[0], host_ds_b[0]])
+        Dataset([host_ds_a, host_ds_b])
     )
 
-    # Combine companion spectra from rolls A and B
+    # Combine companion spectra from rolls A and B (raw units)
     comp_comb_spec, comp_comb_wave, comp_comb_err, comp_rolls = l4_to_tda.combine_spectra(
-        Dataset([comp_ds_a[0], comp_ds_b[0]])
+        Dataset([comp_ds_a, comp_ds_b])
     )
 
-    # Build combined host and companion Images
+    # Build combined host and companion Images in raw units
     host_comb_image = make_1d_spec_image(
         host_comb_spec,
         host_comb_err.reshape(1, -1),
@@ -507,20 +520,38 @@ def test_compute_spec_flux_ratio_weighted():
         comp_comb_err.reshape(1, -1),
         comp_comb_wave,
     )
-    # Combined products are still coronagraphic
-    host_comb_image.hdu_list['SPEC'].header['CTCOR'] = True
-    comp_comb_image.hdu_list['SPEC'].header['CTCOR'] = True
 
-    # Compute flux ratio using the combined spectra
+    host_comb_image.ext_hdr['FSMLOS'] = 0
+    comp_comb_image.ext_hdr['FSMLOS'] = 1
+
+    # Apply core-throughput correction to the combined companion spectrum
+    ct_cal = create_ct_cal(fwhm_mas=50)
+    fpam_fsam_cal = create_mock_fpamfsam_cal()
+    comp_comb_image.ext_hdr.setdefault('STARLOCX', 0.0)
+    comp_comb_image.ext_hdr.setdefault('STARLOCY', 0.0)
+    comp_comb_image.ext_hdr['WV0_X'] = 70.0
+    comp_comb_image.ext_hdr['WV0_Y'] = 0.0
+    _ = l4_to_tda.apply_core_throughput_correction(comp_comb_image, ct_cal, fpam_fsam_cal)
+
+    # Compute flux-calibrated combined spectra to build the expected ratio and error
+    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_comb_image]), fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_comb_image]), fluxcal_factor)
+
+    host_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
+    comp_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
+    host_err_flux = np.squeeze(np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+    comp_err_flux = np.squeeze(np.array(comp_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
+
+    # Compute flux ratio using the combined spectra (production path)
     ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
         host_comb_image, comp_comb_image, fluxcal_factor
     )
 
-    # Expected ratio and uncertainty
-    expected_ratio = comp_comb_spec / host_comb_spec
+    # Expected ratio and uncertainty in flux units
+    expected_ratio = comp_flux / host_flux
     expected_ratio_err = np.sqrt(
-        (comp_comb_err / host_comb_spec) ** 2
-        + ((comp_comb_spec * host_comb_err) / (host_comb_spec ** 2)) ** 2
+        (comp_err_flux / host_flux) ** 2
+        + ((comp_flux * host_err_flux) / (host_flux ** 2)) ** 2
     )
 
     result = (
