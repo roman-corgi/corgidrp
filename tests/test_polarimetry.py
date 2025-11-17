@@ -789,11 +789,12 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
     """
 
     # Set the random seed for reproducibility
-    np.random.seed(42) 
+    rng_seed = 52
+    rng = np.random.default_rng(rng_seed)
 
     # --- Simulate varying polarization fractions ---
-    p_input = 0.1 + 0.2 * np.random.rand(n_sim)
-    theta_input = 10.0 + 20.0 * np.random.rand(n_sim)
+    p_input = 0.1 + 0.2 * rng.random(n_sim)
+    theta_input = 10.0 + 20.0 * rng.random(n_sim)
 
     Q_recovered = []
     Qerr_recovered = []
@@ -807,13 +808,15 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
     rolls = np.full(n_repeat, 0)
 
     for p, theta in zip(p_input, theta_input):
+        new_seed = rng.integers(0, 1e6)
         # --- Generate mock L2b image ---
         dataset_polmock = mocks.create_mock_polarization_l3_dataset(
             I0=1e10,
             p=p,
             theta_deg=theta,
             roll_angles=rolls,
-            prisms=prisms
+            prisms=prisms, 
+            seed=new_seed
         )
 
         # --- Compute unocculted Stokes ---
@@ -866,7 +869,8 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
         theta_deg=theta_target1,
         roll_angles=rolls,
         prisms=prisms, 
-        return_image_list=True
+        return_image_list=True,
+        seed= rng.integers(0, 1e6)
     )
     for img in dataset1_polmock_list:
         img.pri_hdr['TARGET'] = '1'
@@ -881,7 +885,8 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
         theta_deg=theta_target2,
         roll_angles=rolls,
         prisms=prisms, 
-        return_image_list=True
+        return_image_list=True,
+        seed=rng.integers(0, 1e6)
     )
 
     #concatenate the lists
@@ -914,10 +919,10 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
     return
 
 if __name__ == "__main__":
-    test_image_splitting()
-    test_calc_pol_p_and_pa_image()
-    test_subtract_stellar_polarization()
-    test_mueller_matrix_cal()
-    test_combine_polarization_states()
-    test_align_frames()
+    # test_image_splitting()
+    # test_calc_pol_p_and_pa_image()
+    # test_subtract_stellar_polarization()
+    # test_mueller_matrix_cal()
+    # test_combine_polarization_states()
+    # test_align_frames()
     test_calc_stokes_unocculted()
