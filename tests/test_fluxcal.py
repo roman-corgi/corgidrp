@@ -2,11 +2,22 @@ import pytest
 import warnings
 import os
 import numpy as np
+import logging
+from pathlib import Path
 import corgidrp
-from corgidrp.mocks import create_default_L3_headers
-from corgidrp.mocks import create_flux_image
-from corgidrp.mocks import create_pol_flux_image
-from corgidrp.data import Image, Dataset, FluxcalFactor
+from astropy.io import fits
+from corgidrp.mocks import (
+    create_default_L3_headers,
+    create_flux_image,
+    create_pol_flux_image,
+    create_mock_stokes_i_image,
+    gaussian_array,
+    create_ct_cal,
+    create_mock_fpamfsam_cal,
+    make_mock_fluxcal_factor,
+)
+from corgidrp.data import Image, Dataset, FluxcalFactor, get_stokes_intensity_image
+from corgidrp.check import verify_header_keywords
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
@@ -187,6 +198,27 @@ def test_fluxcal_file():
     # JM: I moved this out of the fluxcal class and into fluxcal.py because, depending on the method you use to 
     # make the fluxcal factor, the BUNIT will vary. Doing a mock without running fluxcal methods won't update BUNIT
     #assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
+
+
+
+
+
+
+
+
+
+def _setup_vap_logger(test_name):
+    """Create a logger that saves PASS/FAIL records to pol_tda_companion_phot_output."""
+    log_dir = Path(__file__).resolve().parent / "pol_tda_companion_phot_output"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger(test_name)
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    handler = logging.FileHandler(log_dir / f"{test_name}.log", mode='w')
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
+    return logger, log_dir
+
 
 def test_abs_fluxcal():
     """ 
@@ -562,6 +594,155 @@ def test_pol_abs_fluxcal():
     assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP1.ext_hdr['HISTORY'])
     assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP2.ext_hdr['HISTORY'])
     
+
+def test_l4_companion_photometry():
+    """VAP Test 3: Companion photometry + apparent magnitude validation."""
+    logger, output_dir = _setup_vap_logger('test_l4_companion_photometry')
+    logger.info('=' * 80)
+    logger.info('Spectroscopy L4-> TDA VAP Test 3: Companion Photometry / Apparent Magnitude')
+    logger.info('=' * 80)
+    phot_kwargs = {
+        'encircled_radius': 5,
+        'frac_enc_energy': 1.0,
+        'method': 'subpixel',
+        'subpixels': 5,
+        'background_sub': False,
+        'centering_method': 'xy',
+        'centroid_roi_radius': 5,
+    }
+
+    host_counts = 2.5e5
+    companion_counts = 5.0e4
+    col_cor = 1.2
+    host_image = create_mock_stokes_i_image(host_counts, 'HOST', seed=1, wv0_x=-1.0, wv0_y=0.5, is_coronagraphic=True)
+    companion_image = create_mock_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, wv0_x=2.0, wv0_y=-1.0, is_coronagraphic=True)
+
+    ct_cal = create_ct_cal(fwhm_mas=50, cfam_name='3C', cenx=0.0, ceny=0.0, nx=11, ny=11)
+    fpamfsam_cal = create_mock_fpamfsam_cal()
+
+    host_dataset = Dataset([host_image])
+    companion_dataset = Dataset([companion_image])
+    wv0_x = companion_image.ext_hdr.get('WV0_X', 0.0)
+    wv0_y = companion_image.ext_hdr.get('WV0_Y', 0.0)
+    ct_factor = np.asarray(
+        ct_cal.InterpolateCT(wv0_x, wv0_y, companion_dataset, fpamfsam_cal)
+    ).ravel()[0]
+    if not np.isfinite(ct_factor) or ct_factor <= 0:
+        raise ValueError("Interpolated core throughput factor must be positive and finite.")
+    companion_image.data = companion_image.data / ct_factor
+    companion_image.err = companion_image.err / ct_factor
+    companion_image.ext_hdr['CTCOR'] = True
+    companion_image.ext_hdr['CTFACT'] = ct_factor
+    host_intensity_ds = Dataset([get_stokes_intensity_image(host_image)])
+    companion_intensity_ds = Dataset([get_stokes_intensity_image(companion_image)])
+    fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.05)
+
+    checks = []
+    ext_hdr = companion_image.ext_hdr
+    cgi_keys = ['CFAMNAME', 'DPAMNAME', 'LSAMNAME']
+    checks.append(verify_header_keywords(ext_hdr, cgi_keys, frame_info="Companion header", logger=logger))
+    checks.append(verify_header_keywords(ext_hdr, {'DATALVL': 'L4'}, frame_info="Companion header", logger=logger))
+    checks.append(verify_header_keywords(ext_hdr, {'BUNIT': 'photoelectron/s'}, frame_info="Companion header", logger=logger))
+
+    message = "Core throughput correction applied to companion"
+    condition = np.isfinite(ct_factor) and companion_image.ext_hdr.get('CTCOR', False)
+    details = f"CTFACT={ct_factor:.4f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    comp_intensity = companion_intensity_ds[0]
+    host_intensity = host_intensity_ds[0]
+
+    comp_ap, comp_ap_err = fluxcal.aper_phot(comp_intensity, **phot_kwargs)
+    host_ap, host_ap_err = fluxcal.aper_phot(host_intensity, **phot_kwargs)
+
+    # Save the mock L4 Stokes cubes for reference
+    host_file = output_dir / "0200001000000000000_20250101t1200000_l4_.fits"
+    comp_file = output_dir / "0200001000000000001_20250101t1200001_l4_.fits"
+    for path, image in ((host_file, host_image), (comp_file, companion_image)):
+        if path.exists():
+            path.unlink()
+        image.save(filedir=str(path.parent), filename=path.name)
+
+    host_flux_ds = l4_to_tda.determine_flux(host_intensity_ds, fluxcal_factor, phot_kwargs=phot_kwargs)
+    comp_flux_ds = l4_to_tda.determine_flux(companion_intensity_ds, fluxcal_factor, phot_kwargs=phot_kwargs)
+
+    host_flux = host_flux_ds[0].ext_hdr['FLUX']
+    comp_flux = comp_flux_ds[0].ext_hdr['FLUX']
+    comp_flux_err = comp_flux_ds[0].ext_hdr['FLUXERR']
+    flux_logged = comp_flux_ds[0].ext_hdr.get('FLUX')
+    flux_details = f"FLUX={flux_logged:.3f}" if flux_logged is not None else "FLUX missing"
+    message = "Companion flux recorded in header"
+    condition = 'FLUX' in comp_flux_ds[0].ext_hdr
+    logger.info(f"{message} | {flux_details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    # Confirm the fluxcal factor (with color correction) predicts the measured companion flux
+    factor = fluxcal_factor.fluxcal_fac / col_cor
+    factor_err = fluxcal_factor.fluxcal_err / col_cor
+    expected_comp_flux = comp_ap * factor
+    expected_comp_flux_err = np.sqrt((comp_ap_err * factor) ** 2 + (comp_ap * factor_err) ** 2)
+    message = "Companion flux matches expected scaling"
+    condition = np.isclose(comp_flux, expected_comp_flux, rtol=5e-3)
+    details = f"measured={comp_flux:.2f}, expected={expected_comp_flux:.2f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    # Confirm that enabling COL_COR actually reduces the measured flux relative to the aperture sum
+    message = "Color correction applied when COL_COR present"
+    condition = comp_flux < comp_ap * fluxcal_factor.fluxcal_fac
+    details = f"flux_with_col_cor={comp_flux:.2f}, no_col_cor={comp_ap * fluxcal_factor.fluxcal_fac:.2f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    # Confirm that the flux uncertainty matches what is propagated from aperture and calibration errors
+    message = "Flux uncertainty propagated from aperture sum"
+    condition = np.isclose(comp_flux_err, expected_comp_flux_err, rtol=5e-3)
+    details = f"measured={comp_flux_err:.2f}, expected={expected_comp_flux_err:.2f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    # Check that companion/host flux ratio matches the injected counts after color correction
+    ratio_measured = comp_flux / host_flux
+    ratio_expected = (comp_ap / col_cor) / host_ap
+    ratio_tolerance = max(expected_comp_flux_err / comp_flux, 0.05)
+    message = "Flux ratio matches expected value"
+    condition = np.isclose(ratio_measured, ratio_expected, rtol=ratio_tolerance)
+    details = f"measured={ratio_measured:.3f}, expected={ratio_expected:.3f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    filter_file = fluxcal.get_filter_name(comp_flux_ds[0])
+    companion_mag = fluxcal.calculate_vega_mag(comp_flux, filter_file)
+    companion_mag_err = 2.5 / np.log(10) * comp_flux_err / comp_flux
+    expected_mag = fluxcal.calculate_vega_mag(expected_comp_flux, filter_file)
+    expected_mag_err = 2.5 / np.log(10) * expected_comp_flux_err / expected_comp_flux
+
+    # Convert the measured companion flux into a Vega magnitude and compare against expectation
+    message = "Apparent magnitude derived from measured companion flux"
+    condition = np.isclose(companion_mag, expected_mag, rtol=5e-3)
+    details = f"measured={companion_mag:.3f}, expected={expected_mag:.3f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    # Check that magnitude uncertainty is the flux-error propagation scaled into magnitudes
+    message = "Magnitude uncertainty propagated from flux error"
+    condition = np.isclose(companion_mag_err, expected_mag_err, rtol=5e-3)
+    details = f"measured={companion_mag_err:.3f}, expected={expected_mag_err:.3f}"
+    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
+    checks.append(condition)
+
+    result = all(checks)
+    if result:
+        logger.info('test_l4_companion_photometry overall: PASS')
+    else:
+        logger.info('test_l4_companion_photometry overall: FAIL')
+    logger.info('=' * 80)
+    logger.info('End of Spectroscopy L4-> TDA VAP Test 3')
+    logger.info('=' * 80)
+    print_pass() if result else print_fail()
+    assert result
+
 if __name__ == '__main__':
     test_get_filter_name()
     test_flux_calc()
@@ -571,6 +752,5 @@ if __name__ == '__main__':
     test_fluxcal_file()
     test_abs_fluxcal()
     test_pol_abs_fluxcal()
-
-
+    test_l4_companion_photometry()
 

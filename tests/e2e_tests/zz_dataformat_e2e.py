@@ -359,7 +359,7 @@ def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l2b_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_e2e")
-    fits_files = glob.glob(os.path.join(l2b_data_dir, "*.fits"))
+    fits_files = glob.glob(os.path.join(l2b_data_dir, "*_l2b.fits"))
     l2b_data_file = max(fits_files, key=os.path.getmtime)
     
     validate_cgi_filename(l2b_data_file, 'l2b')
@@ -447,6 +447,62 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
         # diff the two outputs
         compare_docs(ref_doc_contents, doc_contents)
 
+@pytest.mark.e2e
+def test_l3_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    l3_spec_data_dir = os.path.join(thisfile_dir, "l1_to_l3_spec_e2e", "analog")
+    l3_spec_data_file = glob.glob(os.path.join(l3_spec_data_dir, "*_l3_.fits"))[0]
+    
+    validate_cgi_filename(l3_spec_data_file, 'l3_')
+    
+    generate_fits_excel_documentation(l3_spec_data_file, os.path.join(l3_spec_data_dir, "l3_spec_analog_documentation.xlsx"))
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(l3_spec_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "l3_spec_analog.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l3_spec_analog.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+
+@pytest.mark.e2e
+def test_l3_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
+    l3_pol_data_dir = os.path.join(thisfile_dir, "l1_to_l3_pol_e2e", "analog")
+    l3_pol_data_file = glob.glob(os.path.join(l3_pol_data_dir, "*_l3_.fits"))[0]
+    
+    validate_cgi_filename(l3_pol_data_file, 'l3_')
+    
+    generate_fits_excel_documentation(l3_pol_data_file, os.path.join(l3_pol_data_dir, "l3_pol_analog_documentation.xlsx"))
+    
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(l3_pol_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "l3_pol_analog.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l3_pol_analog.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -501,6 +557,34 @@ def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
     ref_doc = os.path.join(ref_doc_dir, "l4noncoron.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+
+@pytest.mark.e2e
+def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
+    l4_pol_data_dir = os.path.join(thisfile_dir, "l3_to_l4_pol_e2e")
+    l4_pol_data_file = glob.glob(os.path.join(l4_pol_data_dir, "*_l4_.fits"))[0]
+    
+    validate_cgi_filename(l4_pol_data_file, 'l4_')
+    
+    generate_fits_excel_documentation(l4_pol_data_file, os.path.join(l4_pol_data_dir, "l4_pol_documentation.xlsx"))
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(l4_pol_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "l4_pol.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l4_pol.rst")
     if os.path.exists(ref_doc):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
@@ -1232,8 +1316,11 @@ if __name__ == "__main__":
     test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
     test_l2b_pc_dataformat_e2e(e2edata_dir, outputdir)
     test_l3_dataformat_e2e(e2edata_dir, outputdir)
+    test_l3_spec_dataformat_e2e(e2edata_dir, outputdir)
+    test_l3_pol_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_pol_dataformat_e2e(e2edata_dir, outputdir)
     test_mueller_matrix_dataformat_e2e(e2edata_dir, outputdir)
     test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
     test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
