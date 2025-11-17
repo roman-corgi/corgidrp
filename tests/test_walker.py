@@ -559,8 +559,6 @@ def test_generate_multiple_recipes():
     assert len(recipes) == 2
 
 
-
-
 if __name__ == "__main__":#
     test_autoreducing()
     test_auto_template_identification()

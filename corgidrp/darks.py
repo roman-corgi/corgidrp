@@ -5,8 +5,7 @@ from astropy.io import fits
 
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
-from corgidrp.data import DetectorNoiseMaps, Dark
-import corgidrp.data as data
+from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset
 
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
@@ -25,7 +24,7 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     master dark.
 
     Args:
-        dataset_or_image_list (dataset, list, or array_like): Dataset or list (or stack) of L2b data frames
+        dataset_or_image_list (data.Dataset, list, or array_like): Dataset or list (or stack) of L2b data frames
     (with no bad pixels applied to them).
         bpmap_list (list or array_like): List (or stack) of bad-pixel maps
         associated with L2b data frames. Each must be 0 (good) or 1 (bad)
@@ -55,7 +54,7 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     # import psutil
     # process = psutil.Process()
 
-    if not isinstance(dataset_or_image_list, data.Dataset):
+    if not isinstance(dataset_or_image_list, Dataset):
         # if input is an np array or stack, try to accommodate
         if type(dataset_or_image_list) == np.ndarray:
             if dataset_or_image_list.ndim == 1: # pathological case of empty array
@@ -96,13 +95,12 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
             pass
 
     # Add non masked elements
-    if isinstance(dataset_or_image_list, data.Dataset):
-        with fits.open(dataset_or_image_list[0].filepath, 'readonly') as temp_fits:
-            if err:
-                shape = temp_fits[2].data.shape[1:]
-            else:
-                shape = temp_fits[1].data.shape
-        del temp_fits
+    if isinstance(dataset_or_image_list, Dataset):
+        temp_fits = Image(dataset_or_image_list[0].filepath)
+        if err:
+            shape = temp_fits.err.shape[1:] 
+        else:
+            shape = temp_fits.data.shape 
         sum_im = np.zeros(shape).astype(float)
         map_im = np.zeros(shape, dtype=int)
     elif isinstance(dataset_or_image_list, list) or isinstance(dataset_or_image_list, np.array):  
@@ -112,14 +110,16 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
         raise TypeError('image_list must be a list, array-like, or a Dataset')
 
     for i in range(len(dataset_or_image_list)):
-        if isinstance(dataset_or_image_list, data.Dataset):
-            with fits.open(dataset_or_image_list[i].filepath, 'readonly') as temp_fits:
-                if err:
-                    frame_data = temp_fits[2].data[0]
-                else:
-                    frame_data = temp_fits[1].data.astype(float)
-                im_m = np.ma.masked_array(frame_data, temp_fits[3].data.astype(bool).astype(int))
-            del frame_data, temp_fits
+        if isinstance(dataset_or_image_list, Dataset):
+            if dataset_or_image_list[0].data is None:
+                temp_fits = Image(dataset_or_image_list[i].filepath)
+            else:
+                temp_fits = dataset_or_image_list[i]
+            if err:
+                frame_data = temp_fits.err[0] 
+            else:
+                frame_data = temp_fits.data.astype(float)
+            im_m = np.ma.masked_array(frame_data, temp_fits.dq.astype(bool).astype(int))
         else: #list
             im_m = np.ma.masked_array(dataset_or_image_list[i], bpmap_list[i])
         masked = im_m.filled(0)
@@ -128,7 +128,6 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
         else:
             sum_im += masked
         map_im += (im_m.mask == False).astype(int)
-        del masked, im_m
 
     # Divide sum_im by map_im only where map_im is not equal to 0 (i.e.,
     # not masked).
@@ -194,7 +193,10 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     Args:
     dataset (corgidrp.data.Dataset):
         This is an instance of corgidrp.data.Dataset.
-        Each frame should accord with the SCI full frame geometry.
+        Each frame should accord with the SCI full frame geometry. 
+        If Dataset has metadata only (as in RAM-heavy case), 
+        each frame is read in from its filepath one at a time.  If Dataset has 
+        its data, then all the frames are processed at once. 
     detector_params (corgidrp.data.DetectorParams):
         a calibration file storing detector calibration values
     detector_regions (dict):
@@ -250,15 +252,19 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         frames = dataset
         bpmaps = None #not used in this case
         errs = frames
-        with fits.open(dataset.frames[0].filepath, 'readonly') as temp_fits:
-            test_frame = temp_fits[1].data.astype(float)
-            test_frame[telem_rows] = np.nan
-            i0 = slice_section(test_frame, 'SCI', 'image', detector_regions)
-            if np.isnan(i0).any():
-                raise ValueError('telem_rows cannot be in image area.')
-            test_frame[telem_rows] = 0
+        test_image = Image(dataset.frames[0].filepath)
+        test_frame = test_image.data.astype(float)
+        test_frame[telem_rows] = np.nan
+        i0 = slice_section(test_frame, 'SCI', 'image', detector_regions)
+        if np.isnan(i0).any():
+            raise ValueError('telem_rows cannot be in image area.')
+        test_frame[telem_rows] = 0
     mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
     mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
+    if dataset[0].data is None:
+        # equivalent to what is done in if statement above for datasets with data
+        mean_frame[telem_rows] = 0 
+        mean_err[telem_rows] = 0 
     # combine the error from individual frames to the standard deviation across
     # the frames due to statistical variance
     zero_inds = np.where(unmasked_num==0)
@@ -266,13 +272,14 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     if dataset[0].data is None:
         sum_squares = np.zeros_like(mean_frame).astype(float)
         for f in dataset.frames:
-            with fits.open(f.filepath, 'readonly') as temp_fits:
-                test_frame = temp_fits[1].data.astype(float)
-                mask = temp_fits[3].data.astype(bool).astype(int) #dq
-                masked_frame = np.ma.masked_array(test_frame, mask)
-                masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
-                sum_squares += (masked_frame - masked_mean)**2
-            del masked_frame, test_frame, mask, temp_fits
+            temp_frame = Image(f.filepath)
+            frame_data = temp_frame.data.astype(float)
+            # equivalent to what is done in if statement above for datasets with data
+            frame_data[telem_rows] = 0
+            mask = temp_frame.dq.astype(bool).astype(int)
+            masked_frame = np.ma.masked_array(frame_data, mask)
+            masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
+            sum_squares += (masked_frame - masked_mean)**2
         stat_std = np.zeros_like(sum_squares).astype(float)
         stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds])/np.sqrt(unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
         stat_std[zero_inds] = 0
@@ -296,10 +303,8 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     if dataset[0].data is None:
         dq_sum = np.zeros_like(mean_frame).astype(float)
         for j in range(len(dataset)):
-            with fits.open(dataset[j].filepath, 'readonly') as temp_fits:
-                dq_temp = temp_fits[3].data #dq
-                dq_sum += dq_temp.astype(float)
-            del dq_temp, temp_fits
+            dq_temp = Image(dataset[j].filepath).dq
+            dq_sum += dq_temp.astype(float)
         dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
         output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
         output_dq = output_dq.filled(0).astype(int)
@@ -388,6 +393,9 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         darks for analog frames,
         thousands for photon counting depending on the maximum number of
         frames that will be used for photon counting.
+        If Dataset has metadata only (as in RAM-heavy case), 
+        each frame is read in from its filepath one at a time.  If Dataset has 
+        its data, then all the frames are processed at once.
     detector_params (corgidrp.data.DetectorParams):
         a calibration file storing detector calibration values
     weighting (bool):
@@ -576,32 +584,34 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             frames = datasets[i]
             bpmaps = None #not used in this case
             errs = frames
-            with fits.open(datasets[i].frames[0].filepath, 'readonly') as temp_fits:
-                test_frame = temp_fits[1].data.astype(float)
-                test_frame[telem_rows] = np.nan
-                i0 = slice_section(test_frame, 'SCI', 'image', detector_regions)
-                if np.isnan(i0).any():
-                    raise ValueError('telem_rows cannot be in image area.')
-                test_frame[telem_rows] = 0
+            test_frame = Image(datasets[i].frames[0].filepath).data.astype(float)
+            shape = test_frame.shape # for later, after mean_combine()
+            test_frame[telem_rows] = np.nan
+            i0 = slice_section(test_frame, 'SCI', 'image', detector_regions)
+            if np.isnan(i0).any():
+                raise ValueError('telem_rows cannot be in image area.')
+            test_frame[telem_rows] = 0
         mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
         mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
+        if dataset[0].data is None:
+            # equivalent to what is done in if statement above for datasets with data
+            mean_frame[telem_rows] = 0 
+            mean_err[telem_rows] = 0 
         # combine the error from individual frames to the standard deviation across
         # the frames due to statistical variance
         zero_inds = np.where(unmasked_num==0)
         nonzero_inds = np.where(unmasked_num!=0)
         if datasets[i][0].data is None:
-            with fits.open(datasets[i][0].filepath, 'readonly') as temp_fits:
-                shape = temp_fits[1].data.shape
-            del temp_fits
             sum_squares = np.zeros(shape).astype(float)
             for f in datasets[i].frames:
-                with fits.open(f.filepath, 'readonly') as temp_fits:
-                    test_frame = temp_fits[1].data.astype(float)
-                    mask = temp_fits[3].data.astype(bool).astype(int) #dq
-                    masked_frame = np.ma.masked_array(test_frame, mask)
-                    masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
-                    sum_squares += (masked_frame - masked_mean)**2
-                del masked_frame, test_frame, mask, temp_fits
+                temp_image = Image(f.filepath)
+                test_data = temp_image.data.astype(float)
+                # equivalent to what is done in if statement above for datasets with data
+                test_data[telem_rows] = 0
+                mask = temp_image.dq.astype(bool).astype(int) 
+                masked_frame = np.ma.masked_array(test_data, mask)
+                masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
+                sum_squares += (masked_frame - masked_mean)**2
             stat_std = np.zeros_like(sum_squares).astype(float)
             stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds])/np.sqrt(unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
             stat_std[zero_inds] = 0
@@ -637,10 +647,8 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         if datasets[i][0].data is None:
             dq_sum = np.zeros_like(mean_frame).astype(float)
             for j in range(len(datasets[i])):
-                with fits.open(datasets[i][j].filepath, 'readonly') as temp_fits:
-                    dq_temp = temp_fits[3].data #dq
-                    dq_sum += dq_temp.astype(float)
-                del dq_temp, temp_fits
+                dq_temp = Image(datasets[i][j].filepath).dq
+                dq_sum += dq_temp.astype(float)
             dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
             output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
             output_dq = output_dq.filled(0).astype(int)

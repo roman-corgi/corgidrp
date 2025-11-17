@@ -2,7 +2,8 @@
     "name" : "l2a_to_l2b_pc_spec",
     "template" : true,
     "drpconfig" : {
-        "track_individual_errors" : false
+        "track_individual_errors" : false,
+        "chunk_size" : "200"
     },
     "inputs" : [],
     "outputdir" : "",
@@ -14,6 +15,15 @@
             "name" : "convert_to_electrons",
             "calibs" : {
                 "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "dark_subtraction",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC, OPTIONAL"
+            },
+            "keywords" : {
+                "outputdir" : "AUTOMATIC"
             }
         },
         {

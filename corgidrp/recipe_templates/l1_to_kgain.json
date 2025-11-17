@@ -3,7 +3,8 @@
     "name" : "l1_to_kgain",
     "template" : true,
     "drpconfig" : {
-        "track_individual_errors" : false
+        "track_individual_errors" : false,
+        "chunk_size" : "200"
     },
     "inputs" : [],
     "outputdir" : "",

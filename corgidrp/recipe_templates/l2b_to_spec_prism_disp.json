@@ -2,7 +2,8 @@
     "name" : "l2b_to_spec_prism_disp",
     "template" : true,
     "drpconfig" : {
-        "track_individual_errors" : false
+        "track_individual_errors" : false,
+        "chunk_size" : "200"
     },
     "inputs" : [],
     "outputdir" : "",

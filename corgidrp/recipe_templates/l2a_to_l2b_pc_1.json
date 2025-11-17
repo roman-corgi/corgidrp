@@ -1,8 +1,10 @@
 {
     "name" : "l2a_to_l2b_pc_1",
     "template" : true,
+    "process_in_chunks" : true,
     "drpconfig" : {
-        "track_individual_errors" : false
+        "track_individual_errors" : false,
+        "chunk_size" : "200"
     },
     "inputs" : [],
     "outputdir" : "",

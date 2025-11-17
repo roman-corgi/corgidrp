@@ -1,8 +1,9 @@
 {
-    "name" : "build_trad_dark",
+    "name" : "build_trad_dark_image",
     "template" : true,
     "drpconfig" : {
-        "track_individual_errors" : false
+        "track_individual_errors" : false,
+        "chunk_size" : "200"
     },
     "inputs" : [],
     "outputdir" : "",

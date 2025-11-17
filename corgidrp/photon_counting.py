@@ -98,6 +98,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             exposure time, EM gain, k gain, and read noise.  If the input dataset's header key 'VISTYPE' is equal to 'DARK', a 
             photon-counted master dark calibration product will be produced.  Otherwise, the input dataset is assumed to consist of illuminated 
             frames intended for photon-counting.
+            If Dataset has metadata only (as in RAM-heavy case), 
+            each frame is read in from its filepath one at a time.  If Dataset has 
+            its data, then all the frames are processed at once.
         pc_master_dark (corgidrp.data.Dark): Dark containing photon-counted master dark(s) to be used for dark subtraction.  There is a 3-D cube 
             of master darks, 1 2-D slice per subset of frames specified by the input bin_size (see below).
             If None, no dark subtraction is done.
@@ -141,8 +144,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
 
     """
     # uncomment for RAM check
-    # import psutil 
-    # process = psutil.Process()
+    import psutil 
+    process = psutil.Process()
 
     if not isinstance(niter, (int, np.integer)) or niter < 1:
             raise PhotonCountException('niter must be an integer greater than '
@@ -253,12 +256,11 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         
         if dataset[0].data is None:
             for j, frame in enumerate(dataset.frames): 
-                with fits.open(frame.filepath, 'readonly') as temp_fits:
-                    frame_data = temp_fits[1].data
-                    frame_err = temp_fits[2].data[0]
-                    bool_map = temp_fits[3].data.astype(bool).astype(float)
-                del temp_fits
-                if np.nanmean(frame_data[considered_indices]/em_gain > pc_ecount_max):
+                temp_frame = data.Image(frame.filepath)
+                frame_data = temp_frame.data
+                frame_err = temp_frame.err[0]
+                bool_map = temp_frame.dq.astype(bool).astype(float)
+                if np.nanmean(frame_data[considered_indices])/em_gain > pc_ecount_max:
                     if safemode:
                         raise Exception('average # of electrons/pixel is > pc_ecount_max, which means '
                         'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
@@ -291,7 +293,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                     frame_pc_coadded_up = np.nansum([frame_pc_coadded_up, frames_pc_masked_up], axis=0)
                     frame_pc_coadded_low = np.nansum([frame_pc_coadded_low, frames_pc_masked_low], axis=0)
         else:    
-            if np.nanmean(dataset.all_data[:, considered_indices]/em_gain) > pc_ecount_max:
+            if np.nanmean(dataset.all_data[:, considered_indices])/em_gain > pc_ecount_max:
                 if safemode:
                     raise Exception('average # of electrons/pixel is > pc_ecount_max, which means '
                     'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
@@ -339,10 +341,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if dataset[0].data is None:
             dq_sum = np.zeros_like(mean_expected).astype(float)
             for j in range(len(dataset)):
-                with fits.open(dataset[j].filepath, 'readonly') as temp_fits:
-                    dq_temp = temp_fits[3].data #dq
-                    dq_sum += dq_temp.astype(float)
-                del dq_temp, temp_fits
+                dq_temp = data.Image(dataset[j].filepath).dq 
+                dq_sum += dq_temp.astype(float)
             dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
             dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
             dq = dq.filled(0).astype(int)
@@ -355,8 +355,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if pc_master_dark is not None:
             if type(pc_master_dark) is not data.Dark:
                 raise Exception('Input type for pc_master_dark must be a Dataset of corgidrp.data.Dark instances.')
-            if (pc_master_dark.ext_hdr['EXPTIME'], pc_master_dark.ext_hdr['EMGAIN_C']) != unique_vals[0][:2]:
-                raise PhotonCountException('Dark should have the same EXPTIME and EMGAIN_C as input_dataset, which are {0} and {1} respectively.'.format(unique_vals[0][0], unique_vals[0][1]))
+            if (pc_master_dark.ext_hdr['EXPTIME'], pc_master_dark.ext_hdr['EMGAIN_C']) != (float(unique_vals[0][0]), float(unique_vals[0][1])):
+                raise PhotonCountException('Dark should have the same EXPTIME and EMGAIN_C as input_dataset, which are {0} and {1} respectively.'.format((unique_vals[0][0]), unique_vals[0][1]))
             if 'PC_STAT' not in pc_master_dark.ext_hdr:
                 raise PhotonCountException('\'PC_STAT\' must be a key in the extension header of each frame of pc_master_dark.')
             if pc_master_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark':
@@ -415,13 +415,13 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             list_dq.append(combined_dq)
 
         # uncomment for RAM check
-        # mem = process.memory_info()
-        # # peak_wset is only available on Windows; fall back to rss on other platforms
-        # if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
-        #     peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
-        # else:
-        #     peak_memory = mem.rss / (1024 ** 2)  # convert to MB
-        # print(f"get_pc_mean peak memory usage:  {peak_memory:.2f} MB")
+        mem = process.memory_info()
+        # peak_wset is only available on Windows; fall back to rss on other platforms
+        if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+            peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+        else:
+            peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+        print(f"get_pc_mean peak memory usage:  {peak_memory:.2f} MB")
 
     if val[0] != "CGIVST_CAL_DRK":
         pc_ill_dataset = data.Dataset(list_new_image)

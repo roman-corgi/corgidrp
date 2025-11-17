@@ -34,8 +34,8 @@ def fix_headers(
     for file in list_of_fits:
         with fits.open(file, mode='update') as fits_file:
             exthdr = fits_file[1].header
-            if 'EMGAIN_A' in exthdr and float(exthdr['EMGAIN_A']) == 1:
-                exthdr['EMGAIN_A'] = -1 
+            if 'EMGAIN_A' in exthdr and float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
+                exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
             if 'EMGAIN_C' in exthdr and type(exthdr['EMGAIN_C']) is str:
                 exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
             
@@ -364,7 +364,15 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     
     # Step 2: L2a -> L2b (auto-detect spectroscopy recipe)
     logger.info('Step 2: Running L2a to L2b recipe...')
-    walker.walk_corgidrp(l2a_filelist, "", l3_outputdir)
+    if is_pc_data:
+        recipe = walker.autogen_recipe(l2a_filelist, l3_outputdir)
+        ### Modify keyword to so that the PC master dark is used
+        for step in recipe['steps']:
+            if step['name'] == "dark_subtraction":
+                step['calibs']['Dark'] = pc_dark.filepath
+        walker.run_recipe(recipe, save_recipe_file=True)
+    else:
+        walker.walk_corgidrp(l2a_filelist, "", l3_outputdir)
     
     # Find the L2b output files
     l2b_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2b.fits')]
@@ -557,7 +565,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")

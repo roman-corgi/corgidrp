@@ -193,7 +193,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
-    walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir, template="build_trad_dark_full_frame.json")
+    walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir) #, template="build_trad_dark_full_frame.json")
 
     # find cal file (naming convention for data.Dark class)
     for f in os.listdir(build_trad_dark_outputdir):

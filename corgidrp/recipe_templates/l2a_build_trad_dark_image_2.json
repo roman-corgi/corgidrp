@@ -1,5 +1,5 @@
 {
-    "name" : "l1_to_l2b_pc_dark_2",
+    "name" : "l2a_build_trad_dark_image_2",
     "template" : true,
     "ram_heavy" : true,
     "drpconfig" : {
@@ -10,10 +10,9 @@
     "outputdir" : "",
     "steps" : [
         {
-            "name": "get_pc_mean",
-            "keywords" : {
-                "inputmode" : "darks",
-                "dataset_copy" : false
+            "name" : "build_trad_dark",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
             }
         },
         {

@@ -1,8 +1,10 @@
 {
     "name" : "l2a_to_l2b_pc_2",
     "template" : true,
+    "ram_heavy" : true,
     "drpconfig" : {
-        "track_individual_errors" : false
+        "track_individual_errors" : false,
+        "chunk_size" : "200"
     },
     "inputs" : [],
     "outputdir" : "",

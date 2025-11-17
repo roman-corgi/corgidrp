@@ -1,7 +1,7 @@
 {
-    "name" : "l1_to_l2b_pc_dark_2",
+    "name" : "l2a_build_trad_dark_image_1",
     "template" : true,
-    "ram_heavy" : true,
+    "process_in_chunks" : true,
     "drpconfig" : {
         "track_individual_errors" : false,
         "chunk_size" : "200"
@@ -10,11 +10,13 @@
     "outputdir" : "",
     "steps" : [
         {
-            "name": "get_pc_mean",
-            "keywords" : {
-                "inputmode" : "darks",
-                "dataset_copy" : false
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
             }
+        },
+        {
+            "name" : "em_gain_division"
         },
         {
             "name" : "save"

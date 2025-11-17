@@ -28,16 +28,19 @@ class Dataset():
         all_data (np.array): an array with all the data combined together. First dimension is always number of images
         frames (np.array): list of data objects (probably corgidrp.data.Image)
     """
-    def __init__(self, frames_or_filepaths, no_data=False, no_err=False, no_dq=False):
+    def __init__(self, frames_or_filepaths, no_data=False):
         """
         Args:
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
             no_data (bool): If True, only the header information is loaded into the dataset for the frames' data.  Defaults to False.
-            no_err (bool): If True, only the header information is loaded into the dataset for the frames' err.  Defaults to False.
-            no_dq (bool): If True, only the header information is loaded into the dataset for the frames' dq.  Defaults to False.
         """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
+        
+        # default value
+        self.data_loaded = True
+        if no_data:
+            self.data_loaded = False
 
         if isinstance(frames_or_filepaths[0], str):
             # list of filepaths
@@ -47,10 +50,14 @@ class Dataset():
                 fr = Image(filepath)
                 if no_data:
                     fr.data = None
-                if no_err:
-                    fr.err = None
-                if no_dq:
-                    fr.dq = None
+                    if fr.ext_hdr['DATALVL'].upper() != 'L1':
+                        #in this case, the frames are L1 and don't yet 
+                        # have err and dq, so don't set those 
+                        # to None so that each frame is given 
+                        # the default starting err and dq for further 
+                        # pipeline processes
+                        fr.err = None
+                        fr.dq = None
                 self.frames.append(fr)
         else:
             # list of frames

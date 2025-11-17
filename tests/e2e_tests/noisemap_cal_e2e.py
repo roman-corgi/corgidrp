@@ -223,8 +223,8 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
         if step['name'] == "calibrate_darks":
             step['keywords'] = {}
             step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
-    walker.run_recipe(recipe[0], save_recipe_file=True)
-    recipe[1]['inputs'] = glob(os.path.join(recipe[0]['outputdir'], '*_l2a.fits'))
+    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = output_filepaths
     walker.run_recipe(recipe[1], save_recipe_file=True)
     
 
@@ -449,8 +449,8 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
         if step['name'] == "calibrate_darks":
             step['keywords'] = {}
             step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
-    walker.run_recipe(recipe[0], save_recipe_file=True)
-    recipe[1]['inputs'] = glob(os.path.join(recipe[0]['outputdir'], '*_l2a.fits'))
+    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = output_filepaths
     walker.run_recipe(recipe[1], save_recipe_file=True) 
 
 

@@ -153,7 +153,7 @@ def autogen_recipe(filelist, outputdir, template=None):
         dataset0 = data.Dataset([filelist[0]])
         first_frame = dataset0[0]
         # don't need the actual data, especially if it would take up a lot of RAM just to hold it in cache
-        dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
+        dataset = data.Dataset(filelist, no_data=True)
 
     # if user didn't pass in template
     if template is None:
@@ -463,50 +463,44 @@ def run_recipe(recipe, save_recipe_file=True):
     # determine if this is a RAM-heavy recipe which needs crop-stack processing
     #sort_pupilimg_frames included here b/c it sorts through a large number of frame (>700) b/c 
     # EM gain cal files (sorted here and excluded, processed by SSC) are included in the visits
-    ram_heavy_bool = (recipe['name'] == 'noisemap_generation_2' or 
-                recipe['name'] == 'build_trad_dark_2' or 
-                recipe['name'] == 'trad_dark_image_2' or
-                recipe['name'] == '_pc_2' or
-                recipe['name'] == 'pc_dark_2' or 
-                recipe['steps'][0]['name'] == 'sort_pupilimg_frames') 
+    if "ram_heavy" in recipe:
+        ram_heavy_bool = bool(recipe["ram_heavy"])
+    else:
+        ram_heavy_bool = False 
+    if "process_in_chunks" in recipe:
+        ram_increment_bool = bool(recipe["process_in_chunks"])
+    else:
+        ram_increment_bool = False
+    if ram_heavy_bool and ram_increment_bool:
+        warnings.warn('\'ram_heavy\' supercedes \'process_in_chunks\', so frames will be read in all at once with no data loaded.')
 
-    ram_increment_bool = (recipe['name'] == 'noisemap_generation_1' or 
-                recipe['name'] == 'build_trad_dark_1' or 
-                recipe['name'] == 'trad_dark_image_1' or
-                recipe['name'] == '_pc_1' or
-                recipe['name'] == 'pc_dark_1')
     # read in data, if not doing bp map
     if not recipe["inputs"]:
         curr_dataset = []
         ram_heavy_bool = False
-        total_dset_length = 1 #for loop purposes later
-        ram_increment = 1
+        # total_dset_length = 1 #for loop purposes later
+        # ram_increment = 1
+        filelist_chunks = [0] #anything of length 1
     else:
         filelist = recipe["inputs"]
-        total_dset_length = len(filelist)
-        if ram_increment_bool:
-        # how many frames to process at a time (before getting the RAM-heaviest function in the recipe) if RAM-heavy
-            ram_increment = 200 
+        if ram_increment_bool and not ram_heavy_bool: #ram_heavy_bool supercedes ram_increment_bool
+            # how many frames to process at a time (before getting the RAM-heaviest function in the recipe) if RAM-heavy
+            filelist_chunks = [filelist[n:n+corgidrp.chunk_size] for n in range(0, len(filelist), corgidrp.chunk_size)] 
+            # chunk_size = int(recipe['drpconfig']['chunk_size']) #XXX
+            # filelist_chunks = [filelist[n:n+chunk_size] for n in range(0, len(filelist), chunk_size)]
         else:
-            ram_increment = len(filelist)
+            filelist_chunks = [filelist]
 
     tot_steps = len(recipe["steps"])
     save_step = False
-    
-    for n in range(0, total_dset_length, ram_increment):
-        if n == 1 and ram_heavy_bool:
-            break # exit for loop b/c all frames already accounted for 
+    output_filepaths = []
+    for filelist in filelist_chunks:
         if recipe["inputs"]:
             if ram_heavy_bool:
-                if recipe['steps'][0]['name'] == 'sort_pupilimg_frames': 
-                    #in this case, the frames are L1 and don't yet have err and dq, so don't set those 
-                    # to None so that each frame is given the default starting err and dq for further pipeline processes
-                    curr_dataset = data.Dataset(filelist, no_data=True)
-                else:
-                    curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
+                curr_dataset = data.Dataset(filelist, no_data=True)
             else:
-                curr_dataset = data.Dataset(filelist[n:n+ram_increment])
-                # write the recipe into the image extension header
+                curr_dataset = data.Dataset(filelist)
+            # write the recipe into the image extension header
             for frame in curr_dataset:
                 frame.ext_hdr["RECIPE"] = json.dumps(recipe)
         # execute each pipeline step
@@ -522,6 +516,10 @@ def run_recipe(recipe, save_recipe_file=True):
                     suffix = ''
                 
                 save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
+                if isinstance(curr_dataset, data.Dataset):
+                    output_filepaths += [frame.filepath for frame in curr_dataset]
+                else:
+                    output_filepaths += [curr_dataset.filepath] 
                 save_step = True
 
             else:
@@ -569,11 +567,12 @@ def run_recipe(recipe, save_recipe_file=True):
                 # run the step!
                 curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
 
+    if not save_step:
         output_filepaths = None
-        if save_step:
-            if isinstance(curr_dataset, data.Dataset):
-                output_filepaths = [frame.filepath for frame in curr_dataset]
-            else:
-                output_filepaths = [curr_dataset.filepath]
+        # if save_step:
+        #     if isinstance(curr_dataset, data.Dataset):
+        #         output_filepaths += [frame.filepath for frame in curr_dataset]
+        #     else:
+        #         output_filepaths += [curr_dataset.filepath] XXX
     
     return output_filepaths
