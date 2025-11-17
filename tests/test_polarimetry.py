@@ -801,66 +801,184 @@ def test_compute_QphiUPhi():
     2) When the input image center is incorrect, U_phi should be nonzero.
     3) The err array in the output should have the same shape as the data array.
     4) The dq array in the output should propagate as the bitwise-OR of the input dq for Q and U.   
+
+    Includes VAP testing for 
     '''
 
-    ####################################
-    ########## TEST Dataset 2 ##########
-    ####################################
+    #######################################
+    ########## Set up VAP Logger ##########
+    #######################################
+
+    current_file_path = os.path.dirname(os.path.abspath(__file__))
+
+    output_dir = os.path.join(current_file_path, 'test_data','l4_to_tda_compute_quphi')
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
+    # set up logging
+    global logger
+
+    log_file = os.path.join(output_dir, 'l4_to_tda_compute_QphiUphi.log')
     
-    ####Verify that U_phi is approximately zero when the input image center is correct. 
-    img = mocks.create_mock_IQUV_image()
+    # Create a new logger specifically for this test, otherwise things have issues
+    logger = logging.getLogger('l4_to_tda_compute_QphiUphi')
+    logger.setLevel(logging.INFO)
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
     
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+
+
+    ################################################
+    ########## TEST Dataset 1  - VAP TEST ##########
+    ################################################
+
+    # ================================================================================
+    # (4.1) Setup Input Files
+    # ================================================================================
+    logger.info('='*80)
+    logger.info('Set up input files and save to disk')
+    logger.info('='*80)
+    #########################################################################################################
+    ########### Create input image of L4 Stokes cube [I, Q, U, V] with tangentially poalrized disk ##########
+     
+    qu_img = mocks.create_mock_IQUV_image()
 
     # Expect at least (I, Q, U, V) planes in the input dq
-    assert img.dq.shape[0] >= 4, "mock image should have I,Q,U,V planes"
+    assert qu_img.dq.shape[0] >= 4, "mock image should have I,Q,U,V planes"
 
     # Distinct bits for Q and U (non-overlapping)
     BIT_Q = 1 << 2
     BIT_U = 1 << 5
 
     # Add bits to Q and U while preserving existing dq
-    dq_mod = img.dq.copy()
+    dq_mod = qu_img.dq.copy()
     dq_mod[1] = dq_mod[1] | BIT_Q  # Q plane
     dq_mod[2] = dq_mod[2] | BIT_U  # U plane
-    img.dq = dq_mod
+    qu_img.dq = dq_mod
+
+    mocks.rename_files_to_cgi_format(list_of_fits=[qu_img], output_dir=output_dir, level_suffix="l4")
+
+    #Check input image complies with cgi format
+    logger.info('='*80)
+    logger.info('Test 4.1: Input L4 Image Data format')
+    logger.info('='*80)
+    frame_info = "Input L4 Polarimetry Image"
+    check_filename_convention(getattr(qu_img , 'filename', None), 'cgi_*_l4_.fits', frame_info,logger,data_level='l4_')
+    verify_header_keywords(qu_img .ext_hdr, {'BUNIT': 'photoelectron/s'},  frame_info,logger)
+    verify_header_keywords(qu_img .ext_hdr, {'DATALVL': 'L4'},  frame_info,logger)
+    logger.info("")
+    
+    # ================================================================================
+    # (4.2) Validate Output L4 Image
+    # ================================================================================
+    logger.info('='*80)
+    logger.info('Test 4.2: Output TDA Azimuthal components test for correct center')
+    logger.info('='*80)
 
     ### Run the compute_QphiUphi function
-    res = l4_to_tda.compute_QphiUphi(img)
+    qu_phi = l4_to_tda.compute_QphiUphi(qu_img)
 
+    q_phi = qu_phi.data[4]
+    u_phi = qu_phi.data[5]
 
-    # check shape
-    assert res.data.shape[0] == 6, "Output should have 6 planes (I,Q,U,V,Q_phi,U_phi)"
+    # if n_l4_files == 1:
+    #     logger.info(f"L4 Output File Count: {n_l4_files}. PASS")
+    # else:
+    #     logger.info(f"L4 Output File Count: {n_l4_files}. Expected 1. FAIL")
 
-    # check U_phi ~ 0 when center is correct
-    U_phi = res.data[5]
-    assert np.allclose(U_phi, 0.0, atol=1e-6), "U_phi should be ~0 for correct center"
+    #### Check the dimensions: 
+    #VAP Version
+    if qu_phi.data.shape[0] == 6:
+        logger.info(f"Output Slices: {qu_phi.data.shape[0]}. PASS")
+    else:
+        logger.info(f"Output Slices: {qu_phi.data.shape[0]}. Expected 6. FAIL")
+    #pytest Version
+    assert qu_phi.data.shape[0] == 6, "Output data should have 6 slices"
 
+    #### Check that Q_phi has the expected tangential polarization pattern
+    #VAP Version
+    if np.mean(q_phi) > 0:
+        logger.info(f"Q_phi Mean Value: {np.mean(q_phi)} > 0. PASS")
+    else:
+        logger.info(f"Q_phi Mean Value: {np.mean(q_phi)} <= 0. FAIL")
+    #pytest Version
+    assert np.mean(q_phi) > 0, "Q_phi should have positive mean for tangential polarization"
 
-    # check that err array is consistent with data
-    assert res.err.shape == res.data.shape, "err should have the same shape as data"
-    assert res.dq.shape == res.data.shape, "dq should have the same shape as data"
+    #### Check that U_phi is approximately zero when the input image center is correct
+    #VAP Version
+    if np.allclose(u_phi, 0.0, atol=1e-6):
+        logger.info(f"U_phi is approximately zero for correct center. PASS")
+    else:
+        logger.info(f"U_phi is not approximately zero for correct center. FAIL")
+    #pytest Version
+    assert np.allclose(u_phi, 0.0, atol=1e-6), "U_phi should be ~0 for correct center"
+        
 
+    #### Check that err array is consistent with data
+    #VAP Version
+    if qu_phi.err.shape == qu_phi.data.shape:
+        logger.info(f"err has the same shape as data. PASS")
+    else:
+        logger.info(f"err shape {qu_phi.err.shape} does not match data shape {qu_phi.data.shape}. FAIL")
+    #pytest Version
+    assert qu_phi.err.shape == qu_phi.data.shape, "err should have the same shape as data"
 
-    # Expect (I, Q, U, V, Q_phi, U_phi) -> 6 planes
-    assert res.dq.shape[0] == 6, "Output dq should have 6 planes"
+    #### Check that dq array is consistent with data
+    #VAP Version
+    if qu_phi.dq.shape == qu_phi.data.shape:
+        logger.info(f"dq has the same shape as data. PASS")
+    else:
+        logger.info(f"dq shape {qu_phi.dq.shape} does not match data shape {qu_phi.data.shape}. FAIL")
+    #pytest Version
+    assert qu_phi.dq.shape == qu_phi.data.shape, "dq should have the same shape as data"
 
-    expected_or = img.dq[1] | img.dq[2]
-
-
-    #### Verify that the dq of Q_phi and U_phi propagates as the bitwise-OR of
+    expected_or = qu_img.dq[1] | qu_img.dq[2]
+    #### Check that DQ propagation is as expected:
+    # #### Verify that the dq of Q_phi and U_phi propagates as the bitwise-OR of
     #### the input dq for Q and U. We set distinct bits on all pixels of Q and U
     #### so the expected OR relationship holds regardless of geometry.
-
+    #VAP Version: 
+    if np.array_equal(
+        qu_phi.dq[4] & (BIT_Q | BIT_U),
+        expected_or & (BIT_Q | BIT_U)
+    ):
+        logger.info("Q_phi dq includes bits from Q and U (OR). PASS")
+    else:
+        logger.info("Q_phi dq does not include bits from Q and U (OR). FAIL")
+    if np.array_equal(
+        qu_phi.dq[5] & (BIT_Q | BIT_U),
+        expected_or & (BIT_Q | BIT_U)
+    ):
+        logger.info("U_phi dq includes bits from Q and U (OR). PASS")
+    else:
+        logger.info("U_phi dq does not include bits from Q and U (OR). FAIL")
+    #pytest Version:
     # Q_phi dq should include bits from Q and U (bitwise OR)
     np.testing.assert_array_equal(
-        res.dq[4] & (BIT_Q | BIT_U),
+        qu_phi.dq[4] & (BIT_Q | BIT_U),
         expected_or & (BIT_Q | BIT_U),
         err_msg="Q_phi dq should include bits from Q and U (OR)."
     )
 
     # U_phi dq should include bits from Q and U (bitwise OR)
     np.testing.assert_array_equal(
-        res.dq[5] & (BIT_Q | BIT_U),
+        qu_phi.dq[5] & (BIT_Q | BIT_U),
         expected_or & (BIT_Q | BIT_U),
         err_msg="U_phi dq should include bits from Q and U (OR)."
     )
@@ -873,16 +991,38 @@ def test_compute_QphiUPhi():
     ####Verify that U_phi is nonzero when the input image center is incorrect.
     #### 5 pixel offset is chosen to ensure significant deviation from true center.
 
-    img = mocks.create_mock_IQUV_image()
+    qu_img = mocks.create_mock_IQUV_image()
+
+    mocks.rename_files_to_cgi_format(list_of_fits=[qu_img], output_dir=output_dir, level_suffix="l4")
+
+    #Check input image complies with cgi format
+    logger.info('='*80)
+    logger.info('Test 4.1b: Input L4 Image Data format')
+    logger.info('='*80)
+    check_filename_convention(getattr(qu_img , 'filename', None), 'cgi_*_l4_.fits', frame_info, logger,data_level='l4_')
+    verify_header_keywords(qu_img .ext_hdr, {'BUNIT': 'photoelectron/s'},  frame_info, logger)
+    verify_header_keywords(qu_img .ext_hdr, {'DATALVL': 'L4'},  frame_info, logger)
+    logger.info("")
+    
     # overwrite header center with wrong value
-    img.ext_hdr["STARLOCX"] += 5.0
-    img.ext_hdr["STARLOCY"] += 5.0
+    qu_img.ext_hdr["STARLOCX"] += 5.0
+    qu_img.ext_hdr["STARLOCY"] += 5.0
 
-    res = l4_to_tda.compute_QphiUphi(img)
+    res = l4_to_tda.compute_QphiUphi(qu_img)
+    u_phi = res.data[5]
 
-    U_phi = res.data[5]
-    assert not np.allclose(U_phi, 0.0, atol=1e-6), "U_phi should be nonzero for wrong center"
-   
+    logger.info('='*80)
+    logger.info('Test 4.2b: Output TDA Azimuthal components test for incorrect center')
+    logger.info('='*80)
+
+    #### Check that U_phi is nonzero when the input image center is incorrect
+    #VAP Version
+    if not np.allclose(u_phi, 0.0, atol=1e-6):
+        logger.info(f"U_phi is nonzero for incorrect center. PASS")
+    else:
+        logger.info(f"U_phi is approximately zero for incorrect center. FAIL")
+    #pytest Version
+    assert not np.allclose(u_phi, 0.0, atol=1e-6), "U_phi should be nonzero for wrong center"
 
 
 if __name__ == "__main__":
