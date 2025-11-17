@@ -1627,6 +1627,10 @@ def spec_psf_subtraction(input_dataset):
     all_dq = []
     all_err = []
     image_list = []
+    ct_hdr = fits.Header()
+    # spectral core throughput values on EXCAM wrt pixel STARLOCX 
+    ct_hdr['COMMENT'] = ('KLIP Throughput as a function of wavelength')
+    ct_hdr['UNITS'] = 'Separation: EXCAM pixels. CT throughput: values between 0 and 1.'
     for frame in input_datasets[1-ref_index]:    
         # compute shift between frame and mean_ref 
         shift = get_shift_correlation(frame.data, mean_ref.data)
@@ -1642,6 +1646,11 @@ def spec_psf_subtraction(input_dataset):
         # at this point in the pipeline, the err is mainly shot noise, so multiplying the err is appropriate
         # shifting may throw off err at the edges of the frame, but those pixels aren't used anyways
         shifted_scaled_referr = np.roll(mean_ref.err[0], (shift[0], shift[1]), axis=(0,1))*scale
+        # determine the throughput at the estimated source position
+        source_pos = frame.ext_hdr['STARLOCX']
+        through = shifted_scaled_ref[:,source_pos]/frame.data[:,source_pos]
+        # Save throughput as an extension on the psf-subtracted Image
+        frame.add_extension_hdu('CT_THRU', data = through, header = ct_hdr)
         # subtract the shifted, scaled ref from the frame
         frame.data -= shifted_scaled_ref
         # update the dq and err arrays
@@ -1653,10 +1662,15 @@ def spec_psf_subtraction(input_dataset):
         image_list.append(frame)
 
     out_dataset = data.Dataset(image_list)
+    
+
+    # Add history msg
+    ct_msg = f'1D wavelength dependent CT throughput measured and saved to Image class HDU List extension CT_THRU. '
+    
     with warnings.catch_warnings():
         # suppress astropy warnings
         warnings.filterwarnings('ignore', category=VerifyWarning)
-        history_msg = f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
+        history_msg = ct_msg + f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
         out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 

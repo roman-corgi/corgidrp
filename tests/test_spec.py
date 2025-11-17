@@ -919,6 +919,8 @@ def test_spec_psf_subtraction():
         # pick a location for this test, roughly center of imaged area
         img.ext_hdr['WV0_X'] = 1600
         img.ext_hdr['WV0_Y'] = 547
+        img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_X']
+        img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_Y']
         np.random.seed(1039+i)
         img.err = np.random.randint(0,100, (1, img.data.shape[0],img.data.shape[1])).astype(float)
     input_dset[1].dq[533, 1600] = 1
@@ -944,6 +946,11 @@ def test_spec_psf_subtraction():
     output = l3_to_l4.spec_psf_subtraction(input_dset)
     # should be perfect subtraction in both bands
     assert(output[0].data.all()==0)
+    
+    #test the throughput determination
+    assert 'CT_THRU' in str(output[0].ext_hdr['HISTORY'])
+    assert np.ndim(output[0].hdu_list['CT_THRU'].data) == 1
+    assert output[0].hdu_list['CT_THRU'].data.any()<=1  and output[0].hdu_list['CT_THRU'].data.any() >= 0
 
 
 def test_extract_spec():
