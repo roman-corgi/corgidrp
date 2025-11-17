@@ -2,8 +2,7 @@
     "name" : "l1_to_l2a_basic",
     "template" : true,
     "drpconfig" : {
-        "track_individual_errors" : false,
-        "chunk_size" : 200
+        "track_individual_errors" : false
     },
     "inputs" : [],
     "outputdir" : "",

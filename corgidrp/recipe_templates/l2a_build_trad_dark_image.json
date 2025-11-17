@@ -2,8 +2,7 @@
     "name" : "l2a_build_trad_dark_image",
     "template" : true,
     "drpconfig" : {
-        "track_individual_errors" : false,
-        "chunk_size" : 200
+        "track_individual_errors" : false
     },
     "inputs" : [],
     "outputdir" : "",

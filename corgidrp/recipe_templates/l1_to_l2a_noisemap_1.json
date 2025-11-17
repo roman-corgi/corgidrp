@@ -3,8 +3,7 @@
     "template" : true,
     "process_in_chunks" : true,
     "drpconfig" : {
-        "track_individual_errors" : false,
-        "chunk_size" : 200
+        "track_individual_errors" : false
     },
     "inputs" : [],
     "outputdir" : "",

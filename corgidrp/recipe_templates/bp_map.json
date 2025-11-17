@@ -2,8 +2,7 @@
     "name": "bp_map",
     "template": true,
     "drpconfig" : {
-        "track_individual_errors" : false,
-        "chunk_size" : 200
+        "track_individual_errors" : false
     },
     "inputs" : [],
     "outputdir" : "",
