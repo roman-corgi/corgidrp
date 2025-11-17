@@ -18,6 +18,7 @@ import corgidrp.l3_to_l4 as l3_to_l4
 import corgidrp.l4_to_tda as l4_to_tda
 from corgidrp.pol import calc_stokes_unocculted
 import corgidrp.corethroughput as corethroughput
+import corgidrp.check as check
 
 from corgidrp import star_center
 
@@ -191,41 +192,42 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
     # ================================================================================
     # Logger Setup
     # ================================================================================
-    def setup_logger(output_dir, name='my_e2e_logger', log_file_name=None):
-        """
-        Setup a logger that prints to console and optionally to a file.
-        
-        Args:
-            output_dir (str): Directory for log file (if log_file_name is provided).
-            name (str): Logger name.
-            log_file_name (str or None): File name for log file. If None, only console output.
-
-        Returns:
-            logging.Logger: Configured logger instance.
-        """
-        logger = logging.getLogger(name)
-        logger.setLevel(logging.INFO)
-        logger.handlers.clear()
-
-        # console handler
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        fmt = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        ch.setFormatter(fmt)
-        logger.addHandler(ch)
-
-        # file handler only if log_file_name is given
-        if log_file_name:
-            log_file = os.path.join(output_dir, log_file_name)
-            fh = logging.FileHandler(log_file)
-            fh.setLevel(logging.INFO)
-            fh.setFormatter(fmt)
-            logger.addHandler(fh)
-
-        return logger
-    
     if logger is None:
-        logger = setup_logger('./', name='polVAP')
+        # Create output directory for log file
+        output_dir = os.path.join(os.path.dirname(__file__), 'pol_l4_to_tda_VAP_test2')
+        os.makedirs(output_dir, exist_ok=True)
+        
+        log_file = os.path.join(output_dir, 'pol_l4_to_tda_VAP_test2.log')
+        
+        # Create a new logger specifically for this test
+        logger = logging.getLogger('pol_l4_to_tda_VAP_test2')
+        logger.setLevel(logging.INFO)
+        
+        # Clear any existing handlers to avoid duplicates
+        logger.handlers.clear()
+        
+        # Create file handler
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.INFO)
+        
+        # Create console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        
+        # Create formatter
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+        
+        # Add handlers to logger
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+        
+        # Header banner
+        logger.info('='*80)
+        logger.info('POLARIMETRY L4 TO TDA VAP TEST 2')
+        logger.info('='*80)
+        logger.info("")
         
     # ================================================================================
     # (0) Setup Input L4 Image
@@ -271,18 +273,19 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
             # (1) Validate Input Image and Header
             # ================================================================================
             # Check/log that L4 data input complies with cgi format
-            if isinstance(Image_input, Image): logger.info(log_head + "Input check passed: CGI format")
-            else: logger.info(log_head + "Input check FAILED: non-CGI format")
+            if isinstance(Image_input, Image): 
+                logger.info(log_head + f"Input format: {type(Image_input).__name__}. Expected: Image. PASS")
+            else: 
+                logger.info(log_head + f"Input format: {type(Image_input).__name__}. Expected: Image. FAIL")
             
             ext_hdr = Image_input.ext_hdr
 
-            # Check/log that DATALVL = L4
-            if ext_hdr['DATALVL'] == "L4": logger.info(log_head + "Header check passed: DATALVL=L4")
-            else: logger.info(log_head + "Header check FAILED, Expected:DATALVL=4, but "+ext_hdr['DATALVL'])
-            
-            # Check/log that BUNIT = photoelectron/s
-            if ext_hdr['BUNIT'] == "photoelectron/s": logger.info(log_head + "Header check passed: BUNIT=photoelectron/s")
-            else: logger.info(log_head + "Header check FAILED: Expected:BUNIT=photoelectron/s, but "+ext_hdr['BUNIT'])
+            # Check/log header keywords using check.verify_header_keywords
+            required_keywords = {
+                'DATALVL': 'L4',
+                'BUNIT': 'photoelectron/s'
+            }
+            check.verify_header_keywords(ext_hdr, required_keywords, frame_info=log_head, logger=logger)
 
         # ================================================================================
         # (2) Compute polarization products
@@ -302,12 +305,13 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
         if i == 0:
             # Check/log that Output shape is [3, H, W]
             shape_expected = (3, Image_input.data.shape[1], Image_input.data.shape[2])
-            if Image_pol.data.shape == shape_expected:
-                logger.info(log_head + f"Output check passed: Image size {shape_expected}")
+            shape_actual = Image_pol.data.shape
+            if shape_actual == shape_expected:
+                logger.info(log_head + f"Output shape: {shape_actual}. Expected shape: {shape_expected}. PASS")
             else:
-                logger.info(log_head + f"Output check FAILED: Image size, expected:{shape_expected}, but {Image_pol.data.shape}")
+                logger.info(log_head + f"Output shape: {shape_actual}. Expected shape: {shape_expected}. FAIL")
 
-            # Check/log that DQ flags propagate correctly
+            #Test: Check/log that flags propagate from I, Q, U to P, p, polarization angle
             dq_input = np.bitwise_or(np.bitwise_or(Image_input.dq[0], Image_input.dq[1]), Image_input.dq[2])
             dq_sets = [
                 (P_dq, "Polarized intensity"),
@@ -317,22 +321,24 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
             for dq, label in dq_sets:
                 idx = np.where( dq_input != dq )[0]
                 if idx.size == 0:
-                    logger.info(log_head + f"Output check passed: DQ for {label} was propagated correctly")
+                    logger.info(log_head + f"Flag propagation test - {label}: DQ flags propagated correctly. Expected: DQ matches input from I, Q, U. PASS")
                 else:
-                    logger.info(log_head + f"Output check FAILED: DQ for {label} was not propagated correctly")
+                    logger.info(log_head + f"Flag propagation test - {label}: {idx.size} mismatched pixels. Expected: DQ matches input from I, Q, U. FAIL")
 
-            # Quick residual check: P_map vs sqrt(Q^2 + U^2)
+            # Test: Check/log that polarized intensity P is computed correctly
             Q = Image_input.data[1]
             U = Image_input.data[2]
             P_qu = np.sqrt(Q**2 + U**2)
             diff = np.nanmax(np.abs(P_map - P_qu))
             if diff < 1e-10:
-                logger.info(log_head + "Output check passed: P == sqrt(Q^2+U^2)")
+                logger.info(log_head + f"Polarized intensity computation test: P == sqrt(Q^2+U^2), max difference = {diff:.2e}. Expected: < 1e-10. PASS")
             else:
-                logger.info(log_head + "Output check FAILED: P != sqrt(Q^2+U^2)")
+                logger.info(log_head + f"Polarized intensity computation test: P == sqrt(Q^2+U^2), max difference = {diff:.2e}. Expected: < 1e-10. FAIL")
         
         if i != n_sim-1:                
-            # Compute chi statistics
+            # Compute chi statistics for statistical validation tests
+            # These will be used to test: fractional polarization p matches input,
+            # polarization position angle matches input, and error propagation
             P_chi = (P_map - P_input) / P_map_err
             p_chi = (p_map - p) / p_map_err
             evpa_chi = (evpa_map - theta) / evpa_map_err
@@ -350,17 +356,22 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
             evpa_chi_std.append(np.nanstd(evpa_chi[idx_evpa]))
         else:
             if np.nanmax(abs(Image_input.data[0])) < 1e-10:
-                logger.info(log_head + "Sanity check passed: A test with I = 0 is implemented")
+                I_max = np.nanmax(abs(Image_input.data[0]))
+                logger.info(log_head + f"Sanity check I=0: max(I) = {I_max:.2e}. Expected: < 1e-10. PASS")
                 map_sets = [
                     (P_map, "Polarized intensity"),
                     (p_map, "Polarized fraction"),
                     (evpa_map, "Polarization angle"),
                 ]
                 for map, label in map_sets:
-                    if np.any(np.isnan(map)) or np.any(np.isinf(map)):
-                        logger.info(log_head + "Sanity check FAILED: NaN/Inf values are in "+label)
+                    has_nan = np.any(np.isnan(map))
+                    has_inf = np.any(np.isinf(map))
+                    if has_nan or has_inf:
+                        nan_count = np.sum(np.isnan(map)) if has_nan else 0
+                        inf_count = np.sum(np.isinf(map)) if has_inf else 0
+                        logger.info(log_head + f"NaN/Inf check for {label}: NaN={nan_count}, Inf={inf_count}. Expected: no NaN/Inf. FAIL")
                     else:
-                        logger.info(log_head + "Sanity check passed: no NaN/Inf values in "+label)
+                        logger.info(log_head + f"NaN/Inf check for {label}: no NaN/Inf values. Expected: no NaN/Inf. PASS")
                         
     # Remove the final run with I ~ 0 for a sanity check
     n_sim -= 1
@@ -370,26 +381,42 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
     n_sim *= P_map.size
     
     chi_sets = [
-        (P_chi_mean, P_chi_std, "Polarized intensity"),
-        (p_chi_mean, p_chi_std, "Polarized fraction"),
-        (evpa_chi_mean, evpa_chi_std, "Polarization angle"),
+        (P_chi_mean, P_chi_std, "Polarized intensity", None),
+        (p_chi_mean, p_chi_std, "Polarized fraction", "Fractional polarization p matches input"),
+        (evpa_chi_mean, evpa_chi_std, "Polarization angle", "Polarization position angle matches input angle"),
     ]
 
-    # Check/log that P computed correctly from Q, U
-    # Check/log that p = P/I matches input polarization fraction
-    # Check/log that EVPA matches input polarization angle
-    # Check/log error propagation through sqrt and division
+    # Test: Check/log that fractional polarization p matches input (within error)
+    # Test: Check/log that polarization position angle matches input angle (within error)
+    # Test: Check/log that error propagation from Q, U is correct
     tol_mean = 1. / np.sqrt(n_sim) * nsigma_tol
     tol_std = 1. / np.sqrt(2.*(n_sim-1.)) * nsigma_tol
-    for chi_mean, chi_std, label in chi_sets:
-        mean_ok = np.median(chi_mean) == pytest.approx(0.0, abs=tol_mean)
-        std_ok =  np.median(chi_std)  == pytest.approx(1.0, abs=tol_std)
+    for chi_mean, chi_std, label, test_name in chi_sets:
+        median_mean = np.median(chi_mean)
+        median_std = np.median(chi_std)
+        mean_ok = abs(median_mean) <= tol_mean
+        std_ok = abs(median_std - 1.0) <= tol_std
         assert mean_ok
         assert std_ok
-        if mean_ok and std_ok:
-            logger.info(log_head + f"Output check passed: {label} matches input within errors")
+        
+        # Log mean check (for p and EVPA, tests if they match input within error)
+        if test_name:
+            if mean_ok:
+                logger.info(log_head + f"{test_name} test - {label}: median(chi_mean)={median_mean:.4f}. Expected: |median(chi_mean)|<={tol_mean:.4f} (within error). PASS")
+            else:
+                logger.info(log_head + f"{test_name} test - {label}: median(chi_mean)={median_mean:.4f}. Expected: |median(chi_mean)|<={tol_mean:.4f} (within error). FAIL")
+        
+        # Log error propagation check (tests if error propagation from Q, U is correct)
+        if std_ok:
+            logger.info(log_head + f"Error propagation test - {label}: median(chi_std)={median_std:.4f}. Expected: |median(chi_std)-1|<={tol_std:.4f}. PASS")
         else:
-            logger.info(log_head + f"Output check FAILED: {label} outside propagated errors")
+            logger.info(log_head + f"Error propagation test - {label}: median(chi_std)={median_std:.4f}. Expected: |median(chi_std)-1|<={tol_std:.4f}. FAIL")
+
+    # Footer banner
+    logger.info("")
+    logger.info('='*80)
+    logger.info('POLARIMETRY L4 TO TDA VAP TEST 2 COMPLETE')
+    logger.info('='*80)
 
     return
 
