@@ -14,10 +14,15 @@ from scipy.stats import gaussian_kde
 
 def determine_app_mag(input_data, source_star, scale_factor = 1.):
     """
-    determine the apparent Vega magnitude of the observed source
-    in the used filter band and put it into the header.
-    We assume that each frame in the dataset was observed with the same color filter.
-    
+    Determine the apparent Vega magnitude by comparing CALSPEC SEDs.
+
+    This function integrates the CALSPEC spectrum given by source_star through the
+    filter bandpass of the input image(s), integrates the Vega CALSPEC spectrum through
+    the same bandpass, and writes APP_MAG = -2.5 log10(source_irr / vega_irr) into
+    the header. The dataset is only inspected to ensure all frames share the same
+    filter and target. This function does not use the measured photometry/flux in input_data. 
+    To convert a measured flux into a Vega magnitude, use fluxcal.calculate_vega_mag or determine_flux.
+
     Args:
         input_data (corgidrp.data.Dataset or corgidrp.data.Image): 
             A dataset of Images (L2b-level) or a single Image. Must be all of the same source with same filter.
@@ -579,7 +584,7 @@ def calc_pol_p_and_pa_image(input_Image):
 
     # --- Polarization angle (EVPA) and uncertainty ---
     evpa = 0.5 * np.arctan2(U, Q)  # radians
-    evpa_err = 0.5 * np.sqrt((Q * Uerr)**2 + (U * Qerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
+    evpa_err = 0.5 * np.sqrt((U * Qerr)**2 + (Q * Uerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
     evpa = np.degrees(evpa)
     evpa_err = np.degrees(evpa_err)
 
@@ -614,6 +619,7 @@ def calc_pol_p_and_pa_image(input_Image):
     )
 
     return Image_out
+
 def compute_QphiUphi(image, x_center=None, y_center=None):
     """
     Compute Q_phi and U_phi from Stokes Q and U, returning an Image with shape [6, n, m]:
