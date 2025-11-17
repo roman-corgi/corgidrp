@@ -3,7 +3,6 @@ import numpy as np
 import pytest
 import logging
 import warnings
-import sys
 from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
@@ -859,11 +858,12 @@ def test_linespread_function():
     test the fit of a linespread function to a narrowband observation and storing in a LineSpread calibration file
     using the output_dataset of the test of the wavelength map
     """
-    line_spread = steps.fit_line_spread_function(output_dataset)
-    image = output_dataset[0].data
+    input_dataset = output_dataset.copy()
+    line_spread = steps.fit_line_spread_function(input_dataset)
+    image = input_dataset[0].data
     flux = np.sum(image, axis = 1)/np.sum(image)
     pos_max = np.argmax(flux)
-    mean_wave = np.mean(output_dataset[0].hdu_list["WAVE"].data, axis = 1)
+    mean_wave = np.mean(input_dataset[0].hdu_list["WAVE"].data, axis = 1)
     assert line_spread.amplitude == pytest.approx(flux[pos_max], abs=0.04)
     assert line_spread.mean_wave == pytest.approx(mean_wave[pos_max], abs=2)
     ind_fwhm = np.where(flux >= flux[pos_max]/2.)[0]
@@ -908,8 +908,8 @@ def test_spec_psf_subtraction():
     assert np.array_equal(shifted_s, r)
 
     # now the PSF subtraction
-    ref_filepath = os.path.join("tests", "test_data", "spectroscopy", "sim_rdi_L1", "spec_sim_rdi_reference_L1.fits")
-    sci_filepath = os.path.join("tests", "test_data", "spectroscopy", "sim_rdi_L1", "spec_sim_rdi_target_L1.fits")
+    ref_filepath = os.path.join(test_datadir, "sim_rdi_L1", "spec_sim_rdi_reference_L1.fits")
+    sci_filepath = os.path.join(test_datadir, "sim_rdi_L1", "spec_sim_rdi_target_L1.fits")
     input_dset = Dataset([sci_filepath, ref_filepath]) 
     input_dset[0].pri_hdr['PSFREF'] = 0
     input_dset[1].pri_hdr['PSFREF'] = 1
@@ -951,25 +951,28 @@ def test_extract_spec():
     test the l3_to_l4.extract_spec() function, that extracts the 1D spectrum 
     with corresponding wavelengths, error, and dq.
     """
-    spec_dataset = l3_to_l4.extract_spec(output_dataset)
+    input_ds = output_dataset.copy()
+    spec_dataset = l3_to_l4.extract_spec(input_ds)
     image = spec_dataset[0]
     #halfwidth = 9, size: 2 * 9 + 1
-    assert np.shape(image.data) == (19,)
-    assert np.shape(image.dq) == (19,)
-    assert np.shape(image.err) == (1,19)
-    assert np.shape(image.hdu_list["WAVE"]) == (19,)
-    assert np.shape(image.hdu_list["WAVE_ERR"]) == (19,)
+    assert np.shape(image.hdu_list["SPEC"].data) == (19,)
+    assert np.shape(image.hdu_list["SPEC_DQ"].data) == (19,)
+    assert np.shape(image.hdu_list["SPEC_ERR"].data) == (1,19)
+    assert np.shape(image.hdu_list["SPEC_WAVE"].data) == (19,)
+    assert np.shape(image.hdu_list["SPEC_WAVE_ERR"].data) == (19,)
     
-    err_im = output_dataset[0].copy()
+    assert np.array_equal(input_ds[0].data, image.data)
+    
+    err_im = input_ds[0].copy()
     #equal error for all pixels => equal weights, should not change the sum
     err_im.err[0,:,:] = 3.
     input_dataset = Dataset([err_im])
     err_ext = l3_to_l4.extract_spec(input_dataset, apply_weights = True)
     out_im = err_ext[0]
-    assert np.allclose(out_im.data, image.data)
+    assert np.allclose(out_im.hdu_list["SPEC"].data, image.hdu_list["SPEC"].data)
     #estimate the resulting value at the position of the maximum
     ind_x = np.argmax(err_im.data[:, 40])
-    assert np.sum(err_im.data[ind_x, 38:43]) == pytest.approx(np.max(out_im.data))
+    assert np.sum(err_im.data[ind_x, 38:43]) == pytest.approx(np.max(out_im.hdu_list["SPEC"].data))
     
     #estimate error as Poisson like
     err_im.err[0,:,:] = np.sqrt(err_im.data)
@@ -979,15 +982,15 @@ def test_extract_spec():
     #estimate the resulting value at the position of the maximum, 
     #there might be a great different in the maxima due to the rough weighting with signal noise
     ind_x = np.argmax(err_im.data[:, 40])
-    assert np.sum(err_im.data[ind_x, 38:43]) == pytest.approx(np.max(out_im.data), rel = 2)
-    max_ind = np.argmax(out_im.data)
-    assert max_ind == np.argmax(image.data)
+    assert np.sum(err_im.data[ind_x, 38:43]) == pytest.approx(np.max(out_im.hdu_list["SPEC"].data), rel = 2)
+    max_ind = np.argmax(out_im.hdu_list["SPEC"].data)
+    assert max_ind == np.argmax(image.hdu_list["SPEC"].data)
     err_wht = err_im.err[0]
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
         whts = 1./np.square(err_wht)
     err_expect = 1./np.sqrt(np.nansum(whts[:, 38:43], axis = 1))
-    assert np.max(err_expect) == np.max(out_im.err)
+    assert np.max(err_expect) == np.max(out_im.hdu_list["SPEC_ERR"].data)
     assert "extraction" and "half width" and "weights" in str(out_im.ext_hdr["HISTORY"])
 
 def test_slit_trans():
@@ -1069,8 +1072,9 @@ def test_slit_trans():
     # Some arbitrary number of FSM positions
     n_fsm = 5
     # Mock error and data quality
-    err = np.zeros_like(spec_slit.data)
-    dq = np.zeros_like(spec_slit.data, dtype=int)
+    spec_slit_data = spec_slit.hdu_list["SPEC"].data
+    err = np.zeros_like(spec_slit_data)
+    dq = np.zeros_like(spec_slit_data, dtype=int)
     # Define NFRAMES for each FSM position (can be different number of frames)
     np.random.seed(0)
     # Arbitrarily choosing between 1 and 10 frames for each FSM position
@@ -1105,7 +1109,7 @@ def test_slit_trans():
                 for idx_frame in range(n_frames_fsm_now):
                     # Change the spectrum by a known factor so that the slit transmission
                     # interpolation can be tested later.
-                    spec_slit_cp.data = (spec_slit.data * (1 + idx_x*fsm[0])
+                    spec_slit_cp.hdu_list["SPEC"].data = (spec_slit_data * (1 + idx_x*fsm[0])
                         * (1 + idx_y*fsm[1]))
                     # Set conventional filename for each frame
                     # Remove microseconds, keep milliseconds
@@ -1126,7 +1130,7 @@ def test_slit_trans():
         for i, frame in enumerate(spec_slit_ds):
             frame_info = f"Frame {i}"
             # Check dimensions
-            check_dimensions(frame.data, spec_slit.data.shape, frame_info,
+            check_dimensions(frame.hdu_list["SPEC"].data, spec_slit_data.shape, frame_info,
                 logger)
             # Check data level is L4
             verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
@@ -1185,7 +1189,7 @@ def test_slit_trans():
                     (1 + (idx_y - n_fsm/2 + 0.5)*fsm[1]))
                 fact_open += (fact_tmp*n_frames_fsm_now/n_frames_fsm.sum())
                 for idx_frame in range(n_frames_fsm_now):
-                    spec_open_cp.data = spec_open.data * fact_tmp
+                    spec_open_cp.hdu_list["SPEC"].data = spec_open.hdu_list["SPEC"].data * fact_tmp
                     # Set conventional filename for each frame
                     # Remove microseconds, keep milliseconds
                     dt = basetime + timedelta(seconds=n_frames)
@@ -1202,7 +1206,7 @@ def test_slit_trans():
         for i, frame in enumerate(spec_open_ds):
             frame_info = f"Frame {i}"
             # Check dimensions (same as with slit in)
-            check_dimensions(frame.data, spec_slit.data.shape, frame_info,
+            check_dimensions(frame.hdu_list["SPEC"].data, spec_slit_data.shape, frame_info,
                 logger)
             # Check data level is L4 (same as eith slit in)
             verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
@@ -1251,8 +1255,8 @@ def test_slit_trans():
         # VAP testing: Confirm data structure of the slit transmission
         logger.info(f'Output slit transmission')
         # Same wavelength bins as input data
-        assert slit_trans_out.shape[1] == spec_slit.data.shape[0], logger.info(f'Slit transmission does not have the same wavelength steps as input data ({spec_slit[0].data.shape[0]}). FAIL')
-        logger.info(f'Slit transmission has the same wavelength steps as input data ({spec_slit.data.shape[0]}). PASS')
+        assert slit_trans_out.shape[1] == spec_slit_data.shape[0], logger.info(f'Slit transmission does not have the same wavelength steps as input data ({spec_slit_data.shape[0]}). FAIL')
+        logger.info(f'Slit transmission has the same wavelength steps as input data ({spec_slit_data.shape[0]}). PASS')
         # Same locations as slit transmission values
         assert slit_pos_x.shape[0] == slit_trans_out.shape[0], logger.info(f'Slit transmission locations and wavelength steps are inconsistent (X). FAIL')
         logger.info(f'Slit transmission locations and wavelength steps are consistent (X). PASS')

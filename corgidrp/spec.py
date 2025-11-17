@@ -1147,9 +1147,9 @@ def slit_transmission(
         
     # Average all spectra of the images with FSAM=OPEN
     if average.lower() == 'mean': 
-        spec_open = np.mean([ds.data for ds in dataset_open], axis=0)
+        spec_open = np.mean([ds.hdu_list["SPEC"].data for ds in dataset_open], axis=0)
     elif average.lower() == 'median':
-        spec_open = np.median([ds.data for ds in dataset_open], axis=0)
+        spec_open = np.median([ds.hdu_list["SPEC"].data for ds in dataset_open], axis=0)
     else:
         raise ValueError(f'Averaging method {average} not recognized.')
 
@@ -1162,10 +1162,10 @@ def slit_transmission(
         slit_pos_x += [subset[0].ext_hdr['WV0_X']]
         slit_pos_y += [subset[0].ext_hdr['WV0_Y']]
         if average.lower() == 'mean':
-            slit_trans_fsm += [np.mean([ds.data/spec_open for ds in subset], axis=0)]
+            slit_trans_fsm += [np.mean([ds.hdu_list["SPEC"].data/spec_open for ds in subset], axis=0)]
         # At this point average can only take 'mean' and 'median' values
         else:
-            slit_trans_fsm += [np.median([ds.data/spec_open for ds in subset], axis=0)]
+            slit_trans_fsm += [np.median([ds.hdu_list["SPEC"].data/spec_open for ds in subset], axis=0)]
     # Double check they all have the same length
     slit_pos_x = np.array(slit_pos_x)
     slit_pos_y = np.array(slit_pos_y)
@@ -1232,7 +1232,7 @@ def slit_transmission(
 
 def star_pos_spec(
     dataset,
-    r_lamD=0,
+    r_lamD=3,
     phi_deg=0,
     ):
     """ Find the position of the star using the information from the satellite
@@ -1272,26 +1272,31 @@ def star_pos_spec(
         # Check it is L3
         if img.ext_hdr['DATALVL'] != 'L3':
             raise ValueError(f"The data level must be L3 and it is {img.ext_hdr['DATALVL']}")
-        cfamname = img.ext_hdr['CFAMNAME']
         # Extract satellite spot wavelength from L3 extended header (it must be present)
         try:
             lam_sat_nm = float(img.ext_hdr['WAVLEN0'])
         except:
             raise ValueError(f'WAVLEN0 keyword missing in L3 frame.')
-
-        # Conversion from EXCAM pixels to milliarsec
-        plate_scale_mas = img.ext_hdr['PLTSCALE']
-        # Conversion from radians to milliarsec (mas/rad)
-        rad2mas = 180/np.pi*3600*1e3
-        # lam/D in radians
-        lamDrad = 1e-9*lam_sat_nm/D_m
-        # lam/D to EXCAM pixels
-        r_pix = r_lamD*lamDrad*rad2mas/plate_scale_mas
-        # EXCAM (X,Y) coordinates
-        X_pix = r_pix * np.cos(phi_deg*np.pi/180)
-        Y_pix = r_pix * np.sin(phi_deg*np.pi/180)
-        # Update estimated location of the occulted star
-        img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_X'] - X_pix
-        img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y'] - Y_pix
+        
+        fsmlos = img.ext_hdr['FSMLOS']
+        # shift of star location only for coronagraphic observations
+        if fsmlos == 1:
+            # Conversion from EXCAM pixels to milliarsec
+            plate_scale_mas = img.ext_hdr['PLTSCALE']
+            # Conversion from radians to milliarsec (mas/rad)
+            rad2mas = 180/np.pi*3600*1e3
+            # lam/D in radians
+            lamDrad = 1e-9*lam_sat_nm/D_m
+            # lam/D to EXCAM pixels
+            r_pix = r_lamD*lamDrad*rad2mas/plate_scale_mas
+            # EXCAM (X,Y) coordinates
+            X_pix = r_pix * np.cos(phi_deg*np.pi/180)
+            Y_pix = r_pix * np.sin(phi_deg*np.pi/180)
+            # Update estimated location of the occulted star
+            img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_X'] - X_pix
+            img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y'] - Y_pix
+        else:
+            img.ext_hdr['STARLOCX'] = img.ext_hdr['WV0_X']
+            img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y']
 
     return dataset_cp

@@ -1,0 +1,45 @@
+{
+    "name" : "l3_to_l4_psfsub_spec",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "determine_wave_zeropoint"
+        },
+        {
+            "name" : "add_wavelength_map",
+                "calibs" : {
+                    "DispersionModel" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "find_spec_star"
+        },
+        {
+            "name" : "spec_psf_subtraction"
+        },
+        {
+            "name" : "align_2d_frames"
+        },
+        {
+            "name" : "combine_spec"
+        },
+        {
+            "name" : "extract_spec"
+        },
+        {
+            "name": "update_to_l4",
+            "calibs": {
+                "CoreThroughputCalibration": "AUTOMATIC, OPTIONAL",
+                "FluxcalFactor": "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

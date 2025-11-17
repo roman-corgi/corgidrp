@@ -61,9 +61,12 @@ all_steps = {
     "replace_bad_pixels": corgidrp.l3_to_l4.replace_bad_pixels,
     "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
     "find_star": corgidrp.l3_to_l4.find_star,
+    "find_spec_star" : corgidrp.l3_to_l4.find_spec_star,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
+    "spec_psf_subtraction": corgidrp.l3_to_l4.spec_psf_subtraction,
     "determine_wave_zeropoint": corgidrp.l3_to_l4.determine_wave_zeropoint,
     "add_wavelength_map": corgidrp.l3_to_l4.add_wavelength_map,
+    "extract_spec": corgidrp.l3_to_l4.extract_spec,
     "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
     "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
     "create_ct_map": corgidrp.corethroughput.create_ct_map,
@@ -76,7 +79,9 @@ all_steps = {
     "generate_mueller_matrix_cal": corgidrp.pol.generate_mueller_matrix_cal,
     "align_polarimetry_frames": corgidrp.l3_to_l4.align_polarimetry_frames,
     "combine_polarization_states": corgidrp.l3_to_l4.combine_polarization_states,
-    "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization
+    "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization,
+    "align_2d_frames": corgidrp.l3_to_l4.align_2d_frames,
+    "combine_spec": corgidrp.l3_to_l4.combine_spec
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -375,17 +380,22 @@ def guess_template(dataset):
     elif image.ext_hdr['DATALVL'] == "L3":
         if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l3_to_l4_pol.json"
+        elif image.ext_hdr['DPAMNAME'] == 'PRISM3':
+            if image.ext_hdr['FSMLOS'] == 1:
+                # coronagraphic obs - PSF subtraction
+                recipe_filename = "l3_to_l4_psfsub_spec.json"
+            else:
+                # noncoronagraphic obs - no PSF subtraction
+                recipe_filename = "l3_to_l4_noncoron_spec.json" 
         else:
             if image.ext_hdr['FSMLOS'] == 1:
                 # coronagraphic obs - PSF subtraction
                 recipe_filename = "l3_to_l4.json"
             else:
-                # noncorongrpahic obs - no PSF subtraction
+                # noncoronagraphic obs - no PSF subtraction
                 recipe_filename = "l3_to_l4_nopsfsub.json"
-            
     else:
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
-
     return recipe_filename, chained
 
 

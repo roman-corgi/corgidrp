@@ -9,7 +9,7 @@ import argparse
 import warnings
 from astropy.io.fits.verify import VerifyWarning
 
-from corgidrp.data import Dataset, LineSpread, DispersionModel
+from corgidrp.data import Dataset, LineSpread
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
@@ -213,7 +213,7 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Test Case 3: Baseline Performance Checks')
     logger.info('='*80)
 
-    # Load and display dispersion model results
+    # Load and display linespread model results
     linespread = LineSpread(cal_file)
     wavlens = linespread.data[0, :]
     flux_profile = linespread.data[1, :]

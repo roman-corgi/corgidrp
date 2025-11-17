@@ -1,6 +1,6 @@
-.. _lsf-label:
+.. _l3_spec_analog-label:
 
-Lsf Data Product
+L3_Spec_Analog Data Product
 ========================================
 
 
@@ -13,9 +13,11 @@ FITS HDU Structure
 +=======+==================+==========+======================+
 | 0     | Primary          | nan      | 0                    |
 +-------+------------------+----------+----------------------+
-| 1     | Image            | >f8      | (2, 19)              |
+| 1     | Image            | >f8      | (125, 125)           |
 +-------+------------------+----------+----------------------+
-| 2     | GAUSS_PAR        | >f8      | (6,)                 |
+| 2     | ERR              | >f8      | (1, 125, 125)        |
++-------+------------------+----------+----------------------+
+| 3     | DQ               | uint16   | (125, 125)           |
 +-------+------------------+----------+----------------------+
 
 
@@ -36,53 +38,47 @@ Primary Header (HDU 0)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | EXTEND     | bool       | True                           | Denotes FITS extensions                            |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| VISITID    | str        | 0200001000000000000            | The full visit ID assigned to this pointing        |
+| VISITID    | str        | 0000000000000000000            | The full visit ID assigned to this pointing        |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CDMSVERS   | str        | 2.1.0                          | SSC CDMS pipeline build version used to generat... |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| FSWDVERS   | str        | 1.1.5.1                        | Record of the CGI FSW dictionary used to parse ... |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| MOCK       | bool       | True                           | Only used for simulated data examples              |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| TELESCOP   | str        | ROMAN                          | Telescope name                                     |
+| CDMSVERS   | str        | X.X.X                          | SSC CDMS pipeline build version used to generat... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | INSTRUME   | str        | CGI                            | Instrument designation                             |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DETECTOR   | str        | EXCAM                          | Name of the detector                               |
-+------------+------------+--------------------------------+----------------------------------------------------+
 | ORIGIN     | str        | DRP                            | The Science Support Center at Caltech/IPAC         |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FILETIME   | str        | 2025-11-07T14:44:11            | Time of file creation                              |
+| FILETIME   | str        | 2025-02-16T00:00:00            | Time of file creation                              |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DATAVERS   | int        | 1                              | Version of data (increments for reprocessing)      |
+| DATAVERS   | str        |                                | Version of data (increments for reprocessing)      |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| PROGNUM    | str        | 2000                           | The Program ID in visit hierarchy (first 5 digits) |
+| MOCK       | int        | 1                              | Only used for simulated data examples              |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| EXECNUM    | str        | 1                              | The Execution Number in visit hierarchy (digits... |
+| PROGNUM    | int        | 0                              | The Program ID in visit hierarchy (first 5 digits) |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CAMPAIGN   | str        | 1                              | The Pass/Campaign in visit hierarchy (digits 8-10) |
+| EXECNUM    | int        | 0                              | The Execution Number in visit hierarchy (digits... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SEGMENT    | str        | 1                              | The Segment Number in visit hierarchy (digits 1... |
+| CAMPAIGN   | int        | 0                              | The Pass/Campaign in visit hierarchy (digits 8-10) |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| OBSNUM     | str        | 1                              | The Observation Number in visit hierarchy (digi... |
+| SEGMENT    | int        | 0                              | The Segment Number in visit hierarchy (digits 1... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| VISNUM     | str        | 1                              | The Visit number in visit hierarchy (digits 17-19) |
+| OBSNUM     | int        | 0                              | The Observation Number in visit hierarchy (digi... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CPGSFILE   | str        | campaign_020000100100100100... | Campaign-level XML containing the current visit    |
+| VISNUM     | int        | 0                              | The Visit number in visit hierarchy (digits 17-19) |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| AUXFILE    | str        | aux_0200001001001001001.txt    | An AUX file associated with this observation       |
+| CPGSFILE   | str        |                                | Campaign-level XML containing the current visit    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| VISTYPE    | str        | CGIVST_TDD_OBS                 | The visit file template used for this observation  |
+| AUXFILE    | str        |                                | An AUX file associated with this observation       |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| OBSNAME    | str        | SCI                            | User-defined label for the associated observati... |
+| VISTYPE    | str        | MOCK                           | The visit file template used for this observation  |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| TARGET     | str        | HD 209458                      | Name of pointing target                            |
+| OBSNAME    | str        | MOCK                           | User-defined label for the associated observati... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| TARGET     | str        | MOCK                           | Name of pointing target                            |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | RA         | float      | 0.0                            | Right Ascension                                    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | DEC        | float      | 0.0                            | Commanded DEC                                      |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| EQUINOX    | str        | 2000                           | J2000                                              |
+| EQUINOX    | str        | 2000.0                         | J2000                                              |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | RAPM       | float      | 0.0                            | RA proper motion                                   |
 +------------+------------+--------------------------------+----------------------------------------------------+
@@ -94,13 +90,13 @@ Primary Header (HDU 0)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | YAW        | float      | 0.0                            | Telescope Yaw orientation                          |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| PSFREF     | int        | 0                              | Whether this is a PSF reference observation or not |
+| PSFREF     | bool       | False                          | Whether this is a PSF reference observation or not |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| OPGAIN     | str        | 1000                           | Planned EXCAM EM gain or 'AUTO'                    |
+| OPGAIN     | int        | 1                              | Planned EXCAM EM gain or 'AUTO'                    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| PHTCNT     | bool       | False                          | Whether photon counting mode is planned, or if ... |
+| PHTCNT     | int        | 0                              | Whether photon counting mode is planned, or if ... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FRAMET     | float      | 30.0                           | Planned exposure time per frame or if set to "A... |
+| FRAMET     | float      | 1.0                            | Planned exposure time per frame or if set to "A... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | SATSPOTS   | int        | 0                              | Whether satellite spots are present                |
 +------------+------------+--------------------------------+----------------------------------------------------+
@@ -108,7 +104,11 @@ Primary Header (HDU 0)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | HOWFSLNK   | int        | 0                              | Does the campaign include a HOWFSC activity        |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FILENAME   | str        | cgi_0200001000000000000_202... | The name of the file                               |
+| TELESCOP   | str        | ROMAN                          | Telescope name                                     |
++------------+------------+--------------------------------+----------------------------------------------------+
+| FILENAME   | str        | CGI_0000000000000000000_202... | The name of the file                               |
++------------+------------+--------------------------------+----------------------------------------------------+
+| COMMENT    | str        | Simulation-specific metadat... |                                                    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 
 Image Header (HDU 1)
@@ -123,9 +123,9 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | NAXIS      | int        | 2                              | number of array dimensions                         |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| NAXIS1     | int        | 19                             | Raw data axis 1 size                               |
+| NAXIS1     | int        | 125                            | Raw data axis 1 size                               |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| NAXIS2     | int        | 2                              | Raw data axis 2 size for SCI frames (1200) or E... |
+| NAXIS2     | int        | 125                            | Raw data axis 2 size for SCI frames (1200) or E... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | PCOUNT     | int        | 0                              | number of parameters                               |
 +------------+------------+--------------------------------+----------------------------------------------------+
@@ -145,9 +145,9 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | OPMODE     | str        | NONE_DETON_0                   | EXCAM readout operational mode                     |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| EXPTIME    | float      | 60.0                           | Commanded exposure time. Taken from telemetry o... |
+| EXPTIME    | float      | 1.0                            | Commanded exposure time. Taken from telemetry o... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| EMGAIN_C   | float      | 1.0                            | Commanded gain                                     |
+| EMGAIN_C   | int        | 1                              | Commanded gain                                     |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | EMGAINA1   | float      | 0.0                            | "Actual" gain calculation a1 coefficient           |
 +------------+------------+--------------------------------+----------------------------------------------------+
@@ -163,9 +163,9 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | EXCAMT     | float      | 0.0                            | EXCAM temperature from telemetry                   |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| EMGAIN_A   | float      | 0.0                            | "Actual" gain computed from a1-a5 and calibrati... |
+| EMGAIN_A   | int        | -1                             | "Actual" gain computed from a1-a5 and calibrati... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| KGAINPAR   | int        | 0                              | Scaling factor convert DN to electrons (e-/DN)     |
+| KGAINPAR   | float      | 8.7                            | Scaling factor convert DN to electrons (e-/DN)     |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | CYCLES     | int        | 0                              | EXCAM clock cycles since boot                      |
 +------------+------------+--------------------------------+----------------------------------------------------+
@@ -181,8 +181,6 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | NOVEREXP   | float      | 0.0                            | Number of pixels overexposed /100                  |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| ISPC       | bool       | False                          | Designated photon counting (telemetered value)     |
-+------------+------------+--------------------------------+----------------------------------------------------+
 | PROXET     | float      | 0.0                            | Thermal strap interface, EXCAM ProxE heater        |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | FCMLOOP    | int        | 0                              | Control state of the FCM loop                      |
@@ -191,7 +189,7 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | FSMINNER   | int        | 0                              | Control state of the FSM inner loop                |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FSMLOS     | int        | 1                              | Control state of the FSM LOS loop                  |
+| FSMLOS     | int        | 0                              | Control state of the FSM LOS loop                  |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | FSMPRFL    | str        | FSM_PROFILE_UNKNOWN            | FSM profile that has been loaded                   |
 +------------+------------+--------------------------------+----------------------------------------------------+
@@ -203,25 +201,13 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | FSMSG3     | float      | 0.0                            | Average measurement in volts for strain gauge 3... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FSMX       | float      | 50.0                           | Derived FSM X position relative to home from st... |
+| FSMX       | int        | 0                              | Derived FSM X position relative to home from st... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FSMY       | float      | 50.0                           | Derived FSM Y position relative to home from st... |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| EACQ_ROW   | float      | 0.0                            | Desired pixel row for most recent star acquisit... |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| EACQ_COL   | float      | 0.0                            | Desired pixel col for most recent star acquisit... |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| SB_FP_DX   | float      | 0.0                            | X pixels offset (from EXCAM center), from FPAM ... |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| SB_FP_DY   | float      | 0.0                            | Y pixels offset (from EXCAM center), from FPAM ... |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| SB_FS_DX   | float      | 0.0                            | X pixels offset (from EXCAM center), from FSAM ... |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| SB_FS_DY   | float      | 0.0                            | Y pixels offset (from EXCAM center), from FSAM ... |
+| FSMY       | float      | 310.0                          | Derived FSM Y position relative to home from st... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | DMZLOOP    | int        | 0                              | Control state of the DM Zernike loop               |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| 1SVALID    | int        | 1                              | 1 sec derived values are valid                     |
+| 1SVALID    | int        | 0                              | 1 sec derived values are valid                     |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | Z2AVG      | float      | 0.0                            | Avg Z2 value (tip) coefficient from previous se... |
 +------------+------------+--------------------------------+----------------------------------------------------+
@@ -235,7 +221,7 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | Z3VAR      | float      | 0.0                            | Var Z3 value (tilt) coefficient from previous s... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| 10SVALID   | int        | 1                              | 10 sec derived values are valid                    |
+| 10SVALID   | int        | 0                              | 10 sec derived values are valid                    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | Z4AVG      | float      | 0.0                            | Avg Z4 value (focus) coefficient for 10000 samples |
 +------------+------------+--------------------------------+----------------------------------------------------+
@@ -275,99 +261,101 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | Z14AVG     | float      | 0.0                            | Avg Z14 value (shear Y) coefficient for 10000 s... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SPAM_H     | float      | 0.0                            | SPAM absolute position of the H-axis in microns    |
+| SPAMNAME   | str        | SPEC                           | Closest named SPAM position, calculated from SP... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SPAM_V     | float      | 0.0                            | SPAM absolute position of the V-axis in microns    |
+| SPAM_H     | float      | 26250.4                        | SPAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SPAMNAME   | str        | OPEN                           | Closest named SPAM position, calculated from SP... |
+| SPAM_V     | float      | 27254.4                        | SPAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SPAMSP_H   | float      | 0.0                            | SPAM set point H. The default H position corres... |
+| SPAMSP_H   | float      | 26250.4                        | SPAM set point H. The default H position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SPAMSP_V   | float      | 0.0                            | SPAM set point V. The default V position corres... |
+| SPAMSP_V   | float      | 27254.4                        | SPAM set point V. The default V position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPAM_H     | float      | 0.0                            | FPAM absolute position of the H-axis in microns    |
+| FPAMNAME   | str        | OPEN_34                        | Closest named FPAM position, calculated from FP... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPAM_V     | float      | 0.0                            | FPAM absolute position of the V-axis in microns    |
+| FPAM_H     | float      | 60251.2                        | FPAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPAMNAME   | str        | HLC12_C2R1                     | Closest named FPAM position, calculated from FP... |
+| FPAM_V     | float      | 2248.5                         | FPAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPAMSP_H   | float      | 0.0                            | FPAM set point H. The default H position corres... |
+| FPAMSP_H   | float      | 60251.2                        | FPAM set point H. The default H position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPAMSP_V   | float      | 0.0                            | FPAM set point V. The default V position corres... |
+| FPAMSP_V   | float      | 2248.5                         | FPAM set point V. The default V position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| LSAM_H     | float      | 0.0                            | LSAM absolute position of the H-axis in microns    |
+| LSAMNAME   | str        | SPEC                           | Closest named LSAM position, calculated from LS... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| LSAM_V     | float      | 0.0                            | LSAM absolute position of the V-axis in microns    |
+| LSAM_H     | float      | 36936.3                        | LSAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| LSAMNAME   | str        | NFOV                           | Closest named LSAM position, calculated from LS... |
+| LSAM_V     | float      | 29389.3                        | LSAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| LSAMSP_H   | float      | 0.0                            | LSAM set point H. The default H position corres... |
+| LSAMSP_H   | float      | 36936.3                        | LSAM set point H. The default H position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| LSAMSP_V   | float      | 0.0                            | LSAM set point V. The default V position corres... |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| FSAM_H     | float      | 0.0                            | FSAM absolute position of the H-axis in microns    |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| FSAM_V     | float      | 0.0                            | FSAM absolute position of the V-axis in microns    |
+| LSAMSP_V   | float      | 29389.3                        | LSAM set point V. The default V position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | FSAMNAME   | str        | R1C2                           | Closest named FSAM position, calculated from FS... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FSAMSP_H   | float      | 0.0                            | FSAM set point H. The default H position corres... |
+| FSAM_H     | int        | 24087                          | FSAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FSAMSP_V   | float      | 0.0                            | FSAM set point V. The default V position corres... |
+| FSAM_V     | int        | 12238                          | FSAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CFAM_H     | float      | 0.0                            | CFAM absolute position of the H-axis in microns    |
+| FSAMSP_H   | int        | 24087                          | FSAM set point H. The default H position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CFAM_V     | float      | 0.0                            | CFAM absolute position of the V-axis in microns    |
+| FSAMSP_V   | int        | 12238                          | FSAM set point V. The default V position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | CFAMNAME   | str        | 3D                             | Closest named CFAM position, calculated from CF... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CFAMSP_H   | float      | 0.0                            | CFAM set point H. The default H position corres... |
+| CFAM_H     | float      | 2329.2                         | CFAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CFAMSP_V   | float      | 0.0                            | CFAM set point V. The default V position corres... |
+| CFAM_V     | float      | 10002.7                        | CFAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DPAM_H     | float      | 0.0                            | DPAM absolute position of the H-axis in microns    |
+| CFAMSP_H   | float      | 2329.2                         | CFAM set point H. The default H position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DPAM_V     | float      | 0.0                            | DPAM absolute position of the V-axis in microns    |
+| CFAMSP_V   | float      | 10002.7                        | CFAM set point V. The default V position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | DPAMNAME   | str        | PRISM3                         | Closest named DPAM calculated from DPAM_H/V and... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DPAMSP_H   | float      | 0.0                            | DPAM set point H. The default H position corres... |
+| DPAM_H     | float      | 26824.2                        | DPAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DPAMSP_V   | float      | 0.0                            | DPAM set point V. The default V position corres... |
+| DPAM_V     | float      | 1261.3                         | DPAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DATETIME   | str        | 2025-11-07T14:44:11            | Time of preceding 1Hz HK packet in TAI             |
+| DPAMSP_H   | float      | 26824.2                        | DPAM set point H. The default H position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FTIMEUTC   | str        | 2025-11-07T14:44:11            | Frame time (correlated injected metadata with S... |
+| DPAMSP_V   | float      | 1261.3                         | DPAM set point V. The default V position corres... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DATALVL    | str        | CAL                            | Data level: 'L1', 'L2a', L2b', 'L3', 'L4', 'TDA... |
+| EACQ_ROW   | int        | 62                             | Desired pixel row for most recent star acquisit... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| DATETIME   | str        | 2025-10-11T23:34:00.024966+... | Time of preceding 1Hz HK packet in TAI             |
++------------+------------+--------------------------------+----------------------------------------------------+
+| FTIMEUTC   | str        | 2025-10-11T23:34:00.024966+... | Frame time (correlated injected metadata with S... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| DATALVL    | str        | L3                             | Data level: 'L1', 'L2a', L2b', 'L3', 'L4', 'TDA... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | MISSING    | int        | 0                              | Flagged if header keywords are missing             |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DESMEAR    | bool       | False                          | Was desmear applied to this frame?                 |
+| ISPC       | int        | 0                              | Designated photon counting (telemetered value)     |
++------------+------------+--------------------------------+----------------------------------------------------+
+| EACQ_COL   | int        | 62                             | Desired pixel col for most recent star acquisit... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| DESMEAR    | bool       | True                           | Was desmear applied to this frame?                 |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | CTI_CORR   | bool       | False                          | Was CTI correction applied to this frame?          |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | IS_BAD     | bool       | False                          | Was this frame deemed bad?                         |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FWC_PP_E   | float      | 0.0                            | Full well capacity of detector image area pixel.   |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| FWC_EM_E   | int        | 0                              | Full well capacity of detector EM gain register    |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| SAT_DN     | float      | 0.0                            | DN saturation                                      |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| RECIPE     | str        | {"name": "l2b_to_spec_lines... | DRP recipe and steps used to generate this data... |
+| RECIPE     | str        | {"name": "l2b_to_l3", "temp... | DRP recipe and steps used to generate this data... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | DRPVERSN   | str        | 3.0rc4                         | corgidrp version that produced this file           |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DRPCTIME   | str        | 2025-11-07T22:44:12.540        | When this file was saved                           |
+| DRPCTIME   | str        | 2025-11-07T22:23:05.246        | When this file was saved                           |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| KGAIN_ER   | float      | 0.0                            | K-gain error                                       |
+| FWC_PP_E   | float      | 90000.0                        | Full well capacity of detector image area pixel.   |
++------------+------------+--------------------------------+----------------------------------------------------+
+| FWC_EM_E   | float      | 100000.0                       | Full well capacity of detector EM gain register    |
++------------+------------+--------------------------------+----------------------------------------------------+
+| SAT_DN     | float      | 7241.379310344827              | DN saturation                                      |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | RN         | str        |                                | Read noise                                         |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| RN_ERR     | str        |                                | Read noise error                                   |
-+------------+------------+--------------------------------+----------------------------------------------------+
-| FRMSEL01   | int        | 1                              | Bad Pixel Fraction < This Value. Doesn't includ    |
+| FRMSEL01   | float      | 1.0                            | Bad Pixel Fraction < This Value. Doesn't includ    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | FRMSEL02   | bool       | False                          | Are we selecting on the OVEREXP flag?              |
 +------------+------------+--------------------------------+----------------------------------------------------+
@@ -379,33 +367,45 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | FRMSEL06   | NoneType   |                                | tilt bias (Z3RES) threshold                        |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| WAVLEN0    | float      | 753.83                         |                                                    |
+| KGAIN_ER   | float      | 0.0                            | K-gain error                                       |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| WV0_X      | float      | 40.55383418422384              |                                                    |
+| RN_ERR     | str        |                                | Read noise error                                   |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| WV0_XERR   | float      | 0.04507176988866267            |                                                    |
+| CD1_1      | float      | -4.2819285724866e-06           | WCS Header keyword: Transformation matrix eleme... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| WV0_Y      | float      | 31.561233308350516             |                                                    |
+| CD1_2      | float      | 4.28192527700892e-06           | WCS Header keyword: Transformation matrix eleme... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| WV0_YERR   | float      | 0.08099231015297424            |                                                    |
+| CD2_1      | float      | 4.28192527700892e-06           | WCS Header keyword: Transformation matrix eleme... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| WV0_DIMX   | int        | 81                             |                                                    |
+| CD2_2      | float      | 4.28192857248663e-06           | WCS Header keyword: Transformation matrix eleme... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| WV0_DIMY   | int        | 81                             |                                                    |
+| CRPIX1     | int        | 61                             | WCS Header keyword: Reference pixel position al... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DATATYPE   | str        | LineSpread                     |                                                    |
+| CRPIX2     | int        | -27                            | WCS Header keyword: Reference pixel position al... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| EXTNAME    | str        | FLUX_PROF                      | extension name                                     |
+| CTYPE1     | str        | RA---TAN                       | WCS Header keyword: Coordinate system type for ... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FILE0      | str        | cgi_0200001000000000000_202... | File name for the n-th science file used           |
+| CTYPE2     | str        | DEC--TAN                       | WCS Header keyword: Coordinate system type for ... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DRPNFILE   | int        | 12                             | # of files used to create this processed frame     |
+| CDELT1     | float      | 6.05555913006928e-06           | WCS Header keyword: Pixel scale along axis 1 (d... |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| HISTORY    | str        |  Marked 0 frames as bad: di... | History of steps used to generate this data pro... |
+| CDELT2     | float      | 6.05555913006928e-06           | WCS Header keyword: Pixel scale along axis 2 (d... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| CRVAL1     | float      | 1.3485502046827e-09            | WCS Header keyword: Coordinate value at referen... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| CRVAL2     | float      | -1.1430844616786e-09           | WCS Header keyword: Coordinate value at referen... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| PLTSCALE   | float      | 21.800012868249425             | The plate scale of the detector giving a pixel'... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| DETPIX0X   | int        | 450                            | Position of the 0th column of the data array on... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| DETPIX0Y   | int        | 538                            | Position of the 0th row of the data array on th... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| HISTORY    | str        | Frames cropped and bias sub... | History of steps used to generate this data pro... |
 +------------+------------+--------------------------------+----------------------------------------------------+
 
-GAUSS_PAR Header (HDU 2)
-========================
+ERR Header (HDU 2)
+==================
 
 +------------+------------+--------------------------------+----------------------------------------------------+
 | Keyword    | Datatype   | Example Value                  | Description                                        |
@@ -414,14 +414,63 @@ GAUSS_PAR Header (HDU 2)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | BITPIX     | int        | -64                            | array data type                                    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| NAXIS      | int        | 1                              | number of array dimensions                         |
+| NAXIS      | int        | 3                              | number of array dimensions                         |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| NAXIS1     | int        | 6                              | Raw data axis 1 size                               |
+| NAXIS1     | int        | 125                            | Raw data axis 1 size                               |
++------------+------------+--------------------------------+----------------------------------------------------+
+| NAXIS2     | int        | 125                            | Raw data axis 2 size for SCI frames (1200) or E... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| NAXIS3     | int        | 1                              | number of array dimensions                         |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | PCOUNT     | int        | 0                              | number of parameters                               |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | GCOUNT     | int        | 1                              | number of groups                                   |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| EXTNAME    | str        | GAUSS_PAR                      | extension name                                     |
+| EXTNAME    | str        | ERR                            | extension name                                     |
++------------+------------+--------------------------------+----------------------------------------------------+
+| TRK_ERRS   | bool       | False                          | Whether or not errors are tracked                  |
++------------+------------+--------------------------------+----------------------------------------------------+
+| LAYER_1    | str        | combined_error                 | The type of error reported in this slice           |
++------------+------------+--------------------------------+----------------------------------------------------+
+| BUNIT      | str        | photoelectron                  | Physical unit of the array (brightness unit)       |
++------------+------------+--------------------------------+----------------------------------------------------+
+| KGAINPAR   | float      | 8.7                            | Scaling factor convert DN to electrons (e-/DN)     |
++------------+------------+--------------------------------+----------------------------------------------------+
+| KGAIN_ER   | float      | 0.0                            | K-gain error                                       |
++------------+------------+--------------------------------+----------------------------------------------------+
+| RN         | str        |                                | Read noise                                         |
++------------+------------+--------------------------------+----------------------------------------------------+
+| RN_ERR     | str        |                                | Read noise error                                   |
++------------+------------+--------------------------------+----------------------------------------------------+
+| DESMEAR    | bool       | True                           | Was desmear applied to this frame?                 |
++------------+------------+--------------------------------+----------------------------------------------------+
+| HISTORY    | str        | Added error term: prescan_b... | History of steps used to generate this data pro... |
++------------+------------+--------------------------------+----------------------------------------------------+
+
+DQ Header (HDU 3)
+=================
+
++------------+------------+--------------------------------+----------------------------------------------------+
+| Keyword    | Datatype   | Example Value                  | Description                                        |
++============+============+================================+====================================================+
+| XTENSION   | str        | IMAGE                          | Image extension                                    |
++------------+------------+--------------------------------+----------------------------------------------------+
+| BITPIX     | int        | 16                             | array data type                                    |
++------------+------------+--------------------------------+----------------------------------------------------+
+| NAXIS      | int        | 2                              | number of array dimensions                         |
++------------+------------+--------------------------------+----------------------------------------------------+
+| NAXIS1     | int        | 125                            | Raw data axis 1 size                               |
++------------+------------+--------------------------------+----------------------------------------------------+
+| NAXIS2     | int        | 125                            | Raw data axis 2 size for SCI frames (1200) or E... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| PCOUNT     | int        | 0                              | number of parameters                               |
++------------+------------+--------------------------------+----------------------------------------------------+
+| GCOUNT     | int        | 1                              | number of groups                                   |
++------------+------------+--------------------------------+----------------------------------------------------+
+| BSCALE     | int        | 1                              | Linear factor in scaling equation. Needed for n... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| BZERO      | int        | 32768                          | Offset for 16-bit unsigned data type (FITS form... |
++------------+------------+--------------------------------+----------------------------------------------------+
+| EXTNAME    | str        | DQ                             | extension name                                     |
 +------------+------------+--------------------------------+----------------------------------------------------+
 
