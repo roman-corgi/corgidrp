@@ -5100,9 +5100,11 @@ def create_mock_stokes_image_l4(
         image_size=256,
         fwhm=3,
         I0=1e4,
-        badpixel_fraction=1e-3,
+        badpixel_fraction=0.0,
+        add_noise=True,
         p=0.1,
         theta_deg=20.0,
+        rng=None,
         seed=None
 ):
     """
@@ -5113,14 +5115,17 @@ def create_mock_stokes_image_l4(
         fwhm (float): Gaussian FWHM in pixels
         I0 (float): Peak intensity
         badpixel_fraction (float): Fraction of bad pixels
+        add_noise (bool): If True, add random noise to the Stokes cube; if False, return a noiseless realization (errors remain).
         p (float): Fractional polarization
         theta_deg (float): Polarization angle in degrees
+        rng (numpy.random.Generator, optional): RNG instance for reproducibility. Defaults to None.
         seed (int, optional): Random seed
 
     Returns:
         Image: Stokes cube Image object with data, err, dq, and headers
     """
-    rng = np.random.default_rng(seed)
+    if rng is None:
+    	rng = np.random.default_rng(seed)
 
     # Gaussian source
     y, x = np.mgrid[0:image_size, 0:image_size]
@@ -5148,14 +5153,17 @@ def create_mock_stokes_image_l4(
         I_map_err,
         I_map_err
     ])
-    stokes_cube += rng.normal(0.0, stokes_err)
+    if add_noise:
+        stokes_cube += rng.normal(0.0, stokes_err)
 
     # headers
     try:
         prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L4_headers()
     except:
         prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
-
+    exthdr['DATALVL'] = 'L4'
+    exthdr['BUNIT'] = 'photoelectron/s'
+    
     dq_out = np.broadcast_to(dq, stokes_cube.shape).copy()
 
     stokes_image = Image(
@@ -5166,7 +5174,7 @@ def create_mock_stokes_image_l4(
         dq=dq_out,
         err_hdr=errhdr,
         dq_hdr=dqhdr
-    )
+    )    
 
     # add throughput extensions
     kl_thru = np.ones((image_size, image_size), dtype=float)
