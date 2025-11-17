@@ -5151,10 +5151,7 @@ def create_mock_stokes_image_l4(
     stokes_cube += rng.normal(0.0, stokes_err)
 
     # headers
-    try:
-        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L4_headers()
-    except:
-        prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
 
     dq_out = np.broadcast_to(dq, stokes_cube.shape).copy()
 
