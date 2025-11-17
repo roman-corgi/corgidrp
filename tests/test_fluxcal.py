@@ -617,18 +617,18 @@ def test_l4_companion_photometry():
     host_counts = 2.5e5
     companion_counts = 5.0e4
     col_cor = 1.2
-    host_image = create_mock_stokes_i_image(host_counts, 'HOST', seed=1, wv0_x=-1.0, wv0_y=0.5, is_coronagraphic=True)
-    companion_image = create_mock_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, wv0_x=2.0, wv0_y=-1.0, is_coronagraphic=True)
+    host_image = create_mock_stokes_i_image(host_counts, 'HOST', seed=1, is_coronagraphic=True)
+    companion_image = create_mock_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, is_coronagraphic=True)
 
     ct_cal = create_ct_cal(fwhm_mas=50, cfam_name='3C', cenx=0.0, ceny=0.0, nx=11, ny=11)
     fpamfsam_cal = create_mock_fpamfsam_cal()
 
     host_dataset = Dataset([host_image])
     companion_dataset = Dataset([companion_image])
-    wv0_x = companion_image.ext_hdr.get('WV0_X', 0.0)
-    wv0_y = companion_image.ext_hdr.get('WV0_Y', 0.0)
+    x_loc = 0.0 #to-do: get companion x location from header
+    y_loc = 0.0 #to-do: get companion y location from header
     ct_factor = np.asarray(
-        ct_cal.InterpolateCT(wv0_x, wv0_y, companion_dataset, fpamfsam_cal)
+        ct_cal.InterpolateCT(x_loc, y_loc, companion_dataset, fpamfsam_cal)
     ).ravel()[0]
     if not np.isfinite(ct_factor) or ct_factor <= 0:
         raise ValueError("Interpolated core throughput factor must be positive and finite.")

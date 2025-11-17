@@ -5185,7 +5185,7 @@ def create_mock_stokes_image_l4(
 
     return stokes_image
 
-def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=0.0, wv0_y=0.0, is_coronagraphic=False):
+def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, is_coronagraphic=False):
     """Create a mock L4 Stokes I image from a mock L4 Stokes cube.
     
     Args:
@@ -5193,8 +5193,6 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
         target_name (str): Name of the target
         col_cor (float, optional): Color correction factor
         seed (int, optional): Random seed
-        wv0_x (float, optional): Wavelength of the x-axis
-        wv0_y (float, optional): Wavelength of the y-axis
         is_coronagraphic (bool, optional): Whether the image is coronagraphic
 
     Returns:
@@ -5227,8 +5225,6 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
     base_img.ext_hdr.setdefault('CFAMNAME', '3C')
     base_img.ext_hdr.setdefault('DPAMNAME', 'POL0')
     base_img.ext_hdr.setdefault('LSAMNAME', 'NFOV')
-    base_img.ext_hdr['WV0_X'] = wv0_x
-    base_img.ext_hdr['WV0_Y'] = wv0_y
     base_img.ext_hdr.setdefault('STARLOCX', 0.0)
     base_img.ext_hdr.setdefault('STARLOCY', 0.0)
     base_img.ext_hdr.setdefault('FPAM_H', 0.0)
