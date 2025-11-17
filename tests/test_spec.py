@@ -948,9 +948,9 @@ def test_spec_psf_subtraction():
     assert(output[0].data.all()==0)
     
     #test the throughput determination
-    assert 'CT_THRU' in str(output[0].ext_hdr['HISTORY'])
-    assert np.ndim(output[0].hdu_list['CT_THRU'].data) == 1
-    assert output[0].hdu_list['CT_THRU'].data.any()<=1  and output[0].hdu_list['CT_THRU'].data.any() >= 0
+    assert 'ALGO_THRU' in str(output[0].ext_hdr['HISTORY'])
+    assert np.ndim(output[0].hdu_list['ALGO_THRU'].data) == 1
+    assert output[0].hdu_list['ALGO_THRU'].data.any()<=1  and output[0].hdu_list['ALGO_THRU'].data.any() >= 0
 
 
 def test_extract_spec():
