@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import shutil
 import warnings
+import logging
 
 from astropy.io.fits import Header
 
@@ -27,6 +28,9 @@ from pyklip.klip import rotate
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
                            validate_binary_table_fields, get_latest_cal_file)
+
+
+
 
 def test_image_splitting():
     """
@@ -790,57 +794,22 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
 
     return
 
+def test_compute_QphiUPhi(): 
+    '''
+    Test that the computer_QphiUphi function behaves as expected in three scenarios:
+    1) When the input image center is correct, U_phi should be approximately zero.
+    2) When the input image center is incorrect, U_phi should be nonzero.
+    3) The err array in the output should have the same shape as the data array.
+    4) The dq array in the output should propagate as the bitwise-OR of the input dq for Q and U.   
+    '''
 
-def test_compute_QphiUphi_center_correct():
-    '''
-    Verify that U_phi is approximately zero when the input image center is correct.
-    '''
+    ####################################
+    ########## TEST Dataset 2 ##########
+    ####################################
+    
+    ####Verify that U_phi is approximately zero when the input image center is correct. 
     img = mocks.create_mock_IQUV_image()
-    res = l4_to_tda.compute_QphiUphi(img)
-
-    # check shape
-    assert res.data.shape[0] == 6, "Output should have 6 planes (I,Q,U,V,Q_phi,U_phi)"
-
-    # check U_phi ~ 0 when center is correct
-    U_phi = res.data[5]
-    assert np.allclose(U_phi, 0.0, atol=1e-6), "U_phi should be ~0 for correct center"
-
-
-def test_compute_QphiUphi_center_wrong():
-    '''
-    Verify that U_phi is nonzero when the input image center is incorrect.
-    5 pixel offset is chosen to ensure significant deviation from true center.
-    '''
-    img = mocks.create_mock_IQUV_image()
-    # overwrite header center with wrong value
-    img.ext_hdr["STARLOCX"] += 5.0
-    img.ext_hdr["STARLOCY"] += 5.0
-
-    res = l4_to_tda.compute_QphiUphi(img)
-
-    U_phi = res.data[5]
-    assert not np.allclose(U_phi, 0.0, atol=1e-6), "U_phi should be nonzero for wrong center"
-
-
-def test_compute_QphiUphi_err_shape():
-    '''
-    Verify that the err and dq arrays in the output of compute_QphiUphi have the
-    correct shape matching the data array.
-    '''
-    img = mocks.create_mock_IQUV_image()
-    res = l4_to_tda.compute_QphiUphi(img)
-
-    # check that err array is consistent with data
-    assert res.err.shape == res.data.shape, "err should have the same shape as data"
-    assert res.dq.shape == res.data.shape, "dq should have the same shape as data"
-
-def test_compute_QphiUphi_dq_propagation():
-    """
-    Verify that the dq of Q_phi and U_phi propagates as the bitwise-OR of
-    the input dq for Q and U. We set distinct bits on all pixels of Q and U
-    so the expected OR relationship holds regardless of geometry.
-    """
-    img = mocks.create_mock_IQUV_image()
+    
 
     # Expect at least (I, Q, U, V) planes in the input dq
     assert img.dq.shape[0] >= 4, "mock image should have I,Q,U,V planes"
@@ -855,13 +824,32 @@ def test_compute_QphiUphi_dq_propagation():
     dq_mod[2] = dq_mod[2] | BIT_U  # U plane
     img.dq = dq_mod
 
-    # Compute Q_phi and U_phi
+    ### Run the compute_QphiUphi function
     res = l4_to_tda.compute_QphiUphi(img)
+
+
+    # check shape
+    assert res.data.shape[0] == 6, "Output should have 6 planes (I,Q,U,V,Q_phi,U_phi)"
+
+    # check U_phi ~ 0 when center is correct
+    U_phi = res.data[5]
+    assert np.allclose(U_phi, 0.0, atol=1e-6), "U_phi should be ~0 for correct center"
+
+
+    # check that err array is consistent with data
+    assert res.err.shape == res.data.shape, "err should have the same shape as data"
+    assert res.dq.shape == res.data.shape, "dq should have the same shape as data"
+
 
     # Expect (I, Q, U, V, Q_phi, U_phi) -> 6 planes
     assert res.dq.shape[0] == 6, "Output dq should have 6 planes"
 
     expected_or = img.dq[1] | img.dq[2]
+
+
+    #### Verify that the dq of Q_phi and U_phi propagates as the bitwise-OR of
+    #### the input dq for Q and U. We set distinct bits on all pixels of Q and U
+    #### so the expected OR relationship holds regardless of geometry.
 
     # Q_phi dq should include bits from Q and U (bitwise OR)
     np.testing.assert_array_equal(
@@ -877,6 +865,26 @@ def test_compute_QphiUphi_dq_propagation():
         err_msg="U_phi dq should include bits from Q and U (OR)."
     )
 
+
+    ####################################
+    ########## TEST Dataset 2 ##########
+    ####################################
+    
+    ####Verify that U_phi is nonzero when the input image center is incorrect.
+    #### 5 pixel offset is chosen to ensure significant deviation from true center.
+
+    img = mocks.create_mock_IQUV_image()
+    # overwrite header center with wrong value
+    img.ext_hdr["STARLOCX"] += 5.0
+    img.ext_hdr["STARLOCY"] += 5.0
+
+    res = l4_to_tda.compute_QphiUphi(img)
+
+    U_phi = res.data[5]
+    assert not np.allclose(U_phi, 0.0, atol=1e-6), "U_phi should be nonzero for wrong center"
+   
+
+
 if __name__ == "__main__":
     # test_image_splitting()
     # test_calc_pol_p_and_pa_image()
@@ -885,7 +893,4 @@ if __name__ == "__main__":
     # test_combine_polarization_states()
     # test_align_frames()
     # test_calc_stokes_unocculted()
-    test_compute_QphiUphi_center_correct()
-    test_compute_QphiUphi_center_wrong()
-    test_compute_QphiUphi_err_shape()
-    test_compute_QphiUphi_dq_propagation()
+    test_compute_QphiUPhi()
