@@ -242,21 +242,27 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
     evpa_chi_mean, evpa_chi_std = [], []
 
     for i, p, theta in zip(range(n_sim), p_input, theta_input):
-        
-        # Generate mock Stokes cube 
+
+        if i != n_sim-1:
+            I0 = 1e10
+        else:
+            # I ~ 0 scenario for a sanity check
+            I0 = 0
+            
+        # Generate mock Stokes cube
         common_kwargs = dict(
             fwhm=1e2,
-            I0=1e10,
+            I0=I0,
             p=p,
             theta_deg=theta,
             rng=rng,
-        )
+        )   
         
         # Generate mock Stokes cube
         Image_input = mocks.create_mock_stokes_image_l4(badpixel_fraction=1e-3, **common_kwargs)
     
-        Image_input_noerr = mocks.create_mock_stokes_image_l4(badpixel_fraction=0.0, add_noise=False, **common_kwargs)
-        P_input = np.sqrt(Image_input_noerr.data[1]**2. + Image_input_noerr.data[2]**2.)
+        Image_input_true = mocks.create_mock_stokes_image_l4(badpixel_fraction=0.0, add_noise=False, **common_kwargs)
+        P_input = np.sqrt(Image_input_true.data[1]**2. + Image_input_true.data[2]**2.)
         idx = np.where( Image_input.dq[0] != 0 )
         P_input[idx] = np.nan
 
@@ -314,24 +320,51 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
                     logger.info(log_head + f"Output check passed: DQ for {label} was propagated correctly")
                 else:
                     logger.info(log_head + f"Output check FAILED: DQ for {label} was not propagated correctly")
-                    
-        # Compute chi statistics
-        P_chi = (P_map - P_input) / P_map_err
-        p_chi = (p_map - p) / p_map_err
-        evpa_chi = (evpa_map - theta) / evpa_map_err
+
+            # Quick residual check: P_map vs sqrt(Q^2 + U^2)
+            Q = Image_input.data[1]
+            U = Image_input.data[2]
+            P_qu = np.sqrt(Q**2 + U**2)
+            diff = np.nanmax(np.abs(P_map - P_qu))
+            if diff < 1e-10:
+                logger.info(log_head + "Output check passed: P == sqrt(Q^2+U^2)")
+            else:
+                logger.info(log_head + "Output check FAILED: P != sqrt(Q^2+U^2)")
         
-        idx_P = np.where( P_dq == 0 )
-        idx_p = np.where( p_dq == 0 )
-        idx_evpa = np.where( evpa_dq == 0 )
-        
-        # Compute mean values among pixels
-        P_chi_mean.append(np.nanmedian(P_chi[idx_P]))
-        P_chi_std.append(np.nanstd(P_chi[idx_P]))
-        p_chi_mean.append(np.nanmedian(p_chi[idx_p]))
-        p_chi_std.append(np.nanstd(p_chi[idx_p]))
-        evpa_chi_mean.append(np.nanmedian(evpa_chi[idx_evpa]))
-        evpa_chi_std.append(np.nanstd(evpa_chi[idx_evpa]))
-        
+        if i != n_sim-1:                
+            # Compute chi statistics
+            P_chi = (P_map - P_input) / P_map_err
+            p_chi = (p_map - p) / p_map_err
+            evpa_chi = (evpa_map - theta) / evpa_map_err
+            
+            idx_P = np.where( P_dq == 0 )
+            idx_p = np.where( p_dq == 0 )
+            idx_evpa = np.where( evpa_dq == 0 )
+            
+            # Compute mean values among pixels
+            P_chi_mean.append(np.nanmedian(P_chi[idx_P]))
+            P_chi_std.append(np.nanstd(P_chi[idx_P]))
+            p_chi_mean.append(np.nanmedian(p_chi[idx_p]))
+            p_chi_std.append(np.nanstd(p_chi[idx_p]))
+            evpa_chi_mean.append(np.nanmedian(evpa_chi[idx_evpa]))
+            evpa_chi_std.append(np.nanstd(evpa_chi[idx_evpa]))
+        else:
+            if np.nanmax(abs(Image_input.data[0])) < 1e-10:
+                logger.info(log_head + "Sanity check passed: A test with I = 0 is implemented")
+                map_sets = [
+                    (P_map, "Polarized intensity"),
+                    (p_map, "Polarized fraction"),
+                    (evpa_map, "Polarization angle"),
+                ]
+                for map, label in map_sets:
+                    if np.any(np.isnan(map)) or np.any(np.isinf(map)):
+                        logger.info(log_head + "Sanity check FAILED: NaN/Inf values are in "+label)
+                    else:
+                        logger.info(log_head + "Sanity check passed: no NaN/Inf values in "+label)
+                        
+    # Remove the final run with I ~ 0 for a sanity check
+    n_sim -= 1
+    
     # Scale n_sim by number of pixels for statistical tolerance calculation
     # Each pixel in the mock images is independent, so total samples = n_sim * n_pixels
     n_sim *= P_map.size
@@ -919,10 +952,10 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
     return
 
 if __name__ == "__main__":
-    # test_image_splitting()
-    # test_calc_pol_p_and_pa_image()
-    # test_subtract_stellar_polarization()
-    # test_mueller_matrix_cal()
-    # test_combine_polarization_states()
-    # test_align_frames()
-    test_calc_stokes_unocculted()
+    #test_image_splitting()
+    test_calc_pol_p_and_pa_image()
+    #test_subtract_stellar_polarization()
+    #test_mueller_matrix_cal()
+    #test_combine_polarization_states()
+    #test_align_frames()
+    #test_calc_stokes_unocculted()
