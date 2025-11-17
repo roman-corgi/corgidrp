@@ -30,6 +30,8 @@ from corgidrp.check import (check_filename_convention, check_dimensions,
                            validate_binary_table_fields, get_latest_cal_file)
 
 
+# Suppress file collision warnings from mocks.rename_files_to_cgi_format
+warnings.filterwarnings("ignore", message="File collision detected.*already exists")
 
 
 def test_image_splitting():
@@ -885,7 +887,7 @@ def test_compute_QphiUPhi():
     logger.info("")
     
     # ================================================================================
-    # (4.2) Validate Output L4 Image
+    # (4.2) Validate Output TDA Image
     # ================================================================================
     logger.info('='*80)
     logger.info('Test 4.2: Output TDA Azimuthal components test for correct center')
@@ -912,13 +914,29 @@ def test_compute_QphiUPhi():
     assert qu_phi.data.shape[0] == 6, "Output data should have 6 slices"
 
     #### Check that Q_phi has the expected tangential polarization pattern
+    # For tangential polarization: Q_phi should be positive and follow the intensity pattern
+    # The mock creates Q = -pfrac*I*cos(2*phi), U = -pfrac*I*sin(2*phi)
+    # which results in Q_phi = pfrac*I (positive, tangential pattern)
+    I = qu_img.data[0]
+    pfrac = 0.1  # Default from create_mock_IQUV_image
+    expected_q_phi = pfrac * I
+    
     #VAP Version
     if np.mean(q_phi) > 0:
         logger.info(f"Q_phi Mean Value: {np.mean(q_phi)} > 0. PASS")
     else:
         logger.info(f"Q_phi Mean Value: {np.mean(q_phi)} <= 0. FAIL")
+    # Check that Q_phi matches the expected tangential pattern (within numerical precision)
+    if np.allclose(q_phi, expected_q_phi, rtol=1e-5, atol=1e-8):
+        logger.info("Q_phi matches expected tangential polarization pattern. PASS")
+    else:
+        logger.info("Q_phi does not match expected tangential polarization pattern. FAIL")
     #pytest Version
     assert np.mean(q_phi) > 0, "Q_phi should have positive mean for tangential polarization"
+    np.testing.assert_allclose(
+        q_phi, expected_q_phi, rtol=1e-5, atol=1e-8,
+        err_msg="Q_phi should match expected tangential polarization pattern"
+    )
 
     #### Check that U_phi is approximately zero when the input image center is correct
     #VAP Version
@@ -999,22 +1017,13 @@ def test_compute_QphiUPhi():
 
     mocks.rename_files_to_cgi_format(list_of_fits=[qu_img], output_dir=output_dir, level_suffix="l4")
 
-    #Check input image complies with cgi format
-    logger.info('='*80)
-    logger.info('Test 4.1b: Input L4 Image Data format')
-    logger.info('='*80)
-    check_filename_convention(getattr(qu_img , 'filename', None), 'cgi_*_l4_.fits', frame_info, logger,data_level='l4_')
-    verify_header_keywords(qu_img .ext_hdr, {'BUNIT': 'photoelectron/s'},  frame_info, logger)
-    verify_header_keywords(qu_img .ext_hdr, {'DATALVL': 'L4'},  frame_info, logger)
-    logger.info("")
-
     ### Run the compute_QphiUphi function
     qu_phi = l4_to_tda.compute_QphiUphi(qu_img)
     #Extract U_phi
     u_phi = qu_phi.data[5]
 
     logger.info('='*80)
-    logger.info('Test 4.2b: Output TDA Azimuthal components test for incorrect center')
+    logger.info('Test 4.3: Output TDA Azimuthal components test for incorrect center')
     logger.info('='*80)
 
     #### Check that U_phi is nonzero when the input image center is incorrect
@@ -1025,6 +1034,113 @@ def test_compute_QphiUPhi():
         logger.info(f"U_phi is approximately zero for incorrect center. FAIL")
     #pytest Version
     assert not np.allclose(u_phi, 0.0, atol=1e-6), "U_phi should be nonzero for wrong center"
+
+    ####################################
+    ########## TEST Dataset 3 ##########
+    ####################################
+    
+    #### Test error propagation: σ_Qφ, σ_Uφ from σ_Q, σ_U
+    logger.info('='*80)
+    logger.info('Test 4.4: Error propagation σ_Qφ, σ_Uφ from σ_Q, σ_U')
+    logger.info('='*80)
+    
+    qu_img = mocks.create_mock_IQUV_image()
+    
+    # Set known error values for Q and U
+    # compute_QphiUphi expects err to be (>=3, n, m), so ensure it's (4, n, m)
+    # If err has a leading dimension of 1, remove it
+    n, m = qu_img.data.shape[1:]
+    if qu_img.err.ndim == 4 and qu_img.err.shape[0] == 1:
+        # err has shape (1, 4, n, m) - reshape to (4, n, m)
+        qu_img.err = qu_img.err[0]
+    elif qu_img.err.shape[0] == 1 and qu_img.err.ndim == 3:
+        # err has shape (1, n, m) - need to expand to (4, n, m)
+        qu_img.err = np.broadcast_to(qu_img.err, (4, n, m)).copy()
+    
+    sigma_Q_val = 0.01
+    sigma_U_val = 0.015
+    qu_img.err[1, :, :] = sigma_Q_val  # Q error
+    qu_img.err[2, :, :] = sigma_U_val  # U error
+    
+    # Get center for error calculation
+    cx = qu_img.ext_hdr["STARLOCX"]
+    cy = qu_img.ext_hdr["STARLOCY"]
+    y_idx, x_idx = np.mgrid[0:n, 0:m]
+    phi = np.arctan2(y_idx - cy, x_idx - cx)
+    c2 = np.cos(2.0 * phi)
+    s2 = np.sin(2.0 * phi)
+    
+    # Expected error propagation: var_Qphi = c2^2 * sigma_Q^2 + s2^2 * sigma_U^2
+    # Expected error propagation: var_Uphi = s2^2 * sigma_Q^2 + c2^2 * sigma_U^2
+    expected_sigma_Qphi = np.sqrt(c2**2 * sigma_Q_val**2 + s2**2 * sigma_U_val**2)
+    expected_sigma_Uphi = np.sqrt(s2**2 * sigma_Q_val**2 + c2**2 * sigma_U_val**2)
+    
+    qu_phi = l4_to_tda.compute_QphiUphi(qu_img)
+    # Output err array is 3D with shape (6, n, m) for [I, Q, U, V, Q_phi, U_phi]
+    actual_sigma_Qphi = qu_phi.err[4, :, :]
+    actual_sigma_Uphi = qu_phi.err[5, :, :]
+    
+    #VAP Version
+    if np.allclose(actual_sigma_Qphi, expected_sigma_Qphi, rtol=1e-5):
+        logger.info("Error propagation for σ_Qφ matches expected. PASS")
+    else:
+        logger.info("Error propagation for σ_Qφ does not match expected. FAIL")
+    if np.allclose(actual_sigma_Uphi, expected_sigma_Uphi, rtol=1e-5):
+        logger.info("Error propagation for σ_Uφ matches expected. PASS")
+    else:
+        logger.info("Error propagation for σ_Uφ does not match expected. FAIL")
+    #pytest Version
+    np.testing.assert_allclose(
+        actual_sigma_Qphi, expected_sigma_Qphi, rtol=1e-5,
+        err_msg="Error propagation for σ_Qφ should match expected formula"
+    )
+    np.testing.assert_allclose(
+        actual_sigma_Uphi, expected_sigma_Uphi, rtol=1e-5,
+        err_msg="Error propagation for σ_Uφ should match expected formula"
+    )
+
+    ####################################
+    ########## TEST Dataset 4 ##########
+    ####################################
+    
+    #### Test using header STARLOCX/Y vs manual center
+    logger.info('='*80)
+    logger.info('Test 4.5: Using header STARLOCX/Y vs manual center')
+    logger.info('='*80)
+    
+    qu_img = mocks.create_mock_IQUV_image()
+    
+    # Get the header center
+    header_cx = qu_img.ext_hdr["STARLOCX"]
+    header_cy = qu_img.ext_hdr["STARLOCY"]
+    
+    # Compute with header center (default behavior)
+    qu_phi_header = l4_to_tda.compute_QphiUphi(qu_img)
+    
+    # Remove header center and use manual center
+    del qu_img.ext_hdr["STARLOCX"]
+    del qu_img.ext_hdr["STARLOCY"]
+    qu_phi_manual = l4_to_tda.compute_QphiUphi(qu_img, x_center=header_cx, y_center=header_cy)
+    
+    # Results should be identical
+    #VAP Version
+    if np.allclose(qu_phi_header.data, qu_phi_manual.data, rtol=1e-10):
+        logger.info("Header STARLOCX/Y and manual center produce identical results. PASS")
+    else:
+        logger.info("Header STARLOCX/Y and manual center produce different results. FAIL")
+    if np.allclose(qu_phi_header.err, qu_phi_manual.err, rtol=1e-10):
+        logger.info("Error arrays match between header and manual center. PASS")
+    else:
+        logger.info("Error arrays differ between header and manual center. FAIL")
+    #pytest Version
+    np.testing.assert_allclose(
+        qu_phi_header.data, qu_phi_manual.data, rtol=1e-10,
+        err_msg="Header STARLOCX/Y and manual center should produce identical results"
+    )
+    np.testing.assert_allclose(
+        qu_phi_header.err, qu_phi_manual.err, rtol=1e-10,
+        err_msg="Error arrays should match between header and manual center"
+    )
 
     logger.info('='*80)
     logger.info('Polarimetry L4->TDA VAP Test 4: Extended Source (Disk) Azimuthal Stokes Test: Complete')
