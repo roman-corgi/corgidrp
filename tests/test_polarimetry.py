@@ -992,6 +992,10 @@ def test_compute_QphiUPhi():
     #### 5 pixel offset is chosen to ensure significant deviation from true center.
 
     qu_img = mocks.create_mock_IQUV_image()
+    
+    # overwrite header center with wrong value
+    qu_img.ext_hdr["STARLOCX"] += 5.0
+    qu_img.ext_hdr["STARLOCY"] += 5.0
 
     mocks.rename_files_to_cgi_format(list_of_fits=[qu_img], output_dir=output_dir, level_suffix="l4")
 
@@ -1003,13 +1007,11 @@ def test_compute_QphiUPhi():
     verify_header_keywords(qu_img .ext_hdr, {'BUNIT': 'photoelectron/s'},  frame_info, logger)
     verify_header_keywords(qu_img .ext_hdr, {'DATALVL': 'L4'},  frame_info, logger)
     logger.info("")
-    
-    # overwrite header center with wrong value
-    qu_img.ext_hdr["STARLOCX"] += 5.0
-    qu_img.ext_hdr["STARLOCY"] += 5.0
 
-    res = l4_to_tda.compute_QphiUphi(qu_img)
-    u_phi = res.data[5]
+    ### Run the compute_QphiUphi function
+    qu_phi = l4_to_tda.compute_QphiUphi(qu_img)
+    #Extract U_phi
+    u_phi = qu_phi.data[5]
 
     logger.info('='*80)
     logger.info('Test 4.2b: Output TDA Azimuthal components test for incorrect center')
@@ -1023,6 +1025,10 @@ def test_compute_QphiUPhi():
         logger.info(f"U_phi is approximately zero for incorrect center. FAIL")
     #pytest Version
     assert not np.allclose(u_phi, 0.0, atol=1e-6), "U_phi should be nonzero for wrong center"
+
+    logger.info('='*80)
+    logger.info('Polarimetry L4->TDA VAP Test 4: Extended Source (Disk) Azimuthal Stokes Test: Complete')
+    logger.info('='*80)
 
 
 if __name__ == "__main__":
