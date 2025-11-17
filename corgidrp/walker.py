@@ -486,8 +486,6 @@ def run_recipe(recipe, save_recipe_file=True):
         if ram_increment_bool and not ram_heavy_bool: #ram_heavy_bool supercedes ram_increment_bool
             # how many frames to process at a time (before getting the RAM-heaviest function in the recipe) if RAM-heavy
             filelist_chunks = [filelist[n:n+corgidrp.chunk_size] for n in range(0, len(filelist), corgidrp.chunk_size)] 
-            # chunk_size = int(recipe['drpconfig']['chunk_size']) #XXX
-            # filelist_chunks = [filelist[n:n+chunk_size] for n in range(0, len(filelist), chunk_size)]
         else:
             filelist_chunks = [filelist]
 
@@ -569,10 +567,5 @@ def run_recipe(recipe, save_recipe_file=True):
 
     if not save_step:
         output_filepaths = None
-        # if save_step:
-        #     if isinstance(curr_dataset, data.Dataset):
-        #         output_filepaths += [frame.filepath for frame in curr_dataset]
-        #     else:
-        #         output_filepaths += [curr_dataset.filepath] XXX
     
     return output_filepaths

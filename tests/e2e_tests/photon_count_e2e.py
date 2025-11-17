@@ -18,6 +18,7 @@ import shutil
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #Checks that a photon-counted master dark works fine in the pipeline, for both cases of master dark (PC master dark or synthesized master dark)
+    # This test also exercises chunk size and RAM-heavy status
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     flat_path = os.path.join(processed_cal_path, "flat.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
@@ -178,10 +179,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = master_dark_filepath_list[0] # to find PC dark
-    #recipe[0]['drpconfig']['chunk_size'] = 2
+    recipe[0]['drpconfig']['chunk_size'] = 80 # exercise chunk size; RAM-heavy status exercised in this test
     output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
     recipe[1]['inputs'] = output_filepaths
-    #recipe[1]['ram_heavy'] = False
     output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
     # files are overwritten with same filenames
     recipe[2]['inputs'] = output_filepaths1

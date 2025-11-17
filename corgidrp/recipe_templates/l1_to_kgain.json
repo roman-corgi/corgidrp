@@ -4,7 +4,7 @@
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false,
-        "chunk_size" : "200"
+        "chunk_size" : 200
     },
     "inputs" : [],
     "outputdir" : "",

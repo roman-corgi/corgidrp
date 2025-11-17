@@ -3,7 +3,7 @@
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false,
-        "chunk_size" : "200"
+        "chunk_size" : 200
     },
     "inputs" : [],
     "outputdir" : "/Users/ygouf/git/cgi-sit/13-tdd/vi_tdd_04_iit_data_processing/output_drp_L2b/",
