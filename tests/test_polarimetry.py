@@ -269,9 +269,7 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
         P_input[idx] = np.nan
 
         if i == 0:
-            # ================================================================================
-            # (1) Validate Input Image and Header
-            # ================================================================================
+            # Validate Input Image and Header
             # Check/log that L4 data input complies with cgi format
             if isinstance(Image_input, Image): 
                 logger.info(log_head + f"Input format: {type(Image_input).__name__}. Expected: Image. PASS")
@@ -287,9 +285,7 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
             }
             check.verify_header_keywords(ext_hdr, required_keywords, frame_info=log_head, logger=logger)
 
-        # ================================================================================
-        # (2) Compute polarization products
-        # ================================================================================
+        # Compute polarization products
         Image_pol = l4_to_tda.calc_pol_p_and_pa_image(Image_input)
 
         P_map = Image_pol.data[0]       # Polarized intensity
