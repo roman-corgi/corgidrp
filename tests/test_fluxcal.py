@@ -24,6 +24,9 @@ from astropy.modeling.models import BlackBody
 import astropy.units as u
 from termcolor import cprint
 
+# Suppress COL_COR warning from l4_to_tda when color correction keyword is missing
+warnings.filterwarnings("ignore", message="There is no COL_COR keyword.*color correction was not done")
+
 
 data = np.ones([1024,1024]) * 2 
 err = np.ones([1,1024,1024]) * 0.5
@@ -599,7 +602,7 @@ def test_l4_companion_photometry():
     """VAP Test 3: Companion photometry + apparent magnitude validation."""
     logger, output_dir = _setup_vap_logger('test_l4_companion_photometry')
     logger.info('=' * 80)
-    logger.info('Spectroscopy L4-> TDA VAP Test 3: Companion Photometry / Apparent Magnitude')
+    logger.info('Polarimetry L4-> TDA VAP Test 3: Companion Photometry / Apparent Magnitude')
     logger.info('=' * 80)
     phot_kwargs = {
         'encircled_radius': 5,
@@ -738,7 +741,7 @@ def test_l4_companion_photometry():
     else:
         logger.info('test_l4_companion_photometry overall: FAIL')
     logger.info('=' * 80)
-    logger.info('End of Spectroscopy L4-> TDA VAP Test 3')
+    logger.info('End of Polarimetry L4-> TDA VAP Test 3')
     logger.info('=' * 80)
     print_pass() if result else print_fail()
     assert result
