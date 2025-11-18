@@ -1653,7 +1653,10 @@ def spec_psf_subtraction(input_dataset):
 
         # determine the throughput at the estimated source position
         # This is a rough guess at the throughput. Want to make this more accurate
-        through = 1 - np.nansum(frame.data * shifted_scaled_ref, axis=1)/np.nansum(orig_frame * shifted_scaled_ref, axis=1)
+        with warnings.catch_warnings():
+            # catch divide by zero warnings
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            through = 1 - np.nansum(frame.data * shifted_scaled_ref, axis=1)/np.nansum(orig_frame * shifted_scaled_ref, axis=1)
         # Save algorithm throughput as an extension on the psf-subtracted Image
         frame.add_extension_hdu('ALGO_THRU', data = np.array(through), header = algothru_hdr)
 
