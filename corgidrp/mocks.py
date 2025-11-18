@@ -5157,10 +5157,9 @@ def create_mock_stokes_image_l4(
         stokes_cube += rng.normal(0.0, stokes_err)
 
     # headers
-    try:
-        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L4_headers()
-    except:
-        prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
+
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
+
     exthdr['DATALVL'] = 'L4'
     exthdr['BUNIT'] = 'photoelectron/s'
     
@@ -5185,7 +5184,7 @@ def create_mock_stokes_image_l4(
 
     return stokes_image
 
-def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=0.0, wv0_y=0.0, is_coronagraphic=False):
+def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, is_coronagraphic=False, xoffset=0.0, yoffset=0.0):
     """Create a mock L4 Stokes I image from a mock L4 Stokes cube.
     
     Args:
@@ -5193,9 +5192,9 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
         target_name (str): Name of the target
         col_cor (float, optional): Color correction factor
         seed (int, optional): Random seed
-        wv0_x (float, optional): Wavelength of the x-axis
-        wv0_y (float, optional): Wavelength of the y-axis
         is_coronagraphic (bool, optional): Whether the image is coronagraphic
+        xoffset (float, optional): X offset for the Gaussian source position in pixels. Defaults to 0.0 (center).
+        yoffset (float, optional): Y offset for the Gaussian source position in pixels. Defaults to 0.0 (center).
 
     Returns:
         Image: Mock Image object with data of shape [4, n, m], err and dq arrays included.
@@ -5213,8 +5212,8 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
         array_shape=(base_img.data.shape[1], base_img.data.shape[2]),
         sigma=3.0,
         amp=total_counts / (2.0 * np.pi * 3.0**2),
-        xoffset=0.0,
-        yoffset=0.0,
+        xoffset=xoffset,
+        yoffset=yoffset,
     )
     base_img.data[0] = profile
     base_img.data[1:] = 0.0
@@ -5227,10 +5226,11 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
     base_img.ext_hdr.setdefault('CFAMNAME', '3C')
     base_img.ext_hdr.setdefault('DPAMNAME', 'POL0')
     base_img.ext_hdr.setdefault('LSAMNAME', 'NFOV')
-    base_img.ext_hdr['WV0_X'] = wv0_x
-    base_img.ext_hdr['WV0_Y'] = wv0_y
-    base_img.ext_hdr.setdefault('STARLOCX', 0.0)
-    base_img.ext_hdr.setdefault('STARLOCY', 0.0)
+    # Set STARLOCX/Y to image center (for 64x64 image, center is at 32, 32)
+    image_center_x = base_img.data.shape[2] / 2.0  # x center (columns)
+    image_center_y = base_img.data.shape[1] / 2.0  # y center (rows)
+    base_img.ext_hdr['STARLOCX'] = image_center_x
+    base_img.ext_hdr['STARLOCY'] = image_center_y
     base_img.ext_hdr.setdefault('FPAM_H', 0.0)
     base_img.ext_hdr.setdefault('FPAM_V', 0.0)
     base_img.ext_hdr.setdefault('FSAM_H', 0.0)
