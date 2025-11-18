@@ -632,8 +632,6 @@ def test_cpgs_satspots():
         assert hdr_recipe['steps'][0]['keywords']['phi_deg'] == 0.
 
 
-
-
 if __name__ == "__main__":#
     test_autoreducing()
     test_auto_template_identification()

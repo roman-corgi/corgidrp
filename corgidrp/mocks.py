@@ -23,7 +23,7 @@ import astropy.units as u
 from astropy.modeling.models import Gaussian2D
 import photutils.centroids as centr
 import corgidrp.data as data
-from corgidrp.data import Image, Dataset, DetectorParams, FpamFsamCal
+from corgidrp.data import Image, Dataset, DetectorParams, FpamFsamCal, FluxcalFactor
 import corgidrp.detector as detector
 import corgidrp.flat as flat
 from corgidrp.detector import imaging_area_geom, unpack_geom
@@ -172,6 +172,35 @@ def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
             out[key] = val
 
     return out
+
+
+def make_mock_fluxcal_factor(value, err=0.0, cfam_name='3D',
+                             dpam_name='PRISM3', fsam_name='R1C2'):
+    """Create a lightweight FluxcalFactor for unit testing.
+
+    Args:
+        value (float): Absolute flux calibration factor to store.
+        err (float, optional): Uncertainty on the calibration factor.
+        cfam_name (str, optional): CFAM filter name recorded in the header.
+        dpam_name (str, optional): DPAM name recorded in the header.
+        fsam_name (str, optional): FSAM name recorded in the header.
+
+    Returns:
+        FluxcalFactor: Calibration object referencing a dummy dataset so tests
+            can exercise downstream logic without building full calibration files.
+    """
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L3_headers()
+    ext_hdr['CFAMNAME'] = cfam_name
+    ext_hdr['DPAMNAME'] = dpam_name
+    ext_hdr['FSAMNAME'] = fsam_name
+    dummy_data = np.zeros((2, 2))
+    dummy_err = np.zeros((1, 2, 2))
+    dummy_dq = np.zeros((2, 2), dtype=int)
+    dummy_img = Image(dummy_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                      err=dummy_err, dq=dummy_dq, err_hdr=err_hdr.copy(),
+                      dq_hdr=dq_hdr.copy())
+    return FluxcalFactor(value, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                         input_dataset=Dataset([dummy_img]))
 
 
 def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS"):
@@ -5071,9 +5100,11 @@ def create_mock_stokes_image_l4(
         image_size=256,
         fwhm=3,
         I0=1e4,
-        badpixel_fraction=1e-3,
+        badpixel_fraction=0.0,
+        add_noise=True,
         p=0.1,
         theta_deg=20.0,
+        rng=None,
         seed=None
 ):
     """
@@ -5084,14 +5115,17 @@ def create_mock_stokes_image_l4(
         fwhm (float): Gaussian FWHM in pixels
         I0 (float): Peak intensity
         badpixel_fraction (float): Fraction of bad pixels
+        add_noise (bool): If True, add random noise to the Stokes cube; if False, return a noiseless realization (errors remain).
         p (float): Fractional polarization
         theta_deg (float): Polarization angle in degrees
+        rng (numpy.random.Generator, optional): RNG instance for reproducibility. Defaults to None.
         seed (int, optional): Random seed
 
     Returns:
         Image: Stokes cube Image object with data, err, dq, and headers
     """
-    rng = np.random.default_rng(seed)
+    if rng is None:
+    	rng = np.random.default_rng(seed)
 
     # Gaussian source
     y, x = np.mgrid[0:image_size, 0:image_size]
@@ -5119,17 +5153,19 @@ def create_mock_stokes_image_l4(
         I_map_err,
         I_map_err
     ])
-    stokes_cube += rng.normal(0.0, stokes_err)
+    if add_noise:
+        stokes_cube += rng.normal(0.0, stokes_err)
 
     # headers
-    try:
-        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L4_headers()
-    except:
-        prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
 
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
+
+    exthdr['DATALVL'] = 'L4'
+    exthdr['BUNIT'] = 'photoelectron/s'
+    
     dq_out = np.broadcast_to(dq, stokes_cube.shape).copy()
 
-    return Image(
+    stokes_image = Image(
         stokes_cube,
         pri_hdr=prihdr,
         ext_hdr=exthdr,
@@ -5137,7 +5173,73 @@ def create_mock_stokes_image_l4(
         dq=dq_out,
         err_hdr=errhdr,
         dq_hdr=dqhdr
+    )    
+
+    # add throughput extensions
+    kl_thru = np.ones((image_size, image_size), dtype=float)
+    ct_thru = np.ones((image_size, image_size), dtype=float)
+    # not adding any particular extra keywords to the headers for now
+    stokes_image.add_extension_hdu('KL_THRU', data=kl_thru, header=fits.Header())
+    stokes_image.add_extension_hdu('CT_THRU', data=ct_thru, header=fits.Header())
+
+    return stokes_image
+
+def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, is_coronagraphic=False, xoffset=0.0, yoffset=0.0):
+    """Create a mock L4 Stokes I image from a mock L4 Stokes cube.
+    
+    Args:
+        total_counts (float): Total counts in the image
+        target_name (str): Name of the target
+        col_cor (float, optional): Color correction factor
+        seed (int, optional): Random seed
+        is_coronagraphic (bool, optional): Whether the image is coronagraphic
+        xoffset (float, optional): X offset for the Gaussian source position in pixels. Defaults to 0.0 (center).
+        yoffset (float, optional): Y offset for the Gaussian source position in pixels. Defaults to 0.0 (center).
+
+    Returns:
+        Image: Mock Image object with data of shape [4, n, m], err and dq arrays included.
+    """
+    base_img = create_mock_stokes_image_l4(
+        image_size=64,
+        fwhm=3,
+        I0=1e4,
+        badpixel_fraction=0.0,
+        p=0.0,
+        theta_deg=0.0,
+        seed=seed,
     )
+    profile = gaussian_array(
+        array_shape=(base_img.data.shape[1], base_img.data.shape[2]),
+        sigma=3.0,
+        amp=total_counts / (2.0 * np.pi * 3.0**2),
+        xoffset=xoffset,
+        yoffset=yoffset,
+    )
+    base_img.data[0] = profile
+    base_img.data[1:] = 0.0
+    base_img.err[0] = np.maximum(np.sqrt(np.abs(base_img.data[0])), 1.0)
+    base_img.err[1:] = base_img.err[0]
+    base_img.dq[:] = 0
+    base_img.pri_hdr['TARGET'] = target_name
+    base_img.ext_hdr['BUNIT'] = 'photoelectron/s'
+    base_img.ext_hdr['DATALVL'] = 'L4'
+    base_img.ext_hdr.setdefault('CFAMNAME', '3C')
+    base_img.ext_hdr.setdefault('DPAMNAME', 'POL0')
+    base_img.ext_hdr.setdefault('LSAMNAME', 'NFOV')
+    # Set STARLOCX/Y to image center (for 64x64 image, center is at 32, 32)
+    image_center_x = base_img.data.shape[2] / 2.0  # x center (columns)
+    image_center_y = base_img.data.shape[1] / 2.0  # y center (rows)
+    base_img.ext_hdr['STARLOCX'] = image_center_x
+    base_img.ext_hdr['STARLOCY'] = image_center_y
+    base_img.ext_hdr.setdefault('FPAM_H', 0.0)
+    base_img.ext_hdr.setdefault('FPAM_V', 0.0)
+    base_img.ext_hdr.setdefault('FSAM_H', 0.0)
+    base_img.ext_hdr.setdefault('FSAM_V', 0.0)
+    base_img.ext_hdr['FSMLOS'] = 1 if is_coronagraphic else 0
+    if col_cor is not None:
+        base_img.ext_hdr['COL_COR'] = col_cor
+    return base_img
+
 def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
     """
     Create a mock Image with [I, Q, U, V] planes for testing.
@@ -5169,19 +5271,19 @@ def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
 
     cube = np.stack([I, Q, U, V], axis=0)
 
-    pri_hdr = Header()
-    ext_hdr = Header()
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
+    ext_hdr=exthdr
     ext_hdr["STARLOCX"] = float(x0)
     ext_hdr["STARLOCY"] = float(y0)
 
     return Image(
         cube,
-        pri_hdr=pri_hdr,
+        pri_hdr=prihdr,
         ext_hdr=ext_hdr,
         err=np.zeros_like(cube),
         dq=np.zeros(cube.shape, dtype=np.uint16),
-        err_hdr=Header(),
-        dq_hdr=Header(),
+        err_hdr=errhdr,
+        dq_hdr=dqhdr,
     )
 
 def create_mock_polarization_l3_dataset(

@@ -6,18 +6,18 @@ import logging
 import pytest
 import argparse
 
-
+from corgidrp import corethroughput
 from corgidrp.data import Dataset
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_calibration_product_headers
-from corgidrp.mocks import rename_files_to_cgi_format
+from corgidrp.mocks import rename_files_to_cgi_format, create_ct_psfs
 from corgidrp.walker import walk_corgidrp
 import corgidrp
 import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
                            get_latest_cal_file)
-from tests.e2e_tests.l1_to_l3_spec_e2e import run_l1_to_l3_e2e_test
+from l1_to_l3_spec_e2e import run_l1_to_l3_e2e_test
 
 # first lift the L1 simulations to L3
 
@@ -139,6 +139,35 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
 
     rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
+    
+    ###########################
+    #### Make dummy CT cal ####
+    ###########################
+
+    # Dataset with some CT profile defined in create_ct_interp
+    # Pupil image
+    pupil_image = np.zeros([1024, 1024])
+    # Set it to some known value for a selected range of pixels
+    pupil_image[510:530, 510:530]=1
+    # Add specific values for pupil images:
+    # DPAM = PUPIL, FSAM = OPEN, LSAM=OPEN and FPAM=OPEN_12
+    exthd['DPAMNAME'] = 'PUPIL'
+    exthd['LSAMNAME'] = 'OPEN'
+    exthd['FSAMNAME'] = 'OPEN'
+    exthd['FPAMNAME'] = 'OPEN_12'
+
+    data_psf, psf_loc_in, half_psf = create_ct_psfs(50, cfam_name='3', n_psfs=10)
+    
+    err = np.ones([1024,1024]) 
+    data_ct_interp = [Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd, err = err)]
+    # Set of off-axis PSFs with a CT profile defined in create_ct_interp
+    # First, we need the CT FPM center to create the CT radial profile
+    # We can use a miminal dataset to get to know it
+    data_ct_interp += [data_psf[0]]
+    ct_cal_tmp = corethroughput.generate_ct_cal(Dataset(data_ct_interp))
+    rename_files_to_cgi_format(list_of_fits=[ct_cal_tmp], output_dir=calibrations_dir, level_suffix="ctm_cal")
+    this_caldb.create_entry(ct_cal_tmp)
     
     # Scan for default calibrations
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
@@ -283,17 +312,25 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     global logger
     
     # Create the spec_l3_to_l4_e2e subfolder regardless
-    output_top_level = os.path.join(e2eoutput_path, 'spec_l3_to_l4_psfsub_e2e')
+    output_top_level = os.path.join(e2eoutput_path, "l3_to_l4_spec_psfsub_e2e")
+    if not os.path.exists(output_top_level):
+        os.makedirs(output_top_level)
+    # clean out any files from a previous run
+    for f in os.listdir(output_top_level):
+        file_path = os.path.join(output_top_level, f)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+    
     
     os.makedirs(output_top_level, exist_ok=True)
     
     # Update paths to use the subfolder structure
     e2eoutput_path = output_top_level
     
-    log_file = os.path.join(e2eoutput_path, 'spec_l3_to_l4_psfsub_e2e.log')
+    log_file = os.path.join(e2eoutput_path, 'l3_to_l4_spec_psfsub_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
-    logger = logging.getLogger('spec_l3_to_l4_psfsub_e2e')
+    logger = logging.getLogger('l3_to_l4_spec_psfsub_e2e')
     logger.setLevel(logging.INFO)
     
     # Clear any existing handlers to avoid duplicates
@@ -334,9 +371,8 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
-    top_level_dir = os.path.join(thisfile_dir, 'spec_l3_to_l4_psfsub_e2e')
-    outputdir = os.path.join(top_level_dir, 'output')
-    e2edata_dir = "/home/schreiber/spec_sim/E2E_Test_Data2"
+    outputdir = thisfile_dir
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

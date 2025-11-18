@@ -28,23 +28,46 @@ class Dataset():
         all_data (np.array): an array with all the data combined together. First dimension is always number of images
         frames (np.array): list of data objects (probably corgidrp.data.Image)
     """
-    def __init__(self, frames_or_filepaths):
+    def __init__(self, frames_or_filepaths, no_data=False):
         """
         Args:
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
+            no_data (bool): If True, only the header information is loaded into the dataset for the frames' data.  Defaults to False.
         """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
+        
+        # default value
+        self.data_loaded = True
+        if no_data:
+            self.data_loaded = False
 
         if isinstance(frames_or_filepaths[0], str):
             # list of filepaths
             # TODO: do some auto detection of the filetype, but for now assume it is an image file
             self.frames = []
             for filepath in frames_or_filepaths:
-                self.frames.append(Image(filepath))
+                fr = Image(filepath)
+                if no_data:
+                    fr.data = None
+                    if fr.ext_hdr['DATALVL'].upper() != 'L1':
+                        #in this case, the frames are L1 and don't yet 
+                        # have err and dq, so don't set those 
+                        # to None so that each frame is given 
+                        # the default starting err and dq for further 
+                        # pipeline processes
+                        fr.err = None
+                        fr.dq = None
+                self.frames.append(fr)
         else:
             # list of frames
             self.frames = frames_or_filepaths
+            # if one of the input frames has data, set data_loaded to True
+            self.data_loaded = False
+            for frame in self.frames:
+                if frame.data is not None:
+                    self.data_loaded = True
+
 
         # turn lists into np.array for indexing behavior
         if isinstance(self.frames, list):
@@ -3193,3 +3216,27 @@ def get_bit_to_flag_map():
         dict: A dictionary with bit positions (int) as keys and flag names as values.
     """
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
+
+def get_stokes_intensity_image(stokes_image):
+    """Return a copy containing only the Stokes I plane for photometry.
+
+    Args:
+        stokes_image (Image): L4 polarimetry Image to extract first plane 
+            (Stokes I) from
+
+    Returns:
+        Image: New Image containing the Stokes I data and all required extensions
+    """
+    intensity_image = stokes_image.copy(copy_data=True)
+    intensity_image.data = stokes_image.data[0].copy()
+
+    err_slice = stokes_image.err[0]
+    err_layer = err_slice if err_slice.ndim == 3 else np.array([err_slice])
+    if err_layer.shape[0] != 1:
+        err_layer = err_layer[:1]
+    intensity_image.err = err_layer.copy()
+    intensity_image.dq = stokes_image.dq[0].copy()
+
+    intensity_image.ext_hdr.add_history("Extracted Stokes-I plane via get_stokes_intensity_image.")
+
+    return intensity_image

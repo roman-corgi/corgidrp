@@ -1,21 +1,13 @@
 {
-    "name" : "l2a_build_trad_dark_image",
+    "name" : "l2a_build_trad_dark_image_2",
     "template" : true,
+    "ram_heavy" : true,
     "drpconfig" : {
         "track_individual_errors" : false
     },
     "inputs" : [],
     "outputdir" : "",
     "steps" : [
-        {
-            "name" : "convert_to_electrons",
-            "calibs" : {
-                "KGain" : "AUTOMATIC"
-            }
-        },
-        {
-            "name" : "em_gain_division"
-        },
         {
             "name" : "build_trad_dark",
             "calibs" : {
