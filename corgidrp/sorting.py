@@ -423,6 +423,7 @@ def sort_pupilimg_frames(
         dataset_sorted.all_data = np.array([frame.data for frame in dataset_sorted.frames])
         for i, frame in enumerate(dataset_sorted.frames):
             frame.data = dataset_sorted.all_data[i]
+    dataset_sorted.data_loaded = True
     dataset_sorted.update_after_processing_step(history)
     # Return Dataset with mean frame and cal type
     return dataset_sorted

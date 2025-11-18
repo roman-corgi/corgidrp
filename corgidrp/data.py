@@ -62,6 +62,12 @@ class Dataset():
         else:
             # list of frames
             self.frames = frames_or_filepaths
+            # if one of the input frames has data, set data_loaded to True
+            self.data_loaded = False
+            for frame in self.frames:
+                if frame.data is not None:
+                    self.data_loaded = True
+
 
         # turn lists into np.array for indexing behavior
         if isinstance(self.frames, list):

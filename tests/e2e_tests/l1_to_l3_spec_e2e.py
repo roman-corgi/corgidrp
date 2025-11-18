@@ -367,10 +367,15 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if is_pc_data:
         recipe = walker.autogen_recipe(l2a_filelist, l3_outputdir)
         ### Modify keyword to so that the PC master dark is used
-        for step in recipe['steps']:
+        for step in recipe[0]['steps']:
             if step['name'] == "dark_subtraction":
                 step['calibs']['Dark'] = pc_dark.filepath
-        walker.run_recipe(recipe, save_recipe_file=True)
+        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+        recipe[1]['inputs'] = output_filepaths
+        output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
+        # files are overwritten with same filenames
+        recipe[2]['inputs'] = output_filepaths1
+        walker.run_recipe(recipe[2], save_recipe_file=True)
     else:
         walker.walk_corgidrp(l2a_filelist, "", l3_outputdir)
     

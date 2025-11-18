@@ -348,7 +348,7 @@ def guess_template(dataset):
             
             if is_spectroscopy:
                 if image.ext_hdr['ISPC'] in (True, 1):
-                    recipe_filename = "l2a_to_l2b_pc_spec.json"
+                    recipe_filename = ["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"] #"l2a_to_l2b_pc_spec.json"
                 else:
                     recipe_filename = "l2a_to_l2b_spec.json"
             else:
@@ -488,8 +488,6 @@ def run_recipe(recipe, save_recipe_file=True):
     if not recipe["inputs"]:
         curr_dataset = []
         ram_heavy_bool = False
-        # total_dset_length = 1 #for loop purposes later
-        # ram_increment = 1
         filelist_chunks = [0] #anything of length 1
     else:
         filelist = recipe["inputs"]
@@ -512,6 +510,11 @@ def run_recipe(recipe, save_recipe_file=True):
             for frame in curr_dataset:
                 frame.ext_hdr["RECIPE"] = json.dumps(recipe)
         # execute each pipeline step
+        print('Executing recipe: {0}'.format(recipe['name']))
+        if ram_increment_bool and len(filelist_chunks) > 1:
+            print('Processing frames in chunks of {0} frames'.format(corgidrp.chunk_size))
+        if ram_heavy_bool:
+            print('Processing frames in RAM-heavy mode (data not loaded into memory until necessary, one frame at a time)')
         for i, step in enumerate(recipe["steps"]):
             print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
             if step["name"].lower() == "save":
