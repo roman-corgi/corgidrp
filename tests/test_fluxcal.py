@@ -784,7 +784,7 @@ def test_l4_companion_photometry():
     else:
         logger.info('test_l4_companion_photometry overall: FAIL')
     logger.info('=' * 80)
-    logger.info('End of Spectroscopy L4-> TDA VAP Test 3')
+    logger.info('End of Polarimetry L4->TDA VAP Test 3')
     logger.info('=' * 80)
     print_pass() if result else print_fail()
     assert result
