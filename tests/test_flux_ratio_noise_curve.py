@@ -509,5 +509,5 @@ def test_expected_flux_ratio_noise_pol():
 
 
 if __name__ == '__main__':  
-    # test_expected_flux_ratio_noise()
+    test_expected_flux_ratio_noise()
     test_expected_flux_ratio_noise_pol()
