@@ -42,8 +42,8 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     )
     logger.info("Mock core-throughput, FPAM/FSAM, and flux calibration factors created")
 
-    host_dir = os.path.join(e2edata_path, 'non-coron')
-    psf_dir = os.path.join(e2edata_path, 'coron')
+    host_dir = os.path.join(e2edata_path, 'SPEC_sims/non-coron')
+    psf_dir = os.path.join(e2edata_path, 'SPEC_sims/coron')
     host_files = sorted(glob.glob(os.path.join(host_dir, '*_l4_.fits')))
     comp_files = sorted(glob.glob(os.path.join(psf_dir, '*_l4_.fits')))
 
@@ -504,7 +504,7 @@ def test_l4_to_tda_spec_vap(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir = "/Users/jmilton/Documents/CGI/E2E_Test_Data2/SPEC_sims"
+    e2edata_dir = "/Users/jmilton/Documents/CGI/E2E_Test_Data2"
 
     ap = argparse.ArgumentParser(description="run the spectroscopy L4->TDA VAP test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
