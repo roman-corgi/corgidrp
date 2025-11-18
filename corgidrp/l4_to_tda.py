@@ -307,7 +307,7 @@ def apply_core_throughput_correction(frame,
         fpam_fsam_cal,
         logr=logr,
     )
-    ct_value = float(np.atleast_1d(ct_values)[0])
+    ct_value = float(np.atleast_1d(ct_values).ravel()[0])
     if not np.isfinite(ct_value) or ct_value <= 0:
         raise ValueError(f"Invalid core throughput value {ct_value}.")
 
