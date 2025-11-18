@@ -607,7 +607,7 @@ def test_pol_abs_fluxcal():
 
 def test_l4_companion_photometry():
     """VAP Test 3: Companion photometry + apparent magnitude validation."""
-    logger, output_dir = _setup_vap_logger('test_l4_companion_photometry')
+    output_dir = Path(__file__).resolve().parent / "pol_tda_companion_phot_output"
     
     # Clear output directory at the start of the test
     if output_dir.exists():
@@ -616,6 +616,9 @@ def test_l4_companion_photometry():
                 item.unlink()
             elif item.is_dir():
                 shutil.rmtree(item)
+    
+    # Set up logger
+    logger, output_dir = _setup_vap_logger('test_l4_companion_photometry')
     
     logger.info('=' * 80)
     logger.info('Polarimetry L4-> TDA VAP Test 3: Companion Photometry / Apparent Magnitude')
