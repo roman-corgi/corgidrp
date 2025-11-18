@@ -558,6 +558,79 @@ def test_generate_multiple_recipes():
 
     assert len(recipes) == 2
 
+def test_cpgs_satspots():
+    """
+    Tests passing in sat spot parameters from the CPGS XML into the 
+    spec mode star centering function 
+    """
+    # create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+
+    # create simulated data
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_L3_headers()
+    ext_hdr['CFAMNAME'] = '3F'
+    # Setup some wavelength zero-point values
+    ext_hdr['WV0_X'], ext_hdr['WV0_Y'] = 38, 42
+    # Add expected wavelength for a satellite spot (for UT, it could be any)
+    ext_hdr['WAVLEN0'] = 753.83
+    # Arbitrary number of images
+    image_list = []
+    for _ in range(12):
+        data_2d = np.zeros([ext_hdr['NAXIS1'], ext_hdr['NAXIS2']])
+        err = np.zeros_like(data_2d)
+        dq = np.zeros_like(data_2d, dtype=int)
+        image_list += [data.Image(
+            data_or_filepath=data_2d,
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
+            err=err,
+            dq=dq)]
+    l3_dataset = data.Dataset(image_list)       
+    # simulate the expected CGI naming convention
+    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l3_.fits"
+    for i, image in enumerate(l3_dataset):
+        image.filename = fname_template.format(i)
+    l3_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l3_dataset]
+
+    # load CPGS
+    CPGS_XML_filepath = os.path.join(os.path.dirname(__file__), "test_data", "cpgs_mock.xml")
+    
+    # create a recipe just to do spec star centering
+    # use this simple saving recipe as a template
+    save_recipe_path = os.path.join(os.path.dirname(__file__), "test_data", "saving_only.json")
+    mini_recipe = json.load(open(save_recipe_path, 'r'))
+    mini_recipe['name'] = 'spec_star_centering_test'
+    mini_recipe['steps'].insert(0, { 'name' : 'find_spec_star'})
+    mini_recipe['steps'][1]['keywords'] = { } # remove keywords for saving
+ 
+    # generate recipe and run it
+    # basic l2a recipe to keep things simple
+    recipe = walker.walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=mini_recipe)
+
+    # check that the output dataset is saved to the output dir
+    # filenames have not changed
+    output_files = [os.path.join(outputdir, frame.filename) for frame in l3_dataset]
+    output_dataset = data.Dataset(output_files)
+
+
+    for frame in output_dataset:
+        assert "RECIPE" in frame.ext_hdr
+        # test recipe was correctly written into the header
+        # do a string comparison, easiest way to check
+        hdr_recipe = json.loads(frame.ext_hdr["RECIPE"])
+        assert 'keywords' in hdr_recipe['steps'][0]
+        assert 'r_lamD' in hdr_recipe['steps'][0]['keywords']
+        assert hdr_recipe['steps'][0]['keywords']['r_lamD'] == 5.0
+        assert 'phi_deg' in hdr_recipe['steps'][0]['keywords']
+        assert hdr_recipe['steps'][0]['keywords']['phi_deg'] == 0.
+
 
 
 
@@ -569,6 +642,6 @@ if __name__ == "__main__":#
     test_skip_missing_optional_calib()
     test_jit_calibs()
     test_generate_multiple_recipes()
-
+    test_cpgs_satspots()
 
 

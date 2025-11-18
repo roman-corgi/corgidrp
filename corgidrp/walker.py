@@ -131,10 +131,18 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
 
         # check for functions that require CPGS XML info
         for step in recipe['steps']:
-            if step['name'].lower() == 'find_spec_star' and 'keywords' in step:
-                if "r_lamD" not in step['keywords']: # if not already specified.
+            if step['name'].lower() == 'find_spec_star':
+                if not 'keywords' in step:
+                    read_cpgs = True
+                    step['keywords'] = {}
+                elif "r_lamD" not in step['keywords']:
+                    read_cpgs = True
+                else:
+                    read_cpgs = False
+
+                if read_cpgs: # if not already specified.
                     # need to populate satellite spot info from XML
-                    cpgs_xml = ET.prase(CPGS_XML_filepath)
+                    cpgs_xml = ET.parse(CPGS_XML_filepath)
                     sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
                     step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
                     step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
@@ -577,7 +585,7 @@ def _get_satellite_spot_info_from_xml(xml_tree):
     sat_spot_info = obs_specification.find("satellite_spots")
     sat_spot_output = {}
     sat_spot_output['num_spots'] = 0
-    for i, pair in enumerate(sat_spot_info.finall("pair")):
+    for i, pair in enumerate(sat_spot_info.findall("pair")):
         sat_spot_output['num_spots'] += 1
         if i == 0:
             sat_spot_output['spot1_contrast'] = float(pair.find("intensity").text)
