@@ -645,7 +645,7 @@ def test_l4_companion_photometry():
 
     host_intensity_ds = Dataset([get_stokes_intensity_image(host_image)])
     companion_intensity_image = get_stokes_intensity_image(companion_image)
-    companion_intensity_ds = Dataset([get_stokes_intensity_image(companion_image)])
+    companion_intensity_ds = Dataset([companion_intensity_image])
 
     logger.info(f"Finding companion location in image")
     # Source is created with sigma=3.0, so FWHM = 2.355 * 3.0 = 7.07 pixels
@@ -790,7 +790,6 @@ def test_l4_companion_photometry():
     assert result
 
 if __name__ == '__main__':
-    '''
     test_get_filter_name()
     test_flux_calc()
     test_colorcor()
@@ -799,6 +798,5 @@ if __name__ == '__main__':
     test_fluxcal_file()
     test_abs_fluxcal()
     test_pol_abs_fluxcal()
-    '''
     test_l4_companion_photometry()
 
