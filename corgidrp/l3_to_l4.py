@@ -1693,7 +1693,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     
     '''
     dataset = input_dataset.copy()
-    dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling)
+    dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling, combine_other_hdus=True)
     history_msg = f"Combined psf subtracted spectroscopy frames by applying {collapse}, result is a dataset with one frame"
     dataset.update_after_processing_step(history_msg)
     return dataset
