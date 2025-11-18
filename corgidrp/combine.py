@@ -6,7 +6,7 @@ import numpy as np
 import corgidrp.data as data
 from pyklip.klip import rotate
 
-def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling):
+def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling, other_hdus=None):
     """
     Combines several images together
 
@@ -16,11 +16,14 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
         dq_subset (np.array): 3-D array of N 2-D DQ maps
         collapse (str): "mean" or "median". 
         num_frames_scaling (bool): Multiply by number of frames in sequence in order to ~conserve photons
+        other_hdus (list of HDULists, optional): list of other HDULists to be combined in the same way
 
     Returns:
-        np.array: 2-D array of combined images
-        np.array: 3-D array of combined error map
-        np.array: 2-D array of combined DQ maps
+        tuple: combined images
+            np.array: 2-D array of combined images
+            np.array: 3-D array of combined error map
+            np.array: 2-D array of combined DQ maps
+            list of np.array: list of the combined data of other HUDs
     """
     tot_frames = data_subset.shape[0]
     # mask bad pixels
@@ -53,10 +56,33 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
     # except for those pixels that have been replaced with good values
     dq_collapse[np.where((dq_collapse > 0) & (~np.isnan(data_collapse)))] = 0
 
-    return data_collapse, err_collapse, dq_collapse
+    # other hdus
+    if other_hdus is not None:
+        combined_hdus = [[] for _ in range(len(other_hdus[0]))]
+        # iterate over each hdulist and append the data
+        for hdul in other_hdus:
+            for i, hdu in enumerate(hdul):
+                combined_hdus[i].append(np.copy(hdu.data))
+        # now combine each hdu data
+        for i in range(len(combined_hdus)):
+            # TODO: not implemented how to take means of anything beyond np.arrays (e.g., np.recarray)
+            try:
+                if collapse.lower() == "mean":
+                    combined_hdus[i] = np.nanmean(np.array(combined_hdus[i]), axis=0)
+                elif collapse.lower() == "median":
+                    combined_hdus[i] = np.nanmedian(np.array(combined_hdus[i]), axis=0)
+                if num_frames_scaling:
+                    combined_hdus[i] *= tot_frames
+            except:
+                combined_hdus[i] = combined_hdus[i][0]  # just take the first one if cannot combine
+    else:
+        combined_hdus = None
+
+    return data_collapse, err_collapse, dq_collapse, combined_hdus
 
 
-def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mean", num_frames_scaling=True):
+def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mean", num_frames_scaling=True,
+                         combine_other_hdus=False):
     """
     Combines a sequence of exposures assuming a constant nubmer of frames per group. 
     The length of the dataset must be divisible by the number of frames per group.
@@ -70,6 +96,8 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         num_frames_per_group (int): number of subexposures per group. If None, combines all images together
         collapse (str): "mean" or "median". (default: mean) 
         num_frames_scaling (bool): Multiply by number of frames in sequence in order to ~conserve photons (default: True)
+        combine_other_hdus (bool): Whether to combine other HDUs in the same way as the main data, err, DQ.
+                                   Otherwise, uses the HDUs from the first frame in a subset (default: False)
 
     Returns:
         corgidrp.data.Dataset: dataset after combination of every "num_frames_per_group" frames together
@@ -90,8 +118,14 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         err_subset = np.copy(input_dataset.all_err[num_frames_per_group*i:num_frames_per_group*(i+1)])
         dq_subset = np.copy(input_dataset.all_dq[num_frames_per_group*i:num_frames_per_group*(i+1)])
 
-        data_collapse, err_collapse, dq_collapse = combine_images(data_subset, err_subset, dq_subset, collapse=collapse, 
-                                                                  num_frames_scaling=num_frames_scaling)
+        if combine_other_hdus:
+            other_hdus = [input_dataset[j].hdu_list for j in range(num_frames_per_group*i, num_frames_per_group*(i+1))]
+        else:
+            other_hdus = None
+
+        data_collapse, err_collapse, dq_collapse, combined_hdus = combine_images(data_subset, err_subset, dq_subset, collapse=collapse, 
+                                                                  num_frames_scaling=num_frames_scaling, other_hdus=other_hdus)
+
 
         # grab the headers from the first frame in this sub sequence
         pri_hdr = input_dataset[num_frames_per_group*i].pri_hdr.copy()
@@ -100,6 +134,12 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         err_hdr = input_dataset[num_frames_per_group*i].err_hdr.copy()
         dq_hdr = input_dataset[num_frames_per_group*i].dq_hdr.copy()
         hdulist = input_dataset[num_frames_per_group*i].hdu_list.copy()
+        # update other hdus if needed
+        if combine_other_hdus:
+            for j, hdu in enumerate(hdulist):
+                hdu.data = combined_hdus[j]
+                hdu.header["NUM_FR"] = num_frames_per_group
+                hdu.header['HISTORY'] = "Combined {0} frames by {1}".format(num_frames_per_group, collapse)
         new_image = data.Image(data_collapse, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err_collapse, dq=dq_collapse, err_hdr=err_hdr, 
                                 dq_hdr=dq_hdr, input_hdulist=hdulist)
                                 

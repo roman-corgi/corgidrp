@@ -205,8 +205,8 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         spec_header = frame.hdu_list['SPEC'].header
         spec_err = frame.hdu_list['SPEC_ERR'].data.astype(float, copy=True)
 
-        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s/bin":
-            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s/bin' before flux calibration.")
+        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s":
+            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s' before flux calibration.")
 
         # Apply slit transmission correction
         slit_vals = slit_per_frame[idx]
@@ -275,7 +275,9 @@ def apply_core_throughput_correction(frame,
         logr (bool): passed through to InterpolateCT (logarithmic radii interpolation).
 
     Returns:
-        float: core-throughput factor applied to the frame.
+        tuple: (ct_value, corrected_frame) where:
+            - ct_value (float): core-throughput factor applied to the frame.
+            - corrected_frame (corgidrp.data.Image): the corrected frame (same object as input, modified in place).
     """
     if fpam_fsam_cal is None:
         raise ValueError("fpam_fsam_cal is required for core throughput correction.")
@@ -286,14 +288,26 @@ def apply_core_throughput_correction(frame,
     except KeyError as exc:
         raise ValueError("Frame is missing WV0_X/WV0_Y required for core throughput correction.") from exc
 
+    # Convert WV0_X/Y (absolute EXCAM pixels) to FPM-relative coordinates
+    # STARLOCX/Y is the FPM center during the coronagraphic observation
+    try:
+        fpm_center_x = float(frame.ext_hdr['STARLOCX'])
+        fpm_center_y = float(frame.ext_hdr['STARLOCY'])
+    except KeyError as exc:
+        raise ValueError("Frame is missing STARLOCX/STARLOCY required for core throughput correction.") from exc
+
+    wv0_x_relative = wv0_x - fpm_center_x
+    wv0_y_relative = wv0_y - fpm_center_y
+
+    # InterpolateCT expects coordinates relative to the FPM center
     ct_values = core_throughput_cal.InterpolateCT(
-        wv0_x,
-        wv0_y,
+        wv0_x_relative,
+        wv0_y_relative,
         Dataset([frame]),
         fpam_fsam_cal,
         logr=logr,
     )
-    ct_value = float(np.atleast_1d(ct_values)[0])
+    ct_value = float(np.atleast_1d(ct_values).ravel()[0])
     if not np.isfinite(ct_value) or ct_value <= 0:
         raise ValueError(f"Invalid core throughput value {ct_value}.")
 
@@ -304,7 +318,7 @@ def apply_core_throughput_correction(frame,
         frame.hdu_list['SPEC_ERR'].header['CTFAC'] = ct_value
     frame.hdu_list['SPEC'].header['CTCOR'] = True
     frame.hdu_list['SPEC'].header['CTFAC'] = ct_value
-    return ct_value
+    return ct_value, frame
 
 
 def select_slit_transmission_curve(frame, slit_tuple):
@@ -1012,7 +1026,7 @@ def calc_pol_p_and_pa_image(input_Image):
 
     # --- Polarization angle (EVPA) and uncertainty ---
     evpa = 0.5 * np.arctan2(U, Q)  # radians
-    evpa_err = 0.5 * np.sqrt((Q * Uerr)**2 + (U * Qerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
+    evpa_err = 0.5 * np.sqrt((U * Qerr)**2 + (Q * Uerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
     evpa = np.degrees(evpa)
     evpa_err = np.degrees(evpa_err)
 
@@ -1047,6 +1061,7 @@ def calc_pol_p_and_pa_image(input_Image):
     )
 
     return Image_out
+
 def compute_QphiUphi(image, x_center=None, y_center=None):
     """
     Compute Q_phi and U_phi from Stokes Q and U, returning an Image with shape [6, n, m]:

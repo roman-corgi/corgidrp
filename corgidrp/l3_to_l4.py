@@ -1627,23 +1627,39 @@ def spec_psf_subtraction(input_dataset):
     all_dq = []
     all_err = []
     image_list = []
+    algothru_hdr = fits.Header()
+    # spectral core throughput values on EXCAM wrt pixel STARLOCX 
+    algothru_hdr['COMMENT'] = ('PSF Sub Algorithm Throughput as a function of wavelength')
+    algothru_hdr['UNITS'] = 'Algo throughput: values between 0 and 1 as a function of wavelength channel'
     for frame in input_datasets[1-ref_index]:    
         # compute shift between frame and mean_ref 
         shift = get_shift_correlation(frame.data, mean_ref.data)
         # shift mean_ref to be on top of frame data
         shifted_ref = np.roll(mean_ref.data, (shift[0], shift[1]), axis=(0,1))
         # rescale wavelengh bands to match
-        ref_col_mean = np.mean(shifted_ref,axis=0)
+        ref_col_mean = np.mean(shifted_ref,axis=1)
         ref_col_mean[ref_col_mean==0] = 1 # prevent div by 0
-        scale = np.mean(frame.data,axis=0)/ref_col_mean
-        shifted_scaled_ref = shifted_ref*scale
+        scale = np.mean(frame.data,axis=1)/ref_col_mean
+        shifted_scaled_ref = shifted_ref*scale[:,None]
 
         shifted_refdq = np.roll(mean_ref.dq, (shift[0], shift[1]), axis=(0,1))
         # at this point in the pipeline, the err is mainly shot noise, so multiplying the err is appropriate
         # shifting may throw off err at the edges of the frame, but those pixels aren't used anyways
-        shifted_scaled_referr = np.roll(mean_ref.err[0], (shift[0], shift[1]), axis=(0,1))*scale
+        shifted_scaled_referr = np.roll(mean_ref.err[0], (shift[0], shift[1]), axis=(0,1))*scale[:,None]
+
         # subtract the shifted, scaled ref from the frame
+        orig_frame = frame.data.copy()
         frame.data -= shifted_scaled_ref
+
+        # determine the throughput at the estimated source position
+        # This is a rough guess at the throughput. Want to make this more accurate
+        with warnings.catch_warnings():
+            # catch divide by zero warnings
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            through = 1 - np.nansum(frame.data * shifted_scaled_ref, axis=1)/np.nansum(orig_frame * shifted_scaled_ref, axis=1)
+        # Save algorithm throughput as an extension on the psf-subtracted Image
+        frame.add_extension_hdu('ALGO_THRU', data = np.array(through), header = algothru_hdr)
+
         # update the dq and err arrays
         frame.dq = np.bitwise_or.reduce([frame.dq, shifted_refdq], axis=0)
         frame.add_error_term(shifted_scaled_referr, 'spec ref image err after alignment and matching spec image waveband scale')
@@ -1653,10 +1669,15 @@ def spec_psf_subtraction(input_dataset):
         image_list.append(frame)
 
     out_dataset = data.Dataset(image_list)
+    
+
+    # Add history msg
+    thru_msg = f'Algorithm throughput measured and saved to Image class HDU List extension ALGO_THRU. '
+    
     with warnings.catch_warnings():
         # suppress astropy warnings
         warnings.filterwarnings('ignore', category=VerifyWarning)
-        history_msg = f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
+        history_msg = thru_msg + f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
         out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 
@@ -1675,7 +1696,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     
     '''
     dataset = input_dataset.copy()
-    dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling)
+    dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling, combine_other_hdus=True)
     history_msg = f"Combined psf subtracted spectroscopy frames by applying {collapse}, result is a dataset with one frame"
     dataset.update_after_processing_step(history_msg)
     return dataset

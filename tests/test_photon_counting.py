@@ -199,8 +199,38 @@ def test_pc_subsets():
     captured2 = buf.getvalue()
     assert captured2 == captured
 
+def test_no_data():
+    '''Tests that a Dataset with only metadata (and has data read in one 
+    frame at a time from filepaths) gives same results as a normal Dataset.
+    '''
+    # check that simulated data folder exists, and create if not
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    for name in os.listdir(datadir):
+            path = os.path.join(datadir, name)
+            os.remove(path)
+    test_dataset, _, _, _ = mocks.create_photon_countable_frames(Nbrights=3, Ndarks=1, flux=0.1)
+    # instead of running through walker, just do the pre-processing steps simply
+    # using EM gain=5000 and kgain=7 and bias=20000 and read noise = 100 and QE=0.9 (quantum efficiency), from mocks.create_photon_countable_frames()
+    for f in test_dataset.frames:
+        f.data = f.data.astype(float)*7 - 20000.
+    test_dataset.all_data = test_dataset.all_data.astype(float)*7 - 20000.
+    for fr in test_dataset:
+        fr.ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
+    test_dataset.save(datadir)
+    test_dataset_no_data = test_dataset.copy()
+    for frame in test_dataset_no_data:
+        frame.data = None
+    with_data = get_pc_mean(test_dataset)
+    without_data = get_pc_mean(test_dataset_no_data)
+    # output is Dataset of 1 frame
+    assert np.array_equal(with_data[0].data, without_data[0].data)
+    assert np.array_equal(with_data[0].err, without_data[0].err)
+    assert np.array_equal(with_data[0].dq, without_data[0].dq)    
 
 if __name__ == '__main__':
+    test_no_data()
     test_pc_subsets()
     test_pc()
     test_negative()

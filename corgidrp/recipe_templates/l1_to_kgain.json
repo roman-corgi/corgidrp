@@ -2,6 +2,7 @@
 {
     "name" : "l1_to_kgain",
     "template" : true,
+	"ram_heavy" : true,
     "drpconfig" : {
         "track_individual_errors" : false
     },

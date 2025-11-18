@@ -1,6 +1,7 @@
 {
     "name" : "l1_to_l2a_nonlin",
     "template" : true,
+    "ram_heavy" : true,
     "drpconfig" : {
         "track_individual_errors" : false
     },

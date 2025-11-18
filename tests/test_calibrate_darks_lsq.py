@@ -8,9 +8,10 @@ import numpy as np
 from corgidrp.darks import (calibrate_darks_lsq,
             CalDarksLSQException)
 from corgidrp.detector import slice_section, imaging_area_geom, imaging_slice
-from corgidrp.mocks import create_synthesized_master_dark_calib
+from corgidrp.mocks import create_synthesized_master_dark_calib, rename_files_to_cgi_format
 from corgidrp.mocks import detector_areas_test as dat
 from corgidrp.data import DetectorNoiseMaps, DetectorParams, Dataset
+import shutil
 
 # make test reproducible
 np.random.seed(4567)
@@ -48,6 +49,16 @@ def setup_module():
     global dataset
     np.random.seed(4567)  # make test reproducible
     dataset = create_synthesized_master_dark_calib(dat)
+    # check that simulated data folder exists, and create if not
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    if os.path.exists(datadir):
+        for name in os.listdir(datadir):
+            path = os.path.join(datadir, name)
+            os.remove(path)
+    # saving with correct filename format:
+    output_filenames = rename_files_to_cgi_format(dataset.frames, datadir)
 
 def teardown_module():
     """
@@ -55,6 +66,7 @@ def teardown_module():
     """
     global dataset
     del dataset
+
 
 # filter out expected warning when unreliable_pix_map has a pixel
 # masked for all sub-stacks (which makes Rsq NaN from a division by 0)
@@ -136,7 +148,7 @@ def test_expected_results_sub():
     # check headers
     assert(noise_maps.data.ndim == 3)
     test_filename = dataset.frames[-1].filename.split('.fits')[0] + '_dnm_cal.fits'
-    test_filename = re.sub('_L[0-9].', '', test_filename)
+    test_filename = re.sub('_l[0-9].', '', test_filename)
     assert(noise_maps.filename == test_filename)
     assert(noise_maps.ext_hdr["BUNIT"] == "detected electron")
     assert(noise_maps.err_hdr["BUNIT"] == "detected electron")
@@ -305,10 +317,23 @@ def test_weighting():
            np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map)))
     assert(np.nanmean(smaller_noise_maps.CIC_err) < np.nanmean(wrong_noise_maps.CIC_err))
     
+def test_no_data():
+    '''Tests that a Dataset with only metadata (and has data read in one 
+    frame at a time from filepaths) gives same results as a normal Dataset.
+    '''
+    noisemaps = calibrate_darks_lsq(dataset, detector_params, detector_regions=dat)
+    dataset_no_data = dataset.copy()
+    for frame in dataset_no_data:
+        frame.data = None
+    noisemaps2 = calibrate_darks_lsq(dataset_no_data, detector_params, detector_regions=dat)
+    assert np.nanmax(noisemaps.data - noisemaps2.data) < 1e-10
+    assert np.nanmax(noisemaps.err - noisemaps2.err) < 1e-10
+    assert np.array_equal(noisemaps.dq, noisemaps2.dq) 
 
 if __name__ == '__main__':
     setup_module()
 
+    test_no_data()
     test_g_gtr_1()
     test_t_gtr_0()
     test_k_gtr_0()

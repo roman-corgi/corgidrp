@@ -1,5 +1,5 @@
 {
-    "name" : "l1_to_l2a_eng",
+    "name" : "noisemap_generation_1",
     "template" : true,
     "process_in_chunks" : true,
     "drpconfig" : {
@@ -10,9 +10,6 @@
     "steps" : [
         {
             "name" : "prescan_biassub",
-            "calibs" : {
-                "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
-            },
             "keywords" : {
                 "return_full_frame" : true,
                 "dataset_copy" : false
@@ -23,6 +20,9 @@
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC",
                 "KGain" : "AUTOMATIC, OPTIONAL"
+            },
+            "keywords" : {
+                "mode" : "full"
             }
         },
         {
@@ -33,6 +33,15 @@
         },
         {
             "name" : "update_to_l2a"
+        },
+        {
+            "name" : "save"
+        },
+        {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
         },
         {
             "name" : "save"

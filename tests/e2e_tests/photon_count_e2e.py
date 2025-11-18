@@ -13,12 +13,12 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
-from corgidrp.darks import build_trad_dark
 import shutil
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #Checks that a photon-counted master dark works fine in the pipeline, for both cases of master dark (PC master dark or synthesized master dark)
+    # This test also exercises chunk size and RAM-heavy status
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     flat_path = os.path.join(processed_cal_path, "flat.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
@@ -62,6 +62,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     ill_dataset.save(output_ill_dir)
     dark_dataset.save(output_dark_dir)
+    del ill_dataset
+    del dark_dataset
     l1_data_ill_filelist = []
     l1_data_dark_filelist = []
     for f in os.listdir(output_ill_dir):
@@ -171,14 +173,20 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)
-
+    
     recipe = walker.autogen_recipe(l2a_files, l2a_to_l2b_output_dir)
     ### Modify they keywords of some of the steps
-    for step in recipe['steps']:
+    for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = master_dark_filepath_list[0] # to find PC dark
-    walker.run_recipe(recipe, save_recipe_file=True)
-    
+    recipe[0]['drpconfig']['chunk_size'] = 80 # exercise chunk size; RAM-heavy status exercised in this test
+    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = output_filepaths
+    output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
+    # files are overwritten with same filenames
+    recipe[2]['inputs'] = output_filepaths1
+    walker.run_recipe(recipe[2], save_recipe_file=True)
+
     # get photon-counted frame
     master_ill_filename_list = []
     master_ill_filepath_list = []
@@ -323,10 +331,14 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # detects that dark-subtraction has already occurred (during the dark_subtraction() step)
     recipe = walker.autogen_recipe(l2a_files, output_dir)
     ### Modify they keywords of some of the steps
-    for step in recipe['steps']:
+    for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = trad_dark_cal.filepath # to find traditional dark
-    walker.run_recipe(recipe, save_recipe_file=True)
+    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = output_filepaths
+    output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
+    recipe[2]['inputs'] = output_filepaths1
+    walker.run_recipe(recipe[2], save_recipe_file=True)
 
     # get photon-counted frame
     master_ill_filename_list = []

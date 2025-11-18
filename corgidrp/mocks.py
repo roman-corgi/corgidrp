@@ -5100,9 +5100,11 @@ def create_mock_stokes_image_l4(
         image_size=256,
         fwhm=3,
         I0=1e4,
-        badpixel_fraction=1e-3,
+        badpixel_fraction=0.0,
+        add_noise=True,
         p=0.1,
         theta_deg=20.0,
+        rng=None,
         seed=None
 ):
     """
@@ -5113,14 +5115,17 @@ def create_mock_stokes_image_l4(
         fwhm (float): Gaussian FWHM in pixels
         I0 (float): Peak intensity
         badpixel_fraction (float): Fraction of bad pixels
+        add_noise (bool): If True, add random noise to the Stokes cube; if False, return a noiseless realization (errors remain).
         p (float): Fractional polarization
         theta_deg (float): Polarization angle in degrees
+        rng (numpy.random.Generator, optional): RNG instance for reproducibility. Defaults to None.
         seed (int, optional): Random seed
 
     Returns:
         Image: Stokes cube Image object with data, err, dq, and headers
     """
-    rng = np.random.default_rng(seed)
+    if rng is None:
+    	rng = np.random.default_rng(seed)
 
     # Gaussian source
     y, x = np.mgrid[0:image_size, 0:image_size]
@@ -5148,14 +5153,16 @@ def create_mock_stokes_image_l4(
         I_map_err,
         I_map_err
     ])
-    stokes_cube += rng.normal(0.0, stokes_err)
+    if add_noise:
+        stokes_cube += rng.normal(0.0, stokes_err)
 
     # headers
-    try:
-        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L4_headers()
-    except:
-        prihdr = exthdr = errhdr = dqhdr = biashdr = Header()
 
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
+
+    exthdr['DATALVL'] = 'L4'
+    exthdr['BUNIT'] = 'photoelectron/s'
+    
     dq_out = np.broadcast_to(dq, stokes_cube.shape).copy()
 
     stokes_image = Image(
@@ -5166,7 +5173,7 @@ def create_mock_stokes_image_l4(
         dq=dq_out,
         err_hdr=errhdr,
         dq_hdr=dqhdr
-    )
+    )    
 
     # add throughput extensions
     kl_thru = np.ones((image_size, image_size), dtype=float)
@@ -5177,7 +5184,7 @@ def create_mock_stokes_image_l4(
 
     return stokes_image
 
-def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, wv0_x=0.0, wv0_y=0.0, is_coronagraphic=False):
+def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, is_coronagraphic=False, xoffset=0.0, yoffset=0.0):
     """Create a mock L4 Stokes I image from a mock L4 Stokes cube.
     
     Args:
@@ -5185,9 +5192,9 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
         target_name (str): Name of the target
         col_cor (float, optional): Color correction factor
         seed (int, optional): Random seed
-        wv0_x (float, optional): Wavelength of the x-axis
-        wv0_y (float, optional): Wavelength of the y-axis
         is_coronagraphic (bool, optional): Whether the image is coronagraphic
+        xoffset (float, optional): X offset for the Gaussian source position in pixels. Defaults to 0.0 (center).
+        yoffset (float, optional): Y offset for the Gaussian source position in pixels. Defaults to 0.0 (center).
 
     Returns:
         Image: Mock Image object with data of shape [4, n, m], err and dq arrays included.
@@ -5205,8 +5212,8 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
         array_shape=(base_img.data.shape[1], base_img.data.shape[2]),
         sigma=3.0,
         amp=total_counts / (2.0 * np.pi * 3.0**2),
-        xoffset=0.0,
-        yoffset=0.0,
+        xoffset=xoffset,
+        yoffset=yoffset,
     )
     base_img.data[0] = profile
     base_img.data[1:] = 0.0
@@ -5219,10 +5226,11 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
     base_img.ext_hdr.setdefault('CFAMNAME', '3C')
     base_img.ext_hdr.setdefault('DPAMNAME', 'POL0')
     base_img.ext_hdr.setdefault('LSAMNAME', 'NFOV')
-    base_img.ext_hdr['WV0_X'] = wv0_x
-    base_img.ext_hdr['WV0_Y'] = wv0_y
-    base_img.ext_hdr.setdefault('STARLOCX', 0.0)
-    base_img.ext_hdr.setdefault('STARLOCY', 0.0)
+    # Set STARLOCX/Y to image center (for 64x64 image, center is at 32, 32)
+    image_center_x = base_img.data.shape[2] / 2.0  # x center (columns)
+    image_center_y = base_img.data.shape[1] / 2.0  # y center (rows)
+    base_img.ext_hdr['STARLOCX'] = image_center_x
+    base_img.ext_hdr['STARLOCY'] = image_center_y
     base_img.ext_hdr.setdefault('FPAM_H', 0.0)
     base_img.ext_hdr.setdefault('FPAM_V', 0.0)
     base_img.ext_hdr.setdefault('FSAM_H', 0.0)
@@ -5263,19 +5271,19 @@ def create_mock_IQUV_image(n=64, m=64, fwhm=20, amp=1.0, pfrac=0.1, bg=0.0):
 
     cube = np.stack([I, Q, U, V], axis=0)
 
-    pri_hdr = Header()
-    ext_hdr = Header()
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
+    ext_hdr=exthdr
     ext_hdr["STARLOCX"] = float(x0)
     ext_hdr["STARLOCY"] = float(y0)
 
     return Image(
         cube,
-        pri_hdr=pri_hdr,
+        pri_hdr=prihdr,
         ext_hdr=ext_hdr,
         err=np.zeros_like(cube),
         dq=np.zeros(cube.shape, dtype=np.uint16),
-        err_hdr=Header(),
-        dq_hdr=Header(),
+        err_hdr=errhdr,
+        dq_hdr=dqhdr,
     )
 
 def create_mock_polarization_l3_dataset(
