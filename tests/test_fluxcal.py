@@ -6,6 +6,9 @@ import logging
 from pathlib import Path
 import corgidrp
 from astropy.io import fits
+
+# Suppress all warnings for tests in this file
+warnings.filterwarnings("ignore")
 from corgidrp.mocks import (
     create_default_L3_headers,
     create_flux_image,
@@ -393,21 +396,29 @@ def test_apply_core_throughput_correction():
     frame.ext_hdr.setdefault('STARLOCX', 0.0)
     frame.ext_hdr.setdefault('STARLOCY', 0.0)
 
-    # Get the interpolated factor for this location using a single-frame dataset.
+    # Convert WV0_X/Y (absolute EXCAM pixels) to FPM-relative coordinates
+    # STARLOCX/Y is the FPM center during the coronagraphic observation
+    fpm_center_x = frame.ext_hdr['STARLOCX']
+    fpm_center_y = frame.ext_hdr['STARLOCY']
+    wv0_x_relative = frame.ext_hdr['WV0_X'] - fpm_center_x
+    wv0_y_relative = frame.ext_hdr['WV0_Y'] - fpm_center_y
+
+    # Get the interpolated factor for this location to compare with the applied correction.
+    # InterpolateCT expects coordinates relative to the FPM center
     ct_values = ct_cal.InterpolateCT(
-        frame.ext_hdr['WV0_X'],
-        frame.ext_hdr['WV0_Y'],
+        wv0_x_relative,
+        wv0_y_relative,
         Dataset([frame.copy()]),
         fpam_fsam_cal,
     )
     ct_factor = np.asarray(ct_values).ravel()[0]
 
     # Apply correction
-    applied = l4_to_tda.apply_core_throughput_correction(frame, ct_cal, fpam_fsam_cal)
+    applied_ct, corrected_frame = l4_to_tda.apply_core_throughput_correction(frame, ct_cal, fpam_fsam_cal)
 
-    spec_ok = np.allclose(frame.hdu_list['SPEC'].data, original_spec / ct_factor)
-    err_ok = np.allclose(frame.hdu_list['SPEC_ERR'].data[0], original_err[0] / ct_factor)
-    applied_ok = np.isclose(applied, ct_factor)
+    spec_ok = np.allclose(corrected_frame.hdu_list['SPEC'].data, original_spec / ct_factor)
+    err_ok = np.allclose(corrected_frame.hdu_list['SPEC_ERR'].data[0], original_err[0] / ct_factor)
+    applied_ok = np.isclose(applied_ct, ct_factor)
 
     print('\napply_core_throughput_correction: ', end='')
     if applied_ok and spec_ok and err_ok:
@@ -447,7 +458,7 @@ def test_compute_spec_flux_ratio_single_roll():
     # Apply CT correction to comp
     ct_cal = create_ct_cal(fwhm_mas=50)
     fpam_fsam_cal = create_mock_fpamfsam_cal()
-    applied = l4_to_tda.apply_core_throughput_correction(comp_ds, ct_cal, fpam_fsam_cal)
+    applied, _ = l4_to_tda.apply_core_throughput_correction(comp_ds, ct_cal, fpam_fsam_cal)
 
     host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_ds]), fluxcal_factor)
     comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_ds]), fluxcal_factor)
@@ -531,7 +542,7 @@ def test_compute_spec_flux_ratio_weighted():
     comp_comb_image.ext_hdr.setdefault('STARLOCY', 0.0)
     comp_comb_image.ext_hdr['WV0_X'] = 70.0
     comp_comb_image.ext_hdr['WV0_Y'] = 0.0
-    _ = l4_to_tda.apply_core_throughput_correction(comp_comb_image, ct_cal, fpam_fsam_cal)
+    _, _ = l4_to_tda.apply_core_throughput_correction(comp_comb_image, ct_cal, fpam_fsam_cal)
 
     # Compute flux-calibrated combined spectra to build the expected ratio and error
     host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_comb_image]), fluxcal_factor)
@@ -968,8 +979,17 @@ def test_l4_companion_photometry():
     companion_dataset = Dataset([companion_image])
     wv0_x = companion_image.ext_hdr.get('WV0_X', 0.0)
     wv0_y = companion_image.ext_hdr.get('WV0_Y', 0.0)
+    
+    # Convert WV0_X/Y (absolute EXCAM pixels) to FPM-relative coordinates
+    # STARLOCX/Y is the FPM center during the coronagraphic observation
+    fpm_center_x = companion_image.ext_hdr.get('STARLOCX', 0.0)
+    fpm_center_y = companion_image.ext_hdr.get('STARLOCY', 0.0)
+    wv0_x_relative = wv0_x - fpm_center_x
+    wv0_y_relative = wv0_y - fpm_center_y
+    
+    # InterpolateCT expects coordinates relative to the FPM center
     ct_factor = np.asarray(
-        ct_cal.InterpolateCT(wv0_x, wv0_y, companion_dataset, fpamfsam_cal)
+        ct_cal.InterpolateCT(wv0_x_relative, wv0_y_relative, companion_dataset, fpamfsam_cal)
     ).ravel()[0]
     if not np.isfinite(ct_factor) or ct_factor <= 0:
         raise ValueError("Interpolated core throughput factor must be positive and finite.")

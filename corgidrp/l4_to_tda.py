@@ -275,7 +275,9 @@ def apply_core_throughput_correction(frame,
         logr (bool): passed through to InterpolateCT (logarithmic radii interpolation).
 
     Returns:
-        float: core-throughput factor applied to the frame.
+        tuple: (ct_value, corrected_frame) where:
+            - ct_value (float): core-throughput factor applied to the frame.
+            - corrected_frame (corgidrp.data.Image): the corrected frame (same object as input, modified in place).
     """
     if fpam_fsam_cal is None:
         raise ValueError("fpam_fsam_cal is required for core throughput correction.")
@@ -286,9 +288,21 @@ def apply_core_throughput_correction(frame,
     except KeyError as exc:
         raise ValueError("Frame is missing WV0_X/WV0_Y required for core throughput correction.") from exc
 
+    # Convert WV0_X/Y (absolute EXCAM pixels) to FPM-relative coordinates
+    # STARLOCX/Y is the FPM center during the coronagraphic observation
+    try:
+        fpm_center_x = float(frame.ext_hdr['STARLOCX'])
+        fpm_center_y = float(frame.ext_hdr['STARLOCY'])
+    except KeyError as exc:
+        raise ValueError("Frame is missing STARLOCX/STARLOCY required for core throughput correction.") from exc
+
+    wv0_x_relative = wv0_x - fpm_center_x
+    wv0_y_relative = wv0_y - fpm_center_y
+
+    # InterpolateCT expects coordinates relative to the FPM center
     ct_values = core_throughput_cal.InterpolateCT(
-        wv0_x,
-        wv0_y,
+        wv0_x_relative,
+        wv0_y_relative,
         Dataset([frame]),
         fpam_fsam_cal,
         logr=logr,
@@ -304,7 +318,7 @@ def apply_core_throughput_correction(frame,
         frame.hdu_list['SPEC_ERR'].header['CTFAC'] = ct_value
     frame.hdu_list['SPEC'].header['CTCOR'] = True
     frame.hdu_list['SPEC'].header['CTFAC'] = ct_value
-    return ct_value
+    return ct_value, frame
 
 
 def select_slit_transmission_curve(frame, slit_tuple):
