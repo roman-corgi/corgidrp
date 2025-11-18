@@ -135,6 +135,35 @@ def test_mean_combine_subexposures_with_bad():
     assert np.isnan(combined_dataset[0].err[0][0][1])
     assert combined_dataset[0].dq[0][1] == 1
 
+
+
+def test_mean_combine_other_hdus():
+    """
+    Test mean combine with other HDUs
+    """
+    new_hdu = fits.ImageHDU(data=img1)
+    new_hdul = fits.HDUList([new_hdu])
+    image1 = data.Image(img1, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd, input_hdulist=new_hdul)
+    image1.filename = "1.fits"
+    image2 = image1.copy()
+    image2.filename = "2.fits"
+    image3 = image1.copy()
+    image3.filename = "3.fits"
+    image4 = image1.copy()
+    image4.filename = "4.fits"
+
+    dataset = data.Dataset([image1, image2, image3, image4])
+
+    combined_dataset = combine.combine_subexposures(dataset, 2, num_frames_scaling=False, combine_other_hdus=True)
+
+    # Check that data and error values are not scaled up
+    assert(len(combined_dataset) == 2)
+    assert(len(combined_dataset[0].hdu_list) == 1)
+    assert(np.all(combined_dataset[0].hdu_list[0].data == img1))
+    assert(np.all(combined_dataset[1].hdu_list[0].data == img1))
+
+
+
 def test_median_combine_subexposures():
     """
     Test median combine of subexposures. And tests default case where num_frames_per_group isn't specified. 
@@ -559,4 +588,4 @@ if __name__ == "__main__":
     # test_prop_err_dq_rdi()
     # test_prop_err_dq_adi()
     # test_prop_err_dq_adirdi()
-    test_prop_err_dq_misaligned()
+    test_mean_combine_other_hdus()
