@@ -241,6 +241,9 @@ def test_expected_flux_ratio_noise_pol():
     ##########################################################################
     ### Generate all the input data (copy and pasted from the on-pol case) ###
     ################################
+    logger.info('='*80)
+    logger.info('Polarimetry L4->TDA VAP Test 1: Flux Ratio Noise vs Separation')
+    logger.info('='*80)
     
     logger.info('='*80)
     logger.info('Pre-test: set up input files and save to disk')
@@ -329,7 +332,7 @@ def test_expected_flux_ratio_noise_pol():
     # ================================================================================
     # (2) Validate Input Images
     # ================================================================================
-
+    
     logger.info('='*80)
     logger.info('Test Case 1: Input L4 Stokes Image Data Format and Content')
     logger.info('='*80)
@@ -373,6 +376,13 @@ def test_expected_flux_ratio_noise_pol():
     logger.info('='*80)
     frame_info = "Flux Ratio Noise Curve Extension"
     for frame in frn_dataset_pol:
+        # Check that FRN_CRV extension exists
+        if 'FRN_CRV' not in frame.hdu_list:
+            logger.error(f"{frame_info}: FRN_CRV extension header not found. FAIL")
+            assert False, f"{frame_info}: FRN_CRV extension header not found."
+        else:
+            logger.info(f"{frame_info}: FRN_CRV extension header exists. PASS")
+        
         frn_crv_data = frame.hdu_list['FRN_CRV'].data
         n_separations = frn_crv_data.shape[1]
         n_klip_modes = 1 #Always 1 for pol mode. 
@@ -384,6 +394,30 @@ def test_expected_flux_ratio_noise_pol():
             logger.info(f"{frame_info}: FRN_CRV data has correct shape {frn_crv_data.shape}. PASS")
         #pytest version:
         assert frn_crv_data.shape == expected_shape, f"{frame_info}: FRN_CRV data has shape {frn_crv_data.shape}, expected {expected_shape}."
+        
+        # Verify row 0 contains separations in pixels
+        separations_pix = frn_crv_data[0, :]
+        if not np.all(separations_pix > 0):
+            logger.error(f"{frame_info}: Row 0 (separations in pixels) contains non-positive values. FAIL")
+        else:
+            logger.info(f"{frame_info}: Row 0 correctly contains separations in pixels (all positive). PASS")
+        assert np.all(separations_pix > 0), f"{frame_info}: Row 0 (separations in pixels) contains non-positive values."
+        
+        # Verify row 1 contains separations in mas
+        separations_mas = frn_crv_data[1, :]
+        if not np.all(separations_mas > 0):
+            logger.error(f"{frame_info}: Row 1 (separations in mas) contains non-positive values. FAIL")
+        else:
+            logger.info(f"{frame_info}: Row 1 correctly contains separations in mas (all positive). PASS")
+        assert np.all(separations_mas > 0), f"{frame_info}: Row 1 (separations in mas) contains non-positive values."
+        
+        # Verify rows 2+ contain FRN values
+        frn_values = frn_crv_data[2:, :]
+        if frn_values.shape[0] != n_klip_modes:
+            logger.error(f"{frame_info}: Rows 2+ have shape {frn_values.shape[0]}, expected {n_klip_modes} KL mode truncations. FAIL")
+        else:
+            logger.info(f"{frame_info}: Rows 2+ correctly contain FRN values for {n_klip_modes} KL mode truncation(s). PASS")
+        assert frn_values.shape[0] == n_klip_modes, f"{frame_info}: Rows 2+ have shape {frn_values.shape[0]}, expected {n_klip_modes} KL mode truncations."
 
     logger.info("")
 
@@ -402,6 +436,16 @@ def test_expected_flux_ratio_noise_pol():
             logger.info(f"{frame_info}: All FRN_CRV separations are within IWA/OWA limits ({iwa_pix}, {owa_pix}). PASS")
         #Pytest version:
         assert np.all(separations_pix >= iwa_pix - tolerance) and np.all(separations_pix <= owa_pix + tolerance), f"{frame_info}: FRN_CRV separations {separations_pix} exceed IWA/OWA limits ({iwa_pix}, {owa_pix})."
+
+        #Check if separations in mas are within IWA/OWA limits
+        iwa_mas_check = iwa_mas
+        owa_mas_check = owa_mas
+        if np.any(separations_mas < iwa_mas_check - tolerance) or np.any(separations_mas > owa_mas_check + tolerance):
+            logger.error(f"{frame_info}: FRN_CRV separations in mas {separations_mas} exceed IWA/OWA limits ({iwa_mas_check}, {owa_mas_check}). FAIL")
+        else:
+            logger.info(f"{frame_info}: All FRN_CRV separations in mas are within IWA/OWA limits ({iwa_mas_check}, {owa_mas_check}). PASS")
+        #Pytest version:
+        assert np.all(separations_mas >= iwa_mas_check - tolerance) and np.all(separations_mas <= owa_mas_check + tolerance), f"{frame_info}: FRN_CRV separations in mas {separations_mas} exceed IWA/OWA limits ({iwa_mas_check}, {owa_mas_check})."
     logger.info("")
 
     # Check/log that FRN values are positive
@@ -410,13 +454,24 @@ def test_expected_flux_ratio_noise_pol():
     logger.info('='*80)
     for frame in frn_dataset_pol:
         frn_crv_data = frame.hdu_list['FRN_CRV'].data
-        frn_values = frn_crv_data[1,:]
-        if np.any(frn_values <= 0):
-            logger.error(f"{frame_info}: FRN_CRV contains non-positive values. FAIL")
+        # FRN values are in rows 2+ (rows 0 and 1 are separations in pixels and mas)
+        frn_values = frn_crv_data[2:, :]
+        
+        # Check for finite values (not NaN or inf)
+        if not np.all(np.isfinite(frn_values)):
+            logger.error(f"{frame_info}: FRN_CRV contains non-finite values (NaN or inf). FAIL")
+            assert False, f"{frame_info}: FRN_CRV contains non-finite values (NaN or inf)."
+        
+        # Check that all values are positive (using same condition for logger and assert)
+        all_positive = np.all(frn_values > 0)
+        if not all_positive:
+            non_positive_count = np.sum(frn_values <= 0)
+            min_value = np.nanmin(frn_values)
+            logger.error(f"{frame_info}: FRN_CRV contains {non_positive_count} non-positive values (min value: {min_value}). FAIL")
         else:
             logger.info(f"{frame_info}: All FRN_CRV values are positive. PASS")
         #Pytest version:
-        assert np.all(frn_values > 0), f"{frame_info}: FRN_CRV contains non-positive values."
+        assert all_positive, f"{frame_info}: FRN_CRV contains non-positive values."
     logger.info("")
 
     # Check/log that interpolation works for custom separation grid
@@ -438,6 +493,9 @@ def test_expected_flux_ratio_noise_pol():
         #Pytest version:
         assert np.array_equal(frn_seps, requested_separations), f"{frame_info}: FRN_CRV separations {frn_seps} do not match requested separations {requested_separations}."
 
+    logger.info('='*80)
+    logger.info('End of Polarimetry L4->TDA VAP Test 1: Flux Ratio Noise vs Separation')
+    logger.info('='*80)
     # ================================================================================
 
     
