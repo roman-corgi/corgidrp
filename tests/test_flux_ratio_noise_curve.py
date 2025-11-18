@@ -292,8 +292,10 @@ def test_expected_flux_ratio_noise_pol():
     star_amp = 100
     x0 = 15
     y0 = 17
-    sig_x = 4
-    sig_y = 4
+    # Use fwhm_pix to calculate sigma for consistency with the PSF subtraction dataset
+    # FWHM = 2*sqrt(2*ln(2)) * sigma, so sigma = FWHM / (2*sqrt(2*ln(2)))
+    sig_x = fwhm_pix / (2 * np.sqrt(2 * np.log(2)))
+    sig_y = sig_x 
     FWHM_star = 2*np.sqrt(2*np.log(2))*sig_x
     # expected flux of star, same for each frame of input dataset to compute_flux_ratio_noise:
     # integral under Gaussian times ND transmission
@@ -353,6 +355,11 @@ def test_expected_flux_ratio_noise_pol():
     stokes_I.data = stokes_I.data[None,:]
     stokes_I.err = stokes_I.err[None,:]
     stokes_I.dq = stokes_I.dq[None,:]
+    
+    # Set STARLOCX and STARLOCY to match the star position in the image (needed for the flux ratio noise curve)
+    # Star is at x0, y0 in the test setup
+    stokes_I.ext_hdr['STARLOCX'] = x0
+    stokes_I.ext_hdr['STARLOCY'] = y0
 
     ############################################
     ### Now run the flux ratio noise curve ###
