@@ -143,7 +143,10 @@ def measure_noise(frame, seps_pix, hw, klmode_index=None, cand_locs = []):
         # plt.show()
 
         # Calculate standard deviation
-        std = np.nanstd(masked_data,axis=(1,2))
+        with warnings.catch_warnings():
+        # warnings.filterwarnings("ignore", category=UserWarning) # catch Not all requested_separations from l4_to_tda
+            warnings.filterwarnings("ignore", category=RuntimeWarning) # catch Not all requested_separations from l4_to_tda
+            std = np.nanstd(masked_data,axis=(1,2))
         stds.append(std)
 
     stds_arr = np.array(stds)
