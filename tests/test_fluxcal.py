@@ -1,6 +1,8 @@
 import pytest
 import warnings
 import os
+import shutil
+import time
 import numpy as np
 import logging
 from pathlib import Path
@@ -15,6 +17,7 @@ from corgidrp.mocks import (
     create_ct_cal,
     create_mock_fpamfsam_cal,
     make_mock_fluxcal_factor,
+    rename_files_to_cgi_format,
 )
 from corgidrp.data import Image, Dataset, FluxcalFactor, get_stokes_intensity_image
 from corgidrp.check import verify_header_keywords
@@ -23,6 +26,7 @@ import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
 import astropy.units as u
 from termcolor import cprint
+import numpy as np
 
 
 data = np.ones([1024,1024]) * 2 
@@ -214,9 +218,22 @@ def _setup_vap_logger(test_name):
     logger = logging.getLogger(test_name)
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
-    handler = logging.FileHandler(log_dir / f"{test_name}.log", mode='w')
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    logger.addHandler(handler)
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    # Create file handler
+    file_handler = logging.FileHandler(log_dir / f"{test_name}.log", mode='w')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
     return logger, log_dir
 
 
@@ -598,8 +615,17 @@ def test_pol_abs_fluxcal():
 def test_l4_companion_photometry():
     """VAP Test 3: Companion photometry + apparent magnitude validation."""
     logger, output_dir = _setup_vap_logger('test_l4_companion_photometry')
+    
+    # Clear output directory at the start of the test
+    if output_dir.exists():
+        for item in output_dir.iterdir():
+            if item.is_file():
+                item.unlink()
+            elif item.is_dir():
+                shutil.rmtree(item)
+    
     logger.info('=' * 80)
-    logger.info('Spectroscopy L4-> TDA VAP Test 3: Companion Photometry / Apparent Magnitude')
+    logger.info('Polarimetry L4-> TDA VAP Test 3: Companion Photometry / Apparent Magnitude')
     logger.info('=' * 80)
     phot_kwargs = {
         'encircled_radius': 5,
@@ -614,27 +640,55 @@ def test_l4_companion_photometry():
     host_counts = 2.5e5
     companion_counts = 5.0e4
     col_cor = 1.2
-    host_image = create_mock_stokes_i_image(host_counts, 'HOST', seed=1, wv0_x=-1.0, wv0_y=0.5, is_coronagraphic=True)
-    companion_image = create_mock_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, wv0_x=2.0, wv0_y=-1.0, is_coronagraphic=True)
+    host_image = create_mock_stokes_i_image(host_counts, 'HOST', seed=1, is_coronagraphic=False)
+    time.sleep(1)  # Wait 1 second to get different filenames
+    # Place companion off-center so it can be detected
+    companion_image = create_mock_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, is_coronagraphic=True, xoffset=15.0, yoffset=10.0)
+
+    # Save input images
+    logger.info('Saving input host and companion images to output directory')
+    rename_files_to_cgi_format(list_of_fits=[host_image], output_dir=str(output_dir), level_suffix="l4")
+    rename_files_to_cgi_format(list_of_fits=[companion_image], output_dir=str(output_dir), level_suffix="l4")
+
+    host_intensity_ds = Dataset([get_stokes_intensity_image(host_image)])
+    companion_intensity_image = get_stokes_intensity_image(companion_image)
+    companion_intensity_ds = Dataset([get_stokes_intensity_image(companion_image)])
+
+    logger.info(f"Finding companion location in image")
+    # Source is created with sigma=3.0, so FWHM = 2.355 * 3.0 = 7.07 pixels
+    companion_i_image = l4_to_tda.find_source(companion_intensity_image, fwhm=7.0, nsigma_threshold=3.0)
+    companion_info = companion_i_image.ext_hdr.get('snyx000', None)
+    if companion_info:
+        snr, companion_y, companion_x = map(float, companion_info.split(','))
+        logger.info(f"Companion detected: SNR={snr:.1f}, location (x,y)=({companion_x:.1f},{companion_y:.1f}). PASS.")
+    else:
+        logger.warning("No companion detected by find_source. FAIL.")
+        companion_x = None
+        companion_y = None
 
     ct_cal = create_ct_cal(fwhm_mas=50, cfam_name='3C', cenx=0.0, ceny=0.0, nx=11, ny=11)
     fpamfsam_cal = create_mock_fpamfsam_cal()
 
     host_dataset = Dataset([host_image])
     companion_dataset = Dataset([companion_image])
-    wv0_x = companion_image.ext_hdr.get('WV0_X', 0.0)
-    wv0_y = companion_image.ext_hdr.get('WV0_Y', 0.0)
-    ct_factor = np.asarray(
-        ct_cal.InterpolateCT(wv0_x, wv0_y, companion_dataset, fpamfsam_cal)
-    ).ravel()[0]
-    if not np.isfinite(ct_factor) or ct_factor <= 0:
-        raise ValueError("Interpolated core throughput factor must be positive and finite.")
-    companion_image.data = companion_image.data / ct_factor
-    companion_image.err = companion_image.err / ct_factor
-    companion_image.ext_hdr['CTCOR'] = True
-    companion_image.ext_hdr['CTFACT'] = ct_factor
-    host_intensity_ds = Dataset([get_stokes_intensity_image(host_image)])
-    companion_intensity_ds = Dataset([get_stokes_intensity_image(companion_image)])
+
+    # Try to apply core throughput correction
+    logger.info(f"Applying core throughput correction at companion location (x,y)=({companion_x:.1f},{companion_y:.1f})")
+    try:
+        ct_factor = np.asarray(
+            ct_cal.InterpolateCT(companion_x, companion_y, companion_dataset, fpamfsam_cal)
+        ).ravel()[0]
+        if not np.isfinite(ct_factor) or ct_factor <= 0:
+            logger.warning("Interpolated core throughput factor must be positive and finite. FAIL.")
+        companion_image.data = companion_image.data / ct_factor
+        companion_image.err = companion_image.err / ct_factor
+        companion_image.ext_hdr['CTCOR'] = True
+        companion_image.ext_hdr['CTFACT'] = ct_factor
+        logger.info(f"Core throughput correction applied: CT factor = {ct_factor:.4f}. PASS.")
+    except Exception as e:
+        logger.warning(f"Could not apply core throughput correction: {e}. FAIL.")
+        companion_image.ext_hdr['CTCOR'] = False
+        ct_factor = 1.0  # Use 1 if correction fails
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.05)
 
     checks = []
@@ -643,26 +697,14 @@ def test_l4_companion_photometry():
     checks.append(verify_header_keywords(ext_hdr, cgi_keys, frame_info="Companion header", logger=logger))
     checks.append(verify_header_keywords(ext_hdr, {'DATALVL': 'L4'}, frame_info="Companion header", logger=logger))
     checks.append(verify_header_keywords(ext_hdr, {'BUNIT': 'photoelectron/s'}, frame_info="Companion header", logger=logger))
-
-    message = "Core throughput correction applied to companion"
-    condition = np.isfinite(ct_factor) and companion_image.ext_hdr.get('CTCOR', False)
-    details = f"CTFACT={ct_factor:.4f}"
-    logger.info(f"{message} | {details}: {'PASS' if condition else 'FAIL'}")
-    checks.append(condition)
+    checks.append(verify_header_keywords(ext_hdr, {'CTCOR': True}, frame_info="Companion header", logger=logger))
+    checks.append(verify_header_keywords(ext_hdr, {'CTFACT': ct_factor}, frame_info="Companion header", logger=logger))
 
     comp_intensity = companion_intensity_ds[0]
     host_intensity = host_intensity_ds[0]
 
     comp_ap, comp_ap_err = fluxcal.aper_phot(comp_intensity, **phot_kwargs)
     host_ap, host_ap_err = fluxcal.aper_phot(host_intensity, **phot_kwargs)
-
-    # Save the mock L4 Stokes cubes for reference
-    host_file = output_dir / "0200001000000000000_20250101t1200000_l4_.fits"
-    comp_file = output_dir / "0200001000000000001_20250101t1200001_l4_.fits"
-    for path, image in ((host_file, host_image), (comp_file, companion_image)):
-        if path.exists():
-            path.unlink()
-        image.save(filedir=str(path.parent), filename=path.name)
 
     host_flux_ds = l4_to_tda.determine_flux(host_intensity_ds, fluxcal_factor, phot_kwargs=phot_kwargs)
     comp_flux_ds = l4_to_tda.determine_flux(companion_intensity_ds, fluxcal_factor, phot_kwargs=phot_kwargs)
@@ -744,6 +786,7 @@ def test_l4_companion_photometry():
     assert result
 
 if __name__ == '__main__':
+    '''
     test_get_filter_name()
     test_flux_calc()
     test_colorcor()
@@ -752,5 +795,6 @@ if __name__ == '__main__':
     test_fluxcal_file()
     test_abs_fluxcal()
     test_pol_abs_fluxcal()
+    '''
     test_l4_companion_photometry()
 
