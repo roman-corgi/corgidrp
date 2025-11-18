@@ -208,8 +208,8 @@ def make_minimal_image(
     minute= exthd['DATETIME'][14:16]
     seconds= exthd['DATETIME'][17:19]
     tenth = int(updated_time.microsecond/1E5)
-    filename = 'cgi_0200001001001001001_{0}{1}{2}T{3}{4}{5}{6}_l1_.fits'.format(year, month, day, hour, minute, seconds, tenth)
-    filepath = str(Path('simdata', filename))
+    filename = 'cgi_0200001001001001001_{0}{1}{2}t{3}{4}{5}{6}_l1_.fits'.format(year, month, day, hour, minute, seconds, tenth)
+    filepath = os.path.join(os.path.dirname(__file__), 'simdata', filename)
     hdul.writeto(filepath, overwrite = True)
     return filepath
 
@@ -347,13 +347,14 @@ def setup_module():
     
     # DRP Dataset
     # Create directory for temporary data files (not tracked by git)
-    if not os.path.exists(Path('simdata')):
-        os.mkdir(Path('simdata'))
+    datadir = os.path.join(os.path.dirname(__file__), 'simdata')
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
     # clean out any previous files in there; files are not overwritten since their names depend on the present time
-    for filename in os.listdir('simdata'):
+    for filename in os.listdir(datadir):
         if not filename.endswith('.fits'):
             continue
-        filepath = os.path.join('simdata', filename)
+        filepath = os.path.join(datadir, filename)
         os.remove(filepath)
     idx_frame = 0
     filename_list = []
@@ -461,16 +462,6 @@ def setup_module():
     # Create datasets
     dataset_wo_change = data.Dataset(filename_wo_change_list)
     dataset_w_change = data.Dataset(filename_w_change_list)
-    
-    # Delete temporary test FITS 
-    for filepath in filename_wo_change_list:
-        os.remove(filepath)
-    for filepath in filename_w_change_list:
-        # Delete remaining non-linearity FITS
-        try:
-            os.remove(filepath)
-        except:
-            pass
 
 def test_kgain_sorting():
     """
@@ -650,6 +641,22 @@ def test_nonlin_sorting_w_change():
         assert (exptime_nonlin_arr[(idx_em+1)*n_exptime_nonlin-1] in
             exptime_nonlin_arr[idx_em*n_exptime_nonlin:(idx_em+1)*n_exptime_nonlin-1])
     
+def test_no_data():
+    '''Tests that a Dataset with only metadata gives same results as a normal Dataset.
+    '''
+    dataset_no_data = dataset_wo_change.copy()
+    for frame in dataset_no_data:
+        frame.data = None
+    dataset_out_no_data = sorting.sort_pupilimg_frames(dataset_no_data, cal_type='k-gain', actual_visit=True)
+    dataset_out_wo_change = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='k-gain', actual_visit=True)
+    for i in range(len(dataset_out_wo_change)):
+        frame_no_data = dataset_out_no_data[i]
+        frame_wo_change = dataset_out_wo_change[i]
+        assert np.array_equal(frame_wo_change.data, frame_no_data.data)
+        # check that changed pri_hdr values are consistent
+        assert frame_wo_change.pri_hdr == frame_no_data.pri_hdr
+
+
 if __name__ == "__main__":
     setup_module()
     print('Running test_sort_pupilimg_sorting')
@@ -664,4 +671,5 @@ if __name__ == "__main__":
     test_nonlin_sorting_w_change()
     print('* Non-linearity tests with different exposure times among non-unity gains passed')
 
-    
+    test_no_data()
+    print('* Test for reading in Dataset with only metadata works passed')

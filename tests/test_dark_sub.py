@@ -2,6 +2,7 @@ import os
 import pickle
 import pytest
 import numpy as np
+import shutil
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -44,6 +45,9 @@ def test_dark_sub():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
+    for name in os.listdir(datadir):
+            path = os.path.join(datadir, name)
+            os.remove(path)
 
     ####### test data architecture
     dark_dataset = mocks.create_dark_calib_files(filedir=datadir)
@@ -63,6 +67,14 @@ def test_dark_sub():
 
     ###### create dark
     dark_frame_full = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
+    # test no data mode
+    dark_dataset_no_data = dark_dataset.copy()
+    for frame in dark_dataset_no_data:
+        frame.data = None
+    dark_frame_full2 = build_trad_dark(dark_dataset_no_data, detector_params, detector_regions=None, full_frame=True)
+    assert np.array_equal(dark_frame_full.data, dark_frame_full2.data)
+    assert np.array_equal(dark_frame_full.err.astype('float32'), dark_frame_full2.err.astype('float32'))
+    assert np.array_equal(dark_frame_full.dq, dark_frame_full2.dq)
 
     # check the level of dark current is approximately correct; leave off last row, telemetry row
     assert np.mean(dark_frame_full.data[:-1]) == pytest.approx(150, abs=1e-2)

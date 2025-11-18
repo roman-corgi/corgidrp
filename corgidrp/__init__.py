@@ -40,6 +40,7 @@ def create_config_dir():
         config["PATH"]["default_calibs"] = default_cal_dir
         config["DATA"] = {}
         config["DATA"]["track_individual_errors"] = "False"
+        config["DATA"]["chunk_size"] = "200"
         config["DATA"]["image_dtype"] = "64"
         config["DATA"]["dq_dtype"] = "16"
         config["WALKER"] = {}
@@ -60,7 +61,7 @@ def update_pipeline_settings():
     Loads configuration file to update pipeline settings
     """
     global config_filepath
-    global caldb_filepath, default_cal_dir, track_individual_errors, image_dtype, dq_dtype, skip_missing_cal_steps, jit_calib_id
+    global caldb_filepath, default_cal_dir, track_individual_errors, chunk_size, image_dtype, dq_dtype, skip_missing_cal_steps, jit_calib_id
     # borrowed from the kpicdrp caldb
     # load in default caldbs based on configuration file
     config_filepath = os.path.join(pathlib.Path.home(), ".corgidrp", "corgidrp.cfg")
@@ -75,6 +76,7 @@ def update_pipeline_settings():
     caldb_filepath = config.get("PATH", "caldb", fallback=None) # path to calibration db
     default_cal_dir = config.get("PATH", "default_calibs", fallback=None) # path to default calibrations directory
     track_individual_errors = _bool_map[config.get("DATA", "track_individual_errors", fallback='false').lower()] # save each individual error component separately?
+    chunk_size = int(float(config.get("DATA", "chunk_size", fallback="200"))) # number of frames to process at a time if pocessing in chunks for RAM conservation
     image_dtype = image_datatype_map[config.get("DATA", "image_dtype", fallback="64")] # bit size for image and error data
     dq_dtype = dq_datatype_map[config.get("DATA", "dq_dtype", fallback="16")] # bit size for DQ data
     skip_missing_cal_steps = _bool_map[config.get("WALKER", "skip_missing_cal_steps", fallback='false').lower()] # skip steps, instead of crashing, when suitable calibration file cannot be found 
