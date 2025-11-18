@@ -28,6 +28,9 @@ import astropy.units as u
 from termcolor import cprint
 import numpy as np
 
+# Suppress all warnings for all tests in this file
+warnings.filterwarnings("ignore")
+
 
 data = np.ones([1024,1024]) * 2 
 err = np.ones([1,1024,1024]) * 0.5
@@ -326,9 +329,7 @@ def test_abs_fluxcal():
     old_ind = corgidrp.track_individual_errors
     corgidrp.track_individual_errors = True
     flux_dataset = Dataset([flux_image, flux_image])
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
-        output_dataset = l4_to_tda.convert_to_flux(flux_dataset, fluxcal_factor)
+    output_dataset = l4_to_tda.convert_to_flux(flux_dataset, fluxcal_factor)
     assert len(output_dataset) == 2
     assert output_dataset[0].ext_hdr['BUNIT'] == "erg/(s*cm^2*AA)"
     assert output_dataset[0].ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
@@ -413,17 +414,13 @@ def test_abs_fluxcal():
     
     # test l4_to_tda.determine_flux
     input_dataset = Dataset([flux_image_back, flux_image_back])
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
-        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back,  photo = "aperture", phot_kwargs = aper_kwargs)
+    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back,  photo = "aperture", phot_kwargs = aper_kwargs)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["LOCBACK"] == pytest.approx(3, abs = 0.03)
     #sanity check: vega is input source, so app mag 0
     assert output_dataset[0].ext_hdr["APP_MAG"] == pytest.approx(0.0)
     
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
-        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back_gauss,  photo = "2dgauss", phot_kwargs = gauss_kwargs)
+    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back_gauss,  photo = "2dgauss", phot_kwargs = gauss_kwargs)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["LOCBACK"] == pytest.approx(3, abs = 0.03)
     #sanity check: Vega is input source, so app mag 0
@@ -434,9 +431,7 @@ def test_abs_fluxcal():
     flux_err_gauss = np.sqrt(error_gauss**2 * fluxcal_factor_gauss.fluxcal_fac**2 + fluxcal_factor_gauss.fluxcal_err**2 * 200**2)
     
     input_dataset = Dataset([flux_image, flux_image])
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
-        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None)
+    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["FLUXERR"] == pytest.approx(flux_err_ap, rel = 0.1)
     assert output_dataset[0].ext_hdr["LOCBACK"] == 0
@@ -444,9 +439,7 @@ def test_abs_fluxcal():
     
     assert output_dataset[0].ext_hdr["MAGERR"] == pytest.approx(mag_err_ap, rel = 0.1)
     
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
-        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_gauss,  photo = "2dgauss", phot_kwargs = None)
+    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_gauss,  photo = "2dgauss", phot_kwargs = None)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["FLUXERR"] == pytest.approx(flux_err_gauss, rel = 0.1)
     assert output_dataset[0].ext_hdr["LOCBACK"] == 0
@@ -642,8 +635,8 @@ def test_l4_companion_photometry():
     col_cor = 1.2
     host_image = create_mock_stokes_i_image(host_counts, 'HOST', seed=1, is_coronagraphic=False)
     time.sleep(1)  # Wait 1 second to get different filenames
-    # Place companion off-center so it can be detected
-    companion_image = create_mock_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, is_coronagraphic=True, xoffset=15.0, yoffset=10.0)
+    # Place companion off-center so it can be detected, but within CT calibration range (< 7 pixels from center)
+    companion_image = create_mock_stokes_i_image(companion_counts, 'COMP', col_cor=col_cor, seed=2, is_coronagraphic=True, xoffset=5.0, yoffset=3.0)
 
     # Save input images
     logger.info('Saving input host and companion images to output directory')
@@ -666,17 +659,28 @@ def test_l4_companion_photometry():
         companion_x = None
         companion_y = None
 
-    ct_cal = create_ct_cal(fwhm_mas=50, cfam_name='3C', cenx=0.0, ceny=0.0, nx=11, ny=11)
-    fpamfsam_cal = create_mock_fpamfsam_cal()
-
     host_dataset = Dataset([host_image])
     companion_dataset = Dataset([companion_image])
-
+    
+    # Get FPM center position first (needed to create CT calibration at correct location)
+    fpamfsam_cal = create_mock_fpamfsam_cal()
+    # Create temporary CT cal to get FPM center
+    temp_ct_cal = create_ct_cal(fwhm_mas=50, cfam_name='3C', cenx=0.0, ceny=0.0, nx=11, ny=11)
+    fpm_center, fpm_center_fsam = temp_ct_cal.GetCTFPMPosition(companion_dataset, fpamfsam_cal)
+    
+    # Create CT calibration centered at the FPM center location
+    ct_cal = create_ct_cal(fwhm_mas=50, cfam_name='3C', cenx=fpm_center[0], ceny=fpm_center[1], nx=11, ny=11)
+    
     # Try to apply core throughput correction
-    logger.info(f"Applying core throughput correction at companion location (x,y)=({companion_x:.1f},{companion_y:.1f})")
+    # InterpolateCT expects coordinates relative to FPM center, not absolute pixel coordinates 
+    # (which is what companion_x and companion_y are)
+    comp_x_relative = companion_x - fpm_center[0]
+    comp_y_relative = companion_y - fpm_center[1]
+    
+    logger.info(f"Applying core throughput correction at companion location (x,y)=({comp_x_relative:.1f},{comp_y_relative:.1f}) relative to FPM center")
     try:
         ct_factor = np.asarray(
-            ct_cal.InterpolateCT(companion_x, companion_y, companion_dataset, fpamfsam_cal)
+            ct_cal.InterpolateCT(comp_x_relative, comp_y_relative, companion_dataset, fpamfsam_cal)
         ).ravel()[0]
         if not np.isfinite(ct_factor) or ct_factor <= 0:
             logger.warning("Interpolated core throughput factor must be positive and finite. FAIL.")

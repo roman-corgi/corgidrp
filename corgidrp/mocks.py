@@ -5226,8 +5226,11 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
     base_img.ext_hdr.setdefault('CFAMNAME', '3C')
     base_img.ext_hdr.setdefault('DPAMNAME', 'POL0')
     base_img.ext_hdr.setdefault('LSAMNAME', 'NFOV')
-    base_img.ext_hdr.setdefault('STARLOCX', 0.0)
-    base_img.ext_hdr.setdefault('STARLOCY', 0.0)
+    # Set STARLOCX/Y to image center (for 64x64 image, center is at 32, 32)
+    image_center_x = base_img.data.shape[2] / 2.0  # x center (columns)
+    image_center_y = base_img.data.shape[1] / 2.0  # y center (rows)
+    base_img.ext_hdr['STARLOCX'] = image_center_x
+    base_img.ext_hdr['STARLOCY'] = image_center_y
     base_img.ext_hdr.setdefault('FPAM_H', 0.0)
     base_img.ext_hdr.setdefault('FPAM_V', 0.0)
     base_img.ext_hdr.setdefault('FSAM_H', 0.0)
