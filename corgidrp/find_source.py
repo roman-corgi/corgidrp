@@ -56,18 +56,41 @@ def psf_scalesub(image, xy, psf, fwhm):
     xx, yy = np.meshgrid(x, y)
     center = np.array(psf.shape) // 2
     distance_map = np.sqrt((xx - center[1])**2 + (yy - center[0])**2)
-    
-    # Mask central region of the PSF
-    idx_masked = np.where( (distance_map < fwhm*1.0) )
 
     # Scale PSF to match local flux and subtract it
-    psf_window = psf.shape[0] // 2
-    psf_scaled = psf * np.nanmedian(image[
-        xy[0]-psf_window:xy[0]+psf_window+1,
-        xy[1]-psf_window:xy[1]+psf_window+1] / psf)
+    psf_window = psf.shape[0] // 2 #PSF: square array
+    im_row_start = xy[0]-psf_window
+    im_row_end = xy[0]+psf_window+1
+    im_col_start = xy[1]-psf_window
+    im_col_end = xy[1]+psf_window+1
+    row_off_start = xy[0]-psf_window
+    if row_off_start >= 0:
+        row_off_start = 0
+    else:
+        im_row_start = 0
+    row_off_end = image.shape[0] - (xy[0]+psf_window+1)
+    if row_off_end >= 0:
+        row_off_end = None
+    else:
+        im_row_end = None
+    col_off_start = xy[1]-psf_window
+    if col_off_start >= 0:
+        col_off_start = 0
+    else: 
+        im_col_start = 0
+    col_off_end = image.shape[1] - (xy[1]+psf_window+1)
+    if col_off_end >= 0:
+        col_off_end = None
+    else:
+        im_col_end = None
+    psf_scaled = psf[-row_off_start:row_off_end, -col_off_start:col_off_end] * np.nanmedian(image[
+        im_row_start:im_row_end,
+        im_col_start:im_col_end] / psf[-row_off_start:row_off_end, -col_off_start:col_off_end])
+    # Mask central region of the PSF
+    idx_masked = np.where( (distance_map[-row_off_start:row_off_end, -col_off_start:col_off_end] < fwhm*1.0) )
     psf_scaled[idx_masked] = np.nan # Apply masking
     
-    image[xy[0]-psf_window:xy[0]+psf_window+1,
-          xy[1]-psf_window:xy[1]+psf_window+1] -= psf_scaled
+    image[im_row_start:im_row_end,
+        im_col_start:im_col_end] -= psf_scaled
     
     return image

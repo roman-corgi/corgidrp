@@ -1,6 +1,7 @@
 {
     "name" : "l1_to_l2a_basic",
     "template" : true,
+    "process_in_chunks" : true,
     "drpconfig" : {
         "track_individual_errors" : false
     },

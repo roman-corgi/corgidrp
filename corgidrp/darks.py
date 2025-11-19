@@ -3,11 +3,11 @@ import re
 import warnings
 from astropy.io import fits
 
-from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, detector_areas
+from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
-from corgidrp.data import DetectorNoiseMaps, Dark
+from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset
 
-def mean_combine(image_list, bpmap_list, err=False):
+def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
     Get mean frame and corresponding bad-pixel map from L2b data frames.  The
     input image_list should consist of frames with no bad pixels marked or
@@ -24,11 +24,11 @@ def mean_combine(image_list, bpmap_list, err=False):
     master dark.
 
     Args:
-        image_list (list or array_like): List (or stack) of L2b data frames
+        dataset_or_image_list (data.Dataset, list, or array_like): Dataset or list (or stack) of L2b data frames
     (with no bad pixels applied to them).
         bpmap_list (list or array_like): List (or stack) of bad-pixel maps
         associated with L2b data frames. Each must be 0 (good) or 1 (bad)
-        at every pixel.
+        at every pixel. If first input is a Dataset, this input is ignored.
         err (bool):  If True, calculates the standard error over all
         the frames.  Intended for the corgidrp.Data.Dataset.all_err
         arrays. Defaults to False.
@@ -50,55 +50,78 @@ def mean_combine(image_list, bpmap_list, err=False):
         mpas can be effectively determined for all pixels.
 
     """
-    # if input is an np array or stack, try to accommodate
-    if type(image_list) == np.ndarray:
-        if image_list.ndim == 1: # pathological case of empty array
-            image_list = list(image_list)
-        elif image_list.ndim == 2: #covers case of single 2D frame
-            image_list = [image_list]
-        elif image_list.ndim == 3: #covers case of stack of 2D frames
-            image_list = list(image_list)
-    if type(bpmap_list) == np.ndarray:
-        if bpmap_list.ndim == 1: # pathological case of empty array
-            bpmap_list = list(bpmap_list)
-        elif bpmap_list.ndim == 2: #covers case of single 2D frame
-            bpmap_list = [bpmap_list]
-        elif bpmap_list.ndim == 3: #covers case of stack of 2D frames
-            bpmap_list = list(bpmap_list)
+    # uncomment for RAM check
+    # import psutil
+    # process = psutil.Process()
 
-    # Check inputs
-    if not isinstance(image_list, list):
-        raise TypeError('image_list must be a list')
-    if not isinstance(bpmap_list, list):
-        raise TypeError('bpmap_list must be a list')
-    if len(image_list) != len(bpmap_list):
-        raise TypeError('image_list and bpmap_list must be the same length')
-    if len(image_list) == 0:
-        raise TypeError('input lists cannot be empty')
-    s0 = image_list[0].shape
-    for index, im in enumerate(image_list):
-        check.twoD_array(im, 'image_list[' + str(index) + ']', TypeError)
-        if im.shape != s0:
-            raise TypeError('all input list elements must be the same shape')
-        pass
-    for index, bp in enumerate(bpmap_list):
-        check.twoD_array(bp, 'bpmap_list[' + str(index) + ']', TypeError)
-        if np.logical_and((bp != 0), (bp != 1)).any():
-            raise TypeError('bpmap_list elements must be 0- or 1-valued')
-        if bp.dtype != int:
-            raise TypeError('bpmap_list must be made up of int arrays')
-        if bp.shape != s0:
-            raise TypeError('all input list elements must be the same shape')
-        pass
+    if not isinstance(dataset_or_image_list, Dataset):
+        # if input is an np array or stack, try to accommodate
+        if type(dataset_or_image_list) == np.ndarray:
+            if dataset_or_image_list.ndim == 1: # pathological case of empty array
+                dataset_or_image_list = list(dataset_or_image_list)
+            elif dataset_or_image_list.ndim == 2: #covers case of single 2D frame
+                dataset_or_image_list = [dataset_or_image_list]
+            elif dataset_or_image_list.ndim == 3: #covers case of stack of 2D frames
+                dataset_or_image_list = list(dataset_or_image_list)
+        if type(bpmap_list) == np.ndarray:
+            if bpmap_list.ndim == 1: # pathological case of empty array
+                bpmap_list = list(bpmap_list)
+            elif bpmap_list.ndim == 2: #covers case of single 2D frame
+                bpmap_list = [bpmap_list]
+            elif bpmap_list.ndim == 3: #covers case of stack of 2D frames
+                bpmap_list = list(bpmap_list)
 
-
-    # Get masked arrays
-    ims_m = np.ma.masked_array(image_list, bpmap_list)
+        # Check inputs
+        if not isinstance(bpmap_list, list):
+            raise TypeError('bpmap_list must be a list')
+        if len(dataset_or_image_list) != len(bpmap_list):
+            raise TypeError('image_list and bpmap_list must be the same length')
+        if len(dataset_or_image_list) == 0:
+            raise TypeError('input lists cannot be empty')
+        s0 = dataset_or_image_list[0].shape
+        for index, im in enumerate(dataset_or_image_list):
+            check.twoD_array(im, 'image_list[' + str(index) + ']', TypeError)
+            if im.shape != s0:
+                raise TypeError('all input list elements must be the same shape')
+            pass
+        for index, bp in enumerate(bpmap_list):
+            check.twoD_array(bp, 'bpmap_list[' + str(index) + ']', TypeError)
+            if np.logical_and((bp != 0), (bp != 1)).any():
+                raise TypeError('bpmap_list elements must be 0- or 1-valued')
+            if bp.dtype != int:
+                raise TypeError('bpmap_list must be made up of int arrays')
+            if bp.shape != s0:
+                raise TypeError('all input list elements must be the same shape')
+            pass
 
     # Add non masked elements
-    sum_im = np.zeros_like(image_list[0])
-    map_im = np.zeros_like(image_list[0], dtype=int)
-    for im_m in ims_m:
+    if isinstance(dataset_or_image_list, Dataset):
+        temp_fits = Image(dataset_or_image_list[0].filepath)
+        if err:
+            shape = temp_fits.err.shape[1:] 
+        else:
+            shape = temp_fits.data.shape 
+        sum_im = np.zeros(shape).astype(float)
+        map_im = np.zeros(shape, dtype=int)
+    elif isinstance(dataset_or_image_list, list) or isinstance(dataset_or_image_list, np.array):  
+        sum_im = np.zeros_like(dataset_or_image_list[0]).astype(float)
+        map_im = np.zeros_like(dataset_or_image_list[0], dtype=int)
+    else:
+        raise TypeError('image_list must be a list, array-like, or a Dataset')
+
+    for i in range(len(dataset_or_image_list)):
+        if isinstance(dataset_or_image_list, Dataset):
+            if dataset_or_image_list[0].data is None:
+                temp_fits = Image(dataset_or_image_list[i].filepath)
+            else:
+                temp_fits = dataset_or_image_list[i]
+            if err:
+                frame_data = temp_fits.err[0] 
+            else:
+                frame_data = temp_fits.data.astype(float)
+            im_m = np.ma.masked_array(frame_data, temp_fits.dq.astype(bool).astype(int))
+        else: #list
+            im_m = np.ma.masked_array(dataset_or_image_list[i], bpmap_list[i])
         masked = im_m.filled(0)
         if err:
             sum_im += masked**2
@@ -119,8 +142,17 @@ def mean_combine(image_list, bpmap_list, err=False):
     comb_bpmap = (map_im == 0).astype(int)
 
     enough_for_rn = True
-    if map_im.min() < len(image_list)/2:
+    if map_im.min() < len(dataset_or_image_list)/2:
         enough_for_rn = False
+
+    # uncomment for RAM check
+    # mem = process.memory_info()
+    # # peak_wset is only available on Windows; fall back to rss on other platforms
+    # if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+    #     peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+    # else:
+    #     peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+    # print(f"mean_combine peak memory usage:  {peak_memory:.2f} MB")
 
     return comb_image, comb_bpmap, map_im, enough_for_rn
 
@@ -161,7 +193,10 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     Args:
     dataset (corgidrp.data.Dataset):
         This is an instance of corgidrp.data.Dataset.
-        Each frame should accord with the SCI full frame geometry.
+        Each frame should accord with the SCI full frame geometry. 
+        If Dataset has metadata only (as in RAM-heavy case), 
+        each frame is read in from its filepath one at a time.  If Dataset has 
+        its data, then all the frames are processed at once. 
     detector_params (corgidrp.data.DetectorParams):
         a calibration file storing detector calibration values
     detector_regions (dict):
@@ -197,28 +232,64 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     frames = []
     bpmaps = []
     errs = []
-    for fr in dataset.frames:
-        # ensure frame is in float so nan can be assigned, though it should
-        # already be float
-        frame = fr.data.astype(float)
-        # For the fit, all types of bad pixels should be masked:
-        b1 = fr.dq.astype(bool).astype(int)
-        err = fr.err[0]
-        frame[telem_rows] = np.nan
-        i0 = slice_section(frame, 'SCI', 'image', detector_regions)
+    if dataset[0].data is not None:
+        for fr in dataset.frames:
+            # ensure frame is in float so nan can be assigned, though it should
+            # already be float
+            frame = fr.data.astype(float)
+            # For the fit, all types of bad pixels should be masked:
+            b1 = fr.dq.astype(bool).astype(int)
+            err = fr.err[0]
+            frame[telem_rows] = np.nan
+            i0 = slice_section(frame, 'SCI', 'image', detector_regions)
+            if np.isnan(i0).any():
+                raise ValueError('telem_rows cannot be in image area.')
+            frame[telem_rows] = 0
+            frames.append(frame)
+            bpmaps.append(b1)
+            errs.append(err)
+    else:
+        frames = dataset
+        bpmaps = None #not used in this case
+        errs = frames
+        test_image = Image(dataset.frames[0].filepath)
+        test_frame = test_image.data.astype(float)
+        test_frame[telem_rows] = np.nan
+        i0 = slice_section(test_frame, 'SCI', 'image', detector_regions)
         if np.isnan(i0).any():
             raise ValueError('telem_rows cannot be in image area.')
-        frame[telem_rows] = 0
-        frames.append(frame)
-        bpmaps.append(b1)
-        errs.append(err)
+        test_frame[telem_rows] = 0
     mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
     mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
+    if dataset[0].data is None:
+        # equivalent to what is done in if statement above for datasets with data
+        mean_frame[telem_rows] = 0 
+        mean_err[telem_rows] = 0 
     # combine the error from individual frames to the standard deviation across
     # the frames due to statistical variance
-    masked_frames = np.ma.masked_array(frames, bpmaps)
-    stat_std = np.ma.std(masked_frames, axis=0)/np.sqrt(unmasked_num)
-    stat_std = np.ma.getdata(stat_std)
+    zero_inds = np.where(unmasked_num==0)
+    nonzero_inds = np.where(unmasked_num!=0)
+    if dataset[0].data is None:
+        sum_squares = np.zeros_like(mean_frame).astype(float)
+        for f in dataset.frames:
+            temp_frame = Image(f.filepath)
+            frame_data = temp_frame.data.astype(float)
+            # equivalent to what is done in if statement above for datasets with data
+            frame_data[telem_rows] = 0
+            mask = temp_frame.dq.astype(bool).astype(int)
+            masked_frame = np.ma.masked_array(frame_data, mask)
+            masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
+            sum_squares += (masked_frame - masked_mean)**2
+        stat_std = np.zeros_like(sum_squares).astype(float)
+        stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds])/np.sqrt(unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
+        stat_std[zero_inds] = 0
+        stat_std = np.ma.getdata(stat_std)
+    else:
+        masked_frames = np.ma.masked_array(frames, bpmaps)
+        stat_std = np.zeros_like(frames[0]).astype(float)
+        stat_std[nonzero_inds] = np.ma.std(masked_frames[:, nonzero_inds[0], nonzero_inds[1]], axis=0)/np.sqrt(unmasked_num[nonzero_inds])
+        stat_std[zero_inds] = 0
+        stat_std = np.ma.getdata(stat_std)
     rows_one, cols_one = np.where(unmasked_num==1)
     rows_normal, cols_normal = np.where(unmasked_num == unmasked_num.max())
     if unmasked_num.max() <= 1: # this would virtually never happen
@@ -229,7 +300,16 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     # bitwise_or flag value for those that are masked all the way through for all
     # frames
     fittable_inds = np.where(combined_bpmap ==0) 
-    output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
+    if dataset[0].data is None:
+        dq_sum = np.zeros_like(mean_frame).astype(float)
+        for j in range(len(dataset)):
+            dq_temp = Image(dataset[j].filepath).dq
+            dq_sum += dq_temp.astype(float)
+        dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
+        output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
+        output_dq = output_dq.filled(0).astype(int)
+    else:
+        output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
     output_dq[fittable_inds] = 0 
     if not full_frame:
         dq = slice_section(output_dq, 'SCI', 'image', detector_regions)
@@ -249,9 +329,13 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['DATATYPE'] = 'Dark'
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
+    master_dark.ext_hdr['DRPNFILE'] = int(np.round(np.nanmean(unmasked_num)))
     master_dark.ext_hdr['BUNIT'] = 'detected electron'
     master_dark.err_hdr['BUNIT'] = 'detected electron'
-    master_dark.ext_hdr['HISTORY'] = 'traditional master analog dark (not synthesized from detector noise maps)'
+
+    msg = 'traditional master analog dark (not synthesized from detector noise maps)'
+    master_dark.ext_hdr.add_history(msg)
+
     return master_dark
 
 
@@ -305,10 +389,13 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         and each stack is for a unique EM gain and frame time combination.
         Each stack should have the same number of frames.
         Each frame should accord with the SCI frame geometry.
-        We recommend  >= 1300 frames for each stack if calibrating
+        We recommend  >= 1176 frames for each stack if calibrating
         darks for analog frames,
         thousands for photon counting depending on the maximum number of
         frames that will be used for photon counting.
+        If Dataset has metadata only (as in RAM-heavy case), 
+        each frame is read in from its filepath one at a time.  If Dataset has 
+        its data, then all the frames are processed at once.
     detector_params (corgidrp.data.DetectorParams):
         a calibration file storing detector calibration values
     weighting (bool):
@@ -348,13 +435,13 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
 
     Info on intermediate products in this function:
     FPN_map : array-like (full frame)
-        A per-pixel map of fixed-pattern noise (in deteceted electrons).  Any negative values
+        A per-pixel map of fixed-pattern noise (in detected electrons).  Any negative values
         from the fit are made positive in the end.
     CIC_map : array-like (full frame)
-        A per-pixel map of EXCAM clock-induced charge (in deteceted electrons). Any negative
+        A per-pixel map of EXCAM clock-induced charge (in detected electrons). Any negative
         values from the fit are made positive in the end.
     DC_map : array-like (full frame)
-        A per-pixel map of dark current (in deteceted electrons/s). Any negative values
+        A per-pixel map of dark current (in detected electrons/s). Any negative values
         from the fit are made positive in the end.
     bias_offset : float
         The median for the residual FPN+CIC in the region where bias was
@@ -366,22 +453,22 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         The lower bound of bias offset, accounting for error in input datasets
         and the fit.
     FPN_image_map : array-like (image area)
-        A per-pixel map of fixed-pattern noise in the image area (in deteceted electrons).
+        A per-pixel map of fixed-pattern noise in the image area (in detected electrons).
         Any negative values from the fit are made positive in the end.
     CIC_image_map : array-like (image area)
         A per-pixel map of EXCAM clock-induced charge in the image area
         (in deteceted electrons). Any negative values from the fit are made positive in the end.
     DC_image_map : array-like (image area)
-        A per-pixel map of dark current in the image area (in deteceted electrons/s).
+        A per-pixel map of dark current in the image area (in detected electrons/s).
         Any negative values from the fit are made positive in the end.
     FPNvar : float
-        Variance of fixed-pattern noise map (in deteceted electrons).
+        Variance of fixed-pattern noise map (in detected electrons).
     CICvar : float
-        Variance of clock-induced charge map (in deteceted electrons).
+        Variance of clock-induced charge map (in detected electrons).
     DCvar : float
-        Variance of dark current map (in deteceted electrons).
+        Variance of dark current map (in detected electrons).
     read_noise : float
-        Read noise estimate from the noise profile of a mean frame (in deteceted electrons).
+        Read noise estimate from the noise profile of a mean frame (in detected electrons).
         It's read off from the sub-stack with the lowest product of EM gain and
         frame time so that the gained variance of C and D is comparable to or
         lower than read noise variance, thus making reading it off doable.
@@ -450,16 +537,15 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     unreliable_pix_map = np.zeros((detector_regions['SCI']['frame_rows'],
                                    detector_regions['SCI']['frame_cols'])).astype(int)
     unfittable_pix_map = unreliable_pix_map.copy()
+    if len(dataset) < 1176:
+            print('The number of frames in dataset is less than 1176 frames, '
+            'which is the minimum number for the analog synthesized '
+            'master dark')
     for i in range(len(datasets)):
         frames = []
         bpmaps = []
         errs = []
-        check.threeD_array(datasets[i].all_data,
-                           'datasets['+str(i)+'].all_data', TypeError)
-        if len(datasets[i].all_data) < 1300:
-            print('A sub-stack was found with less than 1300 frames, '
-            'which is the recommended number per sub-stack for an analog '
-            'master dark')
+        
         if i > 0:
             if np.shape(datasets[i-1].all_data)[1:] != np.shape(datasets[i].all_data)[1:]:
                 raise CalDarksLSQException('All sub-stacks must have the same frame shape.')
@@ -475,33 +561,70 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
         exptime_arr = np.append(exptime_arr, exptime)
         kgain_arr = np.append(kgain_arr, kgain)
-
-        for fr in datasets[i].frames:
-            # ensure frame is in float so nan can be assigned, though it should
-            # already be float
-            frame = fr.data.astype(float)
-            # For the fit, all types of bad pixels should be masked:
-            b1 = fr.dq.astype(bool).astype(int)
-            err = fr.err[0]
-            frame[telem_rows] = np.nan
-            i0 = slice_section(frame, 'SCI', 'image', detector_regions)
+        
+        if not datasets[i][0].data is None:
+            check.threeD_array(datasets[i].all_data,
+                'datasets['+str(i)+'].all_data', TypeError)
+            for fr in datasets[i].frames:
+                # ensure frame is in float so nan can be assigned, though it should
+                # already be float
+                frame = fr.data.astype(float)
+                # For the fit, all types of bad pixels should be masked:
+                b1 = fr.dq.astype(bool).astype(int)
+                err = fr.err[0]
+                frame[telem_rows] = np.nan
+                i0 = slice_section(frame, 'SCI', 'image', detector_regions)
+                if np.isnan(i0).any():
+                    raise ValueError('telem_rows cannot be in image area.')
+                frame[telem_rows] = 0
+                frames.append(frame)
+                bpmaps.append(b1)
+                errs.append(err)
+        else:
+            frames = datasets[i]
+            bpmaps = None #not used in this case
+            errs = frames
+            test_frame = Image(datasets[i].frames[0].filepath).data.astype(float)
+            shape = test_frame.shape # for later, after mean_combine()
+            test_frame[telem_rows] = np.nan
+            i0 = slice_section(test_frame, 'SCI', 'image', detector_regions)
             if np.isnan(i0).any():
                 raise ValueError('telem_rows cannot be in image area.')
-            frame[telem_rows] = 0
-            frames.append(frame)
-            bpmaps.append(b1)
-            errs.append(err)
+            test_frame[telem_rows] = 0
         mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
         mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
+        if dataset[0].data is None:
+            # equivalent to what is done in if statement above for datasets with data
+            mean_frame[telem_rows] = 0 
+            mean_err[telem_rows] = 0 
         # combine the error from individual frames to the standard deviation across
         # the frames due to statistical variance
-        masked_frames = np.ma.masked_array(frames, bpmaps)
-        stat_std = np.ma.std(masked_frames, axis=0)/np.sqrt(unmasked_num)
-        stat_std = np.ma.getdata(stat_std)
+        zero_inds = np.where(unmasked_num==0)
+        nonzero_inds = np.where(unmasked_num!=0)
+        if datasets[i][0].data is None:
+            sum_squares = np.zeros(shape).astype(float)
+            for f in datasets[i].frames:
+                temp_image = Image(f.filepath)
+                test_data = temp_image.data.astype(float)
+                # equivalent to what is done in if statement above for datasets with data
+                test_data[telem_rows] = 0
+                mask = temp_image.dq.astype(bool).astype(int) 
+                masked_frame = np.ma.masked_array(test_data, mask)
+                masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
+                sum_squares += (masked_frame - masked_mean)**2
+            stat_std = np.zeros_like(sum_squares).astype(float)
+            stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds])/np.sqrt(unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
+            stat_std[zero_inds] = 0
+            stat_std = np.ma.getdata(stat_std)
+        else:
+            masked_frames = np.ma.masked_array(frames, bpmaps)
+            stat_std = np.zeros_like(frames[0]).astype(float)
+            stat_std[nonzero_inds] = np.ma.std(masked_frames[:, nonzero_inds[0], nonzero_inds[1]], axis=0)/np.sqrt(unmasked_num[nonzero_inds])
+            stat_std[zero_inds] = 0
+            stat_std = np.ma.getdata(stat_std)
         stat_std[telem_rows] = 1 # something non-zero; masked in the DQ anyways, and this assignment here prevents np.inf issues/warnings later
         # where the number of unmasked frames is 1, the std is 0, but we want error to increase as the number of usuable frames decreases, so fudge it a little:
         rows_one, cols_one = np.where(unmasked_num==1)
-        zero_inds = np.where(unmasked_num==0)
         if zero_inds[0].size != 0:
             stat_std[zero_inds] = 1 # just assign as something non-zero; doesn't really matter b/c such pixels will be masked in the DQ; this will prevent warning outputs
         rows_normal, cols_normal = np.where(unmasked_num == unmasked_num.max())
@@ -521,13 +644,26 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # bitwise_or flag value for those that are masked all the way through for all
         # frames
         fittable_inds = np.where(combined_bpmap != 1)
-        output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
+        if datasets[i][0].data is None:
+            dq_sum = np.zeros_like(mean_frame).astype(float)
+            for j in range(len(datasets[i])):
+                dq_temp = Image(datasets[i][j].filepath).dq
+                dq_sum += dq_temp.astype(float)
+            dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
+            output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
+            output_dq = output_dq.filled(0).astype(int)
+        else:
+            output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
         output_dq[fittable_inds] = 0 
         output_dqs.append(output_dq)
     output_dqs = np.stack(output_dqs)
     unreliable_pix_map = unreliable_pix_map.astype(int)
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
+
+    # uncomment for RAM check 
+    # import psutil
+    # process = psutil.Process()
 
     # flag value for those that are masked all the way through for all
     # but 3 (or fewer) stacks
@@ -758,9 +894,19 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
     
+    noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))
     l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
-    noise_maps.filename = re.sub('_L[0-9].', '', noise_maps.filename)
+    noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
+    
+    # uncomment for RAM check
+    # mem = process.memory_info()
+    # # peak_wset is only available on Windows; fall back to rss on other platforms
+    # if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+    #     peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+    # else:
+    #     peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+    # print(f"calibrate_darks_lsq peak memory usage:  {peak_memory:.2f} MB")
 
     return noise_maps
 
@@ -877,5 +1023,6 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
 
         master_dark = Dark(md_data, prihdr, exthdr, input_data, md_noise, FDCdq,
                         errhdr)
+        master_dark.ext_hdr['DRPNFILE'] = noise_maps.ext_hdr['DRPNFILE']
         
         return master_dark

@@ -13,6 +13,8 @@ from corgidrp.data import Dataset, LineSpread
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
+import corgidrp
+import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
                            get_latest_cal_file)
@@ -57,43 +59,33 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         
         # Load test data
         datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
-        file_path_science = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits")
         file_path_spot = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
 
-        assert os.path.exists(file_path_science), f'Test file not found: {file_path_science}'
         assert os.path.exists(file_path_spot), f'Test file not found: {file_path_spot}'
 
-        psf_array_science = fits.getdata(file_path_science, ext=0)
-        psf_array_spot = fits.getdata(file_path_spot, ext=0)[12]
-        
+        psf_array_spot = fits.getdata(file_path_spot, ext=0)
         # Create dataset with mock headers and noise
         pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
-        # add a fake satellite spot image from a small band simulation
-        image_spot = Image(psf_array_spot, pri_hdr = pri_hdr.copy(), ext_hdr = ext_hdr.copy(),
-                           err =np.zeros_like(psf_array_spot),
-                           dq=np.zeros_like(psf_array_spot, dtype=int))
-        image_spot.ext_hdr["CFAMNAME"] = "3D"
         # Add random noise for reproducibility
         np.random.seed(5)
         read_noise = 200
-        noisy_data_array = (np.random.poisson(np.abs(psf_array_science) / 2) + 
-                            np.random.normal(loc=0, scale=read_noise, size=psf_array_science.shape))
+        noisy_data_array = (np.random.poisson(np.abs(psf_array_spot) / 2) + 
+                            np.random.normal(loc=0, scale=read_noise, size=psf_array_spot.shape))
         
         # Create Image objects
         psf_images = []
-        for i in range(2):
-            image = Image(
+        for i in range(int(len(psf_array_spot)/2)):
+            image_spot = Image(
                 data_or_filepath=np.copy(noisy_data_array[i]),
                 pri_hdr=pri_hdr.copy(),
                 ext_hdr=ext_hdr.copy(),
                 err=np.zeros_like(noisy_data_array[i]),
                 dq=np.zeros_like(noisy_data_array[i], dtype=int)
             )
-            image.ext_hdr["CFAMNAME"] = "3"
-            psf_images.append(image)
-        psf_images.append(image_spot)
+            image_spot.ext_hdr["CFAMNAME"] = "3D"
+            psf_images.append(image_spot)
         
         # Save images to disk with timestamped filenames
         def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
@@ -142,6 +134,17 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info(f"Total input images validated: {len(l2b_dataset_with_filenames)}")
     logger.info("")
     
+    # Create a temporary caldb and add the default DispersionModel calibration
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB()
+    
+    # Scan for default calibrations
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
     # ================================================================================
     # (3) Run Processing Pipeline
     # ================================================================================
@@ -166,8 +169,8 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Validate output calibration product
-    cal_file = get_latest_cal_file(e2eoutput_path, '*_line_spread.fits', logger)
-    check_filename_convention(os.path.basename(cal_file), 'cgi_*_line_spread.fits', "LineSpread calibration product", logger)
+    cal_file = get_latest_cal_file(e2eoutput_path, '*_lsf_cal.fits', logger)
+    check_filename_convention(os.path.basename(cal_file), 'cgi_*_lsf_cal.fits', "LineSpread calibration product", logger)
 
     with fits.open(cal_file) as hdul:
         verify_hdu_count(hdul, 3, "linespread calibration product", logger)
@@ -210,7 +213,7 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Test Case 3: Baseline Performance Checks')
     logger.info('='*80)
 
-    # Load and display dispersion model results
+    # Load and display linespread model results
     linespread = LineSpread(cal_file)
     wavlens = linespread.data[0, :]
     flux_profile = linespread.data[1, :]
@@ -221,6 +224,10 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info(f"mean_wave: {linespread.mean_wave} +- {linespread.wave_err} nm")
     logger.info(f"fwhm: {linespread.fwhm} +- {linespread.fwhm_err} nm")
     logger.info("")
+    
+    # Clean up temporary caldb file
+    if os.path.exists(tmp_caldb_csv):
+        os.remove(tmp_caldb_csv)
     
     return wavlens, flux_profile, gauss_par
 
@@ -240,17 +247,36 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     """
     # Set up output directory and logging
     global logger
+
+    spec_linespread_outputdir = os.path.join(e2eoutput_path, "spec_linespread_cal_e2e")
+    if not os.path.exists(spec_linespread_outputdir):
+        os.makedirs(spec_linespread_outputdir)
+    # clean out any files from a previous run
+    for f in os.listdir(spec_linespread_outputdir):
+        file_path = os.path.join(spec_linespread_outputdir, f)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+    
+
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    
+    # Create input_l2b subfolder for input data
+    input_l2b_dir = os.path.join(spec_linespread_outputdir, 'input_l2b')
+    os.makedirs(input_l2b_dir, exist_ok=True)
+    
+    # Use proper paths for input generation and output
+    input_data_dir = input_l2b_dir
+    output_dir = spec_linespread_outputdir
     
     # Create the spec_linespread_e2e subfolder regardless
-    input_top_level = os.path.join(e2edata_path, 'spec_linespread_e2e')
-    output_top_level = os.path.join(e2eoutput_path, 'spec_linespread_e2e')
-    
-    os.makedirs(input_top_level, exist_ok=True)
-    os.makedirs(output_top_level, exist_ok=True)
     
     # Update paths to use the subfolder structure
-    e2edata_path = input_top_level
-    e2eoutput_path = output_top_level
+    e2edata_path = input_data_dir
+    e2eoutput_path = output_dir
     
     log_file = os.path.join(e2eoutput_path, 'spec_linespread_e2e.log')
     
@@ -295,10 +321,8 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
 # Run the test if this script is executed directly
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
-    # Create top-level spec_linespread_e2e folder
-    top_level_dir = os.path.join(thisfile_dir, 'spec_linespread_e2e')
-    outputdir = os.path.join(top_level_dir, 'output')
-    e2edata_dir = os.path.join(top_level_dir, 'input_data')
+    outputdir = thisfile_dir
+    e2edata_dir = os.path.join(outputdir, 'input_data')
 
     ap = argparse.ArgumentParser(description="run the spectroscopy linespread end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

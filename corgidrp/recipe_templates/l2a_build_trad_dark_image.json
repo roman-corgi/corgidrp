@@ -1,5 +1,5 @@
 {
-    "name" : "build_trad_dark_l2a",
+    "name" : "l2a_build_trad_dark_image",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false

@@ -28,23 +28,46 @@ class Dataset():
         all_data (np.array): an array with all the data combined together. First dimension is always number of images
         frames (np.array): list of data objects (probably corgidrp.data.Image)
     """
-    def __init__(self, frames_or_filepaths):
+    def __init__(self, frames_or_filepaths, no_data=False):
         """
         Args:
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
+            no_data (bool): If True, only the header information is loaded into the dataset for the frames' data.  Defaults to False.
         """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
+        
+        # default value
+        self.data_loaded = True
+        if no_data:
+            self.data_loaded = False
 
         if isinstance(frames_or_filepaths[0], str):
             # list of filepaths
             # TODO: do some auto detection of the filetype, but for now assume it is an image file
             self.frames = []
             for filepath in frames_or_filepaths:
-                self.frames.append(Image(filepath))
+                fr = Image(filepath)
+                if no_data:
+                    fr.data = None
+                    if fr.ext_hdr['DATALVL'].upper() != 'L1':
+                        #in this case, the frames are L1 and don't yet 
+                        # have err and dq, so don't set those 
+                        # to None so that each frame is given 
+                        # the default starting err and dq for further 
+                        # pipeline processes
+                        fr.err = None
+                        fr.dq = None
+                self.frames.append(fr)
         else:
             # list of frames
             self.frames = frames_or_filepaths
+            # if one of the input frames has data, set data_loaded to True
+            self.data_loaded = False
+            for frame in self.frames:
+                if frame.data is not None:
+                    self.data_loaded = True
+
 
         # turn lists into np.array for indexing behavior
         if isinstance(self.frames, list):
@@ -103,7 +126,8 @@ class Dataset():
             frame.err = self.all_err[i]
             frame.dq = self.all_dq[i]
 
-    def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None):
+    def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None,
+                                     update_err_header=True):
         """
         Updates the dataset after going through a processing step
 
@@ -113,6 +137,7 @@ class Dataset():
             new_all_err (np.array): (optional) Array of new err. Needs to be the same shape as `all_err` except of second dimension
             new_all_dq (np.array): (optional) Array of new dq. Needs to be the same shape as `all_dq`
             header_entries (dict): (optional) a dictionary {} of ext_hdr and err_hdr entries to add or update
+            update_err_header (bool): (optional) whether or not to add the new entry to the error header
         """
         # update data if necessary
         if new_all_data is not None:
@@ -136,7 +161,8 @@ class Dataset():
             if header_entries:
                 for key, value in header_entries.items():
                     img.ext_hdr[key] = value
-                    img.err_hdr[key] = value
+                    if update_err_header:
+                        img.err_hdr[key] = value
 
 
     def copy(self, copy_data=True):
@@ -619,7 +645,10 @@ class Image():
         Returns:
             str: the hash of the data, err, and dq
         """
-        data_bytes = self.data.data.tobytes()
+        if self.data is not None:
+            data_bytes = self.data.data.tobytes()
+        else:
+            data_bytes = b''
         if self.err is not None:
             err_bytes = self.err.data.tobytes()
         else:
@@ -846,8 +875,10 @@ class LineSpread(Image):
             self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
 
             # Generate default output filename
+            # Strip level suffix (e.g., _l2b) before adding calibration suffix
             base = input_dataset[0].filename.split(".fits")[0]
-            self.filename = f"{base}_line_spread.fits"
+            self.filename = f"{base}_lsf_cal.fits"
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             if gauss_par is not None:
                 if not (gauss_par.ndim == 1 and len(gauss_par) == 6):
                     raise ValueError('The LineSpread calibration gauss_par array must have 6 entries')
@@ -1744,7 +1775,7 @@ class FluxcalFactor(Image):
             self.filedir = "."
             # slight hack for old mocks not in the stardard filename format
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_L[0-9].', '', self.filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
 class FpamFsamCal(Image):
@@ -2368,11 +2399,12 @@ class CoreThroughputMap(Image):
                 self.ext_hdr['HISTORY'] = ('CoreThroughputMap derived '
                     f'from a set of frames on {self.ext_hdr["DATETIME"]}')
 
-            # The corethroughput map is not a calibration product as of writing
-            # this class. The filename does not follow the convention for
-            # calibration files
+            # Generate filename following the calibration file convention
             self.filedir = '.'
-            self.filename = 'corethroughput_map.fits'
+            if input_dataset is not None:
+                self.filename = re.sub('_l[0-9].', '_ctm_cal', input_dataset[-1].filename)
+            else:
+                self.filename = 'corethroughput_map.fits'  # fallback
             self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = L3
@@ -2612,7 +2644,9 @@ class PyKLIPDataset(pyKLIP_Data):
             wvs_all += [CWAVEL] * NINTS
 
             # pyklip will look for wcs.cd, so make sure that attribute exists
-            wcs_obj = wcs.WCS(header=shead)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+                wcs_obj = wcs.WCS(header=shead)
 
             if not hasattr(wcs_obj.wcs,'cd'):
                 wcs_obj.wcs.cd = wcs_obj.wcs.pc * wcs_obj.wcs.cdelt
@@ -2896,6 +2930,102 @@ class NDFilterSweetSpotDataset(Image):
 
         return interpolator(x, y)
 
+class MuellerMatrix(Image):
+    """
+    Class for a Mueller matrix dataset product.
+    Stores a 4x4 Mueller matrix and its error
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this Mueller Matrix (required only if raw 2D data is passed in)
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+
+        # if this is a new Mueller Matrix map, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
+        if ext_hdr is not None:
+            if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new Mueller Matrix. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this Mueller Matrix.")
+            self.ext_hdr['DATATYPE'] = 'MuellerMatrix'
+
+            # log all the data that went into making this Mueller Matrix
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Mueller Matrix created"
+
+            # set the filename
+            self.filename = re.sub('_l[0-9].', '_mmx_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename          
+            
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+            if 'ND225' in self.ext_hdr['FPAMNAME'] or 'ND475' in self.ext_hdr['FPAMNAME']:
+                raise ValueError("Mueller Matrix cannot be created from ND225 or ND475 data, instead create an NDMuellerMatrix")
+
+        # double check that this is actually a bad pixel map that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr:
+            raise ValueError("File that was loaded was not a MuellerMatrix file.")
+        if self.ext_hdr['DATATYPE'] != 'MuellerMatrix':
+            raise ValueError("File that was loaded was not a MuellerMatrix file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
+
+class NDMuellerMatrix(Image):
+    """
+    Class for a Mueller matrix dataset product made with ND filter data.
+    Stores a 4x4 Mueller matrix and its error.
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this Mueller Matrix (required only if raw 2D data is passed in)
+        err (astropy.io.fits.Header): the error array (required only if raw 2D data is passed in)
+        err_hdr (astropy.io.fits.Header): the error header (required only if raw 2D data is passed in)
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+
+        # if this is a new ND Mueller Matrix map, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
+        if ext_hdr is not None:
+            if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new ND Mueller Matrix. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this ND Mueller Matrix.")
+            self.ext_hdr['DATATYPE'] = 'NDMuellerMatrix'
+
+            # log all the data that went into making this Mueller Matrix
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Mueller Matrix created"
+
+            # set the filename
+            self.filename = re.sub('_l[0-9].', '_ndm_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename          
+            
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+            if 'ND225' not in self.ext_hdr['FPAMNAME'] and 'ND475' not in self.ext_hdr['FPAMNAME']:
+                raise ValueError("An ND Mueller Matrix is only for datasets with ND225 or ND475. You may want to instead create a MuellerMatrix instead.")
+
+        # double check that this is actually a bad pixel map that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr:
+            raise ValueError("File that was loaded was not a ND MuellerMatrix file.")
+        if self.ext_hdr['DATATYPE'] != 'NDMuellerMatrix':
+            raise ValueError("File that was loaded was not a ND MuellerMatrix file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
+
 def format_ftimeutc(ftime_str):
     """
     Round the input FTIMEUTC time to the nearest 0.01 sec and reformat as:
@@ -2947,6 +3077,8 @@ def format_ftimeutc(ftime_str):
     return formatted_time
 
 
+
+
 datatypes = { "Image" : Image,
               "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -2964,7 +3096,9 @@ datatypes = { "Image" : Image,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel,
-              "LineSpread": LineSpread
+              "LineSpread": LineSpread,
+                "MuellerMatrix": MuellerMatrix,
+                "NDMuellerMatrix": NDMuellerMatrix,
               }
 
 def autoload(filepath):
@@ -3085,3 +3219,27 @@ def get_bit_to_flag_map():
         dict: A dictionary with bit positions (int) as keys and flag names as values.
     """
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
+
+def get_stokes_intensity_image(stokes_image):
+    """Return a copy containing only the Stokes I plane for photometry.
+
+    Args:
+        stokes_image (Image): L4 polarimetry Image to extract first plane 
+            (Stokes I) from
+
+    Returns:
+        Image: New Image containing the Stokes I data and all required extensions
+    """
+    intensity_image = stokes_image.copy(copy_data=True)
+    intensity_image.data = stokes_image.data[0].copy()
+
+    err_slice = stokes_image.err[0]
+    err_layer = err_slice if err_slice.ndim == 3 else np.array([err_slice])
+    if err_layer.shape[0] != 1:
+        err_layer = err_layer[:1]
+    intensity_image.err = err_layer.copy()
+    intensity_image.dq = stokes_image.dq[0].copy()
+
+    intensity_image.ext_hdr.add_history("Extracted Stokes-I plane via get_stokes_intensity_image.")
+
+    return intensity_image

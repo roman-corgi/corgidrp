@@ -158,7 +158,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image', detector_regions=None):
+                       mode='image', detector_regions=None, pct_oversat_lim=20):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -198,6 +198,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         detector_regions: (dict):  
             A dictionary of detector geometry properties.  Keys should be as 
             found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
+        pct_oversat_lim: (float):
+            Percent of total frame over sat_fwc over which we determine the frame is oversaturated
+            and will be discarded. Frame saturations equal to this argument are not discarded.
 
     Returns:
         corgidrp.data.Dataset:
@@ -210,9 +213,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         detector_regions = detector_areas
 
     # you should make a copy the dataset to start
-    crmasked_dataset = input_dataset.copy()
-
-    crmasked_cube = crmasked_dataset.all_data
+    initial_dataset = input_dataset.copy()
 
     # Calculate the full well capacity for every frame in the dataset
     if k_gain is None:
@@ -221,7 +222,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         #get the kgain value from the k_gain calibration file
         kgain = k_gain.value
     emgain_list = []
-    for frame in crmasked_dataset:
+    for frame in initial_dataset:
         try: # use measured gain if available
             emgain = frame.ext_hdr['EMGAIN_M']
         except:
@@ -231,19 +232,23 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 emgain = frame.ext_hdr['EMGAIN_C']
             emgain_list.append(emgain)
     emgain_arr = np.array(emgain_list)
-    fwcpp_e_arr = np.array([detector_params.params['FWC_PP_E'] for frame in crmasked_dataset])
-    fwcem_e_arr = np.array([detector_params.params['FWC_EM_E'] for frame in crmasked_dataset])
+    fwcpp_e_arr = np.array([detector_params.params['FWC_PP_E'] for frame in initial_dataset])
+    fwcem_e_arr = np.array([detector_params.params['FWC_EM_E'] for frame in initial_dataset])
 
     fwcpp_dn_arr = fwcpp_e_arr / kgain
     fwcem_dn_arr = fwcem_e_arr / kgain
 
     # pick the FWC that will get saturated first, depending on gain
-    sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_dn_arr,fwcem_dn_arr,sat_thresh)
+    initial_sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_dn_arr,fwcem_dn_arr,sat_thresh)
 
-    for i,frame in enumerate(crmasked_dataset):
+    for i,frame in enumerate(initial_dataset):
         frame.ext_hdr['FWC_PP_E'] = fwcpp_e_arr[i]
         frame.ext_hdr['FWC_EM_E'] = fwcem_e_arr[i]
-        frame.ext_hdr['SAT_DN'] = sat_fwcs[i]
+        frame.ext_hdr['SAT_DN'] = initial_sat_fwcs[i]
+
+    # Remove images that are too saturated to remove cosmics in a timely manner
+    crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim)
+    crmasked_cube = crmasked_dataset.all_data
 
     sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])
 
@@ -328,6 +333,57 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
         linearized_dataset.update_after_processing_step(history_msg, new_all_data=linearized_cube)
 
     return linearized_dataset
+
+def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20):
+    """
+    Discards images from the dataset that have more than a frac_frame_sat_limit fraction of values
+    over the sat_thresh limit. Also removes corresponding fwc elements from sat_fwc array.
+    Intended to be called by detect_cosmic_rays to remove problematic images before processing.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L1-level)
+        sat_fwcs (list):
+            List of calculated SAT_DN values per frame. Already multiplied with sat_thresh
+            and ready to compare with pixel values.
+        pct_oversat_lim: (float):
+            Percent of total frame over sat_fwc over which we determine the frame is oversaturated
+            and will be discarded, Frame saturations equal to this argument are not discarded.
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
+        pruned_sat_fwcs (list): input sat_fwcs with corresponding saturated frame fwcs removed
+    """
+    pruned_dataset = input_dataset.copy()
+    reject_flag = np.zeros(len(input_dataset))
+    reject_reason = {}
+
+    for i, frame in enumerate(pruned_dataset.frames):
+        pct_frame_sat = ((frame.data > sat_fwcs[i]).sum() / frame.data.size) * 100
+        if pct_frame_sat > pct_oversat_lim:
+            reject_flag[i] = True
+            reject_reason[i] = "oversat frame pct {0:.5f} > {1:.5f}".format(pct_frame_sat, pct_oversat_lim)
+
+    good_frames = np.where(reject_flag == False)[0]
+    bad_frames = np.where(reject_flag == True)[0]
+    # check that we didn't remove all of the good frames
+    if np.size(good_frames) == 0:
+        raise ValueError(f"All frames are saturated (at least {pct_oversat_lim} of pixels saturated). Unable to continue")
+
+    # Create good frame collections
+    pruned_dataset = data.Dataset(pruned_dataset.frames[good_frames])
+    pruned_fwcs = [sat_fwcs[i] for i in good_frames]
+
+    # history message of which frames were removed and why
+    history_msg = "Removed {0} frames as bad:".format(np.size(bad_frames))
+
+    for bad_index in bad_frames:
+        bad_frame = input_dataset.frames[bad_index]
+        history_msg += " {0} ({1}),".format(bad_frame.filename, reject_reason[bad_index])
+    history_msg = history_msg[:-1] # remove last comma or :
+
+    pruned_dataset.update_after_processing_step(history_msg)
+
+    return pruned_dataset, pruned_fwcs
 
 def update_to_l2a(input_dataset):
     """

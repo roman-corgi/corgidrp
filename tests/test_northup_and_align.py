@@ -1,8 +1,11 @@
 import os,math
+import warnings
+import astropy.io.fits as fits
 from corgidrp import data, mocks, astrom
-from corgidrp.l3_to_l4 import northup
+from corgidrp.l3_to_l4 import northup, align_2d_frames
 from corgidrp.l2b_to_l3 import create_wcs
 from astropy.wcs import WCS
+from pyklip.instruments.utils.wcsgen import generate_wcs
 from matplotlib import pyplot as plt
 import numpy as np
 import pytest
@@ -134,7 +137,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 ylen, xlen = sci_input.shape
                 xcen, ycen = xlen / 2, ylen / 2
                 # check the angle offset
-                astr_hdr = WCS(sci_hd)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
+                    astr_hdr = WCS(sci_hd)
                 angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
                 # the location for test
                 x_value1 = input_dataset[0].ext_hdr['X_1VAL']
@@ -220,7 +225,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             ylen, xlen = sci_input.shape
             xcen, ycen = xlen / 2, ylen / 2
             # check the angle offset
-            astr_hdr = WCS(sci_hd)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
+                astr_hdr = WCS(sci_hd)
             angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
             # the location for test
             x_value1 = input_dataset[0].ext_hdr['X_1VAL']
@@ -331,7 +338,8 @@ def test_wcs_and_offset(save_mock_dataset=False):
    astrom_cal = astrom.boresight_calibration(mock_dataset_ori, fieldpath, find_threshold=10)
    mock_dataset =  mock_dataset_ori.copy()
    # add an angle offset
-   mock_dataset[0].pri_hdr['ROLL']=(ang,'roll angle (deg)')
+   mock_dataset[0].pri_hdr['ROLL']=(north_angle,'roll angle (deg)')
+
    # create the wcs
    test_offset = (3.3, 1.0)
    updated_dataset = create_wcs(mock_dataset,astrom_cal,offset=test_offset)
@@ -346,8 +354,113 @@ def test_wcs_and_offset(save_mock_dataset=False):
       os.makedirs(outdir, exist_ok=True)
       updated_dataset[0].save(filedir='./',filename=f'mock_offset{ang+north_angle}deg_testoffset.fits')
 
+def test_align_2d_frames():
+    """
+    Test align 2-D frames
+    """
+    # first frame
+    img1 = np.zeros((101,101), dtype=float)
+    img1[50:55, 50:55] = 1  # square of 1s
+    err1 = np.ones((101,101), dtype=float) * 0.1
+    err1[50, 50] = 0.5  # higher error at center
+    dq1 = np.zeros((101,101), dtype=int)
+    dq1[45, 45] = 1  # bad pixel
+    prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
+    # set star center
+    exthdr['STARLOCX'] = 52
+    exthdr['STARLOCY'] = 52
+    # generate wcs
+    # wcs center doesn't necessarily have to be in the same position, although it probably should be
+    wcs_header = generate_wcs(0, [50,50],
+                              platescale=0.0218).to_header()
+    exthdr.extend(wcs_header, update=True)
+
+
+    frame1 = data.Image(img1, pri_hdr=prihdr, ext_hdr=exthdr, err=err1, 
+                        dq=dq1, err_hdr=errhdr, dq_hdr=dqhdr)
+
+    # second frame - shifted by (Y, X) = (1, -2)
+    img2 = np.zeros((101,101), dtype=float)
+    img2[51:56, 48:53] = 1  # square of 1s
+    err2 = np.ones((101,101), dtype=float) * 0.1
+    dq2 = np.zeros((101,101), dtype=int)
+    dq2[50, 50] = 1  # bad pixel at some other point
+    prihdr2, exthdr2, errhdr2, dqhdr2 = mocks.create_default_L3_headers()
+    # set star center to be (50, 53)
+    exthdr2['STARLOCX'] = 50
+    exthdr2['STARLOCY'] = 53
+    # generate wcs
+    # wcs center doesn't necessarily have to be in the same position, although it probably should be
+    wcs_header2 = generate_wcs(0, [50,50],
+                              platescale=0.0218).to_header()
+    exthdr2.extend(wcs_header2, update=True)
+    frame2 = data.Image(img2, pri_hdr=prihdr2, ext_hdr=exthdr2, err=err2, 
+                        dq=dq2, err_hdr=errhdr2, dq_hdr=dqhdr2)
+
+    # create dataset
+    dataset = data.Dataset([frame1, frame2])  
+
+    # default, align to first frame
+    aligned_dataset = align_2d_frames(dataset)
+    # first image, no shift
+    assert np.allclose(aligned_dataset[0].data[50:55, 50:55], 1)
+    assert aligned_dataset[0].err[0, 50, 50] == pytest.approx(0.5, rel=1e-5)
+    assert aligned_dataset[0].dq[45, 45] == 1
+    assert aligned_dataset[0].ext_hdr['STARLOCX'] == 52
+    assert aligned_dataset[0].ext_hdr['STARLOCY'] == 52
+    assert aligned_dataset[0].ext_hdr['CRPIX1'] == 50 
+    assert aligned_dataset[0].ext_hdr['CRPIX2'] == 50
+    # second image shifted by (Y, X) =  (-1, +2)
+    assert np.allclose(aligned_dataset[1].data[50:55, 50:55], 1)
+    assert aligned_dataset[1].err[0, 50, 50] == pytest.approx(0.1, rel=1e-5)
+    assert aligned_dataset[1].dq[49, 52] == 1
+    assert aligned_dataset[1].ext_hdr['STARLOCX'] == 52
+    assert aligned_dataset[1].ext_hdr['STARLOCY'] == 52 
+    assert aligned_dataset[1].ext_hdr['CRPIX1'] == 52
+    assert aligned_dataset[1].ext_hdr['CRPIX2'] == 49
+
+    # align to image center (50, 50)
+    aligned_dataset = align_2d_frames(dataset, center='im_center')
+    # first image, shift -2, -2
+    assert np.allclose(aligned_dataset[0].data[48:53, 48:53], 1)
+    assert aligned_dataset[0].err[0, 48, 48] == pytest.approx(0.5, rel=1e-5)
+    assert aligned_dataset[0].dq[43, 43] == 1
+    assert aligned_dataset[0].ext_hdr['STARLOCX'] == 50
+    assert aligned_dataset[0].ext_hdr['STARLOCY'] == 50
+    assert aligned_dataset[0].ext_hdr['CRPIX1'] == 48
+    assert aligned_dataset[0].ext_hdr['CRPIX2'] == 48
+    # second image shifted by (Y, X) =  (-3, 0)
+    assert np.allclose(aligned_dataset[1].data[48:53, 48:53], 1)
+    assert aligned_dataset[1].err[0, 50, 50] == pytest.approx(0.1, rel=1e-5)
+    assert aligned_dataset[1].dq[47, 50] == 1
+    assert aligned_dataset[1].ext_hdr['STARLOCX'] == 50
+    assert aligned_dataset[1].ext_hdr['STARLOCY'] == 50 
+    assert aligned_dataset[1].ext_hdr['CRPIX1'] == 50
+    assert aligned_dataset[1].ext_hdr['CRPIX2'] == 47
+
+    # align to image center (61.5, 61.5)
+    aligned_dataset = align_2d_frames(dataset, center=(61.5, 61.5))
+    # first image, shift +9.5, +9.5
+    assert np.allclose(aligned_dataset[0].data[60:64, 60:64], 1, rtol=0.4) # check smaller 4x4 region
+    assert aligned_dataset[0].dq[55, 55] == 1
+    assert aligned_dataset[0].ext_hdr['STARLOCX'] == 61.5
+    assert aligned_dataset[0].ext_hdr['STARLOCY'] == 61.5
+    assert aligned_dataset[0].ext_hdr['CRPIX1'] == 59.5
+    assert aligned_dataset[0].ext_hdr['CRPIX2'] == 59.5
+    # second image shifted by (Y, X) =  (8.5, 11.5)
+    assert np.allclose(aligned_dataset[1].data[60:64, 60:64], 1, rtol=0.4)
+    assert aligned_dataset[1].err[0, 50, 50] == pytest.approx(0.1, rel=1e-5)
+    assert aligned_dataset[1].dq[58, 61] == 1
+    assert aligned_dataset[1].ext_hdr['STARLOCX'] == 61.5
+    assert aligned_dataset[1].ext_hdr['STARLOCY'] == 61.5
+    assert aligned_dataset[1].ext_hdr['CRPIX1'] == 61.5
+    assert aligned_dataset[1].ext_hdr['CRPIX2'] == 58.5
+
+
 if __name__ == '__main__':
-   test_northup()
-   test_northup_pol()
-   test_wcs_and_offset()
+    print('Running test_northup()...')
+    test_northup()
+    test_northup_pol()
+    test_wcs_and_offset()
+    test_align_2d_frames()
 

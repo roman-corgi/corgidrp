@@ -1,0 +1,24 @@
+{
+    "name" : "l2a_build_trad_dark_image_1",
+    "template" : true,
+    "process_in_chunks" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "em_gain_division"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

@@ -2,6 +2,7 @@ import os
 import json
 import astropy.time as time
 import warnings
+import xml.etree.ElementTree as ET
 import corgidrp
 import corgidrp.astrom
 import corgidrp.bad_pixel_calibration
@@ -46,6 +47,7 @@ all_steps = {
     "calibrate_kgain" : corgidrp.calibrate_kgain.calibrate_kgain,
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.flat.create_onsky_flatfield,
+    "create_onsky_pol_flatfield" : corgidrp.flat.create_onsky_pol_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark,
     "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
@@ -60,9 +62,12 @@ all_steps = {
     "replace_bad_pixels": corgidrp.l3_to_l4.replace_bad_pixels,
     "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
     "find_star": corgidrp.l3_to_l4.find_star,
+    "find_spec_star" : corgidrp.l3_to_l4.find_spec_star,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
+    "spec_psf_subtraction": corgidrp.l3_to_l4.spec_psf_subtraction,
     "determine_wave_zeropoint": corgidrp.l3_to_l4.determine_wave_zeropoint,
     "add_wavelength_map": corgidrp.l3_to_l4.add_wavelength_map,
+    "extract_spec": corgidrp.l3_to_l4.extract_spec,
     "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
     "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
     "create_ct_map": corgidrp.corethroughput.create_ct_map,
@@ -70,6 +75,14 @@ all_steps = {
     "compute_psf_centroid": corgidrp.spec.compute_psf_centroid,
     "calibrate_dispersion_model": corgidrp.spec.calibrate_dispersion_model,
     "fit_line_spread_function": corgidrp.spec.fit_line_spread_function,
+    "split_image_by_polarization_state": corgidrp.l2b_to_l3.split_image_by_polarization_state,
+    "calc_stokes_unocculted": corgidrp.pol.calc_stokes_unocculted,
+    "generate_mueller_matrix_cal": corgidrp.pol.generate_mueller_matrix_cal,
+    "align_polarimetry_frames": corgidrp.l3_to_l4.align_polarimetry_frames,
+    "combine_polarization_states": corgidrp.l3_to_l4.combine_polarization_states,
+    "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization,
+    "align_2d_frames": corgidrp.l3_to_l4.align_2d_frames,
+    "combine_spec": corgidrp.l3_to_l4.combine_spec
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -116,6 +129,24 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
             for filename in output_filelist:
                 recipe["inputs"].append(filename)
 
+        # check for functions that require CPGS XML info
+        for step in recipe['steps']:
+            if step['name'].lower() == 'find_spec_star':
+                if not 'keywords' in step:
+                    read_cpgs = True
+                    step['keywords'] = {}
+                elif "r_lamD" not in step['keywords']:
+                    read_cpgs = True
+                else:
+                    read_cpgs = False
+
+                if read_cpgs: # if not already specified.
+                    # need to populate satellite spot info from XML
+                    cpgs_xml = ET.parse(CPGS_XML_filepath)
+                    sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
+                    step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
+                    step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
+
         output_filelist = run_recipe(recipe)
 
     # return just the recipe if there was only one
@@ -143,8 +174,10 @@ def autogen_recipe(filelist, outputdir, template=None):
         first_frame = None
     else:
         # load the data to check what kind of recipe it is
-        dataset = data.Dataset(filelist)
-        first_frame = dataset[0]
+        dataset0 = data.Dataset([filelist[0]])
+        first_frame = dataset0[0]
+        # don't need the actual data, especially if it would take up a lot of RAM just to hold it in cache
+        dataset = data.Dataset(filelist, no_data=True)
 
     # if user didn't pass in template
     if template is None:
@@ -275,26 +308,34 @@ def guess_template(dataset):
         if 'VISTYPE' not in image.pri_hdr:
             # this is probably IIT test data. Do generic processing
             recipe_filename = "l1_to_l2b.json"
-        elif image.pri_hdr['VISTYPE'][:3] == "ENG":
-            # first three letters are ENG
-            # for either ENGPUPIL or ENGIMGAGE
+        elif image.pri_hdr['VISTYPE'][:11] == "CGIVST_ENG_":
+            # if this is an ENG calibration visit
+            # for either pupil or image
             recipe_filename = "l1_to_l2a_eng.json"
-        elif image.pri_hdr['VISTYPE'] == "BORESITE":
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_BORESIGHT":
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_boresight.json'] #"l1_to_boresight.json"
             chained = True
-        elif image.pri_hdr['VISTYPE'] == "FFIELD":
-            recipe_filename = "l1_flat_and_bp.json"
-        elif image.pri_hdr['VISTYPE'] == "DARK":
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_FLAT":
+
+            if image.ext_hdr.get('DPAMNAME', '') in ('POL0', 'POL45'):
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_polflat.json"]
+                chained = True
+            else:
+                recipe_filename = "l1_flat_and_bp.json"
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC']:
-                recipe_filename = "l1_to_l2b_pc_dark.json"
+            if image.ext_hdr['ISPC'] in (True, 1):
+                recipe_filename = ["l1_to_l2b_pc_dark_1.json", "l1_to_l2b_pc_dark_2.json"]# "l1_to_l2b_pc_dark.json"
+                chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
-                recipe_filename = "l1_to_l2a_noisemap.json"
+                recipe_filename = ["l1_to_l2a_noisemap_1.json", "l1_to_l2a_noisemap_2.json"]#"l1_to_l2a_noisemap.json"
+                chained = True
             else: # then len(unique_vals) is 1 and not PC: traditional darks
-                recipe_filename = "build_trad_dark_image.json"
-        elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
+                recipe_filename = ["build_trad_dark_image_1.json", "build_trad_dark_image_2.json"] #"build_trad_dark_image.json"
+                chained = True
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
-        elif image.pri_hdr['VISTYPE'] in ("ABSFLXFT", "ABSFLXBT"):
+        elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
             if len(fsm_unique) > 1:
                 recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
@@ -302,29 +343,42 @@ def guess_template(dataset):
             else:
                 recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
                 chained = True
-        elif image.pri_hdr['VISTYPE'] == 'CORETPUT':
+        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
             chained = True
         else:
             recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
     # L2a -> L2b data processing
     elif image.ext_hdr['DATALVL'] == "L2a":
-        if image.pri_hdr['VISTYPE'] == "DARK":
+        if image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC']:
-                recipe_filename = "l2a_to_l2b_pc_dark.json"
+            if image.ext_hdr['ISPC'] in (True, 1):
+                recipe_filename = ["l2a_to_l2b_pc_dark_1.json", "l2a_to_l2b_pc_dark_2.json"]#"l2a_to_l2b_pc_dark.json"
+                chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
-                recipe_filename = "l2a_to_l2a_noisemap.json"
+                recipe_filename = ["l2a_to_l2a_noisemap_1.json", "l2a_to_l2a_noisemap_2.json"] # "l2a_to_l2a_noisemap.json"
+                chained = True
             else: # then len(unique_vals) is 1 and not PC: traditional darks
-                recipe_filename = "l2a_build_trad_dark_image.json"
+                recipe_filename = ["l2a_build_trad_dark_image_1.json", "l2a_build_trad_dark_image_2.json"] #"l2a_build_trad_dark_image.json" 
+                chained = True
         else:
-            if image.ext_hdr['ISPC']:
-                recipe_filename = "l2a_to_l2b_pc.json"
+            # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
+            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
+            
+            if is_spectroscopy:
+                if image.ext_hdr['ISPC'] in (True, 1):
+                    recipe_filename = ["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"] #"l2a_to_l2b_pc_spec.json"
+                else:
+                    recipe_filename = "l2a_to_l2b_spec.json"
             else:
-                recipe_filename = "l2a_to_l2b.json"  # science data and all else
+                if image.ext_hdr['ISPC'] in (True, 1):
+                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
+                    chained = True
+                else:
+                    recipe_filename = "l2a_to_l2b.json"  # science data and all else
     # L2b -> L3 data processing
     elif image.ext_hdr['DATALVL'] == "L2b":
-        if image.pri_hdr['VISTYPE'] in ("ABSFLXFT", "ABSFLXBT"):
+        if image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
             if len(fsm_unique) > 1:
                 recipe_filename = "l2b_to_nd_filter.json"
@@ -333,22 +387,34 @@ def guess_template(dataset):
                     recipe_filename = 'l2b_to_fluxcal_factor_pol.json'
                 else:
                     recipe_filename = "l2b_to_fluxcal_factor.json"
-        elif image.pri_hdr['VISTYPE'] == 'CORETPUT':
+        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
+        elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
+            recipe_filename = "l2b_to_polcal.json"
+        elif image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+            recipe_filename = "l2b_to_l3_pol.json"
         else:
             recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
     elif image.ext_hdr['DATALVL'] == "L3":
-        if image.ext_hdr['FSMLOS'] == 1:
-            # coronagraphic obs - PSF subtraction
-            recipe_filename = "l3_to_l4.json"
+        if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+            recipe_filename = "l3_to_l4_pol.json"
+        elif image.ext_hdr['DPAMNAME'] == 'PRISM3':
+            if image.ext_hdr['FSMLOS'] == 1:
+                # coronagraphic obs - PSF subtraction
+                recipe_filename = "l3_to_l4_psfsub_spec.json"
+            else:
+                # noncoronagraphic obs - no PSF subtraction
+                recipe_filename = "l3_to_l4_noncoron_spec.json" 
         else:
-            # noncorongrpahic obs - no PSF subtraction
-            recipe_filename = "l3_to_l4_nopsfsub.json"
-            
+            if image.ext_hdr['FSMLOS'] == 1:
+                # coronagraphic obs - PSF subtraction
+                recipe_filename = "l3_to_l4.json"
+            else:
+                # noncoronagraphic obs - no PSF subtraction
+                recipe_filename = "l3_to_l4_nopsfsub.json"
     else:
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
-
     return recipe_filename, chained
 
 
@@ -411,19 +477,12 @@ def run_recipe(recipe, save_recipe_file=True):
         recipe = json.load(open(recipe, "r"))
 
     # configure pipeline as needed
+    # these settings should only apply to this recipe, so we will restore old settings later
+    old_settings = {} 
     for setting in recipe['drpconfig']:
         # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
         setattr(corgidrp, setting, recipe['drpconfig'][setting])
-
-    # read in data, if not doing bp map
-    if recipe["inputs"]:
-        filelist = recipe["inputs"]
-        curr_dataset = data.Dataset(filelist)
-        # write the recipe into the image extension header
-        for frame in curr_dataset:
-            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
-    else:
-        curr_dataset = []
+        old_settings[setting] = recipe['drpconfig'][setting]
 
     # save recipe before running recipe
     if save_recipe_file:
@@ -433,75 +492,158 @@ def run_recipe(recipe, save_recipe_file=True):
         with open(recipe_filepath, "w") as json_file:
             json.dump(recipe, json_file, indent=4)
 
+    # determine if this is a RAM-heavy recipe which needs crop-stack processing
+    #sort_pupilimg_frames included here b/c it sorts through a large number of frame (>700) b/c 
+    # EM gain cal files (sorted here and excluded, processed by SSC) are included in the visits
+    if "ram_heavy" in recipe:
+        ram_heavy_bool = bool(recipe["ram_heavy"])
+    else:
+        ram_heavy_bool = False 
+    if "process_in_chunks" in recipe:
+        ram_increment_bool = bool(recipe["process_in_chunks"])
+    else:
+        ram_increment_bool = False
+    if ram_heavy_bool and ram_increment_bool:
+        warnings.warn('\'ram_heavy\' supercedes \'process_in_chunks\', so frames will be read in all at once with no data loaded.')
+
+    # read in data, if not doing bp map
+    if not recipe["inputs"]:
+        curr_dataset = []
+        ram_heavy_bool = False
+        filelist_chunks = [0] #anything of length 1
+    else:
+        filelist = recipe["inputs"]
+        if ram_increment_bool and not ram_heavy_bool: #ram_heavy_bool supercedes ram_increment_bool
+            # how many frames to process at a time (before getting the RAM-heaviest function in the recipe) if RAM-heavy
+            filelist_chunks = [filelist[n:n+corgidrp.chunk_size] for n in range(0, len(filelist), corgidrp.chunk_size)] 
+        else:
+            filelist_chunks = [filelist]
+
     tot_steps = len(recipe["steps"])
     save_step = False
-
-    # execute each pipeline step
-    for i, step in enumerate(recipe["steps"]):
-        print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
-        if step["name"].lower() == "save":
-            # special save instruction
-            
-            # see if suffix is specified as a keyword
-            if "keywords" in step and "suffix" in step["keywords"]:
-                suffix =  step["keywords"]["suffix"]
+    output_filepaths = []
+    for filelist in filelist_chunks:
+        if recipe["inputs"]:
+            if ram_heavy_bool:
+                curr_dataset = data.Dataset(filelist, no_data=True)
             else:
-                suffix = ''
+                curr_dataset = data.Dataset(filelist)
+            # write the recipe into the image extension header
+            for frame in curr_dataset:
+                frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+        # execute each pipeline step
+        print('Executing recipe: {0}'.format(recipe['name']))
+        if ram_increment_bool and len(filelist_chunks) > 1:
+            print('Processing frames in chunks of {0} frames'.format(corgidrp.chunk_size))
+        if ram_heavy_bool:
+            print('Processing frames in RAM-heavy mode (data not loaded into memory until necessary, one frame at a time)')
+        for i, step in enumerate(recipe["steps"]):
+            print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
+            if step["name"].lower() == "save":
+                # special save instruction
                 
-            save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
-            save_step = True
+                # see if suffix is specified as a keyword
+                if "keywords" in step and "suffix" in step["keywords"]:
+                    suffix =  step["keywords"]["suffix"]
+                else:
+                    suffix = ''
+                
+                save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
+                if isinstance(curr_dataset, data.Dataset):
+                    output_filepaths += [frame.filepath for frame in curr_dataset]
+                else:
+                    output_filepaths += [curr_dataset.filepath] 
+                save_step = True
 
-        else:
-            step_func = all_steps[step["name"]]
-
-            # edge case if this step has been specified to be skipped
-            if "skip" in step and step["skip"]:
-                continue
-
-            other_args = ()
-            if "calibs" in step:
-                # if JIT calibration resolving is toggled, figure out the calibrations here
-                # by default, this is false
-                if (corgidrp.jit_calib_id and ("jit_calib_id" not in recipe['drpconfig'])) or (("jit_calib_id" in recipe['drpconfig']) and recipe['drpconfig']["jit_calib_id"]) :
-                    this_caldb = caldb.CalDB()
-                    # dataset may have turned into a single image. handle this case. 
-                    if isinstance(curr_dataset, data.Dataset):
-                        ref_image = curr_dataset[0]
-                        list_of_frames = curr_dataset
-                    else:
-                        ref_image = curr_dataset
-                        list_of_frames = [curr_dataset]
-                    _fill_in_calib_files(step, this_caldb, ref_image)
-
-                    # also update the recipe we used in the headers
-                    for frame in list_of_frames:
-                        frame.ext_hdr["RECIPE"] = json.dumps(recipe)
-
-
-                # load the calibration files in from disk
-                for calib in step["calibs"]:
-                    calib_dtype = data.datatypes[calib]
-                    if step["calibs"][calib] is not None:
-                        cal_file = calib_dtype(step["calibs"][calib])
-                    else:
-                        cal_file = None
-                    other_args += (cal_file,)
-
-
-            if "keywords" in step:
-                kwargs = step["keywords"]
             else:
-                kwargs = {}
+                step_func = all_steps[step["name"]]
 
-            # run the step!
-            curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
+                # edge case if this step has been specified to be skipped
+                if "skip" in step and step["skip"]:
+                    continue
 
-    output_filepaths = None
-    if save_step:
-        if isinstance(curr_dataset, data.Dataset):
-            output_filepaths = [frame.filepath for frame in curr_dataset]
-        else:
-            output_filepaths = [curr_dataset.filepath]
+                other_args = ()
+                if "calibs" in step:
+                    # if JIT calibration resolving is toggled, figure out the calibrations here
+                    # by default, this is false
+                    if (corgidrp.jit_calib_id and ("jit_calib_id" not in recipe['drpconfig'])) or (("jit_calib_id" in recipe['drpconfig']) and recipe['drpconfig']["jit_calib_id"]) :
+                        this_caldb = caldb.CalDB()
+                        # dataset may have turned into a single image. handle this case. 
+                        if isinstance(curr_dataset, data.Dataset):
+                            ref_image = curr_dataset[0]
+                            list_of_frames = curr_dataset
+                        else:
+                            ref_image = curr_dataset
+                            list_of_frames = [curr_dataset]
+                        if ram_heavy_bool:
+                            ref_image = data.Image(ref_image.filepath) #load in data for calibration matching
+                        _fill_in_calib_files(step, this_caldb, ref_image)
+
+                        # also update the recipe we used in the headers
+                        for frame in list_of_frames:
+                            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+
+
+                    # load the calibration files in from disk
+                    for calib in step["calibs"]:
+                        calib_dtype = data.datatypes[calib]
+                        if step["calibs"][calib] is not None:
+                            cal_file = calib_dtype(step["calibs"][calib])
+                        else:
+                            cal_file = None
+                        other_args += (cal_file,)
+
+
+                if "keywords" in step:
+                    kwargs = step["keywords"]
+                else:
+                    kwargs = {}
+
+                # run the step!
+                curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
+
+    if not save_step:
+        output_filepaths = None
+
+    # restore old pipeline settings that this recipe overwrote
+    for setting in old_settings:
+        # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
+        setattr(corgidrp, setting, old_settings[setting])
+
     
     return output_filepaths
 
+
+def _get_satellite_spot_info_from_xml(xml_tree):
+    """
+    Extracts satellite spot information from the CPGS XML file
+
+    Args:
+        xml_tree (ElementTree): loaded in CPGS XML file
+        
+    Returns:
+        dict: dictionary with satellite spot information
+            "num_spots": int, number of satellite spots
+            "spot1_contrast": float, contrast of spot 1
+            "spot1_sep": float, separation of spot 1 in lam/D
+            "spo1_angle": float, angle of spot 1 in degrees
+            "spot2_contrast": float, contrast of spot 2
+            "spot2_sep": float, separation of spot 2 in lam/D
+            "spo2_angle": float, angle of spot 2 in degrees
+    """
+    obs_specification = xml_tree.getroot()
+    sat_spot_info = obs_specification.find("satellite_spots")
+    sat_spot_output = {}
+    sat_spot_output['num_spots'] = 0
+    for i, pair in enumerate(sat_spot_info.findall("pair")):
+        sat_spot_output['num_spots'] += 1
+        if i == 0:
+            sat_spot_output['spot1_contrast'] = float(pair.find("intensity").text)
+            sat_spot_output['spot1_sep'] = float(pair.find("radial_distance").text)
+            sat_spot_output['spot1_angle'] = float(pair.find("clocking_angle").text)
+        elif i == 1:
+            sat_spot_output['spot2_contrast'] = float(pair.find("intensity").text)
+            sat_spot_output['spot2_sep'] = float(pair.find("radial_distance").text)
+            sat_spot_output['spot2_angle'] = float(pair.find("clocking_angle").text)
+
+    return sat_spot_output
