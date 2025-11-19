@@ -592,6 +592,64 @@ def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
         compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
+def test_l4_spec_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    l4_spec_coron_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_spec_psfsub_e2e")
+    l4_spec_coron_data_file = glob.glob(os.path.join(l4_spec_coron_data_dir, "*_l4_.fits"))[0]
+    
+    validate_cgi_filename(l4_spec_coron_data_file, 'l4_')
+    
+    generate_fits_excel_documentation(l4_spec_coron_data_file, os.path.join(l4_spec_coron_data_dir, "l4_spec_coron_documentation.xlsx"))
+
+    doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(l4_spec_coron_data_file) as hdulist:
+        doc_contents = generate_template(hdulist, dtype_name="L4-Spec-Coronagraphic")
+
+    doc_filepath = os.path.join(doc_dir, "l4_spec_coron.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l4_spec_coron.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+
+@pytest.mark.e2e
+def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    l4_spec_noncoron_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_spec_noncoron_e2e")
+    l4_spec_noncoron_data_file = glob.glob(os.path.join(l4_spec_noncoron_data_dir, "*_l4_.fits"))[0]
+    
+    validate_cgi_filename(l4_spec_noncoron_data_file, 'l4_')
+    
+    generate_fits_excel_documentation(l4_spec_noncoron_data_file, os.path.join(l4_spec_noncoron_data_dir, "l4_spec_noncoron_documentation.xlsx"))
+
+    doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(l4_spec_noncoron_data_file) as hdulist:
+        doc_contents = generate_template(hdulist, dtype_name="L4-Spec-Noncoron")
+
+    doc_filepath = os.path.join(doc_dir, "l4_spec_noncoron.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l4_spec_noncoron.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents)
+
+@pytest.mark.e2e
 def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     astrom_data_file = glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits"))[0]
@@ -1144,8 +1202,13 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'L2b_Analog': glob.glob(os.path.join(e2eoutput_path, "l1_to_l2b_e2e", "*.fits")),
         'L2b_PC': glob.glob(os.path.join(e2eoutput_path, "photon_count_e2e", "l2a_to_l2b", "*_l2b.fits")),
         'L3': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_e2e", "l2b_to_l3", "*_l3_.fits")),
+        'L3_Spec': glob.glob(os.path.join(e2eoutput_path, "l1_to_l3_spec_e2e", "analog", "*_l3_.fits")),
+        'L3_Pol': glob.glob(os.path.join(e2eoutput_path, "l1_to_l3_pol_e2e", "analog", "*_l3_.fits")),
         'L4_Coron': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_e2e", "*_l4_.fits")),
         'L4_Noncoron': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e", "*_l4_.fits")),
+        'L4_Pol': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_pol_e2e", "*_l4_.fits")),
+        'L4_Spec_Coron': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_spec_psfsub_e2e", "*_l4_.fits")),
+        'L4_Spec_Noncoron': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_spec_noncoron_e2e", "*_l4_.fits")),
         'Astrom': glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits")),
         'BPMap': glob.glob(os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits")),
         'Flat': glob.glob(os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits")),
@@ -1162,6 +1225,8 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'NoiseMaps': glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits")),
         'Dark': glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits")),
         'TrapPump': glob.glob(os.path.join(e2eoutput_path, "trap_pump_cal_e2e", "*_tpu_cal.fits")),
+        'SpecLineSpread': glob.glob(os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "*_lsf_cal.fits")),
+        'SpecPrismDisp': glob.glob(os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "*_dpm_cal.fits")),
     }
     
     # Get the most recent file for each data product
@@ -1235,15 +1300,25 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
             if 'L2b_PC' in data_files:
                 ordered_products.append('L2b_PC')
             
-            # Add L3
+            # Add L3 variants
             if 'L3' in data_files:
                 ordered_products.append('L3')
+            if 'L3_Spec' in data_files:
+                ordered_products.append('L3_Spec')
+            if 'L3_Pol' in data_files:
+                ordered_products.append('L3_Pol')
             
-            # Add L4
+            # Add L4 variants
             if 'L4_Coron' in data_files:
                 ordered_products.append('L4_Coron')
             if 'L4_Noncoron' in data_files:
                 ordered_products.append('L4_Noncoron')
+            if 'L4_Pol' in data_files:
+                ordered_products.append('L4_Pol')
+            if 'L4_Spec_Coron' in data_files:
+                ordered_products.append('L4_Spec_Coron')
+            if 'L4_Spec_Noncoron' in data_files:
+                ordered_products.append('L4_Spec_Noncoron')
             
             # Add remaining products alphabetically
             remaining_products = sorted([p for p in data_files.keys() if p not in ordered_products])
@@ -1265,18 +1340,33 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
             
             df = pd.DataFrame(data)
             
+            # Clean up column names for Excel (remove invalid characters)
+            invalid_chars = ['[', ']', ':', '*', '?', '/', '\\']
+            column_mapping = {}
+            for col in df.columns:
+                clean_col = col
+                for char in invalid_chars:
+                    clean_col = clean_col.replace(char, '_')
+                if clean_col != col:
+                    column_mapping[col] = clean_col
+            
+            if column_mapping:
+                df = df.rename(columns=column_mapping)
+            
             # Write to Excel sheet (sheet names can't have special chars)
             sheet_name = hdu_name.replace('/', '_').replace('\\', '_')[:31]  # Excel sheet name limit
             df.to_excel(writer, sheet_name=sheet_name, index=False)
             
-            # Auto-adjust column widths
+            # Auto-adjust column widths using actual column letters
             worksheet = writer.sheets[sheet_name]
-            for idx, col in enumerate(df.columns):
+            from openpyxl.utils import get_column_letter
+            for idx, col in enumerate(df.columns, start=1):
                 max_length = max(
                     df[col].astype(str).apply(len).max(),
                     len(col)
                 ) + 2
-                worksheet.column_dimensions[chr(65 + idx)].width = min(max_length, 50)
+                col_letter = get_column_letter(idx)
+                worksheet.column_dimensions[col_letter].width = min(max_length, 50)
     
     print(f"Header cross-reference created: {output_file}")
 
@@ -1321,6 +1411,8 @@ if __name__ == "__main__":
     test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_pol_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_spec_coron_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_spec_noncoron_dataformat_e2e(e2edata_dir, outputdir)
     test_mueller_matrix_dataformat_e2e(e2edata_dir, outputdir)
     test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
     test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
