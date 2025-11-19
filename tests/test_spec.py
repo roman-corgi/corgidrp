@@ -682,7 +682,7 @@ def test_star_spec_registration():
                 wv0_y = hdul[0].header['WV0_Y']
                 wv0_x_values.append(wv0_x)
                 wv0_y_values.append(wv0_y)
-                logger.info(f'    {filename}: WV0_X = {wv0_x}, WV0_Y = {wv0_y}')
+                logger.info(f'    {filename}: WV0_X = {wv0_x}, WV0_Y = {wv0_y}. PASS')
             except KeyError as e:
                 missing_key = str(e).strip("'")
                 logger.error(f'    {filename}: Wavelength zero-point keyword {missing_key} NOT present in template file. FAIL')
