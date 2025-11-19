@@ -477,9 +477,12 @@ def run_recipe(recipe, save_recipe_file=True):
         recipe = json.load(open(recipe, "r"))
 
     # configure pipeline as needed
+    # these settings should only apply to this recipe, so we will restore old settings later
+    old_settings = {} 
     for setting in recipe['drpconfig']:
         # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
         setattr(corgidrp, setting, recipe['drpconfig'][setting])
+        old_settings[setting] = recipe['drpconfig'][setting]
 
     # save recipe before running recipe
     if save_recipe_file:
@@ -572,6 +575,8 @@ def run_recipe(recipe, save_recipe_file=True):
                         else:
                             ref_image = curr_dataset
                             list_of_frames = [curr_dataset]
+                        if ram_heavy_bool:
+                            ref_image = data.Image(ref_image.filepath) #load in data for calibration matching
                         _fill_in_calib_files(step, this_caldb, ref_image)
 
                         # also update the recipe we used in the headers
@@ -599,6 +604,12 @@ def run_recipe(recipe, save_recipe_file=True):
 
     if not save_step:
         output_filepaths = None
+
+    # restore old pipeline settings that this recipe overwrote
+    for setting in old_settings:
+        # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
+        setattr(corgidrp, setting, old_settings[setting])
+
     
     return output_filepaths
 

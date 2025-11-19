@@ -645,7 +645,10 @@ class Image():
         Returns:
             str: the hash of the data, err, and dq
         """
-        data_bytes = self.data.data.tobytes()
+        if self.data is not None:
+            data_bytes = self.data.data.tobytes()
+        else:
+            data_bytes = b''
         if self.err is not None:
             err_bytes = self.err.data.tobytes()
         else:
