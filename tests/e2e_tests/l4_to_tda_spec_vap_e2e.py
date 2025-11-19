@@ -177,7 +177,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
             # PSF-subtracted images: core throughput + CT_THRU grid + CTCOR 
             if is_coron:
                 try:
-                    ct_factor = l4_to_tda.apply_core_throughput_correction(
+                    ct_factor, _ = l4_to_tda.apply_core_throughput_correction(
                         img, ct_cal, fpamfsam_cal, logr=False
                     )
                     spec_hdr = img.hdu_list['SPEC'].header
@@ -192,27 +192,25 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
                     logger.error(
                         f"    Core throughput correction failed: {exc}. FAIL"
                     )
-                    # If CT fails, cannot flux-calibrate the companion spectrum
-                    continue
 
-                # CT_THRU grid shape
-                if 'CT_THRU' in img.hdu_list:
-                    ct_grid = img.hdu_list['CT_THRU'].data
-                    image_shape = img.data.shape
-                    if ct_grid.ndim >= 2 and ct_grid.shape[-2:] == image_shape[-2:]:
+                # ALGO_THRU extension existence check
+                if 'ALGO_THRU' in img.hdu_list:
+                    logger.info("    ALGO_THRU extension present. PASS")
+                else:
+                    logger.error("    ALGO_THRU extension not present in PSF-subtracted L4 image. FAIL")
+
+                # ALGO_THRU shape check (should be 1-D matching SPEC shape)
+                if 'ALGO_THRU' in img.hdu_list:
+                    algo_thru = img.hdu_list['ALGO_THRU'].data
+                    spec_shape = img.hdu_list['SPEC'].data.shape
+                    if algo_thru.ndim == 1 and algo_thru.shape == spec_shape:
                         logger.info(
-                            "    Core throughput grid shape matches PSF-subtracted image shape. PASS"
+                            f"    ALGO_THRU extension is 1-D with shape {algo_thru.shape} matching SPEC. PASS"
                         )
                     else:
                         logger.error(
-                            f"    Core throughput grid shape {ct_grid.shape} does not "
-                            f"match image shape {image_shape}. FAIL"
+                            f"    ALGO_THRU extension has shape {algo_thru.shape}, expected 1-D shape {spec_shape} matching SPEC. FAIL"
                         )
-                else:
-                    logger.error(
-                        "    PSF-subtracted L4 image missing CT_THRU extension; "
-                        "cannot validate throughput grid alignment. FAIL"
-                    )
 
                 # Check CTCOR for convert_spec_to_flux
                 comp_ctcor = img.hdu_list['SPEC'].header.get('CTCOR', False)
@@ -358,7 +356,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         is_coron_comb = comp_comb.ext_hdr.get('FSMLOS', 0) == 1
         if is_coron_comb:
             try:
-                ct_factor_comb = l4_to_tda.apply_core_throughput_correction(
+                ct_factor_comb, _ = l4_to_tda.apply_core_throughput_correction(
                     comp_comb, ct_cal, fpamfsam_cal, logr=False
                 )
                 spec_hdr_comb = comp_comb.hdu_list['SPEC'].header
@@ -406,7 +404,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
             wavelength = host_wave
             ratio_err = np.full_like(host_wave, np.nan, dtype=float)
         else:
-            # Compute flux ratio
+            # Compute flux ratio (this internally calls convert_spec_to_flux which applies ALGO_THRU correction)
             flux_ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
                 host_comb,
                 comp_comb,
@@ -414,6 +412,23 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
                 slit_transmission=slit_transmission,
             )
             ratio_err = metadata.get('ratio_err')
+
+        # Check algorithm throughput correction is applied
+        comp_cal_check = l4_to_tda.convert_spec_to_flux(
+            Dataset([comp_comb]), fluxcal_factor, slit_transmission=slit_transmission
+        )
+        comp_spec_hdr_cal = comp_cal_check[0].hdu_list['SPEC'].header
+        if 'ALGOCOR' in comp_spec_hdr_cal:
+            algocor_value = comp_spec_hdr_cal['ALGOCOR']
+            logger.info(
+                f"Algorithm throughput correction applied to combined companion spectrum. "
+                f"ALGOCOR={algocor_value}. PASS"
+            )
+        else:
+            logger.error(
+                "ALGOCOR flag not found in header after flux calibration. "
+                "Algorithm throughput correction may not have been applied. FAIL"
+            )
 
         # Final flux-ratio diagnostics
         logger.info(f"Final combined flux ratio sample (first 5 bins): {flux_ratio[:5]}")
