@@ -581,10 +581,13 @@ def test_star_spec_registration():
     dir_test = os.path.join(os.path.dirname(__file__), 'simdata')
     os.makedirs(dir_test, exist_ok=True)
 
-    log_file = os.path.join(dir_test, 'star_spec_registration.log')
+    # Create separate output folder for this test's log
+    log_dir = os.path.join(os.path.dirname(__file__), 'star_spec_registration')
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, 'star_spec_registration.log')
     # If file exists, remove it
-    if os.path.exists(os.path.join(dir_test, log_file)):
-        os.remove(os.path.join(dir_test, log_file))
+    if os.path.exists(log_file):
+        os.remove(log_file)
 
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('star_spec_registration')
@@ -653,34 +656,51 @@ def test_star_spec_registration():
     logger.info('Test Case 1: Input Image Data Format and Content')
     logger.info('='*80)
     logger.info('Template data')
+    wv0_x_values = []
+    wv0_y_values = []
     for idx_temp in range(n_temp):
         pathfile = os.path.join(test_datadir,
                 f'spec_reg_fsm_offset_template_cfam3F_{idx_temp:02d}.fits')
         # Make sure the template exists before continuing
         assert os.path.exists(pathfile), f'Test FITS file not found: {pathfile}'
+        filename = os.path.basename(pathfile)
         with fits.open(pathfile) as hdul:
             # Get template data to create a noisy sim with different FSM positions later on
             psf_arr += [hdul[0].data]
             assert psf_arr[-1].ndim == 2, 'Expected 2D PSF array'
             # Make sure FSAM offset is present and record them
             try:
-                yoffset_arr += [hdul[0].header['FSM_OFF']]
-            except:
-                logger.info(f'Alignment offsets relative to FSAM slit NOT present in template file {pathfile}. FAIL')
+                fsm_off = hdul[0].header['FSM_OFF']
+                yoffset_arr += [fsm_off]
+                logger.info(f'    {filename}: FSM_OFF = {fsm_off}')
+            except KeyError:
+                logger.error(f'    {filename}: Alignment offset (FSM_OFF) NOT present in template file. FAIL')
                 raise ValueError(f'Missing FSM offset in file {pathfile:s}')
             # Make sure zero-points are present            
             try:
                 wv0_x = hdul[0].header['WV0_X']
                 wv0_y = hdul[0].header['WV0_Y']
-            except:
-                logger.info(f'Wavelength zero-point WV0_X, WV0_Y NOT present in template file {pathfile}. FAIL')
+                wv0_x_values.append(wv0_x)
+                wv0_y_values.append(wv0_y)
+                logger.info(f'    {filename}: WV0_X = {wv0_x}, WV0_Y = {wv0_y}. PASS')
+            except KeyError as e:
+                missing_key = str(e).strip("'")
+                logger.error(f'    {filename}: Wavelength zero-point keyword {missing_key} NOT present in template file. FAIL')
+                raise ValueError(f'Missing wavelength zeropoint keyword {missing_key} in file {pathfile:s}')
       
         # Add pathfilename to the list
         pathfiles_template += [pathfile]
 
     # At this step all individual tests above have passed
-    logger.info('Alignment offsets relative to FSAM slit present in all template files. PASS')
-    logger.info('WV0_X and WV0_Y present in all template files. PASS')
+    logger.info('')
+    logger.info('Confirm presence of alignment offsets relative to FSAM slit in all file headers:')
+    logger.info(f'    FSM_OFF values: {yoffset_arr}')
+    logger.info('    Alignment offsets relative to FSAM slit present in all template files. PASS')
+    logger.info('')
+    logger.info('Confirm presence of WV0_X and WV0_Y in all file headers:')
+    logger.info(f'    WV0_X values: {wv0_x_values}')
+    logger.info(f'    WV0_Y values: {wv0_y_values}')
+    logger.info('    WV0_X and WV0_Y present in all template files. PASS')
 
     # Define a slit alignment offset for the FSM data that is close to one of the
     # templates to be able to predict which offset best matches the templates
@@ -1012,10 +1032,13 @@ def test_slit_trans():
     dir_test = os.path.join(os.path.dirname(__file__), 'simdata')
     os.makedirs(dir_test, exist_ok=True)
 
-    log_file = os.path.join(dir_test, 'slit_transmission.log')
+    # Create separate output folder for this test's log
+    log_dir = os.path.join(os.path.dirname(__file__), 'slit_transmission')
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, 'slit_transmission.log')
     # If file exists, remove it
-    if os.path.exists(os.path.join(dir_test, log_file)):
-        os.remove(os.path.join(dir_test, log_file))
+    if os.path.exists(log_file):
+        os.remove(log_file)
 
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('slit_transmission')
@@ -1134,6 +1157,9 @@ def test_slit_trans():
         logger.info(f'FSM scan pattern ({idx_fsm+1}/{len(fsm_motion)}): ')
         logger.info('Images with slit in')
         n_images = 0
+        cfam_values = []
+        fsmx_values = []
+        fsmy_values = []
         for i, frame in enumerate(spec_slit_ds):
             frame_info = f"Frame {i}"
             # Check dimensions
@@ -1149,6 +1175,7 @@ def test_slit_trans():
             # Verify all images have identical CFAMNAME values
             verify_header_keywords(frame.ext_hdr, {'CFAMNAME': cfam_expected},
                 frame_info, logger)
+            cfam_values.append(frame.ext_hdr.get('CFAMNAME'))
             # Verify all images have FSAMNAME = SLIT
             verify_header_keywords(frame.ext_hdr, {'FSAMNAME': fsam_expected},
                 frame_info, logger)
@@ -1157,10 +1184,22 @@ def test_slit_trans():
                 frame_info, logger)
             verify_header_keywords(frame.ext_hdr, ['FSMY'],
                 frame_info, logger)
+            fsmx_values.append(frame.ext_hdr.get('FSMX'))
+            fsmy_values.append(frame.ext_hdr.get('FSMY'))
             logger.info("")
             n_images += 1
 
-        logger.info(f"Total input images with validated with FSAM={fsam_expected}: {n_images}")
+        logger.info('Summary for slit-in images:')
+        logger.info(f'    Total images validated: {n_images}')
+        # Verify all images have identical CFAMNAME values
+        cfam_unique = set(cfam_values)
+        if len(cfam_unique) == 1:
+            logger.info(f'    Verify all images have identical CFAMNAME values: {cfam_unique}. PASS')
+        else:
+            logger.error(f'    Verify all images have identical CFAMNAME values: Found {cfam_unique}. FAIL')
+        logger.info(f'    FSAMNAME: {fsam_expected}')
+        logger.info(f'    FSMX values range: [{min(fsmx_values)}, {max(fsmx_values)}]')
+        logger.info(f'    FSMY values range: [{min(fsmy_values)}, {max(fsmy_values)}]')
         logger.info("")
 
         # Build the Dataset with the slit off
@@ -1210,12 +1249,15 @@ def test_slit_trans():
         # VAP testing
         logger.info('Images with slit out')
         n_images = 0
+        cfam_values_open = []
+        fsmx_values_open = []
+        fsmy_values_open = []
         for i, frame in enumerate(spec_open_ds):
             frame_info = f"Frame {i}"
             # Check dimensions (same as with slit in)
             check_dimensions(frame.hdu_list["SPEC"].data, spec_slit_data.shape, frame_info,
                 logger)
-            # Check data level is L4 (same as eith slit in)
+            # Check data level is L4 (same as with slit in)
             verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
                 frame_info, logger)
             # Verify filename convention: cgi_<visitid>_<yyyymmddthhmmsss>_l4_.fits
@@ -1225,6 +1267,7 @@ def test_slit_trans():
             # Verify all images have identical CFAMNAME values (same as with slit in)
             verify_header_keywords(frame.ext_hdr, {'CFAMNAME': cfam_expected},
                 frame_info, logger)
+            cfam_values_open.append(frame.ext_hdr.get('CFAMNAME'))
             # Verify all images have FSAMNAME = OPEN
             verify_header_keywords(frame.ext_hdr, {'FSAMNAME': 'OPEN'},
                 frame_info, logger)
@@ -1233,10 +1276,26 @@ def test_slit_trans():
                 frame_info, logger)
             verify_header_keywords(frame.ext_hdr, ['FSMY'],
                 frame_info, logger)
+            fsmx_values_open.append(frame.ext_hdr.get('FSMX'))
+            fsmy_values_open.append(frame.ext_hdr.get('FSMY'))
             logger.info("")
             n_images += 1
 
-        logger.info(f"Total input images validated with FSAM=OPEN: {n_images}")
+        logger.info('Summary for slit-out images:')
+        logger.info(f'    Total images validated: {n_images}')
+        # Verify all images have identical CFAMNAME values (same as slit-in)
+        cfam_unique_open = set(cfam_values_open)
+        cfam_unique_slit = set(cfam_values)
+        if len(cfam_unique_open) == 1:
+            if cfam_unique_open == cfam_unique_slit:
+                logger.info(f'    Verify all images have identical CFAMNAME values (same as slit-in): {cfam_unique_open}. PASS')
+            else:
+                logger.error(f'    Verify all images have identical CFAMNAME values (same as slit-in): Found {cfam_unique_open}, expected {cfam_unique_slit}. FAIL')
+        else:
+            logger.error(f'    Verify all images have identical CFAMNAME values: Found {cfam_unique_open}. FAIL')
+        logger.info(f'    FSAMNAME: OPEN')
+        logger.info(f'    FSMX values range: [{min(fsmx_values_open)}, {max(fsmx_values_open)}]')
+        logger.info(f'    FSMY values range: [{min(fsmy_values_open)}, {max(fsmy_values_open)}]')
         logger.info("")
 
         # Estimate slit transmission
@@ -1260,18 +1319,34 @@ def test_slit_trans():
             assert slit_trans_out == pytest.approx(slit_trans_design, rel=1e-7)
 
         # VAP testing: Confirm data structure of the slit transmission
-        logger.info(f'Output slit transmission')
+        logger.info('Output slit transmission map (TDA product):')
+        # Check dimensions
+        logger.info(f'    Slit transmission map dimensions: {slit_trans_out.shape}')
+        logger.info(f'    Expected shape: (N_locations, N_wavelength_steps)')
+        
         # Same wavelength bins as input data
-        assert slit_trans_out.shape[1] == spec_slit_data.shape[0], logger.info(f'Slit transmission does not have the same wavelength steps as input data ({spec_slit_data.shape[0]}). FAIL')
-        logger.info(f'Slit transmission has the same wavelength steps as input data ({spec_slit_data.shape[0]}). PASS')
+        n_wavelength_steps = spec_slit_data.shape[0]
+        if slit_trans_out.shape[1] == n_wavelength_steps:
+            logger.info(f'    Slit transmission contains {n_wavelength_steps} wavelength steps (matches input data). PASS')
+        else:
+            logger.error(f'    Slit transmission has {slit_trans_out.shape[1]} wavelength steps, expected {n_wavelength_steps}. FAIL')
+            assert False, f'Slit transmission does not have the same wavelength steps as input data'
+        
         # Same locations as slit transmission values
-        assert slit_pos_x.shape[0] == slit_trans_out.shape[0], logger.info(f'Slit transmission locations and wavelength steps are inconsistent (X). FAIL')
-        logger.info(f'Slit transmission locations and wavelength steps are consistent (X). PASS')
-        assert slit_pos_y.shape[0] == slit_trans_out.shape[0], logger.info(f'Slit transmission locations and wavelength steps are inconsistent (Y). FAIL')
-        logger.info(f'Slit transmission locations and wavelength steps are consistent (Y). PASS')
-        # VAP requirement
-        logger.info(f'The peak value of the slit transmission is {slit_trans_out.max()}')
-        logger.info(f'The mean value of the slit transmission is {slit_trans_out.mean()}')
+        n_locations = slit_trans_out.shape[0]
+        if slit_pos_x.shape[0] == n_locations and slit_pos_y.shape[0] == n_locations:
+            logger.info(f'    Slit transmission contains {n_locations} location values. PASS')
+            logger.info(f'    Locations (X, Y) associated with each slit transmission value: {n_locations} values. PASS')
+        else:
+            logger.error(f'    Slit transmission has {n_locations} transmission values but {slit_pos_x.shape[0]} X locations and {slit_pos_y.shape[0]} Y locations. FAIL')
+            assert False, f'Slit transmission locations and values are inconsistent'
+        
+        # VAP requirement: Baseline performance checks
+        logger.info('Baseline performance checks:')
+        peak_trans = slit_trans_out.max()
+        mean_trans = slit_trans_out.mean()
+        logger.info(f'    Peak transmission value: {peak_trans}')
+        logger.info(f'    Mean transmission value: {mean_trans}')
 
 def test_star_pos():
     """ Test translation of a position on EXCAM measured in polar coordinates
