@@ -18,6 +18,7 @@ from corgidrp.check import (check_filename_convention, check_dimensions,
                            verify_hdu_count, verify_header_keywords)
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.photon_counting import get_pc_mean
+import warnings
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -305,7 +306,9 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     
     # Step 1: L1 -> L2a (generic processing)
     logger.info('Step 1: Running L1 to L2a recipe...')
-    walker.walk_corgidrp(input_data_filelist, "", l3_outputdir)
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.walk_corgidrp(input_data_filelist, "", l3_outputdir)
     
     # Find the L2a output files
     l2a_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2a.fits')]
@@ -338,7 +341,9 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
                 dark_l2a_outdir = os.path.join(l3_outputdir, 'pc_dark_l2a')
                 if not os.path.exists(dark_l2a_outdir):
                     os.makedirs(dark_l2a_outdir)
-                walker.walk_corgidrp(dark_l1_files, "", dark_l2a_outdir, template="l1_to_l2a_basic.json")
+                with warnings.catch_warnings():  
+                    warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+                    walker.walk_corgidrp(dark_l1_files, "", dark_l2a_outdir, template="l1_to_l2a_basic.json")
 
                 # 4) Collect resulting L2a dark frames
                 dark_l2a_filelist = [os.path.join(dark_l2a_outdir, f) for f in os.listdir(dark_l2a_outdir) if f.endswith('_l2a.fits')]
@@ -363,6 +368,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
                 logger.warning(traceback.format_exc())
     
     # Step 2: L2a -> L2b (auto-detect spectroscopy recipe)
+
     logger.info('Step 2: Running L2a to L2b recipe...')
     if is_pc_data:
         recipe = walker.autogen_recipe(l2a_filelist, l3_outputdir)
@@ -370,14 +376,23 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         for step in recipe[0]['steps']:
             if step['name'] == "dark_subtraction":
                 step['calibs']['Dark'] = pc_dark.filepath
-        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+        with warnings.catch_warnings():  
+            warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+            output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
         recipe[1]['inputs'] = output_filepaths
-        output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
-        # files are overwritten with same filenames
-        recipe[2]['inputs'] = output_filepaths1
-        walker.run_recipe(recipe[2], save_recipe_file=True)
+        for step in recipe[1]['steps']:
+            if step['name'] == "get_pc_mean":
+                step['calibs']['Dark'] = pc_dark.filepath
+        with warnings.catch_warnings():  
+            warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+            output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
+            # files are overwritten with same filenames
+            recipe[2]['inputs'] = output_filepaths1
+            walker.run_recipe(recipe[2], save_recipe_file=True)
     else:
-        walker.walk_corgidrp(l2a_filelist, "", l3_outputdir)
+        with warnings.catch_warnings():  
+            warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+            walker.walk_corgidrp(l2a_filelist, "", l3_outputdir)
     
     # Find the L2b output files
     l2b_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2b.fits')]
@@ -570,8 +585,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
-    outputdir = thisfile_dir
+    e2edata_dir = '/Users/maxwellmb/Data/corgi/corgidrp/e2e_test_data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    outputdir = " /Users/maxwellmb/Data/corgi/corgidrp/e2e_test_output/"
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

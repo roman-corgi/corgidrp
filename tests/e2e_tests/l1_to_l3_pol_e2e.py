@@ -16,6 +16,7 @@ import traceback
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
                            get_latest_cal_file)
+import warnings
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -268,7 +269,9 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     
     # Step 1: L1 -> L2b
     logger.info('Step 1: Running L1 to L2b recipe...')
-    walker.walk_corgidrp(input_data_filelist, "", l3_outputdir, template="l1_to_l2b.json")
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.walk_corgidrp(input_data_filelist, "", l3_outputdir, template="l1_to_l2b.json")
     
     l2b_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2b.fits')]
     l2b_filelist = [os.path.join(l3_outputdir, f) for f in l2b_files]

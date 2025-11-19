@@ -15,6 +15,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import warnings
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -215,7 +216,9 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
         #     step['skip'] = True
         if step['name'] == "create_onsky_flatfield":
             step['keywords']['n_pix'] = 165 # full shaped pupil FOV
-    walker.run_recipe(recipe, save_recipe_file=True)
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.run_recipe(recipe, save_recipe_file=True)
 
     # Organize L2a files into l1_to_l2a subfolder
     l1_to_l2a_dir = os.path.join(flat_outputdir, "l1_to_l2a")
@@ -419,7 +422,9 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     ####### Run the walker on some test_data
 
     recipe = walker.autogen_recipe(l1_flatfield_filelist, flat_outputdir)
-    walker.run_recipe(recipe, save_recipe_file=True)
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.run_recipe(recipe, save_recipe_file=True)
 
     # Organize L2a files into l1_to_l2a subfolder
     l1_to_l2a_dir = os.path.join(flat_outputdir, "l1_to_l2a")
