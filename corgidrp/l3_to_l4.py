@@ -1044,6 +1044,10 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
                                                           xcent_round - halfwidth:xcent_round + halfwidth + 1]
         err_cutout = image.err[:,ycent_round - halfheight:ycent_round + halfheight + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        if "ALGO_THRU" in image.hdu_list:
+            algo_thru_cutout = image.hdu_list["ALGO_THRU"].data[ycent_round - halfheight:ycent_round + halfheight + 1]
+        else:
+            algo_thru_cutout = np.ones(image_cutout.shape[0])
         bad_ind = np.where(dq_cutout > 0)
         image_cutout[bad_ind] = np.nan
         err_cutout[bad_ind] = np.nan
@@ -1058,9 +1062,11 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
             whts = 1./np.square(err_cutout[0])
             spec = np.nansum(image_cutout * whts, axis = 1) / np.nansum (whts, axis = 1) * (2 * halfwidth + 1)
             err[0] = 1./np.sqrt(np.nansum(whts, axis = 1))
+            algo_thru_spec = np.nanmean(algo_thru_cutout[:,None] * whts, axis = 1) / np.nanmean (whts, axis = 1) 
             weight_str = "weights applied"
         else:
             spec = np.nansum(image_cutout, axis=1)
+            algo_thru_spec = algo_thru_cutout
             weight_str = "no weights applied"
         
         spec_header = fits.Header()
@@ -1073,6 +1079,9 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
         image.add_extension_hdu("SPEC_WAVE", data = wave, header=wave_header)
         image.add_extension_hdu("SPEC_WAVE_ERR", data = wave_err, header=wave_header)
         del(image.hdu_list["POSLOOKUP"])
+        # update algo_thru extension to match the extracted spectrum, if it exists
+        if "ALGO_THRU" in image.hdu_list:
+            image.hdu_list["ALGO_THRU"].data = algo_thru_spec
     history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
     dataset.update_after_processing_step(history_msg)
     return dataset
@@ -1656,7 +1665,7 @@ def spec_psf_subtraction(input_dataset):
         with warnings.catch_warnings():
             # catch divide by zero warnings
             warnings.filterwarnings('ignore', category=RuntimeWarning)
-            through = 1 - np.nansum(frame.data * shifted_scaled_ref, axis=1)/np.nansum(orig_frame * shifted_scaled_ref, axis=1)
+            through = 1 - np.nansum(frame.data * shifted_scaled_ref, axis=1)/np.nansum(shifted_scaled_ref * shifted_scaled_ref, axis=1)**0.5/np.nansum(frame.data*frame.data, axis=1)**0.5
         # Save algorithm throughput as an extension on the psf-subtracted Image
         frame.add_extension_hdu('ALGO_THRU', data = np.array(through), header = algothru_hdr)
 

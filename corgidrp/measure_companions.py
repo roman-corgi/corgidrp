@@ -455,7 +455,7 @@ def forward_model_psf(
     if plot_results == True:
         plot_dataset(klip_image, 'PSF-Subtracted (fm_psfsub)', cmap='plasma')
 
-    #TO DO: don't hardcode this, ideally you can use masklocx and y
+    #TO DO: don't hardcode this
     comp_keywords = [key for key in fm_psfsub[0].ext_hdr if key.startswith("SNYX")]
     for key in comp_keywords:
         klip_image = update_companion_location_in_cropped_image(klip_image, key, (512, 512), (50, 50))

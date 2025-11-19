@@ -71,8 +71,9 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
                     combined_hdus[i] = np.nanmean(np.array(combined_hdus[i]), axis=0)
                 elif collapse.lower() == "median":
                     combined_hdus[i] = np.nanmedian(np.array(combined_hdus[i]), axis=0)
-                if num_frames_scaling:
-                    combined_hdus[i] *= tot_frames
+                # nothing here makes sense to scale by number of frames
+                # if num_frames_scaling:
+                #     combined_hdus[i] *= tot_frames
             except:
                 combined_hdus[i] = combined_hdus[i][0]  # just take the first one if cannot combine
     else:
