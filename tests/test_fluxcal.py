@@ -266,8 +266,6 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=Non
     ext_hdr['BUNIT'] = 'photoelectron/s'
     ext_hdr['WV0_X'] = 0.0
     ext_hdr['WV0_Y'] = 0.0
-    ext_hdr['MASKLOCX'] = 512  # coronagraphic image
-    ext_hdr['MASKLOCY'] = 512
     pri_hdr['ROLL'] = roll
     pri_hdr['EXP_TIME'] = exp_time
     if col_cor is not None:
