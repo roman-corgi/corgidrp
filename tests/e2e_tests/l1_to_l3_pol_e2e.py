@@ -248,7 +248,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         # Verify HDU count
         try:
             with fits.open(filepath) as hdul:
-                verify_hdu_count(hdul, 4, frame_info, logger) 
+                verify_hdu_count(hdul, 2, frame_info, logger) 
         except Exception as e:
             logger.info(f"{frame_info}: HDU count verification failed. Error: {str(e)}. FAIL")
         

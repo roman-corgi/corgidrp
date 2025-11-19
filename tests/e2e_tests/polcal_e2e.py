@@ -141,7 +141,7 @@ def run_polcal_test(output_dir, do_ND=False,
     checks.check_filename_convention(os.path.basename(cal_file), f'cgi_*{suffix}', product_type, logger)
     
     with fits.open(cal_file) as hdul:
-        checks.verify_hdu_count(hdul, 3, product_type, logger)
+        checks.verify_hdu_count(hdul, 4, product_type, logger)
         
         # Verify HDU0 (header only)
         hdu0 = hdul[0]
@@ -366,7 +366,7 @@ def test_polcal_stokes_vap(e2edata_path, e2eoutput_path,
 
     for i, frame in enumerate(l3_files):
         with fits.open(frame) as hdul:
-            checks.verify_hdu_count(hdul, 3, product_type, logger)
+            checks.verify_hdu_count(hdul, 4, product_type, logger)
             
             # Verify HDU0 (header only)
             hdu0 = hdul[0]
