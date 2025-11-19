@@ -204,7 +204,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     check_filename_convention(os.path.basename(out_file), 'cgi_*_l4_.fits', "spec l4 output product", logger, data_level = "l4_")
 
     with fits.open(out_file) as hdul:        
-        verify_hdu_count(hdul, 11, "spec l4 output product", logger)
+        verify_hdu_count(hdul, 12, "spec l4 output product", logger)
         
         # Verify HDU0 (header only)
         hdu0 = hdul[0]
@@ -235,10 +235,10 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         logger.info("Wavelength-to-pixel calibration map (CGI-REQT-5464) validation:")
         
         # Check data type is float64
-        if data.dtype == np.float64:
-            logger.info(f"    Data type: {data.dtype}. Expected: float64. PASS")
+        if data.dtype.name == "float64":
+            logger.info(f"    Data type: {data.dtype.name}. Expected: float64. PASS")
         else:
-            logger.error(f"    Data type: {data.dtype}. Expected: float64. FAIL")
+            logger.error(f"    Data type: {data.dtype.name}. Expected: float64. FAIL")
         
         # Check header contains expected keywords
         expected_keywords = {'BUNIT', 'REFWAVE', 'XREFWAV', 'YREFWAV'}
@@ -301,35 +301,38 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         hdu5 = hdul[5]
         data = hdu5.data
         check_dimensions(data, (125, 125), "HDU5 Data Array: 2D array containing the 2D wavelength uncertainty distribution", logger)
-        #verify HDU6
+        # Verify HDU6 (ALGO_THRU)
         hdu6 = hdul[6]
-        check_dimensions(hdu6.data, (19,), "HDU6 Data Array: containing the 1D spectral distribution", logger)
-        if np.isnan(hdu6.data).any() is True:
-            logger.info(f"HDU6 Data Array: Contains NANs in the data. Expected: no NANs. FAIL.")
-        else:
-            logger.info(f"HDU6 Data Array: No NANs in the data. Expected: no NANs. PASS.")
-        if np.isinf(hdu6.data).any() is True:
-            logger.info(f"HDU6 Data Array: Contains INFs in the data. Expected: no INFs. FAIL.")
-        else:
-            logger.info(f"HDU6 Data Array: No INFs in the data. Expected: no INFs. PASS.")
-        # Verify HDU7 (error)
+        check_dimensions(hdu6.data, (19,), "HDU6 Data Array: containing the algorithm throughput", logger)
+        # verify HDU7 (SPEC)
         hdu7 = hdul[7]
-        err = hdu7.data
-        check_dimensions(err, (1, 19), "HDU7 Data Array: 1D array with the corresponding spectral uncertainty", logger)
-        # Verify HDU8 (dq)
+        check_dimensions(hdu7.data, (19,), "HDU7 Data Array: containing the 1D spectral distribution", logger)
+        if np.isnan(hdu7.data).any() is True:
+            logger.info(f"HDU7 Data Array: Contains NANs in the data. Expected: no NANs. FAIL.")
+        else:
+            logger.info(f"HDU7 Data Array: No NANs in the data. Expected: no NANs. PASS.")
+        if np.isinf(hdu7.data).any() is True:
+            logger.info(f"HDU7 Data Array: Contains INFs in the data. Expected: no INFs. FAIL.")
+        else:
+            logger.info(f"HDU7 Data Array: No INFs in the data. Expected: no INFs. PASS.")
+        # Verify HDU8 (error)
         hdu8 = hdul[8]
-        dq = hdu8.data
-        check_dimensions(dq, (19,), "HDU8 Data Array: 1D array with the corresponding spectral data quality", logger)
-        
-        # Verify HDU9 (wavelength)
+        err = hdu8.data
+        check_dimensions(err, (1, 19), "HDU8 Data Array: 1D array with the corresponding spectral uncertainty", logger)
+        # Verify HDU9 (dq)
         hdu9 = hdul[9]
-        wave = hdu9.data
-        check_dimensions(wave, (19,), "HDU9 Data Array: 1D array with the corresponding wavelength", logger)
+        dq = hdu9.data
+        check_dimensions(dq, (19,), "HDU9 Data Array: 1D array with the corresponding spectral data quality", logger)
         
-        # Verify HDU10 (wavelength uncertainties)
+        # Verify HDU10 (wavelength)
         hdu10 = hdul[10]
-        wave_err = hdu10.data
-        check_dimensions(wave_err, (19,), "HDU10 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
+        wave = hdu10.data
+        check_dimensions(wave, (19,), "HDU10 Data Array: 1D array with the corresponding wavelength", logger)
+        
+        # Verify HDU11 (wavelength uncertainties)
+        hdu11 = hdul[11]
+        wave_err = hdu11.data
+        check_dimensions(wave_err, (19,), "HDU11 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
         # Verify header keywords
         verify_header_keywords(hdul[1].header, {'DATALVL': 'L4', 'CFAMNAME' : '3F', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3', 'BUNIT' : 'photoelectron/s'},
                                                "spec output product", logger)
@@ -337,7 +340,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
                                                "spec output product", logger)
         verify_header_keywords(hdul[1].header, {'STARLOCX', 'STARLOCY', 'CRPIX1', 'CRPIX2', 'CTCALFN', 'FLXCALFN'},
                                                "spec output product", logger)
-        verify_header_keywords(hdul[6].header, {'BUNIT' : 'photoelectron/s/bin'},
+        verify_header_keywords(hdul[7].header, {'BUNIT' : 'photoelectron/s/bin'},
                                                "spec output product", logger)
     logger.info("")
     

@@ -233,10 +233,10 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
         logger.info("Wavelength-to-pixel calibration map (CGI-REQT-5464) validation:")
         
         # Check data type is float64
-        if data.dtype == np.float64:
-            logger.info(f"    Data type: {data.dtype}. Expected: float64. PASS")
+        if data.dtype.name == "float64":
+            logger.info(f"    Data type: {data.dtype.name}. Expected: float64. PASS")
         else:
-            logger.error(f"    Data type: {data.dtype}. Expected: float64. FAIL")
+            logger.error(f"    Data type: {data.dtype.name}. Expected: float64. FAIL")
         
         # Check header contains expected expected keywords
         expected_keywords = {'BUNIT', 'REFWAVE', 'XREFWAV', 'YREFWAV'}
