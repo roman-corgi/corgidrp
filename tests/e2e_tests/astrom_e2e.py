@@ -3,6 +3,7 @@ import os
 import shutil
 import glob
 import pytest
+import warnings
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
@@ -223,7 +224,9 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
 
     ####### Run the walker on some test_data
 
-    walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir)
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir)
     
     # Organize output files into subdirectories
     subdirs = {

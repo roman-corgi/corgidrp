@@ -18,6 +18,7 @@ from corgidrp.check import (check_filename_convention, check_dimensions,
                            verify_hdu_count, verify_header_keywords, 
                            get_latest_cal_file)
 from l1_to_l3_spec_e2e import run_l1_to_l3_e2e_test
+import warnings
 
 # first lift the L1 simulations to L3
 
@@ -430,7 +431,9 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.info("")
     
     # Run the complete end-to-end test
-    spec_out = run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path)
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=RuntimeWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        spec_out = run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path)
     
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')

@@ -11,6 +11,7 @@ import astropy.io.fits as fits
 import corgidrp
 import re
 import logging
+import warnings
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
@@ -272,7 +273,9 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     logger.info('Step 1: Processing L1 -> Pol Flat Field')
     
     # Step 1: Process L1 to L2a
-    walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
 
     logger.info('Processing pol flat field complete')
 
@@ -517,7 +520,9 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     logger.info('Step 1: Processing L1 -> L2a')
     
     # Step 1: Process L1 to Flat field cal
-    walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
     
 
     ####### Test the flat field result

@@ -3,6 +3,7 @@ import os, shutil
 import logging
 import argparse
 import glob
+import warnings
 
 import corgidrp.mocks as mocks
 import corgidrp.check as checks
@@ -110,11 +111,14 @@ def run_polcal_test(output_dir, do_ND=False,
     logger.info('='*80)
 
     logger.info('Running e2e recipe...')
-    recipe = walk_corgidrp(
-        filelist=saved_files, 
-        CPGS_XML_filepath="",
-        outputdir=output_dir
-    )
+    with warnings.catch_warnings():
+            
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        recipe = walk_corgidrp(
+            filelist=saved_files, 
+            CPGS_XML_filepath="",
+            outputdir=output_dir
+        )
     logger.info("")
 
     # ================================================================================
