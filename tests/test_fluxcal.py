@@ -276,7 +276,7 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=Non
                 err_hdr=err_hdr, dq_hdr=dq_hdr)
 
     spec_hdr = fits.Header()
-    spec_hdr['BUNIT'] = 'photoelectron/s'
+    spec_hdr['BUNIT'] = 'photoelectron/s/bin'
     img.add_extension_hdu('SPEC', data=spec_values, header=spec_hdr)
     img.add_extension_hdu('SPEC_ERR', data=spec_err, header=spec_hdr.copy())
     img.add_extension_hdu('SPEC_DQ', data=np.zeros_like(spec_values, dtype=int))

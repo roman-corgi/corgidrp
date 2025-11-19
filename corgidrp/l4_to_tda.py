@@ -205,8 +205,22 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         spec_header = frame.hdu_list['SPEC'].header
         spec_err = frame.hdu_list['SPEC_ERR'].data.astype(float, copy=True)
 
-        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s":
-            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s' before flux calibration.")
+        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s/bin":
+            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s/bin' before flux calibration.")
+
+        # Apply algorithm throughput correction (ALGO_THRU) if present (PSF-subtracted frames)
+        if 'ALGO_THRU' in frame.hdu_list:
+            algo_thru = frame.hdu_list['ALGO_THRU'].data.astype(float)
+            if algo_thru.shape != spec.shape:
+                raise ValueError(
+                    f"ALGO_THRU shape {algo_thru.shape} must match SPEC shape {spec.shape}."
+                )
+            # Divide by algorithm throughput, accounting for zeros/non-finite
+            valid = np.isfinite(algo_thru) & (algo_thru != 0)
+            spec = np.divide(spec, algo_thru, out=np.full_like(spec, np.nan), where=valid)
+            spec_err = np.divide(spec_err, algo_thru, out=np.full_like(spec_err, np.nan), where=valid)
+            spec_header['ALGOCOR'] = True
+            history_messages.append("Applied algorithm throughput correction (ALGO_THRU).")
 
         # Apply slit transmission correction
         slit_vals = slit_per_frame[idx]
@@ -318,6 +332,7 @@ def apply_core_throughput_correction(frame,
         frame.hdu_list['SPEC_ERR'].header['CTFAC'] = ct_value
     frame.hdu_list['SPEC'].header['CTCOR'] = True
     frame.hdu_list['SPEC'].header['CTFAC'] = ct_value
+    
     return ct_value, frame
 
 
