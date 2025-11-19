@@ -1264,8 +1264,8 @@ def star_pos_spec(
     # Primary diameter of Roman Space Telescope in meters
     D_m=2.4
     # Basic checks
-    if r_lamD <= 0:
-        raise ValueError('r_lamD must be positive. Usual range is 3-20.')
+    if r_lamD < 0:
+        raise ValueError('r_lamD cannot be negative. Usual range is 3-20.')
 
     dataset_cp = dataset.copy()
     for img in dataset_cp:
