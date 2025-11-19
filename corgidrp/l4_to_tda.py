@@ -205,8 +205,8 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         spec_header = frame.hdu_list['SPEC'].header
         spec_err = frame.hdu_list['SPEC_ERR'].data.astype(float, copy=True)
 
-        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s":
-            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s' before flux calibration.")
+        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s/bin":
+            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s/bin' before flux calibration.")
 
         # Apply slit transmission correction
         slit_vals = slit_per_frame[idx]
