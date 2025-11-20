@@ -5,6 +5,7 @@ import os
 import pyklip.rdi
 from pyklip.klip import rotate, collapse_data
 import scipy.ndimage
+import astropy.wcs
 from astropy.wcs import WCS
 
 import corgidrp
@@ -1121,6 +1122,7 @@ def align_2d_frames(input_dataset, center='first_frame'):
         old_stary = frame.ext_hdr['STARLOCY']
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+            warnings.filterwarnings("ignore", category=astropy.wcs.FITSFixedWarning)
             astr_hdr = WCS(frame.ext_hdr)
         new_data = derotate_arr(frame.data, 0, old_starx, old_stary, new_center=new_center, 
                                         astr_hdr=astr_hdr, is_dq=False)
