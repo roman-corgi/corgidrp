@@ -35,7 +35,7 @@ jobs:
       run: |
         mkdir e2e_test_data
         # download file
-        wget -O E2E_Test_Data.tar.xz https://zenodo.org/records/17065109/files/E2E_Test_Data.tar.xz?download=1
+        wget -O E2E_Test_Data.tar.xz https://zenodo.org/records/17654498/files/E2E_Test_Data.tar.xz?download=1
         tar -xvf E2E_Test_Data.tar.xz -C e2e_test_data
     - name: Test with pytest
       run: |
