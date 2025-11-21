@@ -865,6 +865,37 @@ def calibrate_nonlin(dataset_nl,
     nonlin = data.NonLinearityCalibration(nonlin_data,
         pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_nl)
     
+    # === BEGIN DEBUG BLOCK ===
+    print("NONLIN-DEBUG: calibrate_nonlin summary")
+    print("  Input args:")
+    print("    norm_val  =", norm_val)
+    print("    min_write =", min_write)
+    print("    max_write =", max_write)
+    print("    temp_min  =", temp_min)
+    print("    temp_max  =", temp_max)
+
+    data_arr = nonlin.data
+    print("  Output data shape:", getattr(data_arr, "shape", None))
+
+    # Find unity row using the same logic as test_nonlin_cal.py
+    ones_col = data_arr[1:, 1]
+    idx = np.where(ones_col == 1)[0]
+
+    if idx.size:
+        norm_ind = int(idx[0])
+        row = data_arr[norm_ind + 1, :]
+        print("NONLIN-DEBUG: unity row index (norm_ind+1) =", norm_ind + 1)
+        print("  unity row        =", row)
+        print("  x_at_unity       =", float(row[0]))
+        print("  unity col1       =", float(row[1]))
+        print("  unity last col   =", float(row[-1]))
+        print("  would-be assert  :", float(row[0]), "==", norm_val)
+    else:
+        print("NONLIN-DEBUG WARNING: no unity row (data_arr[1:,1] == 1) found")
+
+    print("-" * 60)
+    # === END DEBUG BLOCK ===
+    
     return nonlin
 
 def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):

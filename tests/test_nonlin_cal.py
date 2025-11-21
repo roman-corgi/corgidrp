@@ -158,6 +158,21 @@ def setup_module():
     min_write = 800
     max_write = 10000
 
+    # === BEGIN DEBUG BLOCK ===
+    print("NONLIN-DEBUG: setup_module initialized globals:")
+    print("  norm_val      =", norm_val)
+    print("  min_write     =", min_write)
+    print("  max_write     =", max_write)
+    print("  dataset_nl shape =", np.array(dataset_nl.frames[0].data).shape)
+    print("  init_nonlins_arr shape =", init_nonlins_arr.shape,
+        "sum =", float(init_nonlins_arr.sum()))
+    print("  n_cal shape   =", np.array(n_cal).shape)
+    print("  n_mean shape  =", np.array(n_mean).shape)
+    print("  rms_test      =", rms_test)
+    print("-" * 60)
+    # === END DEBUG BLOCK ===
+
+
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
 
@@ -180,6 +195,17 @@ def test_expected_results_nom_sub():
     rms2 = np.sqrt(np.mean(diffs1**2))
     rms3 = np.sqrt(np.mean(diffs2**2))
     rms4 = np.sqrt(np.mean(diffs3**2))
+
+    # === BEGIN DEBUG BLOCK ===
+    print("NONLIN-DEBUG: RMS CHECKS")
+    print("  rms_test =", rms_test)
+    print("  rms1 =", float(rms1))
+    print("  rms2 =", float(rms2))
+    print("  rms3 =", float(rms3))
+    print("  rms4 =", float(rms4))
+    print("-" * 60)
+    # === END DEBUG BLOCK ===
+
 
     # check that the four rms values are below some value (real data take
     # several frames and the value in IIT was 0.0035 for all of them)
@@ -204,6 +230,22 @@ def test_expected_results_nom_sub():
     # Accept norm_val if in computed mean range, or min_write/max_write if outside range
     assert actual_val in [norm_val, min_write, max_write], \
         f"Expected norm_val={norm_val}, min_write={min_write}, or max_write={max_write}, but got {actual_val}"
+    
+    # === BEGIN DEBUG BLOCK ===
+    row = nonlin_out.data[norm_ind + 1, :]
+
+    print("NONLIN-DEBUG: UNITY ROW CHECK")
+    print("  actual_val =", actual_val)
+    print("  norm_ind =", norm_ind)
+    print("  row at norm_ind+1 =", row)
+    print("  x_at_unity =", float(row[0]))
+    print("  unity col1 =", float(row[1]))
+    print("  unity last col =", float(row[-1]))
+    print("  norm_val expected =", norm_val)
+    print("  would-be assert:", float(row[0]), "==", norm_val)
+    print("-" * 60)
+    # === END DEBUG BLOCK ===
+
 
     # Test filename follows convention (as of R3.0.2)
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
