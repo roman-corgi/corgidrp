@@ -866,6 +866,11 @@ def calibrate_nonlin(dataset_nl,
         pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_nl)
     
     # === BEGIN DEBUG BLOCK ===
+    print("NONLIN-DEBUG: header DATETIME =", exthd.get('DATETIME'))
+    print("NONLIN-DEBUG: header TEMP     =", exthd.get('TEMP'))
+    print("NONLIN-DEBUG: header GAIN     =", exthd.get('GAIN'))
+
+
     print("NONLIN-DEBUG: calibrate_nonlin summary")
     print("  Input args:")
     print("    norm_val  =", norm_val)
