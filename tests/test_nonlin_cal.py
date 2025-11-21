@@ -244,6 +244,8 @@ def test_expected_results_nom_sub():
     print("  norm_val expected =", norm_val)
     print("  would-be assert:", float(row[0]), "==", norm_val)
     print("-" * 60)
+
+    assert nonlin_out.data[norm_ind+1,0] == norm_val
     # === END DEBUG BLOCK ===
 
 
