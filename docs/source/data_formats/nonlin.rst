@@ -1,6 +1,6 @@
 .. _nonlinearitycalibration-label:
 
-NonLinearityCalibration Data Product
+Non-Linearity Calibration Product
 ========================================
 
 

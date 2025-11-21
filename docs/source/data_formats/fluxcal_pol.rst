@@ -1,6 +1,6 @@
 .. _abf-label:
 
-Abf Data Product
+Flux (Polarimetry) Calibration Product
 ========================================
 
 

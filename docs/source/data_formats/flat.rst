@@ -1,6 +1,6 @@
 .. _flatfield-label:
 
-FlatField Data Product
+Flat Field Calibration Product
 ========================================
 
 

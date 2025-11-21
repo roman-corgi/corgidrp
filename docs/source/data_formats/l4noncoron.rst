@@ -1,6 +1,6 @@
 .. _l4-noncoron-label:
 
-L4-Noncoron Data Product
+L4 Data Product (Non-coronagraphic)
 ========================================
 
 

@@ -1,6 +1,6 @@
 .. _trapcalibration-label:
 
-TrapCalibration Data Product
+Trap Pumping Calibration Product
 ========================================
 
 

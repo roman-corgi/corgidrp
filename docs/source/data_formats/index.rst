@@ -30,6 +30,7 @@ Data Formats
    dark.rst
    dpm_cal.rst
    flat.rst
+   polflt.rst
    fluxcal.rst
    fluxcal_pol.rst
    kgain.rst
@@ -39,5 +40,4 @@ Data Formats
    ndm_cal.rst
    noisemaps.rst
    nonlin.rst
-   polflt.rst
    tpump.rst

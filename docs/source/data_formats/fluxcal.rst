@@ -1,6 +1,6 @@
 .. _fluxcalfactor-label:
 
-FluxcalFactor Data Product
+Flux (Imaging) Calibration Product
 ========================================
 
 

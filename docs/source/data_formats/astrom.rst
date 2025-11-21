@@ -1,6 +1,6 @@
 .. _astrometriccalibration-label:
 
-AstrometricCalibration Data Product
+Astrometric Calibration Product
 ========================================
 
 
