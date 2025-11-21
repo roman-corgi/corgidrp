@@ -1,6 +1,6 @@
 .. _corethroughputcalibration-label:
 
-CoreThroughputCalibration Data Product
+Core Throughput Calibration Product
 ========================================
 
 

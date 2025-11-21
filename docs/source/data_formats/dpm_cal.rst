@@ -1,6 +1,6 @@
 .. _dpm-label:
 
-Dpm Data Product
+Dispersion Model Calibration Product
 ========================================
 
 

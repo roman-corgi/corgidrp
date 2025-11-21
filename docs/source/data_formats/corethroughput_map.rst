@@ -1,6 +1,6 @@
 .. _corethroughputmap-label:
 
-CoreThroughputMap Data Product
+Core Throughput Map Calibration Product
 ========================================
 
 

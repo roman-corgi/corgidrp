@@ -1,6 +1,6 @@
 .. _dark-label:
 
-Dark Data Product
+Dark Calibration Product
 ========================================
 
 
