@@ -1,6 +1,6 @@
 .. _kgain-label:
 
-KGain Data Product
+KGain Calibration Product
 ========================================
 
 

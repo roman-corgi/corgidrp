@@ -1202,7 +1202,9 @@ def test_compute_QphiUPhi():
     qu_img.ext_hdr["STARLOCX"] += 5.0
     qu_img.ext_hdr["STARLOCY"] += 5.0
 
-    mocks.rename_files_to_cgi_format(list_of_fits=[qu_img], output_dir=output_dir, level_suffix="l4")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        mocks.rename_files_to_cgi_format(list_of_fits=[qu_img], output_dir=output_dir, level_suffix="l4")
 
     ### Run the compute_QphiUphi function
     qu_phi = l4_to_tda.compute_QphiUphi(qu_img)

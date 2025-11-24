@@ -1,6 +1,6 @@
 .. _l2b-photoncounting-label:
 
-L2b-PhotonCounting Data Product
+L2b Data Product (Photon Counting)
 ========================================
 
 

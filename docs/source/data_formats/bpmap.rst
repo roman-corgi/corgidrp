@@ -1,6 +1,6 @@
 .. _badpixelmap-label:
 
-BadPixelMap Data Product
+Bad Pixel Map Calibration Product
 ========================================
 
 

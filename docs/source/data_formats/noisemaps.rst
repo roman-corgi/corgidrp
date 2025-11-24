@@ -1,6 +1,6 @@
 .. _detectornoisemaps-label:
 
-DetectorNoiseMaps Data Product
+Detector Noise Maps Calibration Product
 ========================================
 
 
