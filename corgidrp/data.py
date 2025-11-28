@@ -1362,7 +1362,7 @@ class KGain(Image):
     @property
     def value(self):
         return self._kgain
-    date_valid=None
+    
     @property
     def error(self):
         return self._kgain_error
