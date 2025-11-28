@@ -555,12 +555,13 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
     return pfit_pos_vs_wavlen, cov_pos_vs_wavlen, pfit_wavlen_vs_pos, cov_wavlen_vs_pos
 
 
-def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitch_um = 13.0):
+def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_file = None, pixel_pitch_um = 13.0):
     """ 
     Generate a DispersionModel of the spectral dispersion profile of the CGI ZOD prism.
 
     Args:
-       centroid_psf (SpectroscopyCentroidPsf): instance of SpectroscopyCentroidPsf calibration class
+       centroid_psf (data.SpectroscopyCentroidPsf): instance of SpectroscopyCentroidPsf calibration class
+       spec_filter_offset (data.SpecFilterOffset): instance of SpecFilterOffset calibration class
        band_center_file (str): file name of the band centers, optional, default is in data/spectroscopy
        pixel_pitch_um (float): EXCAM pixel pitch in micron, default 13 micron
     
@@ -582,11 +583,11 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
         ref_wavlen = 730.
 
     ##bandpass_frac = fwhm/cen_wave, needed for the wavelength calibration
-    band_list = read_cent_wave(ref_cfam, filter_file = band_center_file)
-    band_center = band_list[0]
-    fwhm = band_list[1]
-    xoff_band = band_list[2]
-    yoff_band = band_list[3]
+    band_center, fwhm, _, _ = read_cent_wave(ref_cfam, filter_file = band_center_file)
+    #needed to consider the position offsets between different filters
+    offset_band = spec_filter_offset.get_offsets(ref_cfam)
+    xoff_band = offset_band[0]
+    yoff_band = offset_band[1]
     bandpass_frac = fwhm/band_center
     if 'FILTERS' not in centroid_psf.ext_hdr:
         raise AttributeError("there should be a FILTERS header keyword in the filtersweep SpectroscopyCentroidPsf")
@@ -603,8 +604,9 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
         else:
             cen_wave = read_cent_wave(band_str, filter_file = band_center_file)
             center_wavel.append(cen_wave[0])
-            xoff.append(cen_wave[2] - xoff_band)
-            yoff.append(cen_wave[3] - yoff_band)
+            offset_sub = spec_filter_offset.get_offsets(band_str)
+            xoff.append(offset_sub[0] - xoff_band)
+            yoff.append(offset_sub[1] - yoff_band)
     if len(center_wavel) < 4:
         raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(center_wavel)))
     if len(center_wavel) != len(centroid_psf.xfit) -1:

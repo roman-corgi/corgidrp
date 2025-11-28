@@ -5,7 +5,7 @@ import logging
 import warnings
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
+from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset
 import corgidrp.spec as steps
 from corgidrp.mocks import (create_default_L2b_headers,
     create_default_L3_headers, get_formatted_filename)
@@ -330,7 +330,8 @@ def test_calibrate_dispersion_model():
         dataset=dataset
     )
     
-    disp_model = steps.calibrate_dispersion_model(psf_centroid)
+    spec_filter_offset = SpecFilterOffset({})
+    disp_model = steps.calibrate_dispersion_model(psf_centroid, spec_filter_offset)
     disp_model.save(output_dir, disp_model.filename)
     assert disp_model.filename.endswith("dpm_cal.fits")
     assert disp_model.clocking_angle == pytest.approx(psf_header["PRISMANG"], abs = 2 * disp_model.clocking_angle_uncertainty) 
@@ -477,8 +478,9 @@ def test_determine_zeropoint():
     (xoff_bb, yoff_bb) = (steps.read_cent_wave('3')[2], steps.read_cent_wave('3')[3])
 
     #test it with optional initial guess and with one satspot frame
+    spec_filter_offset = SpecFilterOffset({})
     input_dataset = Dataset(psf_images)
-    dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, xcent_guess = 40., ycent_guess = 32.)
+    dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset, xcent_guess = 40., ycent_guess = 32.)
 
     assert len(dataset_guess) < len(input_dataset)
     for frame in dataset_guess:
@@ -519,12 +521,12 @@ def test_determine_zeropoint():
 
     #test it as non-coronagraphic observation of only psf narrowband, so no science frames, a print statement should be raised
     input_dataset2 = Dataset(psf_images)
-    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2)
+    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset)
     assert len(dataset) > 0
     
     #only 1 fake science dataset frame
     input_dataset2.frames[0].ext_hdr['CFAMNAME'] = '3'
-    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2)
+    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset)
     assert len(dataset) == 1
     for frame in dataset:
         assert frame.pri_hdr["SATSPOTS"] == 0
@@ -552,7 +554,7 @@ def test_determine_zeropoint():
     for frame in noise_dataset:
         frame.data = np.random.poisson(np.abs(frame.data)/3) + \
         np.random.normal(loc=0, scale=read_noise, size = frame.data.shape)
-    noisci_dataset = l3_to_l4.determine_wave_zeropoint(noise_dataset)
+    noisci_dataset = l3_to_l4.determine_wave_zeropoint(noise_dataset, spec_filter_offset)
     for i in range(len(noisci_dataset)):
         x0_noi = noisci_dataset[i].ext_hdr["WV0_X"]
         y0_noi = noisci_dataset[i].ext_hdr["WV0_Y"]
@@ -1393,6 +1395,26 @@ def test_star_pos():
             assert ext_hdr['WV0_X'] - x_in == pytest.approx(img.ext_hdr['STARLOCX'], abs=1e-10), 'The X position of the star is incorrect.'
             assert ext_hdr['WV0_Y'] - y_in == pytest.approx(img.ext_hdr['STARLOCY'], abs=1e-10), 'The Y position of the star is incorrect.'
        
+def test_filter_offset():
+    """
+    test the SpecFilterOffset calibration product
+    """
+    dict = {"2a": [0.5, 0.2]}
+    offset = SpecFilterOffset(dict)
+    assert offset.offsets["2A"][0] == 0.5
+    assert offset.offsets["2A"][1] == 0.2
+    assert offset.offsets["3"] == offset.default_offsets["3"]
+    assert offset.get_offsets("2a") == offset.offsets["2A"]
+    xoff, yoff = offset.get_offsets("2A")
+    assert xoff == 0.5
+    assert yoff == 0.2
+    offset.save(output_dir, "SpecFilterOffset_test.fits")
+    load_offset = SpecFilterOffset(os.path.join(output_dir, "SpecFilterOffset_test.fits"))
+    assert load_offset.offsets == offset.offsets
+    assert load_offset.get_offsets("2A") == [0.5, 0.2]
+    offset2 = SpecFilterOffset({})
+    assert offset2.offsets == offset2.default_offsets
+ 
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
     test_spec_psf_subtraction()
@@ -1407,3 +1429,4 @@ if __name__ == "__main__":
     test_extract_spec()
     test_slit_trans()
     test_star_pos()
+    test_filter_offset()
