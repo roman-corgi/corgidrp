@@ -177,7 +177,7 @@ def autogen_recipe(filelist, outputdir, template=None):
         dataset0 = data.Dataset([filelist[0]])
         first_frame = dataset0[0]
         # don't need the actual data, especially if it would take up a lot of RAM just to hold it in cache
-        dataset = data.Dataset(filelist, no_data=True)
+        dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
 
     # if user didn't pass in template
     if template is None:

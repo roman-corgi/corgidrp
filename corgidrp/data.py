@@ -32,7 +32,10 @@ class Dataset():
         """
         Args:
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
-            no_data (bool): If True, only the header information is loaded into the dataset for the frames' data.  Defaults to False.
+            no_data (bool): If True, only the header information is loaded into the dataset for the frames' data.  However, if the input is at the L1 level, the err and dq for 
+                each frame will have the default loaded in (arrays of zeros).  Defaults to False.
+            no_err (bool): If True, no err arrays are loaded in.  This overrides the condition concerning err in the no_data description above.  Defaults to False.
+            no_dq (bool): If True, no dq arrays are loaded in.  This overrides the condition concerning dq in the no_data description above.  Defaults to False.
         """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
@@ -50,13 +53,14 @@ class Dataset():
                 fr = Image(filepath)
                 if no_data:
                     fr.data = None
-                    if fr.ext_hdr['DATALVL'].upper() != 'L1':
-                        #in this case, the frames are L1 and don't yet 
-                        # have err and dq, so don't set those 
-                        # to None so that each frame is given 
-                        # the default starting err and dq for further 
+                    if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_err:
+                        #in this case, the frames are L1 and don't yet
+                        # have err and dq, so don't set those
+                        # to None so that each frame is given
+                        # the default starting err and dq for further
                         # pipeline processes
                         fr.err = None
+                    if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_dq:
                         fr.dq = None
                 self.frames.append(fr)
         else:
@@ -518,6 +522,9 @@ class Image():
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            if os.path.exists(self.filepath):
+                fd = os.open(self.filepath, os.O_RDWR)
+                os.close(fd)
             hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
@@ -1410,6 +1417,14 @@ class DetectorNoiseMaps(Image):
         self.FPN_err = self.err[0][0]
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
+        if not hasattr(self, 'FPN_im_mean'):
+            self.FPN_im_mean = None
+        if not hasattr(self, 'CIC_im_mean'):
+            self.CIC_im_mean = None
+        if not hasattr(self, 'DC_im_mean'):
+            self.DC_im_mean = None
+        if not hasattr(self, 'FPN_im_median'):
+            self.FPN_im_median = None
 
 class DetectorParams(Image):
     """

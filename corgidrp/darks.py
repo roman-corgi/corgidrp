@@ -858,8 +858,9 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     # now catch any elements that were negative for C and D:
     DC_map[DC_map < 0] = 0
     CIC_map[CIC_map < 0] = 0
-    #mean taken before zeroing out the negatives for C and D
+    #mean taken before zeroing out the negatives for C and D for better statistical representation of mean value)
     FPN_image_mean = np.mean(FPN_image_map)
+    FPN_image_median = np.median(FPN_image_map)
     CIC_image_mean = np.mean(CIC_image_map)
     DC_image_mean = np.mean(DC_image_map)
     CIC_image_map[CIC_image_map < 0] = 0
@@ -898,7 +899,12 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
     noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
-    
+    noise_maps.FPN_im_mean = FPN_image_mean
+    noise_maps.CIC_im_mean = CIC_image_mean
+    noise_maps.DC_im_mean = DC_image_mean
+    noise_maps.FPN_im_median = FPN_image_median
+    noise_maps.ext_hdr['HISTORY'] = 'Detector noise maps created with the following sets of (exposure time (in s), EM gain, and number of frames):  {0}'.format(list(zip(exptime_arr, EMgain_arr, mean_num_good_fr)))
+
     # uncomment for RAM check
     # mem = process.memory_info()
     # # peak_wset is only available on Windows; fall back to rss on other platforms
