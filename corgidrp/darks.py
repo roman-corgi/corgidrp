@@ -903,7 +903,10 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     noise_maps.CIC_im_mean = CIC_image_mean
     noise_maps.DC_im_mean = DC_image_mean
     noise_maps.FPN_im_median = FPN_image_median
-    noise_maps.ext_hdr['HISTORY'] = 'Detector noise maps created with the following sets of (exposure time (in s), EM gain, and number of frames):  {0}'.format(list(zip(exptime_arr, EMgain_arr, mean_num_good_fr)))
+    vals_list=[]
+    for w1,w2,w3 in zip(exptime_arr, EMgain_arr, mean_num_good_fr):
+        vals_list.append([float(w1),float(w2),float(w3)])
+    noise_maps.ext_hdr['HISTORY'] = 'Detector noise maps created with the following sets of (exposure time (in s), EM gain, and number of frames):  {0}'.format(vals_list)
 
     # uncomment for RAM check
     # mem = process.memory_info()
