@@ -1306,13 +1306,15 @@ def star_pos_spec(
 def spec_fluxcal(dataset_or_image, calspec_file = None):
     """
     generates the SpecFluxCal calibration product for one band,
-    calculates the spectral flux calibration factors.
+    calculates the spectral flux calibration or spectro-photometric calibration, that describes the
+    sensitivity of the spectrometer, i.e. how an input power is
+    converted into how many photoelectrons per wavelength, with the final unit erg/(s * cm^2 * AA)/(photoelectron/s/bin).
     The input is expected to be the dataset of an extracted spectrum of a 
-    CALSPEC photometric standard star.
+    CALSPEC photometric standard star with units photoelectron/s/bin.
     
     The band flux values of the input calspec data files are divided by 
     the spectral extracted photoelectrons/s/bin interpolated on the available wavelengths.
-    Propagates also errors to spectral flux calibration file.
+    Propagates also errors to the spectral flux calibration file.
     
     Parameters:
         dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): Image(s) to compute 
@@ -1351,6 +1353,7 @@ def spec_fluxcal(dataset_or_image, calspec_file = None):
         calspec_filepath, calspec_filename = get_calspec_file(star_name)
     
     flux_ref = read_cal_spec(calspec_filepath, wave)
+    #is this correct, do we need to consider the filter transmission at all?
     flux = flux_ref * filter_trans
     if len(dataset) == 1:
         spec = image.hdu_list["SPEC"].data

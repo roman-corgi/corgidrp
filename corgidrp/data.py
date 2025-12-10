@@ -1780,8 +1780,9 @@ class FluxcalFactor(Image):
 
 class SpecFluxCal(Image):
     """
-    Class containing the wavelength dependent absolute spectral flux calibration (and corresponding error) in unit 
-    erg/(s * cm^2 * AA)/photo-electrons/s/bin for each broad band. 
+    Class containing the wavelength dependent absolute spectral flux calibration (spectro-photometric calibration) 
+    and corresponding error in unit 
+    erg/(s * cm^2 * AA)/photo-electrons/s/bin (spectral sensitivity) for each broad band. 
 
     To create a new instance of SpecFluxCal, you need to pass the 2d array (2, N) of wavelength and flux calibration and the 
     corresponding error array:
