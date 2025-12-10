@@ -1796,14 +1796,15 @@ class SpecFluxCal(Image):
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
         err_hdr (astropy.io.fits.Header): the err extension header (required only if raw data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this SpecFluxCal file (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this SpecFluxCal file 
+        (required only if raw 2D data is passed in)
     
     Attributes:
         band (str): band name for which this calibration is valid
         wavelength (np.array): 1d array of wavelengths
         specflux (np.array): 1d array of the flux calibration
-        specflux_err (np.array): the error of the spectral flux calibration
-        specflux_wave_err (np.array): the error of the wavelengths
+        specflux_err (np.array): 1d array of the error of the spectral flux calibration
+        wave_err (np.array): 1d array of the error of the wavelengths
         specflux_dq (np.array): data quality of spectral flux calibration
     """
     def __init__(self, data_or_filepath, err = None, dq = None, pri_hdr=None, ext_hdr=None, err_hdr = None, input_dataset = None):
