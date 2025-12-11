@@ -410,6 +410,17 @@ def test_l3_to_l4(e2eoutput_path):
     expected_separations_arcsec = expected_separations_lambda_over_D *  lambda_c / roman_D * 206265
     expected_separations_pixels = expected_separations_arcsec / pixel_scale * 1000 
 
+    import warnings
+    from astropy.wcs import WCS, FITSFixedWarning
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=FITSFixedWarning)
+        wcs_after = WCS(psf_subtracted_image.ext_hdr)
+    cd12 = wcs_after.wcs.cd[0,1]
+    cd22 = wcs_after.wcs.cd[1,1]
+
+    angle = np.arctan2(-cd12, cd22)
+    assert angle == pytest.approx(0.0, abs=1e-6), "WCS CD matrix not properly rotated to North-up East-left."
+
     #Check that the detected sources are within 1 pixel of the expected separations
     #Assumes that only the correct sources were detected. 
     for i,source_distance in enumerate(expected_separations_pixels):
