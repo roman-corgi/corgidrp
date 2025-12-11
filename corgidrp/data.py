@@ -1801,6 +1801,7 @@ class SpecFluxCal(Image):
     
     Attributes:
         band (str): band name for which this calibration is valid
+        nd_filter (str): Neutral Density filter name, used if standard is bright
         wavelength (np.array): 1d array of wavelengths
         specflux (np.array): 1d array of the flux calibration
         specflux_err (np.array): 1d array of the error of the spectral flux calibration
@@ -1832,6 +1833,13 @@ class SpecFluxCal(Image):
             self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
             
         # make some attributes to be easier to use
+        self.nd_filter = "ND0" #no neutral density filter in beam, TBC
+        if 'FPAMNAME' in self.ext_hdr:
+            name = self.ext_hdr['FPAMNAME']
+            if name.startswith("ND"):
+                self.nd_filter = name
+        else:
+            raise ValueError('The FluxcalFactor calibration has no keyword FPAMNAME in the header')
         self.wavelength = self.data[0,:]
         self.specflux = self.data[1,:]
         self.specflux_err =  self.err[0,1,:]

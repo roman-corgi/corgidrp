@@ -1354,7 +1354,7 @@ def spec_fluxcal(dataset_or_image, calspec_file = None):
     
     flux_ref = read_cal_spec(calspec_filepath, wave)
     #is this correct, do we need to consider the filter transmission at all?
-    flux = flux_ref * filter_trans
+    flux = flux_ref #* filter_trans
     if len(dataset) == 1:
         spec = image.hdu_list["SPEC"].data
         spec_dq = image.hdu_list["SPEC_DQ"].data
