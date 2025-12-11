@@ -76,7 +76,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     if not os.path.exists(astrom_input_dir):
         os.makedirs(astrom_input_dir)
     
-    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
+    #Set rotation to 0 for this test. 
+    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None,rotation=0)
     mock_dataset.save(filedir=astrom_input_dir)
 
     # perform the astrometric calibration
@@ -435,9 +436,9 @@ if __name__ == "__main__":
     # workflow.
 
 
-    outputdir = thisfile_dir
+    outputdir = "/Users/maxmb/Data/corgi/e2e_output/"
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = '/Users/sbogat/.corgidrp'
+    e2edata_dir = '/Users/maxmb/Data/corgi/E2E_Test_Data/'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
