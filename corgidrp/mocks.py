@@ -3885,9 +3885,27 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             wcs_header = generate_wcs(roll_angles[i], 
                                       [psfcentx,psfcenty],
                                       platescale=0.0218).to_header()
+            #Add back in the CD keywords
+            wcs_header['CD1_1'] = wcs_header['CDELT1'] * wcs_header['PC1_1']
+            if 'PC1_2' not in wcs_header:
+                wcs_header['PC1_2'] = 0.0
+            if 'PC2_1' not in wcs_header:
+                wcs_header['PC2_1'] = 0.0
+            wcs_header['CD1_2'] = wcs_header['CDELT1'] * wcs_header['PC1_2']
+            wcs_header['CD2_1'] = wcs_header['CDELT2'] * wcs_header['PC2_1']
+            wcs_header['CD2_2'] = wcs_header['CDELT2'] * wcs_header['PC2_2']
+
+            wcs_header['PC1_1'] = wcs_header['CD1_1']
+            wcs_header['PC1_2'] = wcs_header['CD1_2']
+            wcs_header['PC2_1'] = wcs_header['CD2_1']
+            wcs_header['PC2_2'] = wcs_header['CD2_2']
+            wcs_header['CDELT1'] = 1.0
+            wcs_header['CDELT2'] = 1.0
             
             # wcs_header._cards = wcs_header._cards[-1]
-        exthdr.extend(wcs_header)
+
+        for key, value in wcs_header.items():
+            exthdr[key] = value
 
         # Make a corgiDRP Image frame
         if len(data_shape)==3:
