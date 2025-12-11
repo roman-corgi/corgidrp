@@ -11,9 +11,9 @@ FITS HDU Structure
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+
-| 0     | Primary          | nan      | 0                    |
+| 0     | Primary          | None     | 0                    |
 +-------+------------------+----------+----------------------+
-| 1     | Image            | (numpy.record, [('clocking_angle', '>f8'), ('clocking_angle_uncertainty', '>f8'), ('pos_vs_wavlen_polycoeff', '>f8', (4,)), ('pos_vs_wavlen_cov', '>f8', (4, 4)), ('wavlen_vs_pos_polycoeff', '>f8', (4,)), ('wavlen_vs_pos_cov', '>f8', (4, 4))]) | (1,)                 |
+| 1     | Image            | (array)  | (1,)                 |
 +-------+------------------+----------+----------------------+
 
 
