@@ -5520,3 +5520,46 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
         frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_POL_SETUP"
 
     return mock_dataset
+
+def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=None, col_cor=None):
+    """Create a mock L4 file with 1-D spectroscopy extensions.
+
+    Args:
+        spec_values (ndarray): flux values (photoelectron/s) for `SPEC`.
+        spec_err (ndarray): uncertainty array matching `SPEC` shape.
+        spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
+        roll (str, optional): telescope roll angle
+        exp_time (float, optional): exposure time in seconds
+        col_cor (float, optional): color-correction factor to record.
+
+    Returns:
+        corgidrp.data.Image: image with `SPEC`, `SPEC_ERR`, `SPEC_DQ`,
+        `SPEC_WAVE`, and `SPEC_WAVE_ERR` extensions populated.
+    """
+    data = np.zeros((10, 10))
+    err = np.ones((1, 10, 10))
+    dq = np.zeros((10, 10), dtype=int)
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = create_default_L4_headers()
+    ext_hdr['BUNIT'] = 'photoelectron/s'
+    ext_hdr['WV0_X'] = 0.0
+    ext_hdr['WV0_Y'] = 0.0
+    ext_hdr["STARLOCX"] = 0.0
+    ext_hdr["STARLOCY"] = 0.0
+    pri_hdr['ROLL'] = roll
+    pri_hdr['EXPTIME'] = exp_time
+    if col_cor is not None:
+        ext_hdr['COL_COR'] = col_cor
+    img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
+                err_hdr=err_hdr, dq_hdr=dq_hdr)
+
+    spec_hdr = fits.Header()
+    spec_hdr['BUNIT'] = 'photoelectron/s/bin'
+    img.add_extension_hdu('SPEC', data=spec_values, header=spec_hdr)
+    img.add_extension_hdu('SPEC_ERR', data=spec_err, header=spec_hdr.copy())
+    img.add_extension_hdu('SPEC_DQ', data=np.zeros_like(spec_values, dtype=int))
+
+    wave_hdr = fits.Header()
+    wave_hdr['BUNIT'] = 'nm'
+    img.add_extension_hdu('SPEC_WAVE', data=spec_wave, header=wave_hdr)
+    img.add_extension_hdu('SPEC_WAVE_ERR', data=np.zeros_like(spec_wave), header=wave_hdr.copy())
+    return img

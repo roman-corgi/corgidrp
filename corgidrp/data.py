@@ -1773,8 +1773,109 @@ class FluxcalFactor(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            # slight hack for old mocks not in the stardard filename format
+            # slight hack for old mocks not in the standard filename format
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.pri_hdr['FILENAME'] = self.filename
+
+class SpecFluxCal(Image):
+    """
+    Class containing the wavelength dependent absolute spectral flux calibration (spectro-photometric calibration) 
+    and corresponding error in unit 
+    erg/(s * cm^2 * AA)/photo-electrons/s/bin (spectral sensitivity) for each broad band. 
+
+    To create a new instance of SpecFluxCal, you need to pass the 2d array (2, N) of wavelength and flux calibration and the 
+    corresponding error array:
+
+    Args:
+        data_or_filepath (str or np.array): either a filepath string corresponding to an 
+                                        existing SpecFluxCal file saved to disk or the data and error float values of the
+                                        spectral flux cal factors vs. wavelength 
+        err (np.array): 2d array of uncertainties of wavelength and spectral flux calibration 
+        dq (np.array): 2d array of data quality 
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+        err_hdr (astropy.io.fits.Header): the err extension header (required only if raw data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this SpecFluxCal file 
+        (required only if raw 2D data is passed in)
+    
+    Attributes:
+        band (str): band name for which this calibration is valid
+        nd_filter (str): Neutral Density filter name, used if standard is bright
+        wavelength (np.array): 1d array of wavelengths
+        specflux (np.array): 1d array of the flux calibration
+        specflux_err (np.array): 1d array of the error of the spectral flux calibration
+        wave_err (np.array): 1d array of the error of the wavelengths
+        specflux_dq (np.array): data quality of spectral flux calibration
+    """
+    def __init__(self, data_or_filepath, err = None, dq = None, pri_hdr=None, ext_hdr=None, err_hdr = None, input_dataset = None):
+       # run the image class contructor
+        super().__init__(data_or_filepath, err=err, dq = dq, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
+        # if filepath passed in, just load in from disk as usual
+        # File format checks
+        if self.data.shape[0] != 2:
+            raise ValueError('The spectral flux calibration data should be a 2D array')
+        
+        if 'CFAMNAME' in self.ext_hdr:
+            self.band = self.ext_hdr['CFAMNAME']
+        else:
+            raise ValueError('The SpecFluxCal calibration has no keyword CFAMNAME in the header')
+
+        if isinstance(data_or_filepath, str):
+            # double check that this is actually a FluxcalFactor file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr:
+                raise ValueError("File that was loaded was not a SpecFluxCal file.")
+            if self.ext_hdr['DATATYPE'] != 'SpecFluxCal':
+                raise ValueError("File that was loaded was not a SpecFluxCal file.")
+        else:
+            self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+            
+        # make some attributes to be easier to use
+        self.nd_filter = "ND0" #no neutral density filter in beam, TBC
+        if 'FPAMNAME' in self.ext_hdr:
+            name = self.ext_hdr['FPAMNAME']
+            if name.startswith("ND"):
+                self.nd_filter = name
+        else:
+            raise ValueError('The FluxcalFactor calibration has no keyword FPAMNAME in the header')
+        self.wavelength = self.data[0,:]
+        self.specflux = self.data[1,:]
+        self.specflux_err =  self.err[0,1,:]
+        self.wave_err = self.err[0,0,:]
+        self.specflux_dq = self.dq[0]
+
+        # if this is a new SpecFluxCal file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new SpecFluxCal file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                if 'DRPNFILE' not in ext_hdr:
+                    # error check. this is required in this case
+                    raise ValueError("This appears to be a new SpecFluxCal. The dataset of input files needs to be passed \
+                                     in to the input_dataset keyword to record history of this SpecFluxCal file.")
+                else:
+                    pass
+            else:
+                # log all the data that went into making this calibration file
+                self._record_parent_filenames(input_dataset)
+                # give it a default filename using the first input file as the base
+                # strip off everything starting at .fits
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+  
+            self.ext_hdr['DATATYPE'] = 'SpecFluxCal' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s/bin)'
+            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s/bin)'
+            # add to history
+            self.ext_hdr['HISTORY'] = "Spectral flux calibration file created"
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+            # use the start date for the filename by default
+            self.filedir = "."
+            # slight hack for old mocks not in the standard filename format
+            self.filename = "{0}_spfl_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
@@ -3097,9 +3198,9 @@ datatypes = { "Image" : Image,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel,
               "LineSpread": LineSpread,
-                "MuellerMatrix": MuellerMatrix,
-                "NDMuellerMatrix": NDMuellerMatrix,
-              }
+              "MuellerMatrix": MuellerMatrix,
+              "NDMuellerMatrix": NDMuellerMatrix,
+              "SpecFluxCal": SpecFluxCal }
 
 def autoload(filepath):
     """
