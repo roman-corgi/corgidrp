@@ -457,9 +457,12 @@ def test_cal_file():
     cal_file_side_0 = ct_cal_file.data.shape[1]
     cal_file_side_1 = ct_cal_file.data.shape[2]
     for i_psf, psf in enumerate(psf_cube_in):
-        loc_00 = np.argwhere(psf == ct_cal_file.data[i_psf][0][0])[0]
-        assert np.all(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
-            loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal_file.data[i_psf])
+        # Use isclose for comparison to handle float32 precision differences
+        target_value = ct_cal_file.data[i_psf][0][0]
+        matches = np.isclose(psf, target_value, rtol=1e-5, atol=1e-8)
+        loc_00 = np.argwhere(matches)[0]
+        assert np.allclose(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
+            loc_00[1]:loc_00[1]+cal_file_side_1], ct_cal_file.data[i_psf], rtol=1e-5, atol=1e-8)
 
     # Verify that the PSF images are best centered at each set of coordinates.
     test_result_psf_max_row = []  # intialize
