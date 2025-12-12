@@ -52,13 +52,13 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
-    # make output directory if needed
+    # make output directory if needed (clean up old files first)
     flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e/flat_neptune_output")
-    if not os.path.exists(flat_outputdir):
-        os.makedirs(flat_outputdir)
+    if os.path.exists(flat_outputdir):
+        shutil.rmtree(flat_outputdir)
+    os.makedirs(flat_outputdir)
     flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
-    if not os.path.exists(flat_mock_inputdir):
-        os.makedirs(flat_mock_inputdir)    
+    os.makedirs(flat_mock_inputdir)    
     calibrations_dir = os.path.join(flat_outputdir, "calibrations")
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)

@@ -410,12 +410,13 @@ def test_cal_file():
         raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')
     # Load the calibration file to check it has the same data contents
     ct_cal_file_load = CoreThroughputCalibration(ct_cal_filepath)
-    assert np.all(ct_cal_file_load.data == ct_cal_file_in.data)
-    assert np.all(ct_cal_file_load.err == ct_cal_file_in.err)
-    assert np.all(ct_cal_file_load.dq == ct_cal_file_in.dq)
-    assert np.all(ct_cal_file_load.ct_excam == ct_cal_file_in.ct_excam)
-    assert np.all(ct_cal_file_load.ct_fpam == ct_cal_file_in.ct_fpam)
-    assert np.all(ct_cal_file_load.ct_fsam == ct_cal_file_in.ct_fsam)
+    # Use allclose for floating point comparisons to account for bit depth differences
+    assert np.allclose(ct_cal_file_load.data, ct_cal_file_in.data, rtol=1e-5, atol=1e-8)
+    assert np.allclose(ct_cal_file_load.err, ct_cal_file_in.err, rtol=1e-5, atol=1e-8)
+    assert np.array_equal(ct_cal_file_load.dq, ct_cal_file_in.dq)  # DQ is integer, use exact
+    assert np.allclose(ct_cal_file_load.ct_excam, ct_cal_file_in.ct_excam, rtol=1e-5, atol=1e-8)
+    assert np.allclose(ct_cal_file_load.ct_fpam, ct_cal_file_in.ct_fpam, rtol=1e-5, atol=1e-8)
+    assert np.allclose(ct_cal_file_load.ct_fsam, ct_cal_file_in.ct_fsam, rtol=1e-5, atol=1e-8)
     
     # This test checks that the CT cal file has the right information by making
     # sure that I=O (Note: the comparison b/w analytical predictions
@@ -497,23 +498,24 @@ def test_cal_file():
     # Check EXTNAME is as expected
     if ct_cal_file.ct_excam_hdr['EXTNAME'] != 'CTEXCAM':
         raise ValueError('The extension name of the CT values on EXCAM is not correct')
-    # x location wrt FPM
-    assert np.all(psf_loc_input[:,0] == ct_cal_file.ct_excam[0])
+    # x location wrt FPM (use allclose for float32 precision differences)
+    assert np.allclose(psf_loc_input[:,0], ct_cal_file.ct_excam[0], rtol=1e-5, atol=1e-8)
     # y location wrt FPM
-    assert np.all(psf_loc_input[:,1] == ct_cal_file.ct_excam[1])
+    assert np.allclose(psf_loc_input[:,1], ct_cal_file.ct_excam[1], rtol=1e-5, atol=1e-8)
     # CT map
-    assert np.all(ct_input == ct_cal_file.ct_excam[2])
+    assert np.allclose(ct_input, ct_cal_file.ct_excam[2], rtol=1e-5, atol=1e-8)
 
     # Test 3: FPAM and FSAM positions during the CT observations are present
     # Check EXTNAME is as expected
     if ct_cal_file.ct_fpam_hdr['EXTNAME'] != 'CTFPAM':
         raise ValueError('The extension name of the FPAM values on EXCAM is not correct')
-    assert np.all(ct_cal_file.ct_fpam == np.array([dataset_ct[0].ext_hdr['FPAM_H'],
-        dataset_ct[0].ext_hdr['FPAM_V']]))
+    # Use allclose for float32 precision differences
+    assert np.allclose(ct_cal_file.ct_fpam, np.array([dataset_ct[0].ext_hdr['FPAM_H'],
+        dataset_ct[0].ext_hdr['FPAM_V']]), rtol=1e-5, atol=1e-8)
     if ct_cal_file.ct_fsam_hdr['EXTNAME'] != 'CTFSAM':
         raise ValueError('The extension name of the FSAM values on EXCAM is not correct')
-    assert np.all(ct_cal_file.ct_fsam == np.array([dataset_ct[0].ext_hdr['FSAM_H'],
-        dataset_ct[0].ext_hdr['FSAM_V']]))
+    assert np.allclose(ct_cal_file.ct_fsam, np.array([dataset_ct[0].ext_hdr['FSAM_H'],
+        dataset_ct[0].ext_hdr['FSAM_V']]), rtol=1e-5, atol=1e-8)
     
     # Remove test CT cal file
     if os.path.exists(ct_cal_file.filepath):

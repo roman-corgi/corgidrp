@@ -450,7 +450,7 @@ class Image():
         self.dq_hdr["EXTNAME"] = "DQ"
 
         # discard individual errors if we aren't tracking them but multiple error terms are passed in
-        if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
+        if self.err is not None and not corgidrp.track_individual_errors and self.err.shape[0] > 1:
             num_errs = self.err.shape[0] - 1
             # delete keywords specifying the error of each individual slice
             for i in range(num_errs):
@@ -498,10 +498,28 @@ class Image():
         # recast header data to the appropriate bit depth as set by the pipeline settings
         if self.data is not None:
             self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+            # Update BITPIX in header to match the data dtype (negative for floats, positive for ints)
+            dtype_obj = np.dtype(corgidrp.image_dtype)
+            bitpix = dtype_obj.itemsize * 8
+            if np.issubdtype(dtype_obj, np.floating):
+                bitpix = -bitpix  # Negative for floating point
+            self.ext_hdr['BITPIX'] = bitpix
         if self.err is not None:
             self.err = self.err.astype(corgidrp.image_dtype, copy=False)
+            # Update BITPIX in error header to match the data dtype
+            dtype_obj = np.dtype(corgidrp.image_dtype)
+            bitpix = dtype_obj.itemsize * 8
+            if np.issubdtype(dtype_obj, np.floating):
+                bitpix = -bitpix
+            self.err_hdr['BITPIX'] = bitpix
         if self.dq is not None:
             self.dq = self.dq.astype(corgidrp.dq_dtype, copy=False)
+            # Update BITPIX in DQ header to match the DQ dtype
+            dtype_obj = np.dtype(corgidrp.dq_dtype)
+            bitpix = dtype_obj.itemsize * 8
+            if np.issubdtype(dtype_obj, np.floating):
+                bitpix = -bitpix
+            self.dq_hdr['BITPIX'] = bitpix
             
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
