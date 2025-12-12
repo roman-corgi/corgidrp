@@ -311,7 +311,7 @@ def convert_to_electrons(input_dataset, k_gain):
     kgain_dataset = input_dataset.copy()
     kgain_cube = kgain_dataset.all_data
 
-    kgain = k_gain.value #extract from caldb
+    kgain = float(k_gain.value) #extract from caldb and convert to float
     error_frame = kgain_cube * k_gain.error
     kgain_cube *= kgain
     
