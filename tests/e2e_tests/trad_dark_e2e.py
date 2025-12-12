@@ -488,7 +488,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir =  '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data' #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     outputdir = thisfile_dir
 

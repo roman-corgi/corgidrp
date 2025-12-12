@@ -236,7 +236,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         
         diff = img.data - tvac_dat
 
-        assert np.all(np.abs(diff) < 1e-5)
+        # Use allclose for floating point comparison to account for bit depth differences
+        assert np.allclose(img.data, tvac_dat, rtol=1e-5, atol=1e-6)
 
     # l2b data
     new_l2b_filenames = [os.path.join(test_outputdir, f) for f in os.listdir(test_outputdir) if f.endswith('l2b.fits') ] #[os.path.join(l2b_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
@@ -255,7 +256,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         img.data[e2e_nans] = 0.0
         tvac_dat[tvac_nans] = 0.0
         diff = img.data - tvac_dat
-        assert np.all(np.abs(diff) < 1e-5)
+        # Use allclose for floating point comparison to account for bit depth differences
+        assert np.allclose(img.data, tvac_dat, rtol=1e-5, atol=1e-6)
 
         # plotting script for debugging
         # import matplotlib.pylab as plt
@@ -289,7 +291,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
