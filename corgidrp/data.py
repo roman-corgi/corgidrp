@@ -513,7 +513,10 @@ class Image():
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
 
+        # Cast data in additional HDUs to the configured dtype before appending
         for hdu in self.hdu_list:
+            if hdu.data is not None:
+                hdu.data = hdu.data.astype(corgidrp.image_dtype, copy=False)
             hdulist.append(hdu)
 
         with warnings.catch_warnings():
