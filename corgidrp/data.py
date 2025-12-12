@@ -522,9 +522,6 @@ class Image():
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
-            if os.path.exists(self.filepath):
-                fd = os.open(self.filepath, os.O_RDWR)
-                os.close(fd)
             hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
