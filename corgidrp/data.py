@@ -948,6 +948,26 @@ class LineSpread(Image):
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
+        # Cast data to configured dtype before saving
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+            # Update BITPIX in header to match the data dtype
+            dtype_obj = np.dtype(corgidrp.image_dtype)
+            bitpix = dtype_obj.itemsize * 8
+            if np.issubdtype(dtype_obj, np.floating):
+                bitpix = -bitpix  # Negative for floating point
+            self.ext_hdr['BITPIX'] = bitpix
+        
+        # Cast gauss_par to configured dtype before saving
+        if self.gauss_par is not None:
+            self.gauss_par = self.gauss_par.astype(corgidrp.image_dtype, copy=False)
+            # Update BITPIX in gauss header to match the data dtype
+            dtype_obj = np.dtype(corgidrp.image_dtype)
+            bitpix = dtype_obj.itemsize * 8
+            if np.issubdtype(dtype_obj, np.floating):
+                bitpix = -bitpix
+            self.gauss_hdr['BITPIX'] = bitpix
+
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
