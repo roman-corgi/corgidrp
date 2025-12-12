@@ -3876,7 +3876,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
         exthdr['EACQ_COL'] = psfcentx
-        exthdr['EACQ_ROW'] = psfcentx
+        exthdr['EACQ_ROW'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
         
