@@ -454,15 +454,28 @@ def test_cal_file():
 
     # Compare the PSF cube from the calibration file, which may have a smaller
     # extension, with the input ones
+    # Use known PSF locations instead of searching for pixel values to avoid
+    # float32 precision issues when data is saved/reloaded
     cal_file_side_0 = ct_cal_file.data.shape[1]
     cal_file_side_1 = ct_cal_file.data.shape[2]
-    for i_psf, psf in enumerate(psf_cube_in):
-        # Use isclose for comparison to handle float32 precision differences
-        target_value = ct_cal_file.data[i_psf][0][0]
-        matches = np.isclose(psf, target_value, rtol=1e-5, atol=1e-8)
-        loc_00 = np.argwhere(matches)[0]
-        assert np.allclose(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
-            loc_00[1]:loc_00[1]+cal_file_side_1], ct_cal_file.data[i_psf], rtol=1e-5, atol=1e-8)
+    i_psf = 0
+    for psf in psf_cube_in:
+        psf_y, psf_x = int(np.round(psf_loc_input[i_psf][1])), int(np.round(psf_loc_input[i_psf][0]))
+        start_y = max(0, psf_y - cal_file_side_0 // 2)
+        end_y = min(psf.shape[0], start_y + cal_file_side_0)
+        start_x = max(0, psf_x - cal_file_side_1 // 2)
+        end_x = min(psf.shape[1], start_x + cal_file_side_1)
+        # Adjust if we hit a boundary
+        if end_y - start_y < cal_file_side_0:
+            start_y = max(0, psf.shape[0] - cal_file_side_0)
+            end_y = start_y + cal_file_side_0
+        if end_x - start_x < cal_file_side_1:
+            start_x = max(0, psf.shape[1] - cal_file_side_1)
+            end_x = start_x + cal_file_side_1
+        
+        psf_extracted = psf[start_y:end_y, start_x:end_x]
+        assert np.allclose(psf_extracted, ct_cal_file.data[i_psf], rtol=1e-5, atol=1e-8)
+        i_psf += 1
 
     # Verify that the PSF images are best centered at each set of coordinates.
     test_result_psf_max_row = []  # intialize
