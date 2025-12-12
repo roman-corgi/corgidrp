@@ -125,8 +125,9 @@ def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
             if np.any(mean_idx):
                 with warnings.catch_warnings():
                     warnings.filterwarnings('ignore', category=RuntimeWarning)
-                    local_mean_array[m, n] = np.nanmean(frame_in_flat[mean_idx])
-                    local_noise_array[m, n] = np.nanstd(frame_in_flat[mean_idx])
+                    # Use float64 to maintain precision when input is float32
+                    local_mean_array[m, n] = np.nanmean(frame_in_flat[mean_idx], dtype=np.float64)
+                    local_noise_array[m, n] = np.nanstd(frame_in_flat[mean_idx], dtype=np.float64)
             else:
                 local_mean_array[m, n] = 0
                 local_noise_array[m, n] = 0
@@ -150,7 +151,8 @@ def diff2std(diff_frame, detector_regions=None):
         
     selected_area = slice_section(diff_frame, 'SCI', 'prescan_reliable',
         detector_regions)
-    std_value = np.nanstd(selected_area.reshape(-1), ddof=1)
+    # Use float64 to maintain precision when input is float32
+    std_value = np.nanstd(selected_area.reshape(-1), ddof=1, dtype=np.float64)
     # dividing by sqrt(2) since we want std of one frame
     return std_value / np.sqrt(2)
     
@@ -265,8 +267,9 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
     clipped_data = data.copy()
       
     for i in range(max_iters):
-        mean = np.nanmean(clipped_data)
-        std = np.nanstd(clipped_data)
+        # Use float64 to maintain precision when input is float32
+        mean = np.nanmean(clipped_data, dtype=np.float64)
+        std = np.nanstd(clipped_data, dtype=np.float64)
         mask = np.abs(clipped_data - mean) > sigma * std
         if not np.any(mask):
             break
@@ -380,7 +383,8 @@ def calibrate_kgain(dataset_kgain,
     cal_list, mean_frame_list, _, _, _, actual_gains, _, truncated_set_len = nonlin_kgain_dataset_2_stack(dataset_kgain, apply_dq = apply_dq, cal_type='kgain')
     split_arr = np.arange(0,len(cal_list[0]), truncated_set_len)[1:]
     cal_list = np.split(cal_list[0], split_arr)
-    actual_gain = np.nanmean(actual_gains)
+    # Use float64 to maintain precision when input is float32
+    actual_gain = np.nanmean(actual_gains, dtype=np.float64)
     # check number of frames, unique EM value, exposure times and datetimes
     tmp = cal_list[0]
     for idx in range(4):
@@ -539,8 +543,9 @@ def calibrate_kgain(dataset_kgain,
         # split each frame up into bins, take std and mean of each region
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', category=RuntimeWarning)
-            mean_frames_mean_curr0 = np.nanmean(frames, axis=0)
-        mean_frames_mean_curr = np.nanmean(mean_frames_mean_curr0[rowroi,colroi])
+            # Use float64 to maintain precision when input is float32
+            mean_frames_mean_curr0 = np.nanmean(frames, axis=0, dtype=np.float64)
+        mean_frames_mean_curr = np.nanmean(mean_frames_mean_curr0[rowroi,colroi], dtype=np.float64)
         
         # Calculate the means
         mean_good_mean_frame_roi = np.nanmean(good_mean_frame[rowroi,colroi])
@@ -721,7 +726,8 @@ def calibrate_kgain(dataset_kgain,
     parm1 = -0.5*np.log10(kgain)
     
     # Gaussian read noise value in DN
-    mean_rn_gauss_DN = np.nanmean(rn_gauss)
+    # Use float64 to maintain precision when input is float32
+    mean_rn_gauss_DN = np.nanmean(rn_gauss, dtype=np.float64)
     mean_rn_gauss_e = mean_rn_gauss_DN * kgain
     
     mean_rn_std_DN = np.nanmean(read_noise)
@@ -800,8 +806,9 @@ def calibrate_kgain(dataset_kgain,
     
     # rn err depends on spread of data that determines rn and the error in kgain,
     # so use error propagation to find error in (rn in DN)*kgain
-    kgain_err = np.nanstd(kgain_clipped)
-    rn_err_DN = np.nanstd(rn_gauss)
+    # Use float64 to maintain precision when input is float32
+    kgain_err = np.nanstd(kgain_clipped, dtype=np.float64)
+    rn_err_DN = np.nanstd(rn_gauss, dtype=np.float64)
     rn_err_e = np.sqrt((kgain*rn_err_DN)**2 + (mean_rn_gauss_DN*kgain_err)**2)
     exthd['RN_ERR'] = rn_err_e
     exthd['RN_UNIT'] = 'detected electron'

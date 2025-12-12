@@ -237,7 +237,8 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
             valid = np.isfinite(slit_curve) & (slit_curve != 0)
             spec = np.divide(spec, slit_curve, out=np.full_like(spec, np.nan), where=valid)
             spec_err = np.divide(spec_err, slit_curve, out=np.full_like(spec_err, np.nan), where=valid)
-            spec_header['SLITFAC'] = float(np.nanmean(slit_curve))
+            # Use float64 to maintain precision when input is float32
+            spec_header['SLITFAC'] = float(np.nanmean(slit_curve, dtype=np.float64))
             spec_header['SLITCOR'] = True
         else:
             spec_header['SLITCOR'] = False
