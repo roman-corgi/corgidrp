@@ -1,6 +1,6 @@
 .. _l4-label:
 
-L4 Data Product
+L4 Polarimetry Data Product
 ========================================
 
 
