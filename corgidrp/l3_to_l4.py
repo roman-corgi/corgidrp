@@ -611,7 +611,16 @@ def do_psf_subtraction(input_dataset,
                                               pixel_weights=None, axis=0, 
                                               collapse_method=klip_kwargs['time_collapse'])
 
-
+        # Get the WCS from the derotated_output_dataset
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', FITSFixedWarning)
+            wcs_hdr = WCS(derotated_output_dataset[0].ext_hdr)
+        # update WCS solutions
+        ext_hdr['CD1_1'] = wcs_hdr.wcs.cd[0, 0]
+        ext_hdr['CD1_2'] = wcs_hdr.wcs.cd[0, 1]
+        ext_hdr['CD2_1'] = wcs_hdr.wcs.cd[1, 0]
+        ext_hdr['CD2_2'] = wcs_hdr.wcs.cd[1, 1]
+    
         collapsed_frame = data.Image(collapsed_psfsub_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                         err=err_out_collapsed,
@@ -637,7 +646,7 @@ def do_psf_subtraction(input_dataset,
 
     frame = data.Image(
             collapsed_dataset.all_data,
-            pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+            pri_hdr=pri_hdr, ext_hdr=collapsed_dataset[0].ext_hdr, 
             err=collapsed_dataset.all_err[np.newaxis,:,0,:,:],
             dq=collapsed_dataset.all_dq,
             err_hdr=sci_dataset[0].err_hdr,
@@ -775,40 +784,46 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
             xcen = rot_center[0]
             ycen = rot_center[1]
 
-            # look for WCS solutions
+        if is_pol:
+            if 'NAXIS3' in sci_hd:
+                del sci_hd['NAXIS3']
+            sci_hd['NAXIS'] = 2
+
+        # Calculate CD matrix if it does not exist
+        if not 'CD1_1' in sci_hd.keys():
+            sci_hd['CD1_1'] = sci_hd['CDELT1'] * sci_hd['PC1_1']
+            sci_hd['CD1_2'] = sci_hd['CDELT1'] * sci_hd['PC1_2']
+            sci_hd['CD2_1'] = sci_hd['CDELT2'] * sci_hd['PC2_1']
+            sci_hd['CD2_2'] = sci_hd['CDELT2'] * sci_hd['PC2_2']
+
+            sci_hd['PC1_1'] = sci_hd['CD1_1']
+            sci_hd['PC1_2'] = sci_hd['CD1_2']
+            sci_hd['PC2_1'] = sci_hd['CD2_1']
+            sci_hd['PC2_2'] = sci_hd['CD2_2']
+
+            sci_hd['CDELT1'] = 1.
+            sci_hd['CDELT2'] = 1.
+
+
+        # look for WCS solutions
         if use_wcs is True:
-            if is_pol:
-                if 'NAXIS3' in sci_hd:
-                    del sci_hd['NAXIS3']
-                sci_hd['NAXIS'] = 2
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
-                astr_hdr = WCS(sci_hd)
-    
-            # Calculate CD matrix if it does not exist
-            if not 'CD1_1' in sci_hd.keys():
-                sci_hd['CD1_1'] = sci_hd['CDELT1'] * sci_hd['PC1_1']
-                sci_hd['CD1_2'] = sci_hd['CDELT1'] * sci_hd['PC1_2']
-                sci_hd['CD2_1'] = sci_hd['CDELT2'] * sci_hd['PC2_1']
-                sci_hd['CD2_2'] = sci_hd['CDELT2'] * sci_hd['PC2_2']
-
-                sci_hd['PC1_1'] = sci_hd['CD1_1']
-                sci_hd['PC1_2'] = sci_hd['CD1_2']
-                sci_hd['PC2_1'] = sci_hd['CD2_1']
-                sci_hd['PC2_2'] = sci_hd['CD2_2']
-
-                sci_hd['CDELT1'] = 1.
-                sci_hd['CDELT2'] = 1.
-
             roll_angle = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
 
         else:
             print('WARNING: using "ROLL" instead of WCS to estimate the north position angle')
-            astr_hdr = None
             # read the roll angle parameter, assuming this info is recorded in the primary header as requested
             roll_angle = processed_data.pri_hdr['ROLL']
 
-        # derotate
+        #Make 2D WCS header for derotation. 
+        sci_hd_2D = sci_hd.copy()
+        if 'NAXIS3' in sci_hd_2D:
+            del sci_hd_2D['NAXIS3']
+        sci_hd_2D['NAXIS'] = 2
+        with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+                warnings.filterwarnings("ignore", category=FITSFixedWarning)
+                astr_hdr = WCS(sci_hd_2D)
+        
         sci_derot = derotate_arr(sci_data,roll_angle, xcen,ycen,astr_hdr=astr_hdr,new_center=new_center) # astr_hdr is corrected at above lines
         
         new_all_data.append(sci_derot)
@@ -816,11 +831,12 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         sci_hd['HISTORY'] = log
 
         # update WCS solutions
-        if use_wcs:
-            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0, 0]
-            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0, 1]
-            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1, 0]
-            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1, 1]
+        sci_hd['CD1_1'] = astr_hdr.wcs.cd[0, 0]
+        sci_hd['CD1_2'] = astr_hdr.wcs.cd[0, 1]
+        sci_hd['CD2_1'] = astr_hdr.wcs.cd[1, 0]
+        sci_hd['CD2_2'] = astr_hdr.wcs.cd[1, 1]
+        processed_data.ext_hdr = sci_hd
+
         #############
         ## HDU ERR ##
         err_data = processed_data.err
@@ -1122,7 +1138,7 @@ def align_2d_frames(input_dataset, center='first_frame'):
         old_stary = frame.ext_hdr['STARLOCY']
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
-            warnings.filterwarnings("ignore", category=astropy.wcs.FITSFixedWarning)
+            warnings.filterwarnings("ignore", category=FITSFixedWarning)
             astr_hdr = WCS(frame.ext_hdr)
         new_data = derotate_arr(frame.data, 0, old_starx, old_stary, new_center=new_center, 
                                         astr_hdr=astr_hdr, is_dq=False)
