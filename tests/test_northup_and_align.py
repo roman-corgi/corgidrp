@@ -137,7 +137,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 ylen, xlen = sci_input.shape
                 xcen, ycen = xlen / 2, ylen / 2
                 # check the angle offset
-                with warnings.catch_warnings():
+                with warnings.catch_warnings():  # catch a warning related to a long fits header card - doesn't matter here
                     warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
                     astr_hdr = WCS(sci_hd)
                 angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
@@ -161,7 +161,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 non_integer_indices = np.argwhere(non_integer_mask)
                 assert (len(non_integer_indices) == 0)
                 # check if the north vector really faces up
-                astr_hdr_new = WCS(derot_data.ext_hdr)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+                    astr_hdr_new = WCS(derot_data.ext_hdr)
                 north_pa = -np.rad2deg(np.arctan2(-astr_hdr_new.wcs.cd[0, 1], astr_hdr_new.wcs.cd[1, 1]))
                 assert (math.isclose(north_pa, 0, abs_tol=1e-3))
 
@@ -254,7 +256,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             assert (len(non_integer_indices) == 0)
 
             # check if the north vector really faces up
-            astr_hdr_new = WCS(derot_data.ext_hdr)
+            with warnings.catch_warnings(): #catch a warning related to a long fits header card - doesn't matter here
+                warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning)
+                astr_hdr_new = WCS(derot_data.ext_hdr)
             north_pa = -np.rad2deg(np.arctan2(-astr_hdr_new.wcs.cd[0, 1], astr_hdr_new.wcs.cd[1, 1]))
             assert (math.isclose(north_pa, 0, abs_tol=1e-3))
             # (optional) save comparison figure
@@ -460,7 +464,7 @@ def test_align_2d_frames():
 if __name__ == '__main__':
     print('Running test_northup()...')
     test_northup()
-    test_northup_pol()
-    test_wcs_and_offset()
-    test_align_2d_frames()
+    # test_northup_pol()
+    # test_wcs_and_offset()
+    # test_align_2d_frames()
 
