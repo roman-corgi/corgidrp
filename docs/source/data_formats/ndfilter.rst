@@ -1,6 +1,6 @@
 .. _ndfiltersweetspotdataset-label:
 
-NDFilterSweetSpotDataset Data Product
+ND Filter (Imaging) Calibration Product
 ========================================
 
 

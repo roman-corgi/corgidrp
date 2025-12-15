@@ -1,6 +1,6 @@
 .. _ndm-label:
 
-Ndm Data Product
+ND Filter (Polarimetry) Calibration Product
 ========================================
 
 

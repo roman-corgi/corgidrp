@@ -76,7 +76,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     if not os.path.exists(astrom_input_dir):
         os.makedirs(astrom_input_dir)
     
-    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
+    #Set rotation to 0 for this test. 
+    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None,rotation=0)
     mock_dataset.save(filedir=astrom_input_dir)
 
     # perform the astrometric calibration
@@ -409,6 +410,17 @@ def test_l3_to_l4(e2eoutput_path):
     expected_separations_arcsec = expected_separations_lambda_over_D *  lambda_c / roman_D * 206265
     expected_separations_pixels = expected_separations_arcsec / pixel_scale * 1000 
 
+    import warnings
+    from astropy.wcs import WCS, FITSFixedWarning
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=FITSFixedWarning)
+        wcs_after = WCS(psf_subtracted_image.ext_hdr)
+    cd12 = wcs_after.wcs.cd[0,1]
+    cd22 = wcs_after.wcs.cd[1,1]
+
+    angle = np.arctan2(-cd12, cd22)
+    assert angle == pytest.approx(0.0, abs=1e-6), "WCS CD matrix not properly rotated to North-up East-left."
+
     #Check that the detected sources are within 1 pixel of the expected separations
     #Assumes that only the correct sources were detected. 
     for i,source_distance in enumerate(expected_separations_pixels):
@@ -435,9 +447,9 @@ if __name__ == "__main__":
     # workflow.
 
 
-    outputdir = thisfile_dir
+    outputdir = "/Users/maxmb/Data/corgi/e2e_output/"
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = '/Users/sbogat/.corgidrp'
+    e2edata_dir = '/Users/maxmb/Data/corgi/E2E_Test_Data/'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 

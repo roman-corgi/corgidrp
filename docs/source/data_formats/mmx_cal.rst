@@ -1,6 +1,6 @@
 .. _mmx-label:
 
-Mmx Data Product
+Mueller Matrix (Polarimetry) Calibration Product
 ========================================
 
 

@@ -560,7 +560,7 @@ def test_psf_sub_ADIRDI():
 
     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-rolls[1],reshape=False,cval=0)) / 2
     
-                                
+
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 fileprefix='test_ADI+RDI',
                                 measure_klip_thrupt=False,
@@ -589,6 +589,19 @@ def test_psf_sub_ADIRDI():
     expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI+RDI subtraction.")
+    
+    #Check that the WCS header CD keywords have been properly rotated North-up East-left
+    from astropy.wcs import WCS, FITSFixedWarning
+    
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=FITSFixedWarning)
+        wcs_after = WCS(frame.ext_hdr)
+    cd12 = wcs_after.wcs.cd[0,1]
+    cd22 = wcs_after.wcs.cd[1,1]
+
+    angle = np.arctan2(-cd12, cd22)
+    assert angle == pytest.approx(0.0, abs=1e-6), "WCS CD matrix not properly rotated to North-up East-left."
 
 def test_psf_sub_explicit_klip_kwargs():
     """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
@@ -656,7 +669,7 @@ def test_psf_sub_badmode():
 
 
 if __name__ == '__main__':  
-    # test_pyklipdata_ADI()
+    test_pyklipdata_ADI()
     # test_pyklipdata_RDI()
     # test_pyklipdata_ADIRDI()
     # test_pyklipdata_badtelescope()

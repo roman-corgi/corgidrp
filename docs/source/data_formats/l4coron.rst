@@ -1,6 +1,6 @@
 .. _l4-coronagraphic-label:
 
-L4-Coronagraphic Data Product
+L4 Data Product (Coronagraphic)
 ========================================
 
 

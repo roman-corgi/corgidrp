@@ -4,13 +4,14 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d, LinearNDInterpolator
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal
 from corgidrp.combine import combine_subexposures
 import os
 from astropy.io import ascii, fits
 from astropy.table import Table
 import astropy.modeling.models as models
 import astropy.modeling.fitting as fitting
+from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve, get_calspec_file
 
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
@@ -1302,3 +1303,105 @@ def star_pos_spec(
             img.ext_hdr['STARLOCY'] = img.ext_hdr['WV0_Y']
 
     return dataset_cp
+
+
+def spec_fluxcal(dataset_or_image, calspec_file = None):
+    """
+    generates the SpecFluxCal calibration product for one band,
+    calculates the spectral flux calibration or spectro-photometric calibration, that describes the
+    sensitivity of the spectrometer, i.e. how an input power is
+    converted into how many photoelectrons per wavelength, with the final unit erg/(s * cm^2 * AA)/(photoelectron/s/bin).
+    The input is expected to be the dataset of an extracted spectrum of a 
+    CALSPEC photometric standard star with units photoelectron/s/bin.
+    
+    The band flux values of the input calspec data files are divided by 
+    the spectral extracted photoelectrons/s/bin interpolated on the available wavelengths.
+    Propagates also errors to the spectral flux calibration file.
+    
+    Parameters:
+        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): Image(s) to compute 
+            the calibration factor. Should already be normalized for exposure time. Output of extract_spec.
+        calspec_file (str, optional): file path to the calspec fits file of the observed star. 
+                                      If None, it is downloaded from the calspec database
+
+    Returns:
+        SpecFluxCal (corgidrp.data.SpecFluxCal): A calibration object containing the computed 
+            flux calibration factor in units erg/(s * cm^2 * AA)/(photoelectron/s/bin)
+    """
+    d_or_i = dataset_or_image.copy()
+    if isinstance(d_or_i, Dataset):
+        image = d_or_i[0]
+        dataset = d_or_i
+    else:
+        image = d_or_i
+        dataset = Dataset([image])
+    if image.ext_hdr['BUNIT'] != "photoelectron/s":
+        raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
+    
+    if "SPEC" not in image.hdu_names:
+        raise AttributeError("input dataset has no spectral extracted data and has not run through extract_spec")
+    
+    filter_name = image.ext_hdr["CFAMNAME"]
+    filter_file = get_filter_name(image)
+    
+    # Read filter and CALSPEC data.
+    wave, filter_trans = read_filter_curve(filter_file)
+    
+    if calspec_file is not None:
+        calspec_filepath = calspec_file
+        calspec_filename = os.path.basename(calspec_file)
+    else:
+        star_name = image.pri_hdr["TARGET"]
+        calspec_filepath, calspec_filename = get_calspec_file(star_name)
+    
+    flux_ref = read_cal_spec(calspec_filepath, wave)
+    #is this correct, do we need to consider the filter transmission at all?
+    flux = flux_ref #* filter_trans
+    if len(dataset) == 1:
+        spec = image.hdu_list["SPEC"].data
+        spec_dq = image.hdu_list["SPEC_DQ"].data
+        spec_err = image.hdu_list["SPEC_ERR"].data
+        spec_wave = image.hdu_list["SPEC_WAVE"].data
+        spec_wave_err = image.hdu_list["SPEC_WAVE_ERR"].data
+    else:
+        spec = []
+        spec_dq = []
+        spec_err = []
+        spec_wave = []
+        spec_wave_err = []
+        for frame in dataset:
+            spec.append(frame.hdu_list["SPEC"].data)
+            spec_dq.append(frame.hdu_list["SPEC_DQ"].data)
+            spec_err.append(frame.hdu_list["SPEC_ERR"].data)
+            spec_wave.append(frame.hdu_list["SPEC_WAVE"].data)
+            spec_wave_err.append(frame.hdu_list["SPEC_WAVE_ERR"].data)
+        
+        spec = np.mean(np.array(spec),0)
+        spec_err = np.mean(np.array(spec_err),0)
+        spec_wave = np.mean(np.array(spec_wave), 0)
+        spec_wave_err = np.mean(np.array(spec_wave_err), 0)
+        spec_dq = np.bitwise_or.reduce(np.array(spec_dq),axis = 0)
+    
+    #interpolate on the extracted wavelength in nm (AA/10)
+    wave_nm = wave/10.
+    inter = interp1d(wave_nm, flux, fill_value="extrapolate")
+    spec_flux = inter(spec_wave)/spec
+
+    spec_flux_err = spec_flux / spec**2 * spec_err[0]
+
+    data = np.array([spec_wave, spec_flux])
+    error = np.array([spec_wave_err, spec_flux_err])
+    spec_fluxcal_obj = SpecFluxCal(
+        data,
+        err=error,
+        dq = np.tile(spec_dq, (2,1)),
+        pri_hdr=image.pri_hdr,
+        ext_hdr=image.ext_hdr,
+        input_dataset=dataset
+    )
+
+    # Append to or create a HISTORY entry in the header.
+    history_entry = "spectral flux calibration was determined by spectral extraction using SED file {0}".format(calspec_filename)
+    spec_fluxcal_obj.ext_hdr.add_history(history_entry)
+
+    return spec_fluxcal_obj

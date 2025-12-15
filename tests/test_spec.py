@@ -5,16 +5,18 @@ import logging
 import warnings
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset
+from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset, SpecFluxCal
 import corgidrp.spec as steps
 from corgidrp.mocks import (create_default_L2b_headers,
-    create_default_L3_headers, get_formatted_filename)
+    create_default_L3_headers, get_formatted_filename, make_1d_spec_image)
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
 from datetime import datetime, timedelta
+from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve
 # VAP testing
 from corgidrp.check import (check_filename_convention, verify_header_keywords,
     check_dimensions)
+
 
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy")) 
 test_datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
@@ -383,6 +385,9 @@ def test_add_wavelength_map():
     image.ext_hdr['WV0_YERR'] = wave_0.get('yerr')
     image.ext_hdr['WV0_DIMX'] = wave_0.get('shapex')
     image.ext_hdr['WV0_DIMY'] = wave_0.get('shapey')
+    #more needed header keywords for later processing
+    image.ext_hdr['BUNIT'] = 'photoelectron/s'
+    image.pri_hdr['TARGET'] = 'Vega'
     dataset = Dataset([image])
     
     global output_dataset
@@ -1415,6 +1420,66 @@ def test_filter_offset():
     offset2 = SpecFilterOffset({})
     assert offset2.offsets == offset2.default_offsets
  
+def test_spec_flux_cal():
+    """
+    test the SpecFluxCal calibration class
+    """
+    spec_values = np.ones([10])
+    spec_error = np.ones([10])/10.
+    spec_wavel = np.linspace(720,770, num = 10)
+    image = make_1d_spec_image(spec_values, spec_error, spec_wavel)
+    image.ext_hdr["CFAMNAME"] = "3F"
+    spec_dataset = Dataset([image.copy(), image.copy()])
+    
+    spec = image.hdu_list["SPEC"].data
+    spec_prihdr = image.pri_hdr
+    spec_exthdr = image.ext_hdr
+    spec_dq = image.hdu_list["SPEC_DQ"].data
+    spec_err = image.hdu_list["SPEC_ERR"].data
+    spec_wave = image.hdu_list["SPEC_WAVE"].data
+    wave_err = image.hdu_list["SPEC_WAVE_ERR"].data
+    #dq must have same dimension as data
+    spec_dq = np.tile(spec_dq, (2,1))
+    data = np.array([spec_wave, spec])
+    error = np.array([wave_err, spec_err])
+    spec_fluxcal = SpecFluxCal(data, err = error, dq = spec_dq, pri_hdr = spec_prihdr, ext_hdr = spec_exthdr, input_dataset = spec_dataset)
+    assert spec_fluxcal.band == image.ext_hdr["CFAMNAME"]
+    assert spec_fluxcal.nd_filter == "ND0"
+    assert np.array_equal(spec_fluxcal.specflux, spec)
+    assert np.array_equal(spec_fluxcal.wavelength, spec_wave)
+    assert np.array_equal(spec_fluxcal.specflux_err, spec_err)
+    assert np.array_equal(spec_fluxcal.wave_err, wave_err)
+    assert np.array_equal(spec_fluxcal.specflux_dq, spec_dq[0])
+    #test the saving and loading of the cal file
+    spec_fluxcal.save(filedir = output_dir, filename = "spec_flux_cal_test.fits")
+    specflux_load = SpecFluxCal(os.path.join(output_dir, "spec_flux_cal_test.fits"))
+    assert np.array_equal(specflux_load.specflux, spec)
+    assert np.array_equal(specflux_load.wavelength, spec_wave)
+    assert np.array_equal(specflux_load.specflux_err, spec_err)
+    assert np.array_equal(specflux_load.wave_err, wave_err)
+    assert np.array_equal(specflux_load.specflux_dq, spec_dq[0])
+    
+    #test the absolute spectral flux calibration
+    calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
+    spec_fluxcal = steps.spec_fluxcal(spec_dataset, calspec_file = calspec_filepath)
+    assert len(spec_fluxcal.specflux) == len(spec)
+    assert spec_fluxcal.ext_hdr['BUNIT'] == "erg/(s * cm^2 * AA)/(photoelectron/s/bin)"
+    assert np.array_equal(spec_fluxcal.wavelength, spec_wave)
+    assert np.array_equal(spec_fluxcal.wave_err, wave_err)
+    assert np.array_equal(spec_fluxcal.specflux_dq, spec_dq[0])
+    assert 'alpha_lyr_stis_011.fits' in str (spec_fluxcal.ext_hdr['HISTORY'])
+
+    #test the flux cal values, should be the same as flux since we choose spec = 1
+    filter_file = get_filter_name(image)
+    wave, filter_trans = read_filter_curve(filter_file)
+    ind = (wave/10. >= spec_wavel[0]) & (wave/10. <= spec_wavel[-1])
+    wave = wave[ind]
+    filter_trans = filter_trans[ind]
+    flux_ref = read_cal_spec(calspec_filepath, wave)
+    flux = flux_ref #* filter_trans, correct to not consider?
+    assert np.mean(flux) == pytest.approx(np.mean(spec_fluxcal.specflux), rel = 0.01)
+    
+    
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
     test_spec_psf_subtraction()
@@ -1430,3 +1495,4 @@ if __name__ == "__main__":
     test_slit_trans()
     test_star_pos()
     test_filter_offset()
+    test_spec_flux_cal()
