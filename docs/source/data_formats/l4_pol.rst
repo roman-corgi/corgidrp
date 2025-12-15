@@ -1,4 +1,4 @@
-.. _l4-label:
+.. _l4_pol-label:
 
 L4 Polarimetry Data Product
 ========================================
