@@ -1,6 +1,6 @@
 .. _ndm-label:
 
-ND Filter (Polarimetry) Calibration Product
+ND Filter Mueller Matrix (Polarimetry) Calibration Product
 ========================================
 
 
