@@ -58,7 +58,9 @@ labels = {data.Dark: "Dark",
           data.SpectroscopyCentroidPSF: "SpectroscopyCentroidPSF",
           data.DispersionModel: "DispersionModel",
           data.MuellerMatrix: "MuellerMatrix",
-          data.NDMuellerMatrix: "NDMuellerMatrix"
+          data.NDMuellerMatrix: "NDMuellerMatrix",
+          data.SpecFilterOffset: "SpecFilterOffset",
+          data.SpecFluxCal: "SpecFluxCal"
           }
 
 class CalDB:
@@ -482,6 +484,12 @@ def initialize():
         fpamfsam_2excam = data.FpamFsamCal([],
             date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
         fpamfsam_2excam.save(filedir=corgidrp.default_cal_dir)
+        rescan_needed = True
+    # Add default SpecFilterOffset calibration file if it doesn't exist
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "SpecFilterOffset_2025-12-10T00.00.00.000.fits")):
+        spec_filter = data.SpecFilterOffset({},
+            date_valid=time.Time("2025-12-10 00:00:00", scale='utc'))
+        spec_filter.save(filedir=corgidrp.default_cal_dir)
         rescan_needed = True
     # Add default DispersionModel calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, 'cgi_0200001001001001001_20240210t0000000_dpm_cal.fits')):

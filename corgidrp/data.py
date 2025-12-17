@@ -1137,7 +1137,7 @@ class SpecFilterOffset(Image):
             self.data = Table(self.offsets)
             self.filedir = "."
             
-            filename = "SpecFilterOffsets_{0}.fits".format(ext_hdr['SCTSRT']).replace(':','.')
+            filename = "SpecFilterOffset_{0}.fits".format(ext_hdr['SCTSRT']).replace(':','.')
             self.filename = filename
             pri_hdr['FILENAME'] = self.filename
             self.pri_hdr = pri_hdr
