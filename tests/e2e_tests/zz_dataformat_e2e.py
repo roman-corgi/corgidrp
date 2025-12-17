@@ -248,13 +248,16 @@ def validate_cgi_filename(filepath, expected_suffix):
     return True
 
 custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'FILE0', 'DATETIME', 'FTIMEUTC', 'DETPIX0X', 'DETPIX0Y', 'PYKLIPV']
-def compare_docs(ref_doc, new_doc):
+def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_check=False):
     """
     Compare reference doc to new doc. Checks that all headers are present regardless of order
+    and that data array sizes match.
 
     Args:
         ref_doc (str): full content of reference doc
         new_doc (str): full content of new document
+        data_product_name (str, optional): Name of the data product being tested (e.g., "Bad Pixel Map", "Polarimetry Flat Field")
+        skip_hdu_structure_check (bool): If True, skip HDU structure (array size) comparison
     """
     # ignore beginning and ending whitespace
     # split lines
@@ -294,6 +297,37 @@ def compare_docs(ref_doc, new_doc):
                         headers.add((name, dtype, current_hdu or 'Unknown'))
         return headers
     
+    # Extract HDU structure information (index, name, datatype, array_size) from both documents
+    def extract_hdu_structure(lines):
+        hdu_structure = {}
+        in_hdu_structure_table = False
+        header_row_seen = False
+        for line in lines:
+            # Check if HDU structure table (first table in doc)
+            if 'Index' in line and 'Name' in line and 'Datatype' in line and 'Array Size' in line:
+                in_hdu_structure_table = True
+                header_row_seen = True
+            elif in_hdu_structure_table and (line.strip().endswith('^^^') or 'Header (HDU' in line):
+                in_hdu_structure_table = False
+            
+            # Parse HDU structure table rows
+            if in_hdu_structure_table and '|' in line and header_row_seen:
+                line_args = line.split("|")
+                if len(line_args) >= 5:
+                    index_str = line_args[1].strip()
+                    name = line_args[2].strip()
+                    datatype = line_args[3].strip()
+                    array_size = line_args[4].strip()
+                    # Skip table header/delimiter rows
+                    if index_str.isdigit() and name and datatype and array_size:
+                        index = int(index_str)
+                        hdu_structure[index] = {
+                            'name': name,
+                            'datatype': datatype,
+                            'array_size': array_size
+                        }
+        return hdu_structure
+    
     ref_headers = extract_headers(ref_lines)
     new_headers = extract_headers(new_lines)
     
@@ -302,8 +336,42 @@ def compare_docs(ref_doc, new_doc):
     # Find headers that are in fits file but not in reference
     extra_headers = new_headers - ref_headers
     
+    # Compare HDU structures (if not skipped)
+    hdu_mismatches = []
+    ref_hdu_structure = None
+    if not skip_hdu_structure_check:
+        ref_hdu_structure = extract_hdu_structure(ref_lines)
+        new_hdu_structure = extract_hdu_structure(new_lines)
+        
+        all_hdu_indices = set(ref_hdu_structure.keys()) | set(new_hdu_structure.keys())
+        
+        for idx in sorted(all_hdu_indices):
+            ref_hdu = ref_hdu_structure.get(idx)
+            new_hdu = new_hdu_structure.get(idx)
+            
+            if ref_hdu is None:
+                hdu_mismatches.append((idx, 'missing_in_ref', new_hdu))
+            elif new_hdu is None:
+                hdu_mismatches.append((idx, 'missing_in_new', ref_hdu))
+            else:
+                # Check if name, datatype, or array_size differ
+                mismatches = []
+                if ref_hdu['name'] != new_hdu['name']:
+                    mismatches.append(f"name: '{ref_hdu['name']}' vs '{new_hdu['name']}'")
+                if ref_hdu['datatype'] != new_hdu['datatype']:
+                    mismatches.append(f"datatype: '{ref_hdu['datatype']}' vs '{new_hdu['datatype']}'")
+                if ref_hdu['array_size'] != new_hdu['array_size']:
+                    mismatches.append(f"array_size: '{ref_hdu['array_size']}' vs '{new_hdu['array_size']}'")
+                
+                if mismatches:
+                    hdu_mismatches.append((idx, 'mismatch', {'ref': ref_hdu, 'new': new_hdu, 'details': mismatches}))
+    
+    # Report results
+    has_errors = False
+    
     if missing_headers or extra_headers:
         print("\n=== Header comparison failed ===")
+        has_errors = True
         if missing_headers:
             print("\nHeaders in reference documentation but missing from FITS output:")
             for header in sorted(missing_headers):
@@ -312,9 +380,29 @@ def compare_docs(ref_doc, new_doc):
             print("\nHeaders in FITS output but missing from reference documentation:")
             for header in sorted(extra_headers):
                 print(f"  + {header[0]} ({header[1]}) in {header[2]}")
-        assert False, "Header mismatch"
+    
+    if hdu_mismatches:
+        print("\n=== HDU structure comparison failed ===")
+        has_errors = True
+        for idx, mismatch_type, data in hdu_mismatches:
+            if mismatch_type == 'missing_in_ref':
+                print(f"\nHDU {idx} ({data['name']}) in new output but missing in reference:")
+                print(f"  Datatype: {data['datatype']}, Array Size: {data['array_size']}")
+            elif mismatch_type == 'missing_in_new':
+                print(f"\nHDU {idx} ({data['name']}) in reference but missing in new output:")
+                print(f"  Datatype: {data['datatype']}, Array Size: {data['array_size']}")
+            elif mismatch_type == 'mismatch':
+                print(f"\nHDU {idx} mismatch:")
+                print(f"  Reference: {data['ref']['name']}, {data['ref']['datatype']}, {data['ref']['array_size']}")
+                print(f"  New:       {data['new']['name']}, {data['new']['datatype']}, {data['new']['array_size']}")
+                print(f"  Details:   {', '.join(data['details'])}")
+    
+    if has_errors:
+        assert False, "Documentation mismatch (headers or HDU structure)"
     else:
         print(f"Header comparison passed: All {len(ref_headers)} headers match between reference and actual output")
+        if not skip_hdu_structure_check and ref_hdu_structure is not None:
+            print(f"HDU structure comparison passed: All {len(ref_hdu_structure)} HDUs match between reference and actual output")
     
 
  
@@ -325,7 +413,7 @@ def compare_docs(ref_doc, new_doc):
 
 @pytest.mark.e2e
 def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing L2a ===")
     l2a_data_dir = os.path.join(e2eoutput_path, "l1_to_l2a_e2e")
     #l2a_data_file = os.path.join(l2a_data_dir, "90499.fits")
     fits_files = glob.glob(os.path.join(l2a_data_dir, "*.fits"))
@@ -353,11 +441,11 @@ def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L2a")
 
 @pytest.mark.e2e
 def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing L2b Analog ===")
     l2b_data_dir = os.path.join(e2eoutput_path, "l1_to_l2b_e2e")
     fits_files = glob.glob(os.path.join(l2b_data_dir, "*_l2b.fits"))
     l2b_data_file = max(fits_files, key=os.path.getmtime)
@@ -384,11 +472,11 @@ def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L2b Analog")
 
 @pytest.mark.e2e
 def test_l2b_pc_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing L2b Photon Counting ===")
     l2b_data_dir = os.path.join(e2eoutput_path, "photon_count_e2e", "l2a_to_l2b")
     l2b_data_file = glob.glob(os.path.join(l2b_data_dir, "*_l2b.fits"))[0]
     
@@ -414,12 +502,12 @@ def test_l2b_pc_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L2b Photon Counting")
 
 
 @pytest.mark.e2e
 def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing L3 ===")
     l3_data_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e", "l2b_to_l3")
     l3_data_file = glob.glob(os.path.join(l3_data_dir, "*_l3_.fits"))[0]
     
@@ -445,11 +533,11 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L3")
 
 @pytest.mark.e2e
 def test_l3_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing L3 Spectroscopy ===")
     l3_spec_data_dir = os.path.join(e2eoutput_path, "l1_to_l3_spec_e2e", "analog")
     l3_spec_data_file = glob.glob(os.path.join(l3_spec_data_dir, "*_l3_.fits"))[0]
     
@@ -474,10 +562,11 @@ def test_l3_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L3 Spectroscopy")
 
 @pytest.mark.e2e
 def test_l3_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing L3 Polarimetry ===")
     l3_pol_data_dir = os.path.join(e2eoutput_path, "l1_to_l3_pol_e2e", "analog")
     l3_pol_data_file = glob.glob(os.path.join(l3_pol_data_dir, "*_l3_.fits"))[0]
     
@@ -502,11 +591,11 @@ def test_l3_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L3 Polarimetry")
 
 @pytest.mark.e2e
 def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing L4 Coronagraphic ===")
     l4_data_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e")
     l4_data_file = glob.glob(os.path.join(l4_data_dir, "*_l4_.fits"))[0]
     
@@ -532,11 +621,11 @@ def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L4 Coronagraphic")
 
 @pytest.mark.e2e
 def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing L4 Noncoronagraphic ===")
     kgain_data_file = glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e", "*_l4_.fits"))[0]
     
     validate_cgi_filename(kgain_data_file, 'l4_')
@@ -561,10 +650,11 @@ def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L4 Noncoronagraphic")
 
 @pytest.mark.e2e
 def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing L4 Polarimetry ===")
     l4_pol_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_pol_e2e")
     l4_pol_data_file = glob.glob(os.path.join(l4_pol_data_dir, "*_l4_.fits"))[0]
     
@@ -589,11 +679,11 @@ def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L4 Polarimetry")
 
 @pytest.mark.e2e
 def test_l4_spec_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing L4 Spectroscopy Coronagraphic ===")
     l4_spec_coron_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_spec_psfsub_e2e")
     l4_spec_coron_data_file = glob.glob(os.path.join(l4_spec_coron_data_dir, "*_l4_.fits"))[0]
     
@@ -618,11 +708,11 @@ def test_l4_spec_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L4 Spectroscopy Coronagraphic")
 
 @pytest.mark.e2e
 def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing L4 Spectroscopy Noncoronagraphic ===")
     l4_spec_noncoron_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_spec_noncoron_e2e")
     l4_spec_noncoron_data_file = glob.glob(os.path.join(l4_spec_noncoron_data_dir, "*_l4_.fits"))[0]
     
@@ -647,11 +737,11 @@ def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="L4 Spectroscopy Noncoronagraphic")
 
 @pytest.mark.e2e
 def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Astrometry Calibration ===")
     astrom_data_file = glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits"))[0]
     
     validate_cgi_filename(astrom_data_file, 'ast_cal')
@@ -676,11 +766,11 @@ def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Astrometry Calibration")
 
 @pytest.mark.e2e
 def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Bad Pixel Map ===")
     bpmap_data_file = glob.glob(os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits"))[0]
     
     validate_cgi_filename(bpmap_data_file, 'bpm_cal')
@@ -705,12 +795,12 @@ def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Bad Pixel Map")
 
 
 @pytest.mark.e2e
 def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Flat Field ===")
     flat_data_file = glob.glob(os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits"))[0]
     
     validate_cgi_filename(flat_data_file, 'flt_cal')
@@ -735,11 +825,11 @@ def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Flat Field")
 
 @pytest.mark.e2e
 def test_polflat_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Polarimetry Flat Field ===")
     polflat_data_file = glob.glob(os.path.join(e2eoutput_path, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "*_flt_cal.fits"))[0]
     
     validate_cgi_filename(polflat_data_file, 'flt_cal')
@@ -763,12 +853,12 @@ def test_polflat_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Polarimetry Flat Field")
 
 
 @pytest.mark.e2e
 def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Core Throughput ===")
     ct_data_file = glob.glob(os.path.join(e2eoutput_path, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits"))[0]
     
     validate_cgi_filename(ct_data_file, 'ctp_cal')
@@ -793,11 +883,11 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Core Throughput")
 
 @pytest.mark.e2e
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Core Throughput Map ===")
     ctmap_data_file = glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits"))[0]
     
     validate_cgi_filename(ctmap_data_file, 'ctm_cal')
@@ -822,11 +912,11 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Core Throughput Map")
 
 @pytest.mark.e2e
 def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Flux Calibration ===")
     fluxcal_data_file = glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits"))[0]
     
     validate_cgi_filename(fluxcal_data_file, 'abf_cal')
@@ -851,11 +941,11 @@ def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Flux Calibration")
 
 @pytest.mark.e2e
 def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing K Gain ===")
     kgain_data_file = glob.glob(os.path.join(e2eoutput_path, "kgain_cal_e2e", "*_krn_cal.fits"))[0]
     
     validate_cgi_filename(kgain_data_file, 'krn_cal')
@@ -880,12 +970,12 @@ def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="K Gain")
 
 
 @pytest.mark.e2e
 def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Nonlinearity ===")
     nonlin_data_file = glob.glob(os.path.join(e2eoutput_path, "nonlin_cal_e2e", "*_nln_cal.fits"))[0]
     
     validate_cgi_filename(nonlin_data_file, 'nln_cal')
@@ -910,11 +1000,11 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Nonlinearity")
 
 @pytest.mark.e2e
 def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing ND Filter ===")
     nonlin_data_file = glob.glob(os.path.join(e2eoutput_path, "nd_filter_cal_e2e", "*_ndf_cal.fits"))[0]
     
     validate_cgi_filename(nonlin_data_file, 'ndf_cal')
@@ -939,11 +1029,11 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="ND Filter")
 
 @pytest.mark.e2e
 def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Noise Maps ===")
     noisemaps_data_file = glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits"))[0]
     
     validate_cgi_filename(noisemaps_data_file, 'dnm_cal')
@@ -968,12 +1058,12 @@ def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Noise Maps")
 
 
 @pytest.mark.e2e
 def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Dark ===")
     dark_data_file = glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits"))[0]
     
     validate_cgi_filename(dark_data_file, 'drk_cal')
@@ -998,12 +1088,12 @@ def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Dark")
 
 
 @pytest.mark.e2e
 def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
-
+    print("\n=== Testing Trap Pump ===")
     tpump_data_file = glob.glob(os.path.join(e2eoutput_path, "trap_pump_cal_e2e", "*_tpu_cal.fits"))[0]
     
     validate_cgi_filename(tpump_data_file, 'tpu_cal')
@@ -1028,10 +1118,11 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Trap Pump")
 
 @pytest.mark.e2e
 def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing Flux Calibration Polarimetry ===")
     fluxcal_pol_data_file = glob.glob(os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1", "*_abf_cal.fits"))[0]
     
     validate_cgi_filename(fluxcal_pol_data_file, 'abf_cal')
@@ -1053,10 +1144,11 @@ def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Flux Calibration Polarimetry")
         
 @pytest.mark.e2e
 def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing Mueller Matrix ===")
     polcal_data_file = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_mmx_cal.fits"))[0]
     
     validate_cgi_filename(polcal_data_file, 'mmx_cal')
@@ -1080,10 +1172,11 @@ def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Mueller Matrix")
 
 @pytest.mark.e2e
 def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing ND Mueller Matrix ===")
     polcal_data_file = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_ndm_cal.fits"))[0]
     
     validate_cgi_filename(polcal_data_file, 'ndm_cal')
@@ -1107,11 +1200,12 @@ def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="ND Mueller Matrix")
 
 
 @pytest.mark.e2e
 def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing Spectroscopy Line Spread Function ===")
     spec_linespread_data_file = glob.glob(os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "*_lsf_cal.fits"))[0]
     
     validate_cgi_filename(spec_linespread_data_file, 'lsf_cal')
@@ -1135,10 +1229,11 @@ def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Spectroscopy Line Spread Function")
 
 @pytest.mark.e2e
 def test_spec_prism_disp_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing Spectroscopy Prism Dispersion ===")
     spec_prism_disp_data_file = glob.glob(os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "*_dpm_cal.fits"))[0]
     
     validate_cgi_filename(spec_prism_disp_data_file, 'dpm_cal')
@@ -1161,8 +1256,8 @@ def test_spec_prism_disp_dataformat_e2e(e2edata_path, e2eoutput_path):
     if os.path.exists(ref_doc):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
-        # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents)
+        # diff the two outputs (skip HDU structure check due to weird array)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Spectroscopy Prism Dispersion", skip_hdu_structure_check=True)
 
 @pytest.mark.e2e
 def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
