@@ -231,7 +231,6 @@ def convert_spec_to_flux(input_dataset, spec_fluxcal = None, fluxcal_factor = No
             spec = np.divide(spec, algo_thru, out=np.full_like(spec, np.nan), where=valid)
             spec_err = np.divide(spec_err, algo_thru, out=np.full_like(spec_err, np.nan), where=valid)
             spec_header['ALGOCOR'] = True
-            history_messages.append("Applied algorithm throughput correction (ALGO_THRU).")
 
         # Apply slit transmission correction
         slit_vals = slit_per_frame[idx]

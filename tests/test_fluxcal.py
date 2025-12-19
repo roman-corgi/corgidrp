@@ -1014,41 +1014,7 @@ def test_l4_companion_photometry():
     except Exception as e:
         logger.warning(f"Could not apply core throughput correction: {e}. FAIL.")
         companion_image.ext_hdr['CTCOR'] = False
-        ct_factor = 1.0  # Use 1 if correction fails        # Apply algorithm throughput correction (ALGO_THRU) if present (PSF-subtracted frames)
-        if 'ALGO_THRU' in frame.hdu_list:
-            algo_thru = frame.hdu_list['ALGO_THRU'].data.astype(float)
-            if algo_thru.shape != spec.shape:
-                raise ValueError(
-                    f"ALGO_THRU shape {algo_thru.shape} must match SPEC shape {spec.shape}."
-                )
-            # Divide by algorithm throughput, accounting for zeros/non-finite
-            valid = np.isfinite(algo_thru) & (algo_thru != 0)
-            spec = np.divide(spec, algo_thru, out=np.full_like(spec, np.nan), where=valid)
-            spec_err = np.divide(spec_err, algo_thru, out=np.full_like(spec_err, np.nan), where=valid)
-            spec_header['ALGOCOR'] = True
-            history_messages.append("Applied algorithm throughput correction (ALGO_THRU).")
-
-        # Apply slit transmission correction
-        slit_vals = slit_per_frame[idx]
-        slit_applied = False
-        slit_curve = None
-        if slit_vals is not None:
-            slit_applied = True
-            slit_curve = np.asarray(select_slit_transmission_curve(frame, slit_vals), dtype=float)
-            if slit_curve.shape != spec.shape:
-                raise ValueError(
-                    f"slit_transmission curve shape {slit_curve.shape} must match SPEC shape {spec.shape}."
-                )
-            # Divide by wavelength-dependent slit transmission, accounting for zeros/non-finite
-            valid = np.isfinite(slit_curve) & (slit_curve != 0)
-            spec = np.divide(spec, slit_curve, out=np.full_like(spec, np.nan), where=valid)
-            spec_err = np.divide(spec_err, slit_curve, out=np.full_like(spec_err, np.nan), where=valid)
-            spec_header['SLITFAC'] = float(np.nanmean(slit_curve))
-            spec_header['SLITCOR'] = True
-        else:
-            spec_header['SLITCOR'] = False
-            if 'SLITFAC' in spec_header:
-                del spec_header['SLITFAC']
+        ct_factor = 1.0  # Use 1 if correction fails
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.05)
 
     checks = []
