@@ -10,7 +10,7 @@ pip install -e .
 ```
 Then you can import `corgidrp` like any other python package!
 
-The installation will create a configuration folder in your home directory called `.corgidrp`. 
+Upon first import of corgidrp, the package will create a configuration folder in your home directory called `.corgidrp`. 
 That configuration directory will be used to locate things on your computer such as the location of the calibration database and the pipeline configuration file. The configuration files stores setting such as whether to track each individual error term added to the noise. 
 
 ### For Developers
