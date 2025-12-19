@@ -449,7 +449,7 @@ if __name__ == "__main__":
 
     outputdir = "/Users/maxmb/Data/corgi/e2e_output/"
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = '/Users/maxmb/Data/corgi/E2E_Test_Data/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 

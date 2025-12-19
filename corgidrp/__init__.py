@@ -41,7 +41,7 @@ def create_config_dir():
         config["DATA"] = {}
         config["DATA"]["track_individual_errors"] = "False"
         config["DATA"]["chunk_size"] = "200"
-        config["DATA"]["image_dtype"] = "64"
+        config["DATA"]["image_dtype"] = "32"
         config["DATA"]["dq_dtype"] = "16"
         config["WALKER"] = {}
         config["WALKER"]["skip_missing_cal_steps"] = "False"

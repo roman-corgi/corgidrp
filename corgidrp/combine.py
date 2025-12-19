@@ -38,14 +38,16 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
         with warnings.catch_warnings():
             # prevent RuntimeWarning: Mean of empty slice
             warnings.filterwarnings('ignore', category=RuntimeWarning)
-            data_collapse = np.nanmean(data_subset, axis=0) 
-            err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0)) /np.sqrt(n_samples) # correct assuming standard error propagation
+            # Use float64 to maintain precision when input is float32
+            data_collapse = np.nanmean(data_subset, axis=0, dtype=np.float64) 
+            err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0, dtype=np.float64)) /np.sqrt(n_samples) # correct assuming standard error propagation
     elif collapse.lower() == "median":
         with warnings.catch_warnings():
             # prevent RuntimeWarning: Mean of empty slice
             warnings.filterwarnings('ignore', category=RuntimeWarning)
             data_collapse = np.nanmedian(data_subset, axis=0)
-            err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0)) /np.sqrt(n_samples) * np.sqrt(np.pi/2) # inflate median error
+            # Use float64 to maintain precision when input is float32
+            err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0, dtype=np.float64)) /np.sqrt(n_samples) * np.sqrt(np.pi/2) # inflate median error
     if num_frames_scaling:
         # scale up by the number of frames
         data_collapse *= tot_frames
@@ -68,7 +70,8 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
             # TODO: not implemented how to take means of anything beyond np.arrays (e.g., np.recarray)
             try:
                 if collapse.lower() == "mean":
-                    combined_hdus[i] = np.nanmean(np.array(combined_hdus[i]), axis=0)
+                    # Use float64 accumulator to maintain precision when input is float32
+                    combined_hdus[i] = np.nanmean(np.array(combined_hdus[i]), axis=0, dtype=np.float64)
                 elif collapse.lower() == "median":
                     combined_hdus[i] = np.nanmedian(np.array(combined_hdus[i]), axis=0)
                 # nothing here makes sense to scale by number of frames

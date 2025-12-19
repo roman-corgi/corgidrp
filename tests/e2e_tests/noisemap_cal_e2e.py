@@ -242,10 +242,14 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-9)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-9)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-9)
-    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-9)
+    # Use allclose for floating point comparison. The difference occurs because
+    # calibrate_darks_lsq processes L1 data directly (float64)
+    # while DRP processes L2a data saved as float32 (when image_dtype=32). Errors accumulate
+    # in the least squares calculation.
+    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-3, atol=0.005, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-4, atol=1e-6, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-4, atol=1e-6, equal_nan=True)
+    assert np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-5
     pass
 
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
@@ -467,10 +471,14 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     # iit_noisemap = data.autoload(iit_noisemap_fname)
     
 
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-9)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-9)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-9)
-    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-9)
+    # Use allclose for floating point comparison. The difference occurs because
+    # calibrate_darks_lsq processes L1 data directly (float64)
+    # while DRP processes L2a data saved as float32 (when image_dtype=32). Errors accumulate
+    # in the least squares calculation.
+    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-3, atol=0.005, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-4, atol=1e-6, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-4, atol=1e-6, equal_nan=True)
+    assert np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-5
     pass
 
     # create synthesized master dark in output folder (for inspection and for having a sample synthesized dark with all the right headers)
@@ -531,7 +539,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     #e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")
