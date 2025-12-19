@@ -257,7 +257,7 @@ def test_convert_spec_to_flux_basic():
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
 
-    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor, slit_transmission=slit_tuple)
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor = fluxcal_factor, slit_transmission=slit_tuple)
     frame = calibrated[0]
     spec_out = frame.hdu_list['SPEC'].data
     err_out = frame.hdu_list['SPEC_ERR'].data
@@ -288,7 +288,7 @@ def test_convert_spec_to_flux_no_slit():
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(1.5, err=0.1)
 
-    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor)
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor = fluxcal_factor)
     frame = calibrated[0]
 
     expected_spec = spec_vals * fluxcal_factor.fluxcal_fac
@@ -331,7 +331,7 @@ def test_convert_spec_to_flux_slit_scalar_map():
 
     calibrated = l4_to_tda.convert_spec_to_flux(
         dataset,
-        fluxcal_factor,
+        fluxcal_factor = fluxcal_factor,
         slit_transmission=(slit_map, slit_x, slit_y),
     )
     frame = calibrated[0]
@@ -436,8 +436,8 @@ def test_compute_spec_flux_ratio_single_roll():
     fpam_fsam_cal = create_mock_fpamfsam_cal()
     applied, _ = l4_to_tda.apply_core_throughput_correction(comp_ds, ct_cal, fpam_fsam_cal)
 
-    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_ds]), fluxcal_factor)
-    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_ds]), fluxcal_factor)
+    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_ds]), fluxcal_factor = fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_ds]), fluxcal_factor = fluxcal_factor)
     host_spec_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
     comp_spec_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
     host_err_flux = np.squeeze(np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
@@ -448,7 +448,7 @@ def test_compute_spec_flux_ratio_single_roll():
         ((comp_spec_flux * host_err_flux) / (host_spec_flux ** 2)) ** 2
     )
 
-    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_ds, comp_ds, fluxcal_factor)
+    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_cal[0], comp_cal[0])
     expected = comp_spec / host_spec
 
     result = (
@@ -458,12 +458,10 @@ def test_compute_spec_flux_ratio_single_roll():
         metadata['companion_roll'] == 'ROLL_B' and
         np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
     )
+    
     print('\ncompute_spec_flux_ratio single roll: ', end='')
     print_pass() if result else print_fail()
-
     assert result
-    assert np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
-
 
 def test_compute_spec_flux_ratio_weighted():
     """Combine spectra from multiple rolls, then compute a single flux ratio."""
@@ -521,8 +519,8 @@ def test_compute_spec_flux_ratio_weighted():
     _, _ = l4_to_tda.apply_core_throughput_correction(comp_comb_image, ct_cal, fpam_fsam_cal)
 
     # Compute flux-calibrated combined spectra to build the expected ratio and error
-    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_comb_image]), fluxcal_factor)
-    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_comb_image]), fluxcal_factor)
+    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_comb_image]), fluxcal_factor = fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_comb_image]), fluxcal_factor = fluxcal_factor)
 
     host_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
     comp_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
@@ -531,7 +529,7 @@ def test_compute_spec_flux_ratio_weighted():
 
     # Compute flux ratio using the combined spectra (production path)
     ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
-        host_comb_image, comp_comb_image, fluxcal_factor
+        host_cal[0], comp_cal[0]
     )
 
     # Expected ratio and uncertainty in flux units
@@ -540,15 +538,15 @@ def test_compute_spec_flux_ratio_weighted():
         (comp_err_flux / host_flux) ** 2
         + ((comp_flux * host_err_flux) / (host_flux ** 2)) ** 2
     )
-
+    
     result = (
-        np.allclose(ratio, expected_ratio, equal_nan=True)
-        and np.array_equal(wavelength, host_comb_wave)
-        and np.allclose(metadata['ratio_err'], expected_ratio_err, equal_nan=True)
-    )
+        np.allclose(ratio, expected_ratio, equal_nan=True) and
+        np.array_equal(wavelength, host_comb_wave) and
+        np.allclose(metadata['ratio_err'], expected_ratio_err, equal_nan=True)
+        )
+    
     print('\ncompute_spec_flux_ratio weighted rolls: ', end='')
     print_pass() if result else print_fail()
-
     assert result
 
 def test_abs_fluxcal():
@@ -1016,7 +1014,41 @@ def test_l4_companion_photometry():
     except Exception as e:
         logger.warning(f"Could not apply core throughput correction: {e}. FAIL.")
         companion_image.ext_hdr['CTCOR'] = False
-        ct_factor = 1.0  # Use 1 if correction fails
+        ct_factor = 1.0  # Use 1 if correction fails        # Apply algorithm throughput correction (ALGO_THRU) if present (PSF-subtracted frames)
+        if 'ALGO_THRU' in frame.hdu_list:
+            algo_thru = frame.hdu_list['ALGO_THRU'].data.astype(float)
+            if algo_thru.shape != spec.shape:
+                raise ValueError(
+                    f"ALGO_THRU shape {algo_thru.shape} must match SPEC shape {spec.shape}."
+                )
+            # Divide by algorithm throughput, accounting for zeros/non-finite
+            valid = np.isfinite(algo_thru) & (algo_thru != 0)
+            spec = np.divide(spec, algo_thru, out=np.full_like(spec, np.nan), where=valid)
+            spec_err = np.divide(spec_err, algo_thru, out=np.full_like(spec_err, np.nan), where=valid)
+            spec_header['ALGOCOR'] = True
+            history_messages.append("Applied algorithm throughput correction (ALGO_THRU).")
+
+        # Apply slit transmission correction
+        slit_vals = slit_per_frame[idx]
+        slit_applied = False
+        slit_curve = None
+        if slit_vals is not None:
+            slit_applied = True
+            slit_curve = np.asarray(select_slit_transmission_curve(frame, slit_vals), dtype=float)
+            if slit_curve.shape != spec.shape:
+                raise ValueError(
+                    f"slit_transmission curve shape {slit_curve.shape} must match SPEC shape {spec.shape}."
+                )
+            # Divide by wavelength-dependent slit transmission, accounting for zeros/non-finite
+            valid = np.isfinite(slit_curve) & (slit_curve != 0)
+            spec = np.divide(spec, slit_curve, out=np.full_like(spec, np.nan), where=valid)
+            spec_err = np.divide(spec_err, slit_curve, out=np.full_like(spec_err, np.nan), where=valid)
+            spec_header['SLITFAC'] = float(np.nanmean(slit_curve))
+            spec_header['SLITCOR'] = True
+        else:
+            spec_header['SLITCOR'] = False
+            if 'SLITFAC' in spec_header:
+                del spec_header['SLITFAC']
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.05)
 
     checks = []
