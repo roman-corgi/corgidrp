@@ -1361,6 +1361,9 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
                     # Skip FILE* keywords (FILE0, FILE1, etc.)
                     if keyword.startswith('FILE') and len(keyword) > 4 and keyword[4:].isdigit():
                         continue
+                    # case of a file number greater than 9999 (possible for noisemap cal)
+                    if keyword.startswith('HIERARCH FILE') and len(keyword) > 13 and keyword[13:].isdigit():
+                        continue
                     
                     if keyword not in all_headers[hdu_name]:
                         all_headers[hdu_name][keyword] = {}
