@@ -1052,7 +1052,8 @@ class SpecFilterOffset(Image):
 
     Args:
         data_or_filepath (str or dict): either the filepath to the FITS file to read in OR the dictionary containing 
-                                        the filter offsets in pixel units as a paired list [&x, &y]
+                                        the filter offsets in pixel units as a paired list [&x, &y],
+                                        see SpecFilterOffset.default_offsets as an example
         date_valid (astropy.time.Time): date after which these offsets are valid
             
     Attributes:
@@ -1133,7 +1134,8 @@ class SpecFilterOffset(Image):
                 else:
                     if len(input_dict[key]) != 2:
                         raise ValueError("the offset positions should be a a list of paired x and y offset values")
-                    self.offsets[key] = input_dict.get(key)
+                    else:
+                        self.offsets[key] = input_dict.get(key)
             self.data = Table(self.offsets)
             self.filedir = "."
             
