@@ -1046,6 +1046,134 @@ class DispersionModel(Image):
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
+class SpecFilterOffset(Image):
+    """
+    calibration class that contains a dictionary of the x/y offsets of the different used filters.
+
+    Args:
+        data_or_filepath (str or dict): either the filepath to the FITS file to read in OR the dictionary containing 
+                                        the filter offsets in pixel units as a paired list [&x, &y],
+                                        see SpecFilterOffset.default_offsets as an example
+        date_valid (astropy.time.Time): date after which these offsets are valid
+            
+    Attributes:
+        default_offsets (dict): dictionary containing the default filter offsets in pixel units [&x, &y]
+        data (astropy.Table): table containing the new filter offsets
+        offsets(dict): dictionary of updated filter offset positions
+    """
+    
+    #default x and y offsets of each filter in a dictionary
+    default_offsets = {
+        "1" : [0, 0],
+        "2" : [0, 0],
+        "3" : [0.725909, -0.09398],
+        "4" : [0, 0],
+        "1A": [0, 0],
+        "1B": [0, 0],
+        "1C": [0, 0],
+        "2A": [0, 0],
+        "2B": [0, 0],
+        "2C": [0, 0],
+        "3A": [0.202398, -0.417079],
+        "3B": [-0.151775, -0.271393],
+        "3C": [1.115033, 0.086057],
+        "3G": [0, 0],
+        "3D": [-0.115639, -0.151316],
+        "3E": [0.05028, -0.54714],
+        "4A": [0, 0],
+        "4B": [0, 0],
+        "4C": [0, 0]
+        }
+    
+    def __init__(self, data_or_filepath, date_valid = None):
+        if isinstance(data_or_filepath, str):
+            # run the image class contructor
+            super().__init__(data_or_filepath)
+            # double check that this is actually a DispersionModel file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr:
+                raise ValueError("File that was loaded was not a SpecFilterOffset file.")
+            if self.ext_hdr['DATATYPE'] != 'SpecFilterOffset':
+                raise ValueError("File that was loaded was not a SpecFilterOffset file.")
+            names = self.data.names
+            self.offsets = {}
+            for i, key in enumerate(names):
+                self.offsets[key] = [self.data[0][i], self.data[1][i]]
+        else:
+            if not isinstance(data_or_filepath, dict):
+                raise ValueError("Input should either be a dictionary or a filepath string")
+            if date_valid is None:
+                date_valid = time.Time.now()
+            pri_hdr = fits.Header()
+            ext_hdr = fits.Header()
+            ext_hdr['SCTSRT'] = date_valid.isot # use this for validity date
+            ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+            # fill caldb required keywords with dummy data
+            pri_hdr["OBSNUM"] = 000     
+            ext_hdr["EXPTIME"] = 1
+            ext_hdr['OPMODE'] = ""
+            ext_hdr['EMGAIN_C'] = 1.0
+            ext_hdr['EXCAMT'] = 40.0
+
+            # Enforce data level = CAL
+            ext_hdr['DATALVL']    = 'CAL'
+            ext_hdr['DATATYPE'] = 'SpecFilterOffset' # corgidrp specific keyword for saving to disk
+            # add to history
+            ext_hdr['HISTORY'] = "SpecFilterOffset file created"
+            #check that all parameters are available in the input dict
+            #if not replace the corresponding keys in the default offsets with the new positions
+            self.offsets = {}
+            input_dict = {} 
+            for input_key, value in data_or_filepath.items():
+                input_dict[input_key.upper()] = value
+            for key in self.default_offsets:
+                if key not in input_dict:
+                    self.offsets[key] = self.default_offsets.get(key)
+                else:
+                    if len(input_dict[key]) != 2:
+                        raise ValueError("the offset positions should be a a list of paired x and y offset values")
+                    else:
+                        self.offsets[key] = input_dict.get(key)
+            self.data = Table(self.offsets)
+            self.filedir = "."
+            
+            filename = "SpecFilterOffset_{0}.fits".format(ext_hdr['SCTSRT']).replace(':','.')
+            self.filename = filename
+            pri_hdr['FILENAME'] = self.filename
+            self.pri_hdr = pri_hdr
+            self.ext_hdr = ext_hdr
+            
+        self.err = None
+        self.dq = None
+
+    def get_offsets(self, filter):
+        return self.offsets.get(filter.upper())
+
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.BinTableHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+
+        hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
+
 class NonLinearityCalibration(Image):
     """
     Class for non-linearity calibration files. Although it's not strictly an image that you might look at, it is a 2D array of data
@@ -3178,8 +3306,6 @@ def format_ftimeutc(ftime_str):
     return formatted_time
 
 
-
-
 datatypes = { "Image" : Image,
               "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -3198,9 +3324,11 @@ datatypes = { "Image" : Image,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel,
               "LineSpread": LineSpread,
+              "SpecFilterOffset": SpecFilterOffset,
               "MuellerMatrix": MuellerMatrix,
               "NDMuellerMatrix": NDMuellerMatrix,
               "SpecFluxCal": SpecFluxCal }
+
 
 def autoload(filepath):
     """

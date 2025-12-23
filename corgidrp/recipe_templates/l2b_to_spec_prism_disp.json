@@ -14,7 +14,10 @@
             "name" : "compute_psf_centroid"
         },
         {
-            "name" : "calibrate_dispersion_model"
+            "name" : "calibrate_dispersion_model",
+                "calibs" : {
+                    "SpecFilterOffset" : "AUTOMATIC"
+            }
         },
         {
             "name" : "save"
