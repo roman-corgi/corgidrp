@@ -901,10 +901,10 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     l2a_data_filename = dataset[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
     noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
-    noise_maps.FPN_im_mean = FPN_image_mean
-    noise_maps.CIC_im_mean = CIC_image_mean
-    noise_maps.DC_im_mean = DC_image_mean
-    noise_maps.FPN_im_median = FPN_image_median
+    noise_maps.ext_hdr['FPN_IMM'] = FPN_image_mean
+    noise_maps.ext_hdr['CIC_IMM'] = CIC_image_mean
+    noise_maps.ext_hdr['DC_IMM'] = DC_image_mean
+    noise_maps.ext_hdr['FPN_IMME'] = FPN_image_median
     vals_list=[]
     for w1,w2,w3 in zip(exptime_arr, EMgain_arr, mean_num_good_fr):
         vals_list.append([float(w1),float(w2),float(w3)])

@@ -527,13 +527,13 @@ def run_recipe(recipe, save_recipe_file=True):
                 curr_dataset = data.Dataset(filelist, no_data=True)
                 recipe_temp = recipe.copy()
                 # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
-                recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[0].filepath)
+                recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
             else:
                 curr_dataset = data.Dataset(filelist)
                 recipe_temp = recipe
-            curr_dataset[0].ext_hdr["RECIPE"] = json.dumps(recipe)
+            curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
             # write the recipe into the image extension header
-            for frame in curr_dataset[1:]:
+            for frame in curr_dataset[:-1]:
                 frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
         # execute each pipeline step
         print('Executing recipe: {0}'.format(recipe['name']))
@@ -587,11 +587,11 @@ def run_recipe(recipe, save_recipe_file=True):
                         if ram_heavy_bool:
                             recipe_temp = recipe.copy()
                             # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
-                            recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[0].filepath)
+                            recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
                         else: 
                             recipe_temp = recipe
-                        curr_dataset[0].ext_hdr["RECIPE"] = json.dumps(recipe)
-                        for frame in list_of_frames[1:]:
+                        curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
+                        for frame in list_of_frames[:-1]:
                             frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
 
 

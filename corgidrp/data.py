@@ -1417,14 +1417,14 @@ class DetectorNoiseMaps(Image):
         self.FPN_err = self.err[0][0]
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
-        if not hasattr(self, 'FPN_im_mean'):
-            self.FPN_im_mean = None
-        if not hasattr(self, 'CIC_im_mean'):
-            self.CIC_im_mean = None
-        if not hasattr(self, 'DC_im_mean'):
-            self.DC_im_mean = None
-        if not hasattr(self, 'FPN_im_median'):
-            self.FPN_im_median = None
+        if 'FPN_IMM' not in self.ext_hdr.keys():
+            self.ext_hdr['FPN_IMM'] = None
+        if 'CIC_IMM' not in self.ext_hdr.keys():
+            self.ext_hdr['CIC_IMM'] = None
+        if 'DC_IMM' not in self.ext_hdr.keys():
+            self.ext_hdr['DC_IMM'] = None
+        if 'FPN_IMME' not in self.ext_hdr.keys():
+            self.ext_hdr['FPN_IMME'] = None
 
 class DetectorParams(Image):
     """

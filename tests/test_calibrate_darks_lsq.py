@@ -163,10 +163,10 @@ def test_expected_results_sub():
     assert(nm_open.ext_hdr['B_O_UNIT'] == 'DN')
     # make sure an example set of exposure time, EM gain, and number of frames is in HISTORY
     assert('[2.0, 2.0, 30.0]' in str(nm_open.ext_hdr['HISTORY*']))
-    assert(hasattr(nm_open, 'CIC_im_mean'))
-    assert(hasattr(nm_open, 'DC_im_mean'))
-    assert(hasattr(nm_open, 'FPN_im_mean'))
-    #assert('[]''Detector noise maps created with the following sets of (exposure time (in s), EM gain, and number of frames):  {0}'.format(list(zip(exptime_arr, EMgain_arr, mean_num_good_fr)))
+    assert('FPN_IMM' in nm_open.ext_hdr.keys())
+    assert('CIC_IMM' in nm_open.ext_hdr.keys())
+    assert('DC_IMM' in nm_open.ext_hdr.keys())
+    assert('FPN_IMME' in nm_open.ext_hdr.keys())
 
 def test_sub_stack_len():
     """datasets should have at least 4 sub-stacks."""
