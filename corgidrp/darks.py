@@ -517,8 +517,10 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         raise ValueError('The input weighting should be either True or False.')
     if detector_regions is None:
             detector_regions = detector_areas
-
-    datasets, _ = dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+    if dataset[0].data is None:
+        datasets, _ = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+    else:
+        datasets, _ = dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(datasets) <= 3:
         raise CalDarksLSQException('Number of sub-stacks in datasets must '
                 'be more than 3 for proper curve fit.')
@@ -896,7 +898,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
                            input_err, input_dq, err_hdr=err_hdr)
     
     noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))
-    l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
+    l2a_data_filename = dataset[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
     noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
     noise_maps.FPN_im_mean = FPN_image_mean
