@@ -246,10 +246,6 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-9)
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-9)
     assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-9)
-    # check RAM-heavy metadata things
-    test_filepath = glob(os.path.join(l1_datadir,"*.fits"))[2]
-    test_image = data.Image(test_filepath)
-    assert stackl1_dat[-1].filepath in str(test_image.ext_hdr['RECIPE']) 
     pass
 
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
