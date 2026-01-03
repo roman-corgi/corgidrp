@@ -570,7 +570,7 @@ def calibrate_kgain(dataset_kgain,
             warnings.filterwarnings('ignore', category=DeprecationWarning)
             added_deviations_shot_arr = [
                     np.sqrt(np.square(np.reshape(std_diffs[x], 
-                    newshape=(-1, 1))) - complex(rn_std[x])**2)
+                    shape=(-1, 1))) - complex(rn_std[x])**2)
                     for x in range(len(rn_std))
                     ]
         
