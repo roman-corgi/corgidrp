@@ -8,7 +8,10 @@
     "outputdir" : "",
     "steps" : [
         {
-            "name" : "determine_wave_zeropoint"
+            "name" : "determine_wave_zeropoint",
+                "calibs" : {
+                    "SpecFilterOffset" : "AUTOMATIC"
+            }
         },
         {
             "name" : "add_wavelength_map",
