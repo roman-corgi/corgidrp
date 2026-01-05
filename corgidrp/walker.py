@@ -533,8 +533,9 @@ def run_recipe(recipe, save_recipe_file=True):
                 recipe_temp = recipe
             curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
             # write the recipe into the image extension header
-            for frame in curr_dataset[:-1]:
-                frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+            if len(curr_dataset) > 1:
+                for frame in curr_dataset[:-1]:
+                    frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
         # execute each pipeline step
         print('Executing recipe: {0}'.format(recipe['name']))
         if ram_increment_bool and len(filelist_chunks) > 1:
@@ -591,8 +592,9 @@ def run_recipe(recipe, save_recipe_file=True):
                         else: 
                             recipe_temp = recipe
                         curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                        for frame in list_of_frames[:-1]:
-                            frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                        if len(list_of_frames) > 1:
+                            for frame in list_of_frames[:-1]:
+                                frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
 
 
                     # load the calibration files in from disk
