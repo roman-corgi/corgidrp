@@ -22,14 +22,14 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     '''
 
-    An end-to-end test that takes the OS11 data and runs it through the L2b to L4 pipeline.
+    An end-to-end test that takes the noncoronagraphic OS11 data and runs it through the L2b to L4 pipeline.
 
         It checks that: 
             - The two OS11 planets are detected within 1 pixel of their expected separations
             - The calibration files are correctly associated with the output file
 
         Data needed: 
-            - Coronagraphic dataset - taken from OS11 data
+            - Noncoronagraphic dataset - taken from OS11 data
             - Reference star dataset - taken from OS11 data
             - Satellite spot dataset - created in the test
         
@@ -187,7 +187,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l3_to_l4(e2eoutput_path):
     '''
-    An end-to-end test that takes the L3 data and runs it through the L3 to L4 pipeline.
+    An end-to-end test that takes the noncoronagraphic L3 data and runs it through the L3 to L4 pipeline.
 
         It checks that: 
             - The two OS11 planets are detected within 1 pixel of their expected separations
