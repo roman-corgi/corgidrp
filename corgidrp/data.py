@@ -15,6 +15,7 @@ from scipy.interpolate import LinearNDInterpolator
 from astropy import wcs
 import copy
 import corgidrp
+from corgidrp.detector import slice_section, detector_areas
 from datetime import datetime, timedelta, timezone
 
 class Dataset():
@@ -1418,13 +1419,17 @@ class DetectorNoiseMaps(Image):
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
         if 'FPN_IMM' not in self.ext_hdr.keys():
-            self.ext_hdr['FPN_IMM'] = None
+            fpn_imm = np.nanmean(slice_section(self.FPN_map, 'SCI', 'image', detector_areas))
+            self.ext_hdr['FPN_IMM'] = fpn_imm
         if 'CIC_IMM' not in self.ext_hdr.keys():
-            self.ext_hdr['CIC_IMM'] = None
+            cic_imm = np.nanmean(slice_section(self.CIC_map, 'SCI', 'image', detector_areas))
+            self.ext_hdr['CIC_IMM'] = cic_imm
         if 'DC_IMM' not in self.ext_hdr.keys():
-            self.ext_hdr['DC_IMM'] = None
+            dc_imm = np.nanmean(slice_section(self.DC_map, 'SCI', 'image', detector_areas))
+            self.ext_hdr['DC_IMM'] = dc_imm
         if 'FPN_IMME' not in self.ext_hdr.keys():
-            self.ext_hdr['FPN_IMME'] = None
+            fpn_imme = np.nanmedian(slice_section(self.FPN_map, 'SCI', 'image', detector_areas))
+            self.ext_hdr['FPN_IMME'] = fpn_imme
 
 class DetectorParams(Image):
     """

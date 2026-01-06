@@ -1019,6 +1019,11 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         prihdr = noise_maps.pri_hdr
         exthdr = noise_maps.ext_hdr
         errhdr = noise_maps.err_hdr
+        # remove keywords that would not appear in Dark not made from noise maps
+        for key in ['B_O', 'B_O_ERR', 'B_O_UNIT', 'FPN_IMM', 'CIC_IMM', 'DC_IMM',
+                    'FPN_IMME']:
+            if key in exthdr.keys():
+                del exthdr[key]
         exthdr['NAXIS1'] = Fd.shape[1]
         exthdr['NAXIS2'] = Fd.shape[0]
         exthdr['DATATYPE'] = 'Dark'
