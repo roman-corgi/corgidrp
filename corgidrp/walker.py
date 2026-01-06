@@ -591,7 +591,7 @@ def run_recipe(recipe, save_recipe_file=True):
                             recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
                         else: 
                             recipe_temp = recipe
-                        curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
+                        list_of_frames[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
                         if len(list_of_frames) > 1:
                             for frame in list_of_frames[:-1]:
                                 frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
