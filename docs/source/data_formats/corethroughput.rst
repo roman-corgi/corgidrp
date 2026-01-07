@@ -284,7 +284,7 @@ Image Header (HDU 1)
 +------------+------------+----------------------------------+--------------------------------------------------------------------------------------------------+
 | SPAMSP_V   | float      | 27254.4                          | SPAM set point V. The default V position corresponding to the closest SPAM named position        |
 +------------+------------+----------------------------------+--------------------------------------------------------------------------------------------------+
-| FPAMNAME   | str        | | Closest named FPAM position, calculated from FPAM_H/V and FPAM lookup table | closest named position                                                                           |
+| FPAMNAME   | str        |                                  | Closest named FPAM position, calculated from FPAM_H/V and FPAM lookup table                      |
 +------------+------------+----------------------------------+--------------------------------------------------------------------------------------------------+
 | FPAM_H     | float      | 0.0                              | FPAM absolute position of the H-axis in microns                                                  |
 +------------+------------+----------------------------------+--------------------------------------------------------------------------------------------------+
