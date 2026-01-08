@@ -1,5 +1,9 @@
-# RAM testing 
-'''This script is designed to test ~26000 frames for generating noise maps.  It uses a shortcut 
+# RAM testing; NOT part of automated e2e tests 
+
+'''
+This test script is meant to quantify RAM usage and is not included in the automated e2e test suite.
+
+This script is designed to test ~26000 frames for generating noise maps.  It uses a shortcut 
 through all the preliminary step functions before calibrate_darks_lsq(), the main 
 RAM-heavy function for generating noise maps.  
 

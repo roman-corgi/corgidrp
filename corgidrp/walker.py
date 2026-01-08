@@ -531,8 +531,8 @@ def run_recipe(recipe, save_recipe_file=True):
             else:
                 curr_dataset = data.Dataset(filelist)
                 recipe_temp = recipe
-            curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
             # write the recipe into the image extension header
+            curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
             if len(curr_dataset) > 1:
                 for frame in curr_dataset[:-1]:
                     frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
