@@ -59,9 +59,19 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
     if not os.path.exists(flat_mock_inputdir):
         os.makedirs(flat_mock_inputdir)    
+    # Empty out flat_mock_inputdir if it contains any files
+    for filename in os.listdir(flat_mock_inputdir):
+        file_path = os.path.join(flat_mock_inputdir, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
     calibrations_dir = os.path.join(flat_outputdir, "calibrations")
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
+    # Empty out flat_mock_inputdir if it contains any files
+    for filename in os.listdir(calibrations_dir):
+        file_path = os.path.join(calibrations_dir, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -271,9 +281,19 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
     if not os.path.exists(flat_mock_inputdir):
         os.makedirs(flat_mock_inputdir) 
+    # Empty out flat_mock_inputdir if it contains any files
+    for filename in os.listdir(flat_mock_inputdir):
+        file_path = os.path.join(flat_mock_inputdir, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
     calibrations_dir = os.path.join(flat_outputdir, "calibrations")
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
+    # Empty out flat_mock_inputdir if it contains any files
+    for filename in os.listdir(calibrations_dir):
+        file_path = os.path.join(calibrations_dir, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -464,7 +484,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     # e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
