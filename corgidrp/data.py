@@ -28,11 +28,14 @@ class Dataset():
         all_data (np.array): an array with all the data combined together. First dimension is always number of images
         frames (np.array): list of data objects (probably corgidrp.data.Image)
     """
-    def __init__(self, frames_or_filepaths, no_data=False):
+    def __init__(self, frames_or_filepaths, no_data=False, no_err=False, no_dq=False):
         """
         Args:
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
-            no_data (bool): If True, only the header information is loaded into the dataset for the frames' data.  Defaults to False.
+            no_data (bool): If True, only the header information is loaded into the dataset for the frames' data.  However, if the input is at the L1 level, the err and dq for 
+                each frame will have the default loaded in (arrays of zeros).  Defaults to False.
+            no_err (bool): If True, no err arrays are loaded in.  This overrides the condition concerning err in the no_data description above.  Defaults to False.
+            no_dq (bool): If True, no dq arrays are loaded in.  This overrides the condition concerning dq in the no_data description above.  Defaults to False.
         """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
@@ -50,13 +53,14 @@ class Dataset():
                 fr = Image(filepath)
                 if no_data:
                     fr.data = None
-                    if fr.ext_hdr['DATALVL'].upper() != 'L1':
-                        #in this case, the frames are L1 and don't yet 
-                        # have err and dq, so don't set those 
-                        # to None so that each frame is given 
-                        # the default starting err and dq for further 
+                    if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_err:
+                        #in this case, the frames are L1 and don't yet
+                        # have err and dq, so don't set those
+                        # to None so that each frame is given
+                        # the default starting err and dq for further
                         # pipeline processes
                         fr.err = None
+                    if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_dq:
                         fr.dq = None
                 self.frames.append(fr)
         else:
@@ -542,7 +546,10 @@ class Image():
                     parent_filenames.add(img.ext_hdr['FILE{0}'.format(j)])
         
         for i, filename in enumerate(parent_filenames):
-            self.ext_hdr.set('FILE{0}'.format(i), filename, "File #{0} filename used to create this frame".format(i))
+            if len(str(i)) > 4:
+                self.ext_hdr.set('HIERARCH FILE{0}'.format(i), filename, "File #{0} filename used to create this frame".format(i))
+            else:
+                self.ext_hdr.set('FILE{0}'.format(i), filename, "File #{0} filename used to create this frame".format(i))
         self.ext_hdr.set('DRPNFILE', len(parent_filenames), "# of files used to create this processed frame")
 
     def copy(self, copy_data=True):
@@ -1538,6 +1545,18 @@ class DetectorNoiseMaps(Image):
         self.FPN_err = self.err[0][0]
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
+        if 'FPN_IMM' not in self.ext_hdr.keys():
+            fpn_imm = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            self.ext_hdr['FPN_IMM'] = fpn_imm
+        if 'CIC_IMM' not in self.ext_hdr.keys():
+            cic_imm = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            self.ext_hdr['CIC_IMM'] = cic_imm
+        if 'DC_IMM' not in self.ext_hdr.keys():
+            dc_imm = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            self.ext_hdr['DC_IMM'] = dc_imm
+        if 'FPN_IMME' not in self.ext_hdr.keys():
+            fpn_imme = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            self.ext_hdr['FPN_IMME'] = fpn_imme
 
 class DetectorParams(Image):
     """

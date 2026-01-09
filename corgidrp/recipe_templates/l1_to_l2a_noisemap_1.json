@@ -35,9 +35,6 @@
             "name" : "update_to_l2a"
         },
         {
-            "name" : "save"
-        },
-        {
             "name" : "convert_to_electrons",
             "calibs" : {
                 "KGain" : "AUTOMATIC"
