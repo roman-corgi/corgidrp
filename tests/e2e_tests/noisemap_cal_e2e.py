@@ -44,7 +44,7 @@ def set_obstype_for_darks(
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
-        if exthdr['EMGAIN_A'] == 1:
+        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
         prihdr['PHTCNT'] = False
