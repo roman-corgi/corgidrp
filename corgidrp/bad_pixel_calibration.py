@@ -45,7 +45,7 @@ def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac 
     #Combined the two maps 
     combined_badpixels = np.bitwise_or(hot_warm_pixels,dead_pixels)
 
-    # Merge headers from dark and flat (may differ in BUNIT, EXPTIME, EMGAIN_C, KGAINPAR)
+    # Merge headers from dark and flat (may differ in BUNIT, EXPTIME, EMGAIN_C, KGAINPAR?)
     input_dataset = Dataset([master_dark, master_flat])
     pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(input_dataset, 
                                                                                  allow_differing_keywords={'BUNIT', 'EXPTIME', 'EMGAIN_C', 'KGAINPAR'})

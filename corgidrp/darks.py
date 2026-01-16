@@ -868,16 +868,8 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     # Merge headers (EMGAIN_C, EXPTIME, KGAINPAR may differ ?)
     pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(dataset,
                                                                                 allow_differing_keywords={'EMGAIN_C', 'EXPTIME', 'KGAINPAR'})
-    
-    # Clear exposure-specific keywords ? TODO
-    ext_hdr['EXPTIME'] = None
-    if 'EMGAIN_M' in ext_hdr.keys():
-        ext_hdr['EMGAIN_M'] = None
-    ext_hdr['EMGAIN_C'] = None
-    ext_hdr['KGAINPAR'] = None
-    ext_hdr['BUNIT'] = 'detected electron'
 
-    err_hdr['BUNIT'] = 'detected electron'
+
 
     ext_hdr['DATATYPE'] = 'DetectorNoiseMaps'
 
