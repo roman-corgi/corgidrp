@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import corgidrp.data as data
 from pyklip.klip import rotate
+import corgidrp.check as check
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling, other_hdus=None):
     """
@@ -127,20 +128,21 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         data_collapse, err_collapse, dq_collapse, combined_hdus = combine_images(data_subset, err_subset, dq_subset, collapse=collapse, 
                                                                   num_frames_scaling=num_frames_scaling, other_hdus=other_hdus)
 
-
-        # grab the headers from the first frame in this sub sequence
-        pri_hdr = input_dataset[num_frames_per_group*i].pri_hdr.copy()
-        ext_hdr = input_dataset[num_frames_per_group*i].ext_hdr.copy()
-        ext_hdr["NUM_FR"] = num_frames_per_group
-        err_hdr = input_dataset[num_frames_per_group*i].err_hdr.copy()
-        dq_hdr = input_dataset[num_frames_per_group*i].dq_hdr.copy()
+        # Get subset of frames for this group
+        subset_indices = range(num_frames_per_group*i, num_frames_per_group*(i+1))
+        subset_dataset = data.Dataset([input_dataset[j] for j in subset_indices])
+        
+        # Merge headers for combined frame 
+        # Allow BUNIT to differ?
+        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(subset_dataset,
+                                                                                    allow_differing_keywords={'BUNIT'})
         hdulist = input_dataset[num_frames_per_group*i].hdu_list.copy()
         # update other hdus if needed
         if combine_other_hdus:
             for j, hdu in enumerate(hdulist):
                 hdu.data = combined_hdus[j]
                 hdu.header["NUM_FR"] = num_frames_per_group
-                hdu.header['HISTORY'] = "Combined {0} frames by {1}".format(num_frames_per_group, collapse)
+                hdu.header.add_history("Combined {0} frames by {1}".format(num_frames_per_group, collapse))
         new_image = data.Image(data_collapse, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err_collapse, dq=dq_collapse, err_hdr=err_hdr, 
                                 dq_hdr=dq_hdr, input_hdulist=hdulist)
                                 

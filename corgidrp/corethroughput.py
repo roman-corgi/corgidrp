@@ -4,7 +4,7 @@ from astropy.time import Time
 from astropy.io import fits, ascii
 
 import corgidrp
-from corgidrp import astrom, data
+from corgidrp import astrom, data, check
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -402,13 +402,26 @@ def generate_ct_cal(
     fsam_hdr['UNITS'] = 'micrometer'
     ct_hdu_list += [fits.ImageHDU(data=fsam_hv, header=fsam_hdr, name='CTFSAM')]
 
+    # Merge headers for combined frame (EXPTIME may differ?)
+    pri_hdr, ext_hdr_merged, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(dataset,
+                                                                                        allow_differing_keywords={'EXPTIME'})
+    
+    # Start with merged ext_hdr, then update with PSF cube header info
+    ext_hdr = ext_hdr_merged.copy()
+    # Update with PSF cube-specific header info
+    for key in ['NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'EXTNAME']:
+        if key in psf_hdu.header:
+            ext_hdr[key] = psf_hdu.header[key]
+            if key in psf_hdu.header.comments:
+                ext_hdr.comments[key] = psf_hdu.header.comments[key]
+    
     # Generate core throughput calibration file
     ct_cal = data.CoreThroughputCalibration(psf_hdu.data,
-        pri_hdr=dataset[0].pri_hdr,
-        ext_hdr=psf_hdu.header,
+        pri_hdr=pri_hdr,
+        ext_hdr=ext_hdr,
         input_hdulist=ct_hdu_list,
         dq=dq_hdu.data,
-        dq_hdr=dq_hdu.header,
+        dq_hdr=dq_hdr,
         input_dataset=dataset)
 
     return ct_cal

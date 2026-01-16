@@ -15,6 +15,7 @@ from photutils.aperture import CircularAperture
 from photutils.detection import DAOStarFinder
 import corgidrp.data as data
 import corgidrp.mocks as mocks
+import corgidrp.check as check
 
 
 def create_flatfield(flat_dataset):
@@ -31,11 +32,13 @@ def create_flatfield(flat_dataset):
         flat_field (corgidrp.data.FlatField): a master flat for flat calibration
     """
 
-
     combined_frame = np.nanmean(flat_dataset.all_data, axis=0)
 
-    flat_field = data.FlatField(combined_frame, pri_hdr=flat_dataset[0].pri_hdr.copy(),
-                         ext_hdr=flat_dataset[0].ext_hdr.copy(), input_dataset=flat_dataset)
+    # Merge headers for combined frame
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(flat_dataset)
+
+    flat_field = data.FlatField(combined_frame, pri_hdr=pri_hdr,
+                         ext_hdr=ext_hdr, input_dataset=flat_dataset)
 
     #determine the standard error of the mean: stddev/sqrt(n_frames)
     flat_field.err = np.nanstd(flat_dataset.all_data, axis=0)/np.sqrt(len(flat_dataset))
@@ -323,7 +326,11 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
     resi_images_dataset=flatfield_residuals(raster_images_dataset,N=N)
     raster_com=combine_flatfield_rasters(resi_images_dataset,planet=planet,band=band,cent=cent, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=image_center_x,image_center_y=image_center_y)
     onskyflat=raster_com[0]
-    onsky_flatfield = data.FlatField(onskyflat, pri_hdr=prihdr, ext_hdr=exthdr, input_dataset=dataset)
+    
+    # Merge headers for combined frame
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(dataset)
+    
+    onsky_flatfield = data.FlatField(onskyflat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=dataset)
     onsky_flatfield.err=raster_com[1]
     
     return(onsky_flatfield)
@@ -490,8 +497,10 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
     onsky_polflat_error[start_left[1]:start_left[1]+n_pix, start_left[0]:start_left[0]+n_pix]=combined_rasters_pol1[1][int(cent_n_pol1[1]) - n_pix//2:int(cent_n_pol1[1]) + n_pix//2,int(cent_n_pol1[0]) - n_pix//2:int(cent_n_pol1[0]) + n_pix//2]
     onsky_polflat_error[start_right[1]:start_right[1]+n_pix, start_right[0]:start_right[0]+n_pix]=combined_rasters_pol2[1][int(cent_n_pol2[1]) - n_pix//2:int(cent_n_pol2[1]) + n_pix//2,int(cent_n_pol2[0]) - n_pix//2:int(cent_n_pol2[0]) + n_pix//2]   
     
+    # Merge headers for combined frame
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(dataset)
     
-    onsky_pol_flatfield = data.FlatField(onsky_polflat, pri_hdr=prihdr, ext_hdr=exthdr, input_dataset=dataset)
+    onsky_pol_flatfield = data.FlatField(onsky_polflat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=dataset)
     onsky_pol_flatfield.err=onsky_polflat_error
     
     return(onsky_pol_flatfield)
