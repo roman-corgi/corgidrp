@@ -191,7 +191,7 @@ def find_star(input_dataset,
               drop_satspots_frames=True):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that 
-    contain satellite spots (indicated by ``SATSPOTS=1`` in the primary header). The 
+    contain satellite spots (indicated by ``SATSPOTS=1`` in the image header). The 
     function computes the median of all science frames (``SATSPOTS=0``) and the median 
     of all satellite spot frames (``SATSPOTS=1``), then estimates the star location 
     based on these median images and the initial guess provided.
@@ -310,10 +310,11 @@ def find_star(input_dataset,
         sci_frames = []
         sat_spot_frames = []
         for frame in split_dataset.frames:
-            if frame.pri_hdr["SATSPOTS"] == 0:
+            satspots = frame.ext_hdr["SATSPOTS"]
+            if satspots == 0:
                 sci_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
-            elif frame.pri_hdr["SATSPOTS"] == 1:
+            elif satspots == 1:
                 sat_spot_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
             else:
@@ -358,7 +359,7 @@ def find_star(input_dataset,
             #align second slice on first slice and drop satellite spot images if necessary
             shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.pri_hdr["SATSPOTS"] == 0 :
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
                     aligned_slice = shift(frame.data[1], shift_value)
                     frame.data[1] = aligned_slice
                     frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]

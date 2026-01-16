@@ -4703,7 +4703,7 @@ def create_satellite_spot_observing_sequence(
     prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers(arrtype="SCI")
     prihdr['NAXIS1'] = image_shape[1]
     prihdr['NAXIS2'] = image_shape[0]
-    prihdr["SATSPOTS"] = 0  # 0 if no satellite spots, 1 if satellite spots
+    exthdr["SATSPOTS"] = 0  # 0 if no satellite spots, 1 if satellite spots
     exthdr['FSMPRFL'] = f'{observing_mode}'  # Needed for initial guess of satellite spot parameters
 
     # Make science images (no satellite spots)
@@ -4714,7 +4714,7 @@ def create_satellite_spot_observing_sequence(
             amplitude_multiplier=0
         )
         sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        sci_frame.pri_hdr["SATSPOTS"] = 0
+        sci_frame.ext_hdr["SATSPOTS"] = 0
         
         # Generate CGI filename with incrementing datetime for science frames
         visitid = sci_frame.pri_hdr["VISITID"]
@@ -4732,7 +4732,7 @@ def create_satellite_spot_observing_sequence(
             separation, star_center, angle_offset, amplitude_multiplier
         )
         satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        satspot_frame.pri_hdr["SATSPOTS"] = 1
+        satspot_frame.ext_hdr["SATSPOTS"] = 1
         
         # Generate CGI filename with incrementing datetime for satellite spot frames
         visitid = satspot_frame.pri_hdr["VISITID"]
@@ -5109,7 +5109,7 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     exthdr['DPAMNAME'] = dpamname
     exthdr['LSAMNAME'] = observing_mode
     exthdr['FSMPRFL'] = observing_mode
-    prihdr["SATSPOTS"] = 1
+    exthdr["SATSPOTS"] = 1
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
     return image
