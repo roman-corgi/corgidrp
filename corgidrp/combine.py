@@ -304,7 +304,7 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1,new_center=None):
     derotated_dq_arr = []
     derotated_err_arr = []
     for i,frame in enumerate(sci_dataset):
-        roll = frame.pri_hdr['ROLL']
+        roll = frame.pri_hdr['PA_APER']
         xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
         
         derotated_dq = derotate_arr(aligned_sci_dq_arr[i],roll, xcen,ycen,is_dq=True)

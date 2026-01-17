@@ -42,7 +42,8 @@ def calc_stokes_unocculted(input_dataset,
                            phot_kwargs=None,
                            image_center_x=None, 
                            image_center_y=None,
-                           split_rolls=True):
+                           split_rolls=True,
+                           pa_tolerance=0.1):
     """
     Compute uncalibrated Stokes parameters (I, Q/I, U/I) from unocculted L3 polarimetric datacubes.
 
@@ -65,6 +66,9 @@ def calc_stokes_unocculted(input_dataset,
         split_rolls (bool, optional):
             If True, split the input dataset by both target and roll angle. If False, split only by target.
             Default is True.
+        pa_tolerance (float, optional):
+            Maximum allowed difference in PA_APER (deg) to group frames together when split_rolls is True.
+            Default is 0.1.
 
     Returns:
         Image:
@@ -94,10 +98,37 @@ def calc_stokes_unocculted(input_dataset,
 
     prism_map = {'POL0': [0., 90.], 'POL45': [45., 135.]}
 
-    #split datasets by target if there are multiple targets
-    # targets = []
-    if split_rolls:   
-        datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET", "ROLL"])
+    # split datasets by target if there are multiple targets
+    if split_rolls:
+        datasets = []
+        target_datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
+        for target_dataset in target_datasets:
+            # Make (PA_APER, frame) pairs to sort 
+            frames_with_pa = []
+            for frame in target_dataset.frames:
+                frames_with_pa.append((frame.pri_hdr["PA_APER"], frame))
+            # Sort by PA_APER 
+            frames_with_pa.sort()
+            current_frames = []
+            current_pa = None
+            for pa, frame in frames_with_pa:
+                if current_pa is None:
+                    current_frames = [frame]
+                    current_pa = pa
+                    continue
+                if abs(pa - current_pa) <= pa_tolerance:
+                    # Same PA group: keep accumulating and update the group PA mean
+                    # if the PA is within the tolerance
+                    current_frames.append(frame)
+                    current_pa = np.mean([f.pri_hdr["PA_APER"] for f in current_frames])
+                else:
+                    # New PA group
+                    datasets.append(Dataset(current_frames))
+                    current_frames = [frame]
+                    current_pa = pa
+            if current_frames:
+                # Append the last PA group for this target.
+                datasets.append(Dataset(current_frames))
     else:
         datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
 
@@ -257,7 +288,8 @@ def generate_mueller_matrix_cal(input_dataset,
     for image in dataset:
         stokes_vectors.append(image.data[1:3]) #Grab just Q and U
         stokes_vector_errs.append(image.err[0][1:3]) #Grab just Q and U errors
-        roll_angles.append(image.pri_hdr["ROLL"])
+        # PA_APER is the on-sky position angle east of north for the CGI aperture
+        roll_angles.append(image.pri_hdr["PA_APER"])
     stokes_vectors = np.append(stokes_vectors[0], stokes_vectors[1:])
     stokes_vector_errs = np.append(stokes_vector_errs[0], stokes_vector_errs[1:])
 

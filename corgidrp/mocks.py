@@ -1787,7 +1787,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         prihdr['VISTYPE'] = 'CGIVST_CAL_BORESIGHT'
         prihdr['RA'] = np.array(frame_targs).T[0][i]  # assume we will know something about the dither RA/DEC pointing
         prihdr['DEC'] = np.array(frame_targs).T[1][i]
-        prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
+        # Use PA_APER (on-sky position angle east of north) for roll angle in mocks.
+        prihdr['PA_APER'] = 0
 
         ## save as an Image object
         err_map = None if not sim_err_map else err_map
@@ -3268,8 +3269,8 @@ def generate_reference_star_dataset_with_flux(
         # 2) Mark primary header as "PSFREF=1" so do_psf_subtraction sees it as reference
         frame.pri_hdr["PSFREF"] = 1
 
-        # 3) Set this frame's roll angle in pri_hdr
-        frame.pri_hdr["ROLL"] = roll_angles[i]
+    # 3) Set this frame's PA_APER angle in pri_hdr
+    frame.pri_hdr["PA_APER"] = roll_angles[i]
 
         # 4) Set star center for reference
         #    create_flux_image puts the star around (shape[1]//2, shape[0]//2).
@@ -3870,7 +3871,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr['INSTRUME'] = 'CGI'
         prihdr['XOFFSET'] = 0.0
         prihdr['YOFFSET'] = 0.0
-        prihdr["ROLL"] = roll_angles[i]
+        prihdr["PA_APER"] = roll_angles[i]
         
         exthdr['BUNIT'] = 'photoelectron/s'
         exthdr['STARLOCX'] = psfcentx
@@ -4083,7 +4084,7 @@ def generate_coron_dataset_with_companions(
         time_str = data.format_ftimeutc(unique_time.isoformat())
         filename = f"cgi_{visitid}_{time_str}_l3_.fits"
         prihdr["FILENAME"] = filename
-        prihdr["ROLL"] = angle_i
+        prihdr["PA_APER"] = angle_i
         prihdr['TELESCOP'] = 'ROMAN'
         exthdr["CFAMNAME"] = filter
         exthdr["PLTSCALE"] = pltscale_as*1000 #in milliarcsec
@@ -4378,7 +4379,7 @@ def generate_reference_star_dataset(
         prihdr["FILENAME"] = filename
         # Mark these frames as reference
         prihdr["PSFREF"] = 1 
-        prihdr["ROLL"] = roll_angles[i]
+        prihdr["PA_APER"] = roll_angles[i]
         exthdr["STARLOCX"] = star_center[0]
         exthdr["STARLOCY"] = star_center[1]
 
@@ -5420,7 +5421,7 @@ def create_mock_polarization_l3_dataset(
     for i, (roll, prism) in enumerate(zip(roll_angles, prisms)):
         prihdr_i = prihdr.copy()
         exthdr_i = exthdr.copy()
-        prihdr_i['ROLL'] = roll
+        prihdr_i['PA_APER'] = roll
         exthdr_i['DPAMNAME'] = prism
         Image_out.append(
             Image(
@@ -5502,8 +5503,8 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
 
         #Add Random Roll - This should still work everywhere. 
         random_roll = np.random.randint(0,360)
-        pol0.pri_hdr['ROLL'] = random_roll
-        pol45.pri_hdr['ROLL'] = random_roll
+        pol0.pri_hdr['PA_APER'] = random_roll
+        pol45.pri_hdr['PA_APER'] = random_roll
 
         #get the q and u values from the reference polarization degree and angle
         q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_roll)
@@ -5546,7 +5547,7 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=Non
         spec_values (ndarray): flux values (photoelectron/s) for `SPEC`.
         spec_err (ndarray): uncertainty array matching `SPEC` shape.
         spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
-        roll (str, optional): telescope roll angle
+        roll (str, optional): PA_APER (on-sky position angle east of north)
         exp_time (float, optional): exposure time in seconds
         col_cor (float, optional): color-correction factor to record.
 
@@ -5563,7 +5564,7 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=Non
     ext_hdr['WV0_Y'] = 0.0
     ext_hdr["STARLOCX"] = 0.0
     ext_hdr["STARLOCY"] = 0.0
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     pri_hdr['EXPTIME'] = exp_time
     if col_cor is not None:
         ext_hdr['COL_COR'] = col_cor

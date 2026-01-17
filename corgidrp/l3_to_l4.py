@@ -743,7 +743,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
     The northup function looks for 'STARLOCX' and 'STARLOCY' for the star location. If not, it uses the center of the FoV as the star location.
-    With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
+    With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'PA_APER' header keyword if use_wcs is False (not recommended).
     TODO: Update pixel locations that are saved in the header!
     TODO: Add tests for behavior of new_center
     
@@ -811,9 +811,9 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
             roll_angle = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
 
         else:
-            print('WARNING: using "ROLL" instead of WCS to estimate the north position angle')
+            print('WARNING: using "PA_APER" instead of WCS to estimate the north position angle')
             # read the roll angle parameter, assuming this info is recorded in the primary header as requested
-            roll_angle = processed_data.pri_hdr['ROLL']
+            roll_angle = processed_data.pri_hdr['PA_APER']
 
         #Make 2D WCS header for derotation. 
         sci_hd_2D = sci_hd.copy()
@@ -1293,7 +1293,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 
         # S_nd = M_nd * R(roll_angle) * S_in
         # invert M_nd * R(roll_angle) to recover S_in
-        roll_angle = unocculted_pol0_img.pri_hdr['ROLL']
+        roll_angle = unocculted_pol0_img.pri_hdr['PA_APER']
         total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
         system_nd_inv = np.linalg.pinv(total_system_mm_nd)
         S_in = system_nd_inv @ S_nd
@@ -1324,7 +1324,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         # subtract stellar polarization from the rest of the frames
         for frame in coron_frames:
             # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
-            frame_roll_angle = frame.pri_hdr['ROLL']
+            frame_roll_angle = frame.pri_hdr['PA_APER']
             total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_roll_angle)
             S_out = total_system_mm @ S_in
             # construct I0, I45, I90, and I135 back from stokes vector
@@ -1559,7 +1559,7 @@ def combine_polarization_states(input_dataset,
         output_intensities_cov[(2*i)+1,(2*i)+1,:,:] = derotated_dataset.frames[i].err[0,1,:,:]**2
         ## fill in measurement matrix
         # roll angle rotation matrix
-        roll = derotated_dataset.frames[i].pri_hdr['ROLL']
+        roll = derotated_dataset.frames[i].pri_hdr['PA_APER']
         rotation_mm = pol.rotation_mueller_matrix(roll)
         if derotated_dataset.frames[i].ext_hdr['DPAMNAME'] == 'POL0':
             # use correct polarizer mueller matrix depending on wollaston used

@@ -409,7 +409,7 @@ def combine_spectra(input_dataset):
             - combined_spec (ndarray): weighted spectrum on the reference grid
             - wavelength (ndarray): reference wavelength grid
             - combined_err (ndarray): 1σ uncertainty of the combined spectrum
-            - rolls (list): list of roll angles 
+            - rolls (list): list of PA_APER angles 
     """
 
     # Collect per-frame spectra, uncertainties, and wavelength grids
@@ -432,7 +432,7 @@ def combine_spectra(input_dataset):
         spec_list.append(spec)
         err_list.append(spec_err)
         wave_list.append(wave)
-        rolls.append(img.pri_hdr.get('ROLL'))
+        rolls.append(img.pri_hdr.get('PA_APER'))
 
     reference_wave = wave_list[0]
     ref_decreasing = reference_wave[0] > reference_wave[-1]
@@ -511,8 +511,8 @@ def compute_spec_flux_ratio(host_image, companion_image, fluxcal_factor,
             - flux_ratio (numpy.ndarray): companion/host spectrum R(λ).
             - wavelength (numpy.ndarray): wavelength array in nm.
             - metadata (dict): contains:
-                - 'roll': host roll angle
-                - 'companion_roll': companion roll angle 
+                - 'roll': host PA_APER angle
+                - 'companion_roll': companion PA_APER angle 
                 - 'ratio_err': 1σ uncertainty on the flux ratio R(λ).
     """
 
@@ -591,8 +591,8 @@ def compute_spec_flux_ratio(host_image, companion_image, fluxcal_factor,
         ratio_unc[valid_unc] = np.sqrt(variance[valid_unc])
 
     metadata = {
-        'roll': host_image.pri_hdr.get('ROLL'),
-        'companion_roll': companion_image.pri_hdr.get('ROLL'),
+        'roll': host_image.pri_hdr.get('PA_APER'),
+        'companion_roll': companion_image.pri_hdr.get('PA_APER'),
         'ratio_err': ratio_unc,
     }
 
