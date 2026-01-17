@@ -44,7 +44,7 @@ def test_pyklipdata_ADI():
     # Check roll assignments match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
         assert roll == rolls[r]
-        assert mock_sci[r].pri_hdr['ROLL'] == roll, f"Incorrect roll assignment for frame {r}."
+        assert mock_sci[r].pri_hdr['PA_APER'] == roll, f"Incorrect PA_APER assignment for frame {r}."
     
     # Check ref library is None
     assert pyklip_dataset.psflib is None, "pyklip_dataset.psflib is not None, even though no reference dataset was provided."
@@ -68,7 +68,7 @@ def test_pyklipdata_RDI():
     # Check roll assignments match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
         assert roll == rolls[r]
-        assert mock_sci[r].pri_hdr['ROLL'] == roll, f"Incorrect roll assignment for frame {r}."
+        assert mock_sci[r].pri_hdr['PA_APER'] == roll, f"Incorrect PA_APER assignment for frame {r}."
     
     # Check ref library shape
     assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref
@@ -93,7 +93,7 @@ def test_pyklipdata_ADIRDI():
     # Check roll assignments match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
         assert roll == rolls[r]
-        assert mock_sci[r].pri_hdr['ROLL'] == roll, f"Incorrect roll assignment for frame {r}."
+        assert mock_sci[r].pri_hdr['PA_APER'] == roll, f"Incorrect PA_APER assignment for frame {r}."
     
     # Check ref library shape
     assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref

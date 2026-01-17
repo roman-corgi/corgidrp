@@ -462,10 +462,10 @@ def test_determine_zeropoint():
         ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
         ext_hdr['CFAMNAME'] = '3'
         if i == 12:
-            pri_hdr["SATSPOTS"] = 1
+            ext_hdr["SATSPOTS"] = 1
             ext_hdr['CFAMNAME'] = '3D'
         else:
-            pri_hdr["SATSPOTS"] = 0
+            ext_hdr["SATSPOTS"] = 0
         err = np.zeros_like(data_2d)
         dq = np.zeros_like(data_2d, dtype=int)
         image = Image(
@@ -489,7 +489,7 @@ def test_determine_zeropoint():
 
     assert len(dataset_guess) < len(input_dataset)
     for frame in dataset_guess:
-        assert frame.pri_hdr["SATSPOTS"] == 0
+        assert frame.ext_hdr["SATSPOTS"] == 0
         assert frame.ext_hdr["WAVLEN0"] == 753.83
         assert "WV0_X" in frame.ext_hdr
         assert "WV0_Y" in frame.ext_hdr
@@ -512,7 +512,7 @@ def test_determine_zeropoint():
         ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
         ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
         ext_hdr['CFAMNAME'] = '3D'
-        pri_hdr["SATSPOTS"] = 0
+        ext_hdr["SATSPOTS"] = 0
         err = np.zeros_like(data_2d)
         dq = np.zeros_like(data_2d, dtype=int)
         image = Image(
@@ -534,7 +534,7 @@ def test_determine_zeropoint():
     dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset)
     assert len(dataset) == 1
     for frame in dataset:
-        assert frame.pri_hdr["SATSPOTS"] == 0
+        assert frame.ext_hdr["SATSPOTS"] == 0
         assert frame.ext_hdr["WAVLEN0"] == 753.83
         assert "WV0_X" in frame.ext_hdr
         assert "WV0_Y" in frame.ext_hdr

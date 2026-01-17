@@ -144,7 +144,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -167,7 +167,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -188,7 +188,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -209,7 +209,7 @@ def test_inject_psf():
 
     pri_hdr = fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -231,7 +231,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -253,7 +253,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -276,7 +276,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -299,7 +299,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -322,7 +322,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -345,7 +345,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -367,7 +367,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -389,7 +389,7 @@ def test_inject_psf():
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     

@@ -26,7 +26,7 @@ def test_create_wcs():
     ra_offset, dec_offset = astrom_cal.avg_offset
 
     for mock_frame, updated_frame in zip(mock_dataset, updated_dataset):
-        roll_ang = mock_frame.pri_hdr['ROLL']
+        roll_ang = mock_frame.pri_hdr['PA_APER']
         data = mock_frame.data
         image_shape = data.shape
         center_pixel = [(image_shape[1]-1) // 2, (image_shape[0]-1) // 2]

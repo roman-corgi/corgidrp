@@ -641,9 +641,9 @@ def test_subtract_stellar_polarization():
         # first four images are unocculted with roll angle of 30
         if i < 4:
             input_list[i].ext_hdr['FPAMNAME'] = 'ND225'
-            input_list[i].pri_hdr['ROLL'] = roll_unocculted
+            input_list[i].pri_hdr['PA_APER'] = roll_unocculted
         else:
-            input_list[i].pri_hdr['ROLL'] = roll
+            input_list[i].pri_hdr['PA_APER'] = roll
         # distinguish between the two different target stars
         if i in [0, 1, 4, 5]:
             input_list[i].pri_hdr['TARGET'] = '1'
@@ -757,7 +757,7 @@ def test_combine_polarization_states():
         # construct POL0 image
         pol0_data = np.array([intensity_0 * target_rotated , intensity_90 * target_rotated])
         pol0_img = data.Image(pol0_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        pol0_img.pri_hdr['ROLL'] = roll_angle
+        pol0_img.pri_hdr['PA_APER'] = roll_angle
         pol0_img.ext_hdr['DPAMNAME'] = 'POL0'
         pol0_img.ext_hdr['STARLOCX'] = 24
         pol0_img.ext_hdr['STARLOCY'] = 24
@@ -766,7 +766,7 @@ def test_combine_polarization_states():
         # construct POL45 image
         pol45_data = np.array([intensity_45 * target_rotated, intensity_135 * target_rotated])
         pol45_img = data.Image(pol45_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        pol45_img.pri_hdr['ROLL'] = roll_angle
+        pol45_img.pri_hdr['PA_APER'] = roll_angle
         pol45_img.ext_hdr['DPAMNAME'] = 'POL45'
         pol45_img.ext_hdr['STARLOCX'] = 24
         pol45_img.ext_hdr['STARLOCY'] = 24
@@ -775,8 +775,8 @@ def test_combine_polarization_states():
         # construct total intensity image for psf sub
         psfsub_img_1 = data.Image( (intensity_0 + intensity_90) * target_rotated, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         psfsub_img_2 = data.Image( (intensity_45 + intensity_135) * target_rotated, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        psfsub_img_1.pri_hdr['ROLL'] = roll_angle
-        psfsub_img_2.pri_hdr['ROLL'] = roll_angle
+        psfsub_img_1.pri_hdr['PA_APER'] = roll_angle
+        psfsub_img_2.pri_hdr['PA_APER'] = roll_angle
         psfsub_img_1.ext_hdr['STARLOCX'] = 24
         psfsub_img_2.ext_hdr['STARLOCX'] = 24
         psfsub_img_1.ext_hdr['STARLOCY'] = 24

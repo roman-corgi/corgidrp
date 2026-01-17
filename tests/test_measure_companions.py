@@ -224,7 +224,7 @@ def generate_test_data(out_dir):
 
     
     # inject planets into coronagrpahic dataset
-    rolls = np.array([frame.pri_hdr['ROLL'] for frame in coron_data])
+    rolls = np.array([frame.pri_hdr['PA_APER'] for frame in coron_data])
     for i, comp in enumerate(COMPANION_PARAMS):
         planet_psf = companion_psfs[i]
         inject_planet(coron_data.all_data, [host_star_center for _ in coron_data], [planet_psf for _ in coron_data],
