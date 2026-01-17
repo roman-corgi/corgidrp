@@ -289,7 +289,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

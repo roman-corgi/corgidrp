@@ -273,7 +273,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                     #Update Headers
                     stellar_sys_wp_img.pri_hdr['TARGET'] = targetname
                     stellar_sys_wp_img.ext_hdr['DPAMNAME'] = wollaston
-                    stellar_sys_wp_img.pri_hdr['ROLL'] = roll_angle
+                    stellar_sys_wp_img.pri_hdr['PA_APER'] = roll_angle
                     stellar_sys_wp_img.ext_hdr['FSMPRFL'] = 'NFOV'
 
                     # wcs_header = generate_wcs(roll_angles[i], 
@@ -317,8 +317,8 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                     #Update Headers
                     split_frame.pri_hdr['TARGET'] = targetname
                     split_frame.ext_hdr['DPAMNAME'] = wollaston
-                    split_frame.pri_hdr['ROLL'] = roll_angle
-                    split_frame.pri_hdr['SATSPOTS'] = 1
+                    split_frame.pri_hdr['PA_APER'] = roll_angle
+                    split_frame.ext_hdr['SATSPOTS'] = 1
 
                     input_image_list.append(split_frame)
 
@@ -350,7 +350,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                 stellar_nd_wp_img.pri_hdr['TARGET'] = targetname
                 stellar_nd_wp_img.ext_hdr['DPAMNAME'] = wollaston
                 stellar_nd_wp_img.ext_hdr['FPAMNAME'] = "ND225"
-                stellar_nd_wp_img.pri_hdr['ROLL'] = roll_angle
+                stellar_nd_wp_img.pri_hdr['PA_APER'] = roll_angle
                 stellar_nd_wp_img.ext_hdr['FSMPRFL'] = 'NFOV'
 
                 input_image_list.append(stellar_nd_wp_img)

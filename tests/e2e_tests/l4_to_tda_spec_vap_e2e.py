@@ -90,7 +90,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
             # Filename + basic header checks
             check_filename_convention(img.filename, 'cgi_*_l4_.fits', f"    ", logger, data_level='l4_')
             verify_header_keywords(img.ext_hdr, {'DATALVL': 'L4', 'DPAMNAME': 'PRISM3', 'BUNIT': 'photoelectron/s'}, f"    ", logger)
-            verify_header_keywords(img.pri_hdr, {'ROLL'}, f"    ", logger)
+            verify_header_keywords(img.pri_hdr, {'PA_APER'}, f"    ", logger)
             verify_header_keywords(img.ext_hdr, {'WAVLEN0', 'WV0_X', 'WV0_XERR', 'WV0_Y', 'WV0_YERR', 'WV0_DIMX', 'WV0_DIMY'}, f"    ", logger)
 
             # Wavelength grid checks (monotonicity + NaNs)
@@ -282,8 +282,8 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
         logger.info(f'Number of host L4 spectra used: {len(host_images)}')
         logger.info(f'Number of companion L4 spectra used: {len(comp_images)}')
-        logger.info(f'Host rolls: {[img.pri_hdr.get("ROLL") for img in host_images]}')
-        logger.info(f'Companion rolls: {[img.pri_hdr.get("ROLL") for img in comp_images]}')
+        logger.info(f'Host rolls: {[img.pri_hdr.get("PA_APER") for img in host_images]}')
+        logger.info(f'Companion rolls: {[img.pri_hdr.get("PA_APER") for img in comp_images]}')
 
         # Check that all host and companion cubes contain a SPEC_WAVE (wavelength) extension.
         host_wave_ext = all('SPEC_WAVE' in img.hdu_list for img in host_images)
