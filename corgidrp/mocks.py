@@ -3269,8 +3269,8 @@ def generate_reference_star_dataset_with_flux(
         # 2) Mark primary header as "PSFREF=1" so do_psf_subtraction sees it as reference
         frame.pri_hdr["PSFREF"] = 1
 
-    # 3) Set this frame's PA_APER angle in pri_hdr
-    frame.pri_hdr["PA_APER"] = roll_angles[i]
+        # 3) Set this frame's PA_APER angle in pri_hdr
+        frame.pri_hdr["PA_APER"] = roll_angles[i]
 
         # 4) Set star center for reference
         #    create_flux_image puts the star around (shape[1]//2, shape[0]//2).
@@ -5144,7 +5144,7 @@ def create_mock_stokes_image_l4(
         Image: Stokes cube Image object with data, err, dq, and headers
     """
     if rng is None:
-    	rng = np.random.default_rng(seed)
+        rng = np.random.default_rng(seed)
 
     # Gaussian source
     y, x = np.mgrid[0:image_size, 0:image_size]
