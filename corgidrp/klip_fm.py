@@ -281,8 +281,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                         for cand_sep, cand_pa in cand_locs:
                             # Account for telescope roll angles, skip if any are too close
                             for roll in rolls:
-                                # NOTE: roll is not applied here; cand_pa_adj currently equals cand_pa.
-                                # If roll handling is desired, adjust cand_pa_adj using roll (e.g., cand_pa + roll).
+                                # NOTE (TO DO?): roll is not applied here, cand_pa_adj == cand_pa.
+                                # If roll should be applied, cand_pa_adj = cand_pa + roll
                                 cand_pa_adj = cand_pa
                                 dist = get_polar_dist((cand_sep,cand_pa_adj),inject_loc)
                                 if dist < res_elem:
