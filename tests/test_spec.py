@@ -1499,7 +1499,8 @@ def test_spec_flux_cal():
     assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.hdu_list['SPEC_ERR'].header['BUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.ext_hdr['SPECUNIT'] == "erg/(s*cm^2*AA)"
-    
+    assert 'Calibrated 1D spectrum' in str(frame.ext_hdr['HISTORY'])
+
 def test_convert_spec_to_flux_factor():
     """Validate convert_spec_to_flux when only fluxcal_factor is supplied."""
     spec_vals = np.array([5.0, 6.0, 7.0])
@@ -1512,11 +1513,10 @@ def test_convert_spec_to_flux_factor():
     fluxcal_factor = make_mock_fluxcal_factor(1.5, err=0.1)
 
     with pytest.raises(TypeError):
-        cal = l4_to_tda.convert_spec_to_flux(dataset)
+        cal = l4_to_tda.convert_spec_to_flux(dataset, spec_vals)
 
-    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor = fluxcal_factor)
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor)
     frame = calibrated[0]
-
     expected_spec = spec_vals * fluxcal_factor.fluxcal_fac
     expected_err = np.sqrt((spec_err[0] * fluxcal_factor.fluxcal_fac) ** 2 +
                            (spec_vals * fluxcal_factor.fluxcal_err) ** 2)

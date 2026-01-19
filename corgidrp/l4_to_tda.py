@@ -142,21 +142,19 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     return color_dataset
 
 
-def convert_spec_to_flux(input_dataset, spec_fluxcal = None, fluxcal_factor = None, slit_transmission = None):
+def convert_spec_to_flux(input_dataset, fluxcal, slit_transmission = None):
     """
     Flux calibrate 1-D spectroscopy spectra stored in the L4 SPEC extension.
     The function propagates calibration uncertainties. It applies the spectral flux calibration,
-    if not available it applies the fluxcal factor and color correction.
+    if not available it can apply the fluxcal factor and color correction.
     Requires the input dataset to have already been core-throughput corrected
     (ie SPEC header contains CTCOR=True).
 
     Args:
         input_dataset (corgidrp.data.Dataset): L4 dataset containing SPEC,
             SPEC_ERR, SPEC_DQ, SPEC_WAVE, and SPEC_WAVE_ERR extensions.
-        spec_fluxcal (corgidrp.data.SpecFluxCal): wavelength dependent flux calibration
-            product used to convert the spectrum to absolute flux units erg/(s*cm^2*Å).
-        fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration
-            product used to scale the spectrum.
+        fluxcal (corgidrp.data.SpecFluxCal or corgidrp.data.FluxcalFactor): wavelength dependent flux calibration
+            or absolute flux calibration product used to convert the spectrum to absolute flux units erg/(s*cm^2*Å).
         slit_transmission (tuple or list of tuples, optional): slit throughput
             information from spec.slit_transmission(). Provide either a single
             (slit_map, slit_x, slit_y) tuple applied to every frame or a list
@@ -169,18 +167,13 @@ def convert_spec_to_flux(input_dataset, spec_fluxcal = None, fluxcal_factor = No
         headers/history updated.
         
     """
-    #check that the correct spectral flux calibration file is used
-    if spec_fluxcal is None and fluxcal_factor is None:
-        raise TypeError("either spec_fluxcal or fluxcal_factor must be available")
-    elif spec_fluxcal is not None:
-        #spec_fluxcal has priority
-        if not isinstance(spec_fluxcal, SpecFluxCal):
-            raise TypeError("spec_fluxcal must be a corgidrp.data.SpecFluxCal instance.")
-        specflux = True
+    specflux = False
+    #check that the correct flux calibration file is used
+    if isinstance(fluxcal, SpecFluxCal):
+       specflux = True
     else:
-        if not isinstance(fluxcal_factor, FluxcalFactor):
-            raise TypeError("fluxcal_factor must be a corgidrp.data.FluxcalFactor instance.")
-        specflux = False
+        if not isinstance(fluxcal, FluxcalFactor):
+            raise TypeError("fluxcal must be a corgidrp.data.FluxcalFactor or SpecFluxCal instance.")
     
     spec_dataset = input_dataset.copy()
 
@@ -202,6 +195,8 @@ def convert_spec_to_flux(input_dataset, spec_fluxcal = None, fluxcal_factor = No
             slit_per_frame = slit_per_frame * len(spec_dataset)
     else:
         raise TypeError("slit_transmission must be None, a (slit_map, slit_x, slit_y) tuple, or a list of such tuples.")
+
+    history_messages = []
 
     for idx, frame in enumerate(spec_dataset):
         if 'SPEC' not in frame.hdu_list:
@@ -231,6 +226,7 @@ def convert_spec_to_flux(input_dataset, spec_fluxcal = None, fluxcal_factor = No
             spec = np.divide(spec, algo_thru, out=np.full_like(spec, np.nan), where=valid)
             spec_err = np.divide(spec_err, algo_thru, out=np.full_like(spec_err, np.nan), where=valid)
             spec_header['ALGOCOR'] = True
+            history_messages.append("Applied algorithm throughput correction (ALGO_THRU).")
 
         # Apply slit transmission correction
         slit_vals = slit_per_frame[idx]
@@ -256,22 +252,22 @@ def convert_spec_to_flux(input_dataset, spec_fluxcal = None, fluxcal_factor = No
 
         if specflux:
             # check that the correct flux calibration file is used
-            if frame.ext_hdr["CFAMNAME"] != spec_fluxcal.ext_hdr["CFAMNAME"]:
+            if frame.ext_hdr["CFAMNAME"] != fluxcal.ext_hdr["CFAMNAME"]:
                 raise ValueError(f"the spec_fluxcal has another filter name {spec_fluxcal.ext_hdr['CFAMNAME']}, "
                                  f"than the observation {frame.ext_hdr['CFAMNAME']}.")
             # Convert to flux units and propagate uncertainties
-            factor = spec_fluxcal.specflux 
-            factor_error = spec_fluxcal.specflux_err
+            factor = fluxcal.specflux 
+            factor_error = fluxcal.specflux_err
         else:
             # Apply flux calibration factor and color correction
             color_cor_fac = frame.ext_hdr.get('COL_COR', 1.0)
-            factor = fluxcal_factor.fluxcal_fac / color_cor_fac
-            factor_error = fluxcal_factor.fluxcal_err / color_cor_fac
+            factor = fluxcal.fluxcal_fac / color_cor_fac
+            factor_error = fluxcal.fluxcal_err / color_cor_fac
 
         # Convert to flux units and propagate uncertainties
         spec_flux = spec * factor
         spec_flux_err = np.sqrt((spec_err * factor) ** 2 + (spec * factor_error) ** 2)
-   
+
         frame.hdu_list['SPEC'].data[:] = spec_flux
         frame.hdu_list['SPEC_ERR'].data[:] = spec_flux_err
         spec_header['BUNIT'] = "erg/(s*cm^2*AA)"
@@ -279,16 +275,20 @@ def convert_spec_to_flux(input_dataset, spec_fluxcal = None, fluxcal_factor = No
             frame.hdu_list['SPEC_ERR'].header['BUNIT'] = "erg/(s*cm^2*AA)"
     
     if specflux:
-        history_message = f"Calibrated 1D spectrum applying spectral flux calibration file:{spec_fluxcal.filename}."
+        history_messages.append(
+             f"Calibrated 1D spectrum applying spectral flux calibration file:{fluxcal.filename}."
+        )
         spec_dataset.update_after_processing_step(
-                history_message,
+                " ".join(history_messages),
                 header_entries={"SPECUNIT": "erg/(s*cm^2*AA)"}
         )
     else:
-        history_message = f"Calibrated 1D spectrum with fluxcal_factor={fluxcal_factor.fluxcal_fac}, COL_COR={color_cor_fac}."
+        history_messages.append(
+            f"Calibrated 1D spectrum by applying a broad band fluxcal_factor={fluxcal.fluxcal_fac} determined by aperture photometry, COL_COR={color_cor_fac}."
+        )
         spec_dataset.update_after_processing_step(
-            history_message,
-            header_entries={"SPECUNIT": "erg/(s*cm^2*AA)", "FLUXFAC": fluxcal_factor.fluxcal_fac}
+            " ".join(history_messages),
+            header_entries={"SPECUNIT": "erg/(s*cm^2*AA)", "FLUXFAC": fluxcal.fluxcal_fac}
         )
 
     return spec_dataset
