@@ -253,7 +253,7 @@ def convert_spec_to_flux(input_dataset, fluxcal, slit_transmission = None):
         if specflux:
             # check that the correct flux calibration file is used
             if frame.ext_hdr["CFAMNAME"] != fluxcal.ext_hdr["CFAMNAME"]:
-                raise ValueError(f"the spec_fluxcal has another filter name {spec_fluxcal.ext_hdr['CFAMNAME']}, "
+                raise ValueError(f"the spec_fluxcal has another filter name {fluxcal.ext_hdr['CFAMNAME']}, "
                                  f"than the observation {frame.ext_hdr['CFAMNAME']}.")
             # Convert to flux units and propagate uncertainties
             factor = fluxcal.specflux 
