@@ -257,7 +257,7 @@ def test_convert_spec_to_flux_basic():
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
 
-    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor = fluxcal_factor, slit_transmission=slit_tuple)
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor, slit_transmission=slit_tuple)
     frame = calibrated[0]
     spec_out = frame.hdu_list['SPEC'].data
     err_out = frame.hdu_list['SPEC_ERR'].data
@@ -288,7 +288,7 @@ def test_convert_spec_to_flux_no_slit():
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(1.5, err=0.1)
 
-    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor = fluxcal_factor)
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor)
     frame = calibrated[0]
 
     expected_spec = spec_vals * fluxcal_factor.fluxcal_fac
@@ -331,7 +331,7 @@ def test_convert_spec_to_flux_slit_scalar_map():
 
     calibrated = l4_to_tda.convert_spec_to_flux(
         dataset,
-        fluxcal_factor = fluxcal_factor,
+        fluxcal_factor,
         slit_transmission=(slit_map, slit_x, slit_y),
     )
     frame = calibrated[0]
@@ -436,8 +436,8 @@ def test_compute_spec_flux_ratio_single_roll():
     fpam_fsam_cal = create_mock_fpamfsam_cal()
     applied, _ = l4_to_tda.apply_core_throughput_correction(comp_ds, ct_cal, fpam_fsam_cal)
 
-    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_ds]), fluxcal_factor = fluxcal_factor)
-    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_ds]), fluxcal_factor = fluxcal_factor)
+    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_ds]), fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_ds]), fluxcal_factor)
     host_spec_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
     comp_spec_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
     host_err_flux = np.squeeze(np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float))
@@ -519,8 +519,8 @@ def test_compute_spec_flux_ratio_weighted():
     _, _ = l4_to_tda.apply_core_throughput_correction(comp_comb_image, ct_cal, fpam_fsam_cal)
 
     # Compute flux-calibrated combined spectra to build the expected ratio and error
-    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_comb_image]), fluxcal_factor = fluxcal_factor)
-    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_comb_image]), fluxcal_factor = fluxcal_factor)
+    host_cal = l4_to_tda.convert_spec_to_flux(Dataset([host_comb_image]), fluxcal_factor)
+    comp_cal = l4_to_tda.convert_spec_to_flux(Dataset([comp_comb_image]), fluxcal_factor)
 
     host_flux = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
     comp_flux = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
