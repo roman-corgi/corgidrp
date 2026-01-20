@@ -229,7 +229,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
             # Flux calibration 
             calibrated_img = l4_to_tda.convert_spec_to_flux(
-                Dataset([img]), fluxcal_factor = fluxcal_factor, slit_transmission=slit_transmission
+                Dataset([img]), fluxcal_factor, slit_transmission=slit_transmission
             )
             calibrated_spec = calibrated_img[0].hdu_list['SPEC'].data
             calibrated_err = calibrated_img[0].hdu_list['SPEC_ERR'].data
@@ -413,7 +413,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
         # Check algorithm throughput correction is applied
         comp_cal_check = l4_to_tda.convert_spec_to_flux(
-            Dataset([comp_comb]), fluxcal_factor = fluxcal_factor, slit_transmission=slit_transmission
+            Dataset([comp_comb]), fluxcal_factor, slit_transmission=slit_transmission
         )
         comp_spec_hdr_cal = comp_cal_check[0].hdu_list['SPEC'].header
         if 'ALGOCOR' in comp_spec_hdr_cal:
