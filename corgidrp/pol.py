@@ -42,8 +42,9 @@ def calc_stokes_unocculted(input_dataset,
                            phot_kwargs=None,
                            image_center_x=None, 
                            image_center_y=None,
-                           split_rolls=True,
-                           pa_tolerance=0.1):
+                           split_pa_states=True,
+                           pa_tolerance=0.1,
+                           split_rolls=None):
     """
     Compute uncalibrated Stokes parameters (I, Q/I, U/I) from unocculted L3 polarimetric datacubes.
 
@@ -63,12 +64,14 @@ def calc_stokes_unocculted(input_dataset,
         image_center_y (float, optional):
             Y-coordinate of the aperture center in pixels. Default is None.
             If None, assume the center of the array is a good guess. 
-        split_rolls (bool, optional):
-            If True, split the input dataset by both target and roll angle. If False, split only by target.
+        split_pa_states (bool, optional):
+            If True, split the input dataset by both target and PA_APER. If False, split only by target.
             Default is True.
         pa_tolerance (float, optional):
-            Maximum allowed difference in PA_APER (deg) to group frames together when split_rolls is True.
+            Maximum allowed difference in PA_APER (deg) to group frames together when split_pa_states is True.
             Default is 0.1.
+        split_rolls (bool, optional):
+            Deprecated. Use split_pa_states instead.
 
     Returns:
         Image:
@@ -98,37 +101,45 @@ def calc_stokes_unocculted(input_dataset,
 
     prism_map = {'POL0': [0., 90.], 'POL45': [45., 135.]}
 
+    if split_rolls is not None:
+        split_pa_states = split_rolls
+
     # split datasets by target if there are multiple targets
-    if split_rolls:
+    if split_pa_states:
         datasets = []
         target_datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
         for target_dataset in target_datasets:
-            # Make (PA_APER, frame) pairs to sort 
-            frames_with_pa = []
+            # Assign frames to the nearest PA cluster within tolerance.
+            clusters = []
             for frame in target_dataset.frames:
-                frames_with_pa.append((frame.pri_hdr["PA_APER"], frame))
-            # Sort by PA_APER 
-            frames_with_pa.sort()
-            current_frames = []
-            current_pa = None
-            for pa, frame in frames_with_pa:
-                if current_pa is None:
-                    current_frames = [frame]
-                    current_pa = pa
-                    continue
-                if abs(pa - current_pa) <= pa_tolerance:
-                    # Same PA group: keep accumulating and update the group PA mean
-                    # if the PA is within the tolerance
-                    current_frames.append(frame)
-                    current_pa = np.mean([f.pri_hdr["PA_APER"] for f in current_frames])
+                pa = frame.pri_hdr["PA_APER"]
+                pa_rad = np.deg2rad(pa)
+                pa_sin = np.sin(pa_rad)
+                pa_cos = np.cos(pa_rad)
+                best_idx = None
+                best_diff = None
+                for idx, cluster in enumerate(clusters):
+                    pa_diff = abs(((pa - cluster["pa_center"] + 180.0) % 360.0) - 180.0)
+                    if pa_diff <= pa_tolerance and (best_diff is None or pa_diff < best_diff):
+                        best_idx = idx
+                        best_diff = pa_diff
+                if best_idx is None:
+                    clusters.append({
+                        "pa_center": pa,
+                        "sum_sin": pa_sin,
+                        "sum_cos": pa_cos,
+                        "frames": [frame],
+                    })
                 else:
-                    # New PA group
-                    datasets.append(Dataset(current_frames))
-                    current_frames = [frame]
-                    current_pa = pa
-            if current_frames:
-                # Append the last PA group for this target.
-                datasets.append(Dataset(current_frames))
+                    cluster = clusters[best_idx]
+                    cluster["frames"].append(frame)
+                    cluster["sum_sin"] += pa_sin
+                    cluster["sum_cos"] += pa_cos
+                    cluster["pa_center"] = np.degrees(
+                        np.arctan2(cluster["sum_sin"], cluster["sum_cos"])
+                    ) % 360.0
+            for cluster in clusters:
+                datasets.append(Dataset(cluster["frames"]))
     else:
         datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
 
