@@ -21,89 +21,96 @@ import astropy.io.fits as fits
 # L2a EXPECTED HEADERS WITH DTYPES
 # =============================================================================
 
-# Format: (keyword, expected_dtype)
+# Format: (keyword, expected_dtype) or just keyword for backward compatibility
 # dtype can be: bool, int, float, str, or None for optional/variable types
 
 L2A_PRIMARY_HEADERS = [
     # Identification
     ('SIMPLE', bool), ('BITPIX', int), ('NAXIS', int), ('EXTEND', bool),
     # Observation metadata
-    'VISITID', 'TELESCOP', 'INSTRUME', 'DETECTOR', 'TARGET',
+    ('VISITID', str), ('TELESCOP', str), ('INSTRUME', str), ('DETECTOR', str), ('TARGET', str),
     # Program information
-    'PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'OBSNUM', 'VISNUM',
+    ('PROGNUM', str), ('EXECNUM', str), ('CAMPAIGN', str), ('SEGMENT', str), ('OBSNUM', str), ('VISNUM', str),
     # Pointing coordinates
-    'RA', 'DEC', 'EQUINOX', 'RAPM', 'DECPM', 'ROLL', 'PITCH', 'YAW',
+    ('RA', str), ('DEC', str), ('EQUINOX', float), ('RAPM', str), ('DECPM', str),
+    ('ROLL', str), ('PITCH', str), ('YAW', str),
     # Configuration parameters
-    'OPGAIN', 'PHTCNT', 'FRAMET', 'SATSPOTS', 'ISHOWFSC', 'HOWFSLNK',
+    ('OPGAIN', str), ('PHTCNT', str), ('FRAMET', str), ('SATSPOTS', str), ('ISHOWFSC', str), ('HOWFSLNK', str),
     # Processing metadata
-    'CDMSVERS', 'FSWDVERS', 'ORIGIN', 'FILETIME', 'DATAVERS', 'VISTYPE', 'FILENAME',
+    ('CDMSVERS', int), ('FSWDVERS', str), ('ORIGIN', str), ('FILETIME', str),
+    ('DATAVERS', int), ('VISTYPE', str), ('FILENAME', str),
     # Associated files
-    'CPGSFILE', 'AUXFILE',
+    ('CPGSFILE', type(None)), ('AUXFILE', type(None)),
     # Additional
-    'MOCK', 'OBSNAME', 'PSFREF'
+    ('OBSNAME', type(None)), ('PSFREF', str)
 ]
 
 L2A_IMAGE_HEADERS = [
     # Data structure
-    'XTENSION', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2', 'PCOUNT', 'GCOUNT', 'BUNIT', 'ARRTYPE',
+    ('XTENSION', str), ('BITPIX', int), ('NAXIS', int), ('NAXIS1', int), ('NAXIS2', int),
+    ('PCOUNT', int), ('GCOUNT', int), ('BUNIT', str), ('ARRTYPE', str),
     # Timing
-    'SCTSRT', 'SCTEND', 'DATETIME', 'FTIMEUTC',
+    ('SCTSRT', str), ('SCTEND', str), ('DATETIME', str), ('FTIMEUTC', str),
     # Exposure parameters
-    'EXPTIME', 'EXPCYC', 'BLNKTIME', 'BLNKCYC', 'LASTEXP',
+    ('EXPTIME', float), ('EXPCYC', int), ('BLNKTIME', float), ('BLNKCYC', int), ('LASTEXP', int),
     # Gain/calibration
-    'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR', 'EMGAINA1', 'EMGAINA2', 'EMGAINA3', 'EMGAINA4', 'EMGAINA5', 'GAINTCAL',
+    ('EMGAIN_C', float), ('EMGAIN_A', int), ('KGAINPAR', float),
+    ('EMGAINA1', float), ('EMGAINA2', float), ('EMGAINA3', float),
+    ('EMGAINA4', float), ('EMGAINA5', float), ('GAINTCAL', float), ('UNITYG', int),
     # Temperature data
-    'EXCAMT',
+    ('EXCAMT', str), ('LOCAMT', str),
     # Operational modes
-    'OPMODE', 'ISPC', 'STATUS', 'HVCBIAS',
+    ('OPMODE', str), ('ISPC', int), ('STATUS', int), ('HVCBIAS', int),
     # Hardware status
-    'CYCLES', 'OVEREXP', 'NOVEREXP', 'PROXET',
+    ('CYCLES', int), ('OVEREXP', int), ('NOVEREXP', int), ('PROXET', str),
     # Control systems
-    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR', 'DMZLOOP',
+    ('FCMLOOP', str), ('FCMPOS', int), ('FSMINNER', str), ('FSMLOS', str),
+    ('FSMPRFL', str), ('FSMRSTR', int), ('DMZLOOP', int),
     # Alignment offsets
-    'FSMX', 'FSMY', 'FSMSG1', 'FSMSG2', 'FSMSG3',
-    'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY', 'EACQ_ROW', 'EACQ_COL',
+    ('FSMX', float), ('FSMY', float), ('FSMSG1', float), ('FSMSG2', float), ('FSMSG3', float),
+    ('SB_FP_DX', float), ('SB_FP_DY', float), ('SB_FS_DX', float), ('SB_FS_DY', float),
+    ('EACQ_ROW', float), ('EACQ_COL', float),
     # Wavefront sensing - Zernike coefficients
-    'Z2AVG', 'Z2RES', 'Z2VAR',
-    'Z3AVG', 'Z3RES', 'Z3VAR',
-    'Z4AVG', 'Z4RES',
-    'Z5AVG', 'Z5RES',
-    'Z6AVG', 'Z6RES',
-    'Z7AVG', 'Z7RES',
-    'Z8AVG', 'Z8RES',
-    'Z9AVG', 'Z9RES',
-    'Z10AVG', 'Z10RES',
-    'Z11AVG', 'Z11RES',
-    'Z12AVG', 'Z13AVG', 'Z14AVG',
-    '1SVALID', '10SVALID',
+    ('Z2AVG', float), ('Z2RES', float), ('Z2VAR', float),
+    ('Z3AVG', float), ('Z3RES', float), ('Z3VAR', float),
+    ('Z4AVG', float), ('Z4RES', float),
+    ('Z5AVG', float), ('Z5RES', float),
+    ('Z6AVG', float), ('Z6RES', float),
+    ('Z7AVG', float), ('Z7RES', float),
+    ('Z8AVG', float), ('Z8RES', float),
+    ('Z9AVG', float), ('Z9RES', float),
+    ('Z10AVG', float), ('Z10RES', float),
+    ('Z11AVG', float), ('Z11RES', float),
+    ('Z12AVG', float), ('Z13AVG', float), ('Z14AVG', float),
+    ('1SVALID', int), ('10SVALID', int),
     # Actuator positions
-    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
-    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
-    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
-    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
-    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
-    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+    ('SPAM_H', float), ('SPAM_V', float), ('SPAMNAME', str), ('SPAMSP_H', float), ('SPAMSP_V', float),
+    ('FPAM_H', float), ('FPAM_V', float), ('FPAMNAME', str), ('FPAMSP_H', float), ('FPAMSP_V', float),
+    ('LSAM_H', float), ('LSAM_V', float), ('LSAMNAME', str), ('LSAMSP_H', float), ('LSAMSP_V', float),
+    ('FSAM_H', float), ('FSAM_V', float), ('FSAMNAME', str), ('FSAMSP_H', float), ('FSAMSP_V', float),
+    ('CFAM_H', float), ('CFAM_V', float), ('CFAMNAME', str), ('CFAMSP_H', float), ('CFAMSP_V', float),
+    ('DPAM_H', float), ('DPAM_V', float), ('DPAMNAME', str), ('DPAMSP_H', float), ('DPAMSP_V', float),
     # Processing flags - L2a specific
-    'DATALVL', 'MISSING', 'DESMEAR', 'CTI_CORR', 'IS_BAD',
+    ('DATALVL', str), ('MISSING', bool), ('DESMEAR', bool), ('CTI_CORR', bool), ('IS_BAD', bool),
     # Saturation info - L2a specific
-    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+    ('FWC_PP_E', float), ('FWC_EM_E', float), ('SAT_DN', float),
     # Processing history - L2a specific
-    'RECIPE', 'DRPVERSN', 'DRPCTIME'
+    ('RECIPE', str), ('DRPVERSN', str), ('DRPCTIME', str), ('HISTORY', str)
 ]
 
 L2A_ERR_HEADERS = [
-    'XTENSION', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3',
-    'PCOUNT', 'GCOUNT', 'EXTNAME', 'TRK_ERRS', 'LAYER_1'
+    ('XTENSION', str), ('BITPIX', int), ('NAXIS', int), ('NAXIS1', int), ('NAXIS2', int), ('NAXIS3', int),
+    ('PCOUNT', int), ('GCOUNT', int), ('EXTNAME', str), ('TRK_ERRS', bool), ('LAYER_1', str), ('HISTORY', str)
 ]
 
 L2A_DQ_HEADERS = [
-    'XTENSION', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2',
-    'PCOUNT', 'GCOUNT', 'BSCALE', 'BZERO', 'EXTNAME'
+    ('XTENSION', str), ('BITPIX', int), ('NAXIS', int), ('NAXIS1', int), ('NAXIS2', int),
+    ('PCOUNT', int), ('GCOUNT', int), ('BSCALE', int), ('BZERO', int), ('EXTNAME', str)
 ]
 
 L2A_BIAS_HEADERS = [
-    'XTENSION', 'BITPIX', 'NAXIS', 'NAXIS1',
-    'PCOUNT', 'GCOUNT', 'EXTNAME'
+    ('XTENSION', str), ('BITPIX', int), ('NAXIS', int), ('NAXIS1', int),
+    ('PCOUNT', int), ('GCOUNT', int), ('EXTNAME', str)
 ]
 
 # =============================================================================
@@ -153,23 +160,72 @@ VERIFICATION_CONFIG = {
 }
 
 
+def normalize_dtype(value_type):
+    """
+    Normalize Python types to match FITS header value types.
+
+    Args:
+        value_type: Python type of the header value
+
+    Returns:
+        Normalized type (bool, int, float, str, or NoneType)
+    """
+    if value_type == type(None) or value_type is None or (hasattr(value_type, '__name__') and value_type.__name__ == 'NoneType'):
+        return type(None)
+    elif value_type == bool or (hasattr(value_type, '__name__') and value_type.__name__ == 'bool_'):
+        return bool
+    elif value_type == int or (hasattr(value_type, '__name__') and value_type.__name__ in ['int', 'int32', 'int64']):
+        return int
+    elif value_type == float or (hasattr(value_type, '__name__') and value_type.__name__ in ['float', 'float32', 'float64']):
+        return float
+    elif value_type == str or (hasattr(value_type, '__name__') and value_type.__name__ in ['str', 'str_']):
+        return str
+    else:
+        return value_type
+
+
 def verify_hdu_headers(hdu, expected_headers, hdu_name):
     """
-    Verify headers in a single HDU.
+    Verify headers in a single HDU, including dtype checking.
 
     Args:
         hdu: FITS HDU object
-        expected_headers (list): List of expected header keywords
+        expected_headers (list): List of expected headers (keyword or (keyword, dtype))
         hdu_name (str): Name of the HDU for reporting
 
     Returns:
-        dict: {'present': list, 'missing': list}
+        dict: {'present': list, 'missing': list, 'dtype_mismatch': list}
     """
-    results = {'present': [], 'missing': []}
+    results = {'present': [], 'missing': [], 'dtype_mismatch': []}
 
-    for keyword in expected_headers:
+    for header_spec in expected_headers:
+        # Handle both tuple format (keyword, dtype) and plain keyword
+        if isinstance(header_spec, tuple):
+            keyword, expected_dtype = header_spec
+        else:
+            keyword = header_spec
+            expected_dtype = None
+
         if keyword in hdu.header:
             results['present'].append(keyword)
+
+            # Check dtype if specified
+            if expected_dtype is not None:
+                actual_value = hdu.header[keyword]
+                actual_dtype = normalize_dtype(type(actual_value))
+                expected_dtype_norm = normalize_dtype(expected_dtype)
+
+                if actual_dtype != expected_dtype_norm:
+                    # Format type names for display
+                    expected_name = 'NoneType' if expected_dtype_norm == type(None) else expected_dtype_norm.__name__
+                    actual_name = 'NoneType' if actual_dtype == type(None) else actual_dtype.__name__
+
+                    results['dtype_mismatch'].append({
+                        'keyword': keyword,
+                        'expected': expected_name,
+                        'actual': actual_name,
+                        'value': actual_value
+                    })
         else:
             results['missing'].append(keyword)
 
@@ -198,6 +254,7 @@ def verify_headers(fits_file, data_level):
 
     results = {}
     summary = {}
+    total_dtype_mismatches = 0
 
     with fits.open(fits_file) as hdul:
         print(f"Total HDUs in file: {len(hdul)}\n")
@@ -211,15 +268,16 @@ def verify_headers(fits_file, data_level):
 
             if len(hdul) <= hdu_idx:
                 print(f"  ✗ HDU {hdu_idx} not found in file!")
-                results[hdu_name] = {'present': [], 'missing': expected_headers}
+                results[hdu_name] = {'present': [], 'missing': expected_headers, 'dtype_mismatch': []}
                 summary[f'{hdu_name.lower()}_total'] = len(expected_headers)
                 summary[f'{hdu_name.lower()}_present'] = 0
                 summary[f'{hdu_name.lower()}_missing'] = len(expected_headers)
+                summary[f'{hdu_name.lower()}_dtype_mismatch'] = 0
                 continue
 
             if not expected_headers:
                 print(f"  ⚠ No expected headers configured for {hdu_name} HDU")
-                results[hdu_name] = {'present': [], 'missing': []}
+                results[hdu_name] = {'present': [], 'missing': [], 'dtype_mismatch': []}
                 continue
 
             hdu_results = verify_hdu_headers(hdul[hdu_idx], expected_headers, hdu_name)
@@ -229,6 +287,7 @@ def verify_headers(fits_file, data_level):
             total = len(expected_headers)
             present = len(hdu_results['present'])
             missing = len(hdu_results['missing'])
+            dtype_mismatch = len(hdu_results['dtype_mismatch'])
 
             print(f"  Present: {present}/{total}")
             if hdu_results['missing']:
@@ -238,9 +297,16 @@ def verify_headers(fits_file, data_level):
             else:
                 print(f"  ✓ All expected {hdu_name} headers present!")
 
+            if hdu_results['dtype_mismatch']:
+                print(f"  ⚠ Dtype mismatches: {dtype_mismatch}")
+                for dm in hdu_results['dtype_mismatch']:
+                    print(f"    - {dm['keyword']}: expected {dm['expected']}, got {dm['actual']} (value={dm['value']})")
+                total_dtype_mismatches += dtype_mismatch
+
             summary[f'{hdu_name.lower()}_total'] = total
             summary[f'{hdu_name.lower()}_present'] = present
             summary[f'{hdu_name.lower()}_missing'] = missing
+            summary[f'{hdu_name.lower()}_dtype_mismatch'] = dtype_mismatch
 
         # Check HISTORY entries if configured
         if config.get('check_history', False):
@@ -258,6 +324,7 @@ def verify_headers(fits_file, data_level):
         else:
             summary['history_count'] = 0
 
+    summary['total_dtype_mismatches'] = total_dtype_mismatches
     results['summary'] = summary
     return results
 
@@ -270,6 +337,7 @@ def print_summary(results, data_level):
 
     summary = results['summary']
     total_missing = 0
+    total_dtype_mismatches = summary.get('total_dtype_mismatches', 0)
 
     # Print each HDU's results
     for key in summary:
@@ -278,12 +346,14 @@ def print_summary(results, data_level):
             total = summary[f'{hdu_name.lower()}_total']
             present = summary[f'{hdu_name.lower()}_present']
             missing = summary[f'{hdu_name.lower()}_missing']
+            dtype_mismatch = summary.get(f'{hdu_name.lower()}_dtype_mismatch', 0)
 
             if total > 0:
                 print(f"\n{hdu_name} HDU:")
-                print(f"  Expected: {total}")
-                print(f"  Present:  {present} ({present/total*100:.1f}%)")
-                print(f"  Missing:  {missing}")
+                print(f"  Expected:        {total}")
+                print(f"  Present:         {present} ({present/total*100:.1f}%)")
+                print(f"  Missing:         {missing}")
+                print(f"  Dtype mismatch:  {dtype_mismatch}")
                 total_missing += missing
 
     if summary.get('history_count', 0) > 0:
@@ -292,10 +362,15 @@ def print_summary(results, data_level):
 
     # Overall verdict
     print(f"\n{'='*80}")
-    if total_missing == 0:
-        print(f"✓ ALL EXPECTED HEADERS PRESENT IN ALL HDUs FOR {data_level}")
+    if total_missing == 0 and total_dtype_mismatches == 0:
+        print(f"✓ ALL EXPECTED HEADERS PRESENT WITH CORRECT DTYPES FOR {data_level}")
     else:
-        print(f"⚠ {total_missing} headers missing across all HDUs")
+        issues = []
+        if total_missing > 0:
+            issues.append(f"{total_missing} headers missing")
+        if total_dtype_mismatches > 0:
+            issues.append(f"{total_dtype_mismatches} dtype mismatches")
+        print(f"⚠ {', '.join(issues)}")
     print(f"{'='*80}\n")
 
 
@@ -311,26 +386,41 @@ def save_results(results, data_level, fits_file, output_file):
             if hdu_name == 'summary':
                 continue
 
-            f.write(f"Missing {hdu_name} Headers:\n")
+            f.write(f"{hdu_name} HDU:\n")
+            f.write("-"*40 + "\n")
+
             if hdu_results['missing']:
+                f.write("Missing Headers:\n")
                 for h in hdu_results['missing']:
                     f.write(f"  - {h}\n")
             else:
-                f.write("  None\n")
+                f.write("Missing Headers: None\n")
+
+            if hdu_results.get('dtype_mismatch'):
+                f.write("\nDtype Mismatches:\n")
+                for dm in hdu_results['dtype_mismatch']:
+                    f.write(f"  - {dm['keyword']}: expected {dm['expected']}, got {dm['actual']} (value={dm['value']})\n")
+            else:
+                f.write("Dtype Mismatches: None\n")
             f.write("\n")
 
         # Write summary
         summary = results['summary']
+        f.write("="*80 + "\n")
         f.write("Summary:\n")
         for key in summary:
             if key.endswith('_total'):
                 hdu_name = key.replace('_total', '').capitalize()
                 total = summary[key]
                 present = summary[f'{key.replace("_total", "_present")}']
+                missing = summary[f'{key.replace("_total", "_missing")}']
+                dtype_mismatch = summary.get(f'{key.replace("_total", "_dtype_mismatch")}', 0)
                 if total > 0:
-                    f.write(f"  {hdu_name:8s}: {present}/{total} present\n")
+                    f.write(f"  {hdu_name:8s}: {present}/{total} present, {missing} missing, {dtype_mismatch} dtype mismatches\n")
         if summary.get('history_count', 0) > 0:
             f.write(f"  History : {summary['history_count']} entries\n")
+
+        f.write(f"\nTotal dtype mismatches across all HDUs: {summary.get('total_dtype_mismatches', 0)}\n")
 
     print(f"Detailed results saved to: {output_file}")
 

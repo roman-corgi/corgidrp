@@ -1,0 +1,42 @@
+L2a Header Verification Results
+================================================================================
+
+File: mock_l2aframe_002.fits
+
+Primary HDU:
+----------------------------------------
+Missing Headers: None
+
+Dtype Mismatches:
+  - OBSNAME: expected NoneType, got str (value=SCI)
+
+Image HDU:
+----------------------------------------
+Missing Headers: None
+Dtype Mismatches: None
+
+ERR HDU:
+----------------------------------------
+Missing Headers: None
+Dtype Mismatches: None
+
+DQ HDU:
+----------------------------------------
+Missing Headers: None
+Dtype Mismatches: None
+
+BIAS HDU:
+----------------------------------------
+Missing Headers: None
+Dtype Mismatches: None
+
+================================================================================
+Summary:
+  Primary : 40/40 present, 0 missing, 1 dtype mismatches
+  Image   : 122/122 present, 0 missing, 0 dtype mismatches
+  Err     : 11/11 present, 0 missing, 0 dtype mismatches
+  Dq      : 10/10 present, 0 missing, 0 dtype mismatches
+  Bias    : 7/7 present, 0 missing, 0 dtype mismatches
+  History : 6 entries
+
+Total dtype mismatches across all HDUs: 1
