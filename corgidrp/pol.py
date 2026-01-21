@@ -43,8 +43,7 @@ def calc_stokes_unocculted(input_dataset,
                            image_center_x=None, 
                            image_center_y=None,
                            split_pa_states=True,
-                           pa_tolerance=0.1,
-                           split_rolls=None):
+                           pa_tolerance=0.1):
     """
     Compute uncalibrated Stokes parameters (I, Q/I, U/I) from unocculted L3 polarimetric datacubes.
 
@@ -70,8 +69,6 @@ def calc_stokes_unocculted(input_dataset,
         pa_tolerance (float, optional):
             Maximum allowed difference in PA_APER (deg) to group frames together when split_pa_states is True.
             Default is 0.1.
-        split_rolls (bool, optional):
-            Deprecated. Use split_pa_states instead.
 
     Returns:
         Image:
@@ -101,18 +98,15 @@ def calc_stokes_unocculted(input_dataset,
 
     prism_map = {'POL0': [0., 90.], 'POL45': [45., 135.]}
 
-    if split_rolls is not None:
-        split_pa_states = split_rolls
-
     # split datasets by target if there are multiple targets
     if split_pa_states:
         datasets = []
         target_datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
         for target_dataset in target_datasets:
-            # Assign frames to the nearest PA cluster within tolerance.
+            # Assign frames to a cluster based on the nearest PA_APER
             clusters = []
             for frame in target_dataset.frames:
-                pa = frame.pri_hdr["PA_APER"]
+                pa = frame.pri_hdr["PA_APER"] % 360.0 # in case PA_APER can be negative..
                 pa_rad = np.deg2rad(pa)
                 pa_sin = np.sin(pa_rad)
                 pa_cos = np.cos(pa_rad)
