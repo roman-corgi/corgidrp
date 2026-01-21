@@ -63,10 +63,11 @@ def save_headers_to_file(fits_file, output_dir, stage_name=""):
                     f.write(f"Data type: {hdu.data.dtype}\n")
                     f.write("-"*80 + "\n")
 
-                # Write all header keywords
+                # Write all header keywords with dtype
                 for key, value in hdu.header.items():
                     comment = hdu.header.comments[key]
-                    f.write(f"{key:8s} = {value!s:20s} / {comment}\n")
+                    dtype = type(value).__name__
+                    f.write(f"{key:8s} = {value!s:20s} [{dtype:10s}] / {comment}\n")
 
                 # Separator between HDUs
                 if i < len(hdul) - 1:
