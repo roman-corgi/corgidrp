@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 import logging
 import warnings
-from astropy.io import fits
+from astropy.io import fits, ascii
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset, SpecFluxCal
 import corgidrp.spec as steps
@@ -1402,10 +1402,10 @@ def test_star_pos():
        
 def test_filter_offset():
     """
-    test the SpecFilterOffset calibration product
+    test the SpecFilterOffset calibration product and its generation function
     """
-    dict = {"2a": [0.5, 0.2]}
-    offset = SpecFilterOffset(dict)
+    off_dict = {"2a": [0.5, 0.2]}
+    offset = SpecFilterOffset(off_dict)
     assert offset.offsets["2A"][0] == 0.5
     assert offset.offsets["2A"][1] == 0.2
     assert offset.offsets["3"] == offset.default_offsets["3"]
@@ -1419,7 +1419,22 @@ def test_filter_offset():
     assert load_offset.get_offsets("2A") == [0.5, 0.2]
     offset2 = SpecFilterOffset({})
     assert offset2.offsets == offset2.default_offsets
- 
+    
+    # test generate_filter_offset
+    spec_filter_offset = steps.generate_filter_offset()
+    assert isinstance(spec_filter_offset, SpecFilterOffset)
+    assert spec_filter_offset.offsets == spec_filter_offset.default_offsets
+    t = Table(names = ('filter', 'xoffset', 'yoffset'), dtype = (str, np.float64, np.float64))
+    
+    for k, v in off_dict.items():
+        t.add_row((k, v[0], v[1]))
+    ascii.write(t, 'test.csv', format = 'csv', overwrite = True)
+    offset_test = steps.generate_filter_offset('test.csv')
+    assert offset_test.offsets["2A"][0] == 0.5
+    assert offset_test.offsets["2A"][1] == 0.2
+    assert offset_test.offsets['3'] == offset_test.default_offsets['3']
+    os.remove('test.csv')
+    
 def test_spec_flux_cal():
     """
     test the SpecFluxCal calibration class
