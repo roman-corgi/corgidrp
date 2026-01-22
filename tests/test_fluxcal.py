@@ -448,7 +448,7 @@ def test_compute_spec_flux_ratio_single_roll():
         ((comp_spec_flux * host_err_flux) / (host_spec_flux ** 2)) ** 2
     )
 
-    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_ds, comp_ds, fluxcal_factor)
+    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_cal[0], comp_cal[0])
     expected = comp_spec / host_spec
 
     result = (
@@ -458,12 +458,10 @@ def test_compute_spec_flux_ratio_single_roll():
         metadata['companion_roll'] == 'ROLL_B' and
         np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
     )
+    
     print('\ncompute_spec_flux_ratio single roll: ', end='')
     print_pass() if result else print_fail()
-
     assert result
-    assert np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
-
 
 def test_compute_spec_flux_ratio_weighted():
     """Combine spectra from multiple rolls, then compute a single flux ratio."""
@@ -531,7 +529,7 @@ def test_compute_spec_flux_ratio_weighted():
 
     # Compute flux ratio using the combined spectra (production path)
     ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
-        host_comb_image, comp_comb_image, fluxcal_factor
+        host_cal[0], comp_cal[0]
     )
 
     # Expected ratio and uncertainty in flux units
@@ -540,15 +538,15 @@ def test_compute_spec_flux_ratio_weighted():
         (comp_err_flux / host_flux) ** 2
         + ((comp_flux * host_err_flux) / (host_flux ** 2)) ** 2
     )
-
+    
     result = (
-        np.allclose(ratio, expected_ratio, equal_nan=True)
-        and np.array_equal(wavelength, host_comb_wave)
-        and np.allclose(metadata['ratio_err'], expected_ratio_err, equal_nan=True)
-    )
+        np.allclose(ratio, expected_ratio, equal_nan=True) and
+        np.array_equal(wavelength, host_comb_wave) and
+        np.allclose(metadata['ratio_err'], expected_ratio_err, equal_nan=True)
+        )
+    
     print('\ncompute_spec_flux_ratio weighted rolls: ', end='')
     print_pass() if result else print_fail()
-
     assert result
 
 def test_abs_fluxcal():
