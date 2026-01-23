@@ -21,8 +21,8 @@ INPUT_EFFICIENCY_FACTOR = 1
 PHOT_METHOD = "aperture"
 FLUX_OR_IRR = 'irr'
 NUM_IMAGES = 10
-ROLL_ANGLES = np.zeros(NUM_IMAGES)
-ROLL_ANGLES[NUM_IMAGES//2:] = 45
+ROTATION_ANGLES = np.zeros(NUM_IMAGES)
+ROTATION_ANGLES[NUM_IMAGES//2:] = 45
 NUMBASIS = [1, 4, 8]
 FULL_SIZE_IMAGE = (1024, 1024)
 CROPPED_IMAGE_SIZE = (201, 201) # Practically this will be an odd shape so we should test that
@@ -169,7 +169,7 @@ def generate_test_data(out_dir):
     host_star_image.data *= nd_cal.interpolate_od(512, 512)
 
     # 4) Generate coronagraphic frames (just star, no companions) and RDI reference star dataset
-    coron_data, ref_data = mocks.create_psfsub_dataset(NUM_IMAGES, NUM_IMAGES, np.append(ROLL_ANGLES, ROLL_ANGLES), 
+    coron_data, ref_data = mocks.create_psfsub_dataset(NUM_IMAGES, NUM_IMAGES, np.append(ROTATION_ANGLES, ROTATION_ANGLES), 
                                                         data_shape = FULL_SIZE_IMAGE,
                                                         centerxy = host_star_center,
                                                         st_amp = host_star_counts * 0.01,
@@ -224,11 +224,11 @@ def generate_test_data(out_dir):
 
     
     # inject planets into coronagrpahic dataset
-    rolls = np.array([frame.pri_hdr['PA_APER'] for frame in coron_data])
+    rotation_angles = np.array([frame.pri_hdr['PA_APER'] for frame in coron_data])
     for i, comp in enumerate(COMPANION_PARAMS):
         planet_psf = companion_psfs[i]
         inject_planet(coron_data.all_data, [host_star_center for _ in coron_data], [planet_psf for _ in coron_data],
-                      [None for _ in coron_data], comp['sep_pix'], 0, thetas=90 + comp['pa'] - rolls)
+                      [None for _ in coron_data], comp['sep_pix'], 0, thetas=90 + comp['pa'] - rotation_angles)
 
 
     # 8) Create the PSF-subtracted frame using the dataset with planets and the RDI reference star dtaset

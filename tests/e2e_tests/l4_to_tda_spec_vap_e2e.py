@@ -282,8 +282,8 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
         logger.info(f'Number of host L4 spectra used: {len(host_images)}')
         logger.info(f'Number of companion L4 spectra used: {len(comp_images)}')
-        logger.info(f'Host rolls: {[img.pri_hdr.get("PA_APER") for img in host_images]}')
-        logger.info(f'Companion rolls: {[img.pri_hdr.get("PA_APER") for img in comp_images]}')
+        logger.info(f'Host rotation angles: {[img.pri_hdr.get("PA_APER") for img in host_images]}')
+        logger.info(f'Companion rotation angles: {[img.pri_hdr.get("PA_APER") for img in comp_images]}')
 
         # Check that all host and companion cubes contain a SPEC_WAVE (wavelength) extension.
         host_wave_ext = all('SPEC_WAVE' in img.hdu_list for img in host_images)
@@ -301,8 +301,8 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         host_ds = Dataset(host_images)
         comp_ds = Dataset(comp_images)
 
-        host_spec, host_wave, host_err, host_rolls = l4_to_tda.combine_spectra(host_ds)
-        comp_spec, comp_wave, comp_err, comp_rolls = l4_to_tda.combine_spectra(comp_ds)
+        host_spec, host_wave, host_err, host_rotation_angles = l4_to_tda.combine_spectra(host_ds)
+        comp_spec, comp_wave, comp_err, comp_rotation_angles = l4_to_tda.combine_spectra(comp_ds)
 
         # Check monotonicity and length of the combined wavelength grids.
         host_mono = np.all(np.diff(host_wave) >= 0) or np.all(np.diff(host_wave) <= 0)

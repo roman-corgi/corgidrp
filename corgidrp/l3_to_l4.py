@@ -553,7 +553,7 @@ def do_psf_subtraction(input_dataset,
                                                       dq_thresh)
 
     # Derotate & align PSF subtracted frames
-    # pyklip_dataset.output shape: (len numbasis, n_rolls, n_wls, y, x)
+    # pyklip_dataset.output shape: (len numbasis, n_pa_aper_degs, n_wls, y, x)
 
     output = pyklip_dataset.output
     collapsed_frames = []
@@ -808,12 +808,12 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
 
         # look for WCS solutions
         if use_wcs is True:
-            roll_angle = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
+            pa_aper_deg = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
 
         else:
             print('WARNING: using "PA_APER" instead of WCS to estimate the north position angle')
-            # read the roll angle parameter, assuming this info is recorded in the primary header as requested
-            roll_angle = processed_data.pri_hdr['PA_APER']
+            # read the PA_APER angle parameter, assuming this info is recorded in the primary header as requested
+            pa_aper_deg = processed_data.pri_hdr['PA_APER']
 
         #Make 2D WCS header for derotation. 
         sci_hd_2D = sci_hd.copy()
@@ -825,10 +825,10 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
                 warnings.filterwarnings("ignore", category=FITSFixedWarning)
                 astr_hdr = WCS(sci_hd_2D)
         
-        sci_derot = derotate_arr(sci_data,roll_angle, xcen,ycen,astr_hdr=astr_hdr,new_center=new_center) # astr_hdr is corrected at above lines
+        sci_derot = derotate_arr(sci_data, pa_aper_deg, xcen,ycen,astr_hdr=astr_hdr,new_center=new_center) # astr_hdr is corrected at above lines
         
         new_all_data.append(sci_derot)
-        log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
+        log = f'FoV rotated by {pa_aper_deg}deg counterclockwise around center {xcen, ycen}'
         sci_hd['HISTORY'] = log
 
         # update WCS solutions
@@ -841,7 +841,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         #############
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = derotate_arr(err_data,roll_angle, xcen,ycen,new_center=new_center) # err data shape is 1x1024x1024
+        err_derot = derotate_arr(err_data,pa_aper_deg, xcen,ycen,new_center=new_center) # err data shape is 1x1024x1024
         new_all_err.append(err_derot)
 
         #############
@@ -849,7 +849,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         # all DQ pixels must have integers
         dq_data = processed_data.dq
 
-        dq_derot = derotate_arr(dq_data,roll_angle,xcen,ycen,
+        dq_derot = derotate_arr(dq_data,pa_aper_deg,xcen,ycen,
                                 is_dq=True,new_center=new_center)
 
         new_all_dq.append(dq_derot)
@@ -1207,7 +1207,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
-                                               taken with both wollastons at the same roll angle. All frames for the
+                                               taken with both wollastons at the same telescope rotation angle. All frames for the
                                                same target star must have the same x and y dimensions
         system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
         nd_mueller_matrix_cal (corgidrp.data.NDMuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
@@ -1291,10 +1291,10 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         # construct stokes vector after instrument with ND filter
         S_nd = [I_nd, Q_nd, U_nd, V_nd]
 
-        # S_nd = M_nd * R(roll_angle) * S_in
-        # invert M_nd * R(roll_angle) to recover S_in
-        roll_angle = unocculted_pol0_img.pri_hdr['PA_APER']
-        total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
+        # S_nd = M_nd * R(pa_aper_deg) * S_in
+        # invert M_nd * R(pa_aper_deg) to recover S_in
+        pa_aper_deg = unocculted_pol0_img.pri_hdr['PA_APER']
+        total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(pa_aper_deg)
         system_nd_inv = np.linalg.pinv(total_system_mm_nd)
         S_in = system_nd_inv @ S_nd
 
@@ -1324,8 +1324,8 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         # subtract stellar polarization from the rest of the frames
         for frame in coron_frames:
             # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
-            frame_roll_angle = frame.pri_hdr['PA_APER']
-            total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_roll_angle)
+            frame_pa_aper_deg = frame.pri_hdr['PA_APER']
+            total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_pa_aper_deg)
             S_out = total_system_mm @ S_in
             # construct I0, I45, I90, and I135 back from stokes vector
             I_0_star = (S_out[0] + S_out[1]) / 2
@@ -1414,7 +1414,7 @@ def combine_polarization_states(input_dataset,
         input_dataset (corgidrp.data.Dataset): a dataset of polarimetric Images (L3-level), should be of the same size and same target
         system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the instrument
         svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
-        use_wcs (bool, optional): Uses WCS coordinates to rotate northup, defaults to true. If false, uses roll angle header instead.
+        use_wcs (bool, optional): Uses WCS coordinates to rotate northup, defaults to true. If false, uses PA_APER header instead.
         rot_center (string, optional): Define the center to rotate the images with respect to. Options are 'im_center', 'starloc',
             or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header.
         ct_calibration (corgidrp.data.CoreThroughputCalibration, optional): For PSF Subtraction. core throughput calibration object. Required 
@@ -1558,9 +1558,9 @@ def combine_polarization_states(input_dataset,
         output_intensities_cov[2*i,2*i,:,:] = derotated_dataset.frames[i].err[0,0,:,:]**2
         output_intensities_cov[(2*i)+1,(2*i)+1,:,:] = derotated_dataset.frames[i].err[0,1,:,:]**2
         ## fill in measurement matrix
-        # roll angle rotation matrix
-        roll = derotated_dataset.frames[i].pri_hdr['PA_APER']
-        rotation_mm = pol.rotation_mueller_matrix(roll)
+        # PA_APER rotation matrix
+        pa_aper_deg = derotated_dataset.frames[i].pri_hdr['PA_APER']
+        rotation_mm = pol.rotation_mueller_matrix(pa_aper_deg)
         if derotated_dataset.frames[i].ext_hdr['DPAMNAME'] == 'POL0':
             # use correct polarizer mueller matrix depending on wollaston used
             # o and e denotes ordinary and extraordinary axis of the wollaston
@@ -1569,7 +1569,7 @@ def combine_polarization_states(input_dataset,
         else:
             polarizer_mm_o = pol.lin_polarizer_mueller_matrix(45)
             polarizer_mm_e = pol.lin_polarizer_mueller_matrix(135)
-        # construct full mueller matrix with roll angle and wollaston
+        # construct full mueller matrix with PA_APER angle and wollaston
         total_mm_o = polarizer_mm_o @ system_mm @ rotation_mm
         total_mm_e = polarizer_mm_e @ system_mm @ rotation_mm
         # row at current index of the measurement matrix corresponds to the first row of the full system mueller matrix

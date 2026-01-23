@@ -156,16 +156,17 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     return new_dataset
 
 
-def derotate_arr(data_arr,roll_angle, xcen,ycen,new_center=None,astr_hdr=None,
+def derotate_arr(data_arr,pa_aper_deg, xcen,ycen,new_center=None,astr_hdr=None,
                  is_dq=False,dq_round_threshold=0.05):
-    """Derotates an array based on the provided roll angle, about the provided
+    """Derotates an array based on the provided PA_APER angle, about the provided
     center. Treats DQ arrays specially, converting to float to do the rotation, 
     and converting back to np.int64 afterwards. DQ output becomes only zeros and
     ones, so detailed DQ flag information is not preserved.
 
     Args:
         data_arr (np.array): an array with 2-4 dimensions
-        roll_angle (float): telescope roll angle in degrees
+        pa_aper_deg (float): position angle (measured counter-clockwise) of the detector y axis from 
+            celestial north (degrees)
         xcen (float): x-coordinate of center about which to rotate
         ycen (float): y-coordinate of center about which to rotate
         new_center (tuple, optional): tuple of x- and y- coordinate of the new center to shift to.
@@ -182,14 +183,14 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,new_center=None,astr_hdr=None,
         data_arr = data_arr.astype(np.float32)
 
     if data_arr.ndim == 2:
-        derotated_arr = rotate(data_arr,roll_angle,(xcen,ycen),
+        derotated_arr = rotate(data_arr,pa_aper_deg,(xcen,ycen),
                                new_center=new_center,
                                astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
     
     elif data_arr.ndim == 3:
         derotated_arr = []
         for i,im in enumerate(data_arr):
-            derotated_im = rotate(im,roll_angle,(xcen,ycen),
+            derotated_im = rotate(im,pa_aper_deg,(xcen,ycen),
                                new_center=new_center,
                                astr_hdr=astr_hdr if (i==0) else None) # astr_hdr is corrected only once
         
@@ -202,7 +203,7 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,new_center=None,astr_hdr=None,
         for s,set in enumerate(data_arr):
             derotated_set = []
             for i,im in enumerate(set):
-                derotated_im = rotate(im,roll_angle,(xcen,ycen),
+                derotated_im = rotate(im,pa_aper_deg,(xcen,ycen),
                                new_center=new_center,
                                astr_hdr=astr_hdr if (i==0 and s==0) else None) # astr_hdr is corrected only once
         
@@ -304,11 +305,11 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1,new_center=None):
     derotated_dq_arr = []
     derotated_err_arr = []
     for i,frame in enumerate(sci_dataset):
-        roll = frame.pri_hdr['PA_APER']
+        pa_aper_deg = frame.pri_hdr['PA_APER']
         xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
         
-        derotated_dq = derotate_arr(aligned_sci_dq_arr[i],roll, xcen,ycen,is_dq=True)
-        derotated_err = derotate_arr(aligned_sci_err_arr[i],roll, xcen,ycen)
+        derotated_dq = derotate_arr(aligned_sci_dq_arr[i],pa_aper_deg, xcen,ycen,is_dq=True)
+        derotated_err = derotate_arr(aligned_sci_err_arr[i],pa_aper_deg, xcen,ycen)
         
         derotated_dq_arr.append(derotated_dq)
         derotated_err_arr.append(derotated_err)

@@ -68,7 +68,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         if pol_data == True:
             mock_dataset_3d = mock_dataset_ori.copy()
             # add an angle offset to each pol image
-            mock_dataset_3d[0].pri_hdr['PA_APER'] = (ang, 'roll angle (deg)')
+            mock_dataset_3d[0].pri_hdr['PA_APER'] = (ang, 'PA_APER angle (deg)')
             mock_dataset_temp = mock_dataset_3d.copy()
             mock_dataset_temp[0].data = mock_dataset_3d[0].data[0]
             mock_dataset_temp[0].err = mock_dataset_3d[0].err[:, 0]
@@ -86,7 +86,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         else:
             mock_dataset = mock_dataset_ori.copy()
             # add an angle offset
-            mock_dataset[0].pri_hdr['PA_APER'] = (ang, 'roll angle (deg)')
+            mock_dataset[0].pri_hdr['PA_APER'] = (ang, 'PA_APER angle (deg)')
             # create the wcs
             updated_dataset = create_wcs(mock_dataset, astrom_cal)
             # inject fake sources for test

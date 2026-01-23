@@ -109,7 +109,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     data = np.loadtxt(os.path.join(e2edata_path,"hlc_os11_v3",'hlc_os11_batch_info.txt'), skiprows=2)
     batch = data[:,0].astype(int)
     star = data[:,2].astype(int)
-    roll = data[:,3]
+    rotation = data[:,3]
     frame_exptime_sec = data[:,4]
     nframes = data[:,6].astype(int)
 
@@ -157,7 +157,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
         new_image.pri_hdr.set('FRAMET', frame_exptime_sec[ibatch])
         new_image.ext_hdr.set('EXPTIME', frame_exptime_sec[ibatch])
-        new_image.pri_hdr.set('PA_APER',-roll[ibatch])
+        new_image.pri_hdr.set('PA_APER',-rotation[ibatch])
         new_image.ext_hdr.set('FSMPRFL','NFOV')
         new_image.ext_hdr.set('LSAMNAME','NFOV')
         new_image.ext_hdr.set('CFAMNAME','1F')

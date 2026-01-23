@@ -26,12 +26,12 @@ rel_tolerance = 0.05
 ## pyKLIP data class tests
 
 def test_pyklipdata_ADI():
-    """Tests that pyklip dataset centers frame, assigns rolls, and initializes PSF library properly for ADI data. 
+    """Tests that pyklip dataset centers frame, assigns rotation angles, and initializes PSF library properly for ADI data. 
     """
 
-    rolls = [0,90]
+    pa_aper_degs = [0,90]
     # Init with center shifted by 1 pixel in x, 2 pixels in y
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,pa_aper_degs,
                                               centerxy=(50.5,51.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
@@ -41,22 +41,22 @@ def test_pyklipdata_ADI():
 
         assert mock_sci.all_data[i,2:,1:] == pytest.approx(image[:-2,:-1]), f"Frame {i} centered improperly."
 
-    # Check roll assignments match up for sci dataset
-    for r,roll in enumerate(pyklip_dataset._PAs):
-        assert roll == rolls[r]
-        assert mock_sci[r].pri_hdr['PA_APER'] == roll, f"Incorrect PA_APER assignment for frame {r}."
+    # Check rotation angle assignments match up for sci dataset
+    for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
+        assert pa_aper_deg == pa_aper_degs[r]
+        assert mock_sci[r].pri_hdr['PA_APER'] == pa_aper_deg, f"Incorrect PA_APER assignment for frame {r}."
     
     # Check ref library is None
     assert pyklip_dataset.psflib is None, "pyklip_dataset.psflib is not None, even though no reference dataset was provided."
 
 def test_pyklipdata_RDI():
-    """Tests that pyklip dataset centers frame, assigns rolls, and initializes PSF library properly for RDI data. 
+    """Tests that pyklip dataset centers frame, assigns rotation angles, and initializes PSF library properly for RDI data. 
     """
-    rolls = [45,180]
+    pa_aper_degs = [45,180]
     n_sci = 1
     n_ref = 1
     # Init with center shifted
-    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,centerxy=(50.5,51.5))
+    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,pa_aper_degs,centerxy=(50.5,51.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
     
@@ -65,22 +65,22 @@ def test_pyklipdata_RDI():
 
         assert mock_sci.all_data[i,2:,1:] == pytest.approx(image[:-2,:-1]), f"Frame {i} centered improperly."
 
-    # Check roll assignments match up for sci dataset
-    for r,roll in enumerate(pyklip_dataset._PAs):
-        assert roll == rolls[r]
-        assert mock_sci[r].pri_hdr['PA_APER'] == roll, f"Incorrect PA_APER assignment for frame {r}."
+    # Check rotation angle assignments match up for sci dataset
+    for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
+        assert pa_aper_deg == pa_aper_degs[r]
+        assert mock_sci[r].pri_hdr['PA_APER'] == pa_aper_deg, f"Incorrect PA_APER assignment for frame {r}."
     
     # Check ref library shape
     assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref
  
 def test_pyklipdata_ADIRDI():
-    """Tests that pyklip dataset centers frame, assigns rolls, and initializes PSF library properly for ADI+RDI data. 
+    """Tests that pyklip dataset centers frame, assigns rotation angles, and initializes PSF library properly for ADI+RDI data. 
     """
-    rolls = [45,-45,180]
+    pa_aper_degs = [45,-45,180]
     n_sci = 2
     n_ref = 1
     # Init with center shifted by 1 pixel
-    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,pa_aper_degs,
                                               centerxy=(50.5,51.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
@@ -90,10 +90,10 @@ def test_pyklipdata_ADIRDI():
 
         assert mock_sci.all_data[i,2:,1:] == pytest.approx(image[:-2,:-1]), f"Frame {i} centered improperly."
 
-    # Check roll assignments match up for sci dataset
-    for r,roll in enumerate(pyklip_dataset._PAs):
-        assert roll == rolls[r]
-        assert mock_sci[r].pri_hdr['PA_APER'] == roll, f"Incorrect PA_APER assignment for frame {r}."
+    # Check rotation angle assignments match up for sci dataset
+    for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
+        assert pa_aper_deg == pa_aper_degs[r]
+        assert mock_sci[r].pri_hdr['PA_APER'] == pa_aper_deg, f"Incorrect PA_APER assignment for frame {r}."
     
     # Check ref library shape
     assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref
@@ -326,8 +326,8 @@ def test_psf_sub_split_dataset():
     subsections = 2
     annuli = 2
     movement = 2
-    rolls = [270+13,270-13,0,0]
-    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
+    pa_aper_degs = [270+13,270-13,0,0]
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,pa_aper_degs,
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)
@@ -393,14 +393,14 @@ def test_psf_sub_split_dataset():
                                 **klip_kwargs)
 
 def test_psf_sub_ADI():
-    """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
+    """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rotation angles, no references), 
     that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
     output data shape is correct.
     """
 
     numbasis = [1]
-    rolls = [45,-45]
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
+    pa_aper_degs = [45,-45]
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,pa_aper_degs,
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast,
@@ -439,7 +439,7 @@ def test_psf_sub_ADI():
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
 
-    analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2
+    analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-pa_aper_degs[1],reshape=False,cval=0)) / 2
     
     frame = result[0]
 
@@ -485,15 +485,15 @@ def test_psf_sub_ADI():
         raise Exception(f"Unexpected numbasis was used in KLIP parameters.")
 
 def test_psf_sub_RDI(): 
-    """Tests that psf subtraction step correctly identifies an RDI dataset (single roll, 1 or more references), 
+    """Tests that psf subtraction step correctly identifies an RDI dataset (single rotation angle, 1 or more references), 
     that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
     output data shape is correct.
     """
     numbasis = [1]
-    rolls = [90,0,0]
+    pa_aper_degs = [90,0,0]
     data_shape = [101,101]
 
-    mock_sci,mock_ref = create_psfsub_dataset(1,2,rolls,ref_psf_spread=1.,
+    mock_sci,mock_ref = create_psfsub_dataset(1,2,pa_aper_degs,ref_psf_spread=1.,
                                 pl_contrast=pl_contrast,
                                 noise_amp=noise_amp,
                                 st_amp=st_amp,
@@ -512,7 +512,7 @@ def test_psf_sub_RDI():
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs
                                 )
-    analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
     expected_dq = np.zeros(data_shape)
     expected_dq[15,:] = 1
 
@@ -528,7 +528,7 @@ def test_psf_sub_RDI():
         
         assert frame.dq[i] == pytest.approx(expected_dq)
     
-    # The step should choose mode RDI based on having 1 roll and 1 reference.
+    # The step should choose mode RDI based on having 1 rotation angle and 1 reference.
     if not frame.pri_hdr['KLIP_ALG'] == 'RDI':
         raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'RDI' mode when provided 1 science image and 1 reference.")
     
@@ -542,23 +542,23 @@ def test_psf_sub_RDI():
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after RDI subtraction.")
     
 def test_psf_sub_ADIRDI():
-    """Tests that psf subtraction step correctly identifies an ADI+RDI dataset (multiple rolls, 1 or more references), 
+    """Tests that psf subtraction step correctly identifies an ADI+RDI dataset (multiple rotation angles, 1 or more references), 
     that overall counts decrease, that the KLIP result matches the analytical expectation for 1 KL mode, and that the 
     output data shape is correct.
     """
 
     numbasis = [1,2,3,4]
-    rolls = [13,-13,+26,-26]
+    pa_aper_degs = [13,-13,+26,-26]
     data_shape = (101,101)
     klip_kwargs={"numbasis":numbasis}
-    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,pa_aper_degs,
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast,
                                               data_shape=data_shape)
     
 
-    analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-rolls[1],reshape=False,cval=0)) / 2
+    analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-pa_aper_degs[1],reshape=False,cval=0)) / 2
     
 
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
@@ -604,14 +604,14 @@ def test_psf_sub_ADIRDI():
     assert angle == pytest.approx(0.0, abs=1e-6), "WCS CD matrix not properly rotated to North-up East-left."
 
 def test_psf_sub_explicit_klip_kwargs():
-    """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
+    """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rotation angles, no references), 
     that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
     output data shape is correct.
     """
 
     numbasis = [1]
-    rolls = [270+13,270-13]
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
+    pa_aper_degs = [270+13,270-13]
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,pa_aper_degs,
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)
@@ -652,8 +652,8 @@ def test_psf_sub_badmode():
     """
 
     numbasis = [1,2,3,4]
-    rolls = [13,-13,0]
-    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,
+    pa_aper_degs = [13,-13,0]
+    mock_sci,mock_ref = create_psfsub_dataset(2,1,pa_aper_degs,
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)

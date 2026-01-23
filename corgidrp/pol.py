@@ -235,7 +235,7 @@ def generate_mueller_matrix_cal(input_dataset,
     '''
     Calculates the Mueller Matrix calibration for a given dataset of polarimetric observations.
     The expected input is a dataset of stokes vectors measured from known polarized standard stars, separated by 
-    target and roll angle. The function reads in a polarization reference file containing the known polarization 
+    target and PA_APER angle. The function reads in a polarization reference file containing the known polarization 
     properties of the targets, and uses these to calculate the Mueller Matrix elements via SVD inversion.
     
     The pol reference file should contain the known polarization properties of the targets in the dataset.
@@ -289,22 +289,22 @@ def generate_mueller_matrix_cal(input_dataset,
     # measure the normalized difference for each dataset
     stokes_vectors = []
     stokes_vector_errs = []
-    roll_angles = []
+    rotation_angles = []
     for image in dataset:
         stokes_vectors.append(image.data[1:3]) #Grab just Q and U
         stokes_vector_errs.append(image.err[0][1:3]) #Grab just Q and U errors
         # PA_APER is the on-sky position angle east of north for the CGI aperture
-        roll_angles.append(image.pri_hdr["PA_APER"])
+        rotation_angles.append(image.pri_hdr["PA_APER"])
     stokes_vectors = np.append(stokes_vectors[0], stokes_vectors[1:])
     stokes_vector_errs = np.append(stokes_vector_errs[0], stokes_vector_errs[1:])
 
     # generate the matrix of meausurements six columns [1 q_star, u_star, 0,0,0] for q_measured
-    # and [0,0,0, 1, q_star, u_star] for u_measured #Where Q and U have been rotated by the roll angle: 
+    # and [0,0,0, 1, q_star, u_star] for u_measured #Where Q and U have been rotated by the PA_APER angle: 
     stokes_matrix = np.zeros((2*len(dataset), 6))
     for i, target in enumerate(targets):
         pol_row = pol_ref[pol_ref["TARGET"] == target]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
-        PA = pol_row["PA"].values[0] + roll_angles[i] # in degrees
+        PA = pol_row["PA"].values[0] + rotation_angles[i] # in degrees
 
         # calculate the Stokes parameters Q and U from P and PA
         Q, U = get_qu_from_p_theta(P, PA)
