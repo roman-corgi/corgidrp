@@ -1,0 +1,24 @@
+{
+    "name" : "build_trad_dark_full_2",
+    "template" : true,
+    "ram_heavy" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "build_trad_dark",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "full_frame" : true
+            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

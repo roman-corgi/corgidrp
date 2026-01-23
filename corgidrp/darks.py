@@ -7,6 +7,8 @@ from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, u
 import corgidrp.check as check
 from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset
 
+from memory_profiler import profile
+
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
     Get mean frame and corresponding bad-pixel map from L2b data frames.  The
@@ -98,12 +100,12 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     if isinstance(dataset_or_image_list, Dataset):
         temp_fits = Image(dataset_or_image_list[0].filepath)
         if err:
-            shape = temp_fits.err.shape[1:] 
+            shape = temp_fits.err.shape[1:]
         else:
-            shape = temp_fits.data.shape 
+            shape = temp_fits.data.shape
         sum_im = np.zeros(shape).astype(float)
         map_im = np.zeros(shape, dtype=int)
-    elif isinstance(dataset_or_image_list, list) or isinstance(dataset_or_image_list, np.array):  
+    elif isinstance(dataset_or_image_list, list) or isinstance(dataset_or_image_list, np.array):
         sum_im = np.zeros_like(dataset_or_image_list[0]).astype(float)
         map_im = np.zeros_like(dataset_or_image_list[0], dtype=int)
     else:
@@ -116,7 +118,7 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
             else:
                 temp_fits = dataset_or_image_list[i]
             if err:
-                frame_data = temp_fits.err[0] 
+                frame_data = temp_fits.err[0]
             else:
                 frame_data = temp_fits.data.astype(float)
             im_m = np.ma.masked_array(frame_data, temp_fits.dq.astype(bool).astype(int))
@@ -134,7 +136,7 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     # Where map_im is equal to 0, set combined_im to zero
     comb_image = np.divide(sum_im, map_im, out=np.zeros_like(sum_im),
                             where=map_im != 0)
-   
+
     if err: # (sqrt of sum of sigma**2 terms)/sqrt(n)
         comb_image = np.sqrt(comb_image)
 
@@ -156,6 +158,7 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
 
     return comb_image, comb_bpmap, map_im, enough_for_rn
 
+@profile
 def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=False):
     """This function produces a traditional master dark from a stack of darks
     taken at a specific EM gain and exposure time to match a corresponding
@@ -167,13 +170,13 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     - have been corrected for nonlinearity
     - have been converted from DN to e-
     - have been divided by EM gain
-    - have NOT been desmeared. Darks should not be desmeared.  The only component 
-    of dark frames that would be subject to a smearing effect is dark current 
-    since it linearly increases with time, so the extra row read time affects 
+    - have NOT been desmeared. Darks should not be desmeared.  The only component
+    of dark frames that would be subject to a smearing effect is dark current
+    since it linearly increases with time, so the extra row read time affects
     the dark current per pixel.  However, illuminated images
-    would also contain this smeared dark current, so dark subtraction should 
-    remove this smeared dark current (and then desmearing may be applied to the 
-    processed image if appropriate).  
+    would also contain this smeared dark current, so dark subtraction should
+    remove this smeared dark current (and then desmearing may be applied to the
+    processed image if appropriate).
 
     Also, add_shot_noise_to_err() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -193,10 +196,10 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     Args:
     dataset (corgidrp.data.Dataset):
         This is an instance of corgidrp.data.Dataset.
-        Each frame should accord with the SCI full frame geometry. 
-        If Dataset has metadata only (as in RAM-heavy case), 
-        each frame is read in from its filepath one at a time.  If Dataset has 
-        its data, then all the frames are processed at once. 
+        Each frame should accord with the SCI full frame geometry.
+        If Dataset has metadata only (as in RAM-heavy case),
+        each frame is read in from its filepath one at a time.  If Dataset has
+        its data, then all the frames are processed at once.
     detector_params (corgidrp.data.DetectorParams):
         a calibration file storing detector calibration values
     detector_regions (dict):
@@ -215,7 +218,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         master_dark.err includes the statistical error across all the frames as
         well as any individual err from each frame (and accounts for masked
         pixels in the calculations).
-        master_dark.dq: pixels that are masked for all frames have non-zero 
+        master_dark.dq: pixels that are masked for all frames have non-zero
         values.
     """
     if detector_regions is None:
@@ -263,8 +266,8 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
     if dataset[0].data is None:
         # equivalent to what is done in if statement above for datasets with data
-        mean_frame[telem_rows] = 0 
-        mean_err[telem_rows] = 0 
+        mean_frame[telem_rows] = 0
+        mean_err[telem_rows] = 0
     # combine the error from individual frames to the standard deviation across
     # the frames due to statistical variance
     zero_inds = np.where(unmasked_num==0)
@@ -299,7 +302,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     total_err = np.sqrt(mean_err**2 + stat_std**2)
     # bitwise_or flag value for those that are masked all the way through for all
     # frames
-    fittable_inds = np.where(combined_bpmap ==0) 
+    fittable_inds = np.where(combined_bpmap ==0)
     if dataset[0].data is None:
         dq_sum = np.zeros_like(mean_frame).astype(float)
         for j in range(len(dataset)):
@@ -310,7 +313,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         output_dq = output_dq.filled(0).astype(int)
     else:
         output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
-    output_dq[fittable_inds] = 0 
+    output_dq[fittable_inds] = 0
     if not full_frame:
         dq = slice_section(output_dq, 'SCI', 'image', detector_regions)
         err = slice_section(total_err, 'SCI', 'image', detector_regions)
@@ -346,21 +349,21 @@ class CalDarksLSQException(Exception):
 def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regions=None):
     """The input dataset represents a collection of frame stacks of the
     (in e- units), where the stacks are for various
-    EM gain values and exposure times.  Stacks with fewer frames than other 
-    stacks are accordingly weighed less in the fit.  
+    EM gain values and exposure times.  Stacks with fewer frames than other
+    stacks are accordingly weighed less in the fit.
     The frames in each stack should be SCI full frames that:
 
     - have had their bias subtracted (assuming full frame)
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have NOT been desmeared. Darks should not be desmeared.  The only component 
-    of dark frames that would be subject to a smearing effect is dark current 
-    since it linearly increases with time, so the extra row read time affects 
+    - have NOT been desmeared. Darks should not be desmeared.  The only component
+    of dark frames that would be subject to a smearing effect is dark current
+    since it linearly increases with time, so the extra row read time affects
     the dark current per pixel.  However, illuminated images
-    would also contain this smeared dark current, so dark subtraction should 
-    remove this smeared dark current (and then desmearing may be applied to the 
-    processed image if appropriate).  
+    would also contain this smeared dark current, so dark subtraction should
+    remove this smeared dark current (and then desmearing may be applied to the
+    processed image if appropriate).
 
     Also, add_shot_noise_to_err() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -393,16 +396,16 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         darks for analog frames,
         thousands for photon counting depending on the maximum number of
         frames that will be used for photon counting.
-        If Dataset has metadata only (as in RAM-heavy case), 
-        each frame is read in from its filepath one at a time.  If Dataset has 
+        If Dataset has metadata only (as in RAM-heavy case),
+        each frame is read in from its filepath one at a time.  If Dataset has
         its data, then all the frames are processed at once.
     detector_params (corgidrp.data.DetectorParams):
         a calibration file storing detector calibration values
     weighting (bool):
         If True, weighting is used for the least squares fit, and the weighting
         takes into account the err coming from the input frames, the statistical
-        variation among the supposedly identical frames in each sub-stack, and 
-        the effect of any DQ masking.  If False, all data is evenly weighted in 
+        variation among the supposedly identical frames in each sub-stack, and
+        the effect of any DQ masking.  If False, all data is evenly weighted in
         the least squares fit.  Defaults to True.
     detector_regions (dict):
         a dictionary of detector geometry properties.  Keys should be as found
@@ -416,7 +419,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         input err:  np.stack([FPN_std_map, C_std_map, DC_std_map])
         FPN_std_map, C_std_map, and DC_std_map contain the fitting error.
         In all the err, masked pixels are accounted for in
-        the calculations, and the err from the input frames, along with statistical 
+        the calculations, and the err from the input frames, along with statistical
         error due to having fewer frames available per sub-stack due to any masking,
         is used for weighting the data in the least squares fit.
         input dq:   np.stack([output_dq, output_dq, output_dq])
@@ -502,7 +505,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         in unreliable_pix_map.  Since the least-squares fit function has 3
         parameters, at least 4 sub-stacks are needed for a given pixel in order
         to perform a fit for that pixel.  The pixels in unreliable_pix_map that
-        are >= len(stack_arr)-3 cannot be fit.  
+        are >= len(stack_arr)-3 cannot be fit.
         The pixels that are masked for EVERY frame in all sub-stacks
         but 3 (or less) are assigned a flag value from the combination of the frames.
         These pixels would have no reliability for dark subtraction.
@@ -547,7 +550,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         frames = []
         bpmaps = []
         errs = []
-        
+
         if i > 0:
             if np.shape(datasets[i-1].all_data)[1:] != np.shape(datasets[i].all_data)[1:]:
                 raise CalDarksLSQException('All sub-stacks must have the same frame shape.')
@@ -563,7 +566,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
         exptime_arr = np.append(exptime_arr, exptime)
         kgain_arr = np.append(kgain_arr, kgain)
-        
+
         if not datasets[i][0].data is None:
             check.threeD_array(datasets[i].all_data,
                 'datasets['+str(i)+'].all_data', TypeError)
@@ -597,8 +600,8 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
         if dataset[0].data is None:
             # equivalent to what is done in if statement above for datasets with data
-            mean_frame[telem_rows] = 0 
-            mean_err[telem_rows] = 0 
+            mean_frame[telem_rows] = 0
+            mean_err[telem_rows] = 0
         # combine the error from individual frames to the standard deviation across
         # the frames due to statistical variance
         zero_inds = np.where(unmasked_num==0)
@@ -610,7 +613,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
                 test_data = temp_image.data.astype(float)
                 # equivalent to what is done in if statement above for datasets with data
                 test_data[telem_rows] = 0
-                mask = temp_image.dq.astype(bool).astype(int) 
+                mask = temp_image.dq.astype(bool).astype(int)
                 masked_frame = np.ma.masked_array(test_data, mask)
                 masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
                 sum_squares += (masked_frame - masked_mean)**2
@@ -656,14 +659,14 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             output_dq = output_dq.filled(0).astype(int)
         else:
             output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
-        output_dq[fittable_inds] = 0 
+        output_dq[fittable_inds] = 0
         output_dqs.append(output_dq)
     output_dqs = np.stack(output_dqs)
     unreliable_pix_map = unreliable_pix_map.astype(int)
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
 
-    # uncomment for RAM check 
+    # uncomment for RAM check
     # import psutil
     # process = psutil.Process()
 
@@ -738,7 +741,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     pinv_wX = np.einsum('...ij,jk...', wXTwXinv, np.transpose(wX,(1,0,2,3)))
     params_t = np.einsum('...ij,j...', pinv_wX, wY)
     params = np.transpose(params_t,(2,0,1))
-    
+
     #next line: checked with KKT method for including bounds
     #actually, do this after determining everything else so that
     # bias_offset, etc is accurate
@@ -896,7 +899,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
 
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
-    
+
     noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))
     l2a_data_filename = dataset[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
@@ -1040,5 +1043,5 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         master_dark = Dark(md_data, prihdr, exthdr, input_data, md_noise, FDCdq,
                         errhdr)
         master_dark.ext_hdr['DRPNFILE'] = noise_maps.ext_hdr['DRPNFILE']
-        
+
         return master_dark

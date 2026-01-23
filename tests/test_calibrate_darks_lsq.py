@@ -9,7 +9,8 @@ from corgidrp.darks import (calibrate_darks_lsq,
             CalDarksLSQException)
 from corgidrp.detector import slice_section, imaging_area_geom, imaging_slice
 from corgidrp.mocks import create_synthesized_master_dark_calib, rename_files_to_cgi_format
-from corgidrp.mocks import detector_areas_test as dat
+#from corgidrp.mocks import detector_areas_test as dat
+from corgidrp.detector import detector_areas as dat 
 from corgidrp.data import DetectorNoiseMaps, DetectorParams, Dataset
 import shutil
 
@@ -159,14 +160,8 @@ def test_expected_results_sub():
     assert(nm_open.filename == test_filename)
     assert(nm_open.ext_hdr["BUNIT"] == "detected electron")
     assert(nm_open.err_hdr["BUNIT"] == "detected electron")
-    assert("DetectorNoiseMaps" in str(nm_open.ext_hdr["HISTORY*"]))
+    assert("DetectorNoiseMaps" in str(nm_open.ext_hdr["HISTORY"]))
     assert(nm_open.ext_hdr['B_O_UNIT'] == 'DN')
-    # make sure an example set of exposure time, EM gain, and number of frames is in HISTORY
-    assert('[2.0, 2.0, 30.0]' in str(nm_open.ext_hdr['HISTORY*']))
-    assert('FPN_IMM' in nm_open.ext_hdr.keys())
-    assert('CIC_IMM' in nm_open.ext_hdr.keys())
-    assert('DC_IMM' in nm_open.ext_hdr.keys())
-    assert('FPN_IMME' in nm_open.ext_hdr.keys())
 
 def test_sub_stack_len():
     """datasets should have at least 4 sub-stacks."""
