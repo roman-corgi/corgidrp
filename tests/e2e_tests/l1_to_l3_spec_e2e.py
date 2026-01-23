@@ -1,5 +1,5 @@
 import argparse
-import os
+import os, sys
 import json
 import pytest
 import numpy as np
@@ -48,9 +48,9 @@ def fix_headers(
             naxis2 = exthdr.get('NAXIS2', 1024)
             
             # Fix EACQ_ROW/COL if missing, 0, or outside frame bounds
-            if 'EACQ_ROW' not in exthdr or exthdr['EACQ_ROW'] == 0 or exthdr['EACQ_ROW'] >= naxis2:
+            if 'EACQ_ROW' not in exthdr or exthdr['EACQ_ROW'] == 0 or exthdr['EACQ_ROW'] >= naxis2 // 2:
                 exthdr['EACQ_ROW'] = naxis2 // 2
-            if 'EACQ_COL' not in exthdr or exthdr.get('EACQ_COL', 0) == 0 or exthdr.get('EACQ_COL', 0) >= naxis1:
+            if 'EACQ_COL' not in exthdr or exthdr.get('EACQ_COL', 0) == 0 or exthdr.get('EACQ_COL', 0) >= naxis1 // 2:
                 exthdr['EACQ_COL'] = naxis1 // 2
 
             # Set RN (read noise) if missing, empty, or not a number - only for L2a data (required for photon counting)
@@ -276,9 +276,18 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     # fix headers
     fix_headers(input_data_filelist)
 
+    ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
+    for file in input_data_filelist:
+        with fits.open(file, mode='update') as fits_file:
+            print(fits_file[1].header['EXPTIME'])
+            if fits_file[1].header['EXPTIME'] >= 100:
+                fits_file[1].data = fits_file[1].data/10.
+                fits_file[1].header['EXPTIME'] = fits_file[1].header['EXPTIME']/10.
+                print('Changed exposure time',fits_file[1].header['EXPTIME'])
+
     # Validate all input images
     input_dataset = data.Dataset(input_data_filelist)
-    
+
     for i, (frame, filepath) in enumerate(zip(input_dataset, input_data_filelist)):
         frame_info = f"L1 Input Frame {i}"
         

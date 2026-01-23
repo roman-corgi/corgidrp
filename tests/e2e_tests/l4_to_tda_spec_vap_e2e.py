@@ -404,12 +404,10 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
             wavelength = host_wave
             ratio_err = np.full_like(host_wave, np.nan, dtype=float)
         else:
-            # Compute flux ratio (this internally calls convert_spec_to_flux which applies ALGO_THRU correction)
+            # Compute flux ratio)
             flux_ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
                 host_comb,
-                comp_comb,
-                fluxcal_factor,
-                slit_transmission=slit_transmission,
+                comp_comb
             )
             ratio_err = metadata.get('ratio_err')
 
