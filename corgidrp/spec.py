@@ -1405,3 +1405,59 @@ def spec_fluxcal(dataset_or_image, calspec_file = None):
     spec_fluxcal_obj.ext_hdr.add_history(history_entry)
 
     return spec_fluxcal_obj
+
+
+def select_slit_transmission_curve(frame, slit_tuple):
+    """
+    Select the slit-transmission curve for the frame from the tuple returned by
+    spec.slit_transmission.
+
+    Args:
+        frame (corgidrp.data.Image): L4 spectroscopy frame whose WV0_X/WV0_Y
+            coordinates identify where the slit correction should be evaluated.
+        slit_tuple (tuple): Output from spec.slit_transmission containing
+            (slit_map, slit_x, slit_y) arrays, where slit_map has shape
+            (N_positions, N_wavelengths) and slit_x/slit_y are 1-D arrays of
+            length N_positions giving the EXCAM coordinates of each position.
+
+    Returns:
+        numpy.ndarray: 1-D slit throughput curve sampled on the frame's SPEC
+        wavelength grid.
+    """
+    slit_map, slit_x, slit_y = slit_tuple
+    slit_map = np.asarray(slit_map, dtype=float)
+    slit_x = np.asarray(slit_x, dtype=float)
+    slit_y = np.asarray(slit_y, dtype=float)
+    try:
+        wv0_x = float(frame.ext_hdr['WV0_X'])
+        wv0_y = float(frame.ext_hdr['WV0_Y'])
+    except KeyError as exc:
+        raise ValueError("Frame must contain WV0_X and WV0_Y for slit correction.") from exc
+
+    # Slit map should be (N_positions, N_wave) or already 1-D in wavelength
+    if slit_map.ndim == 1:
+        slit_curve = slit_map
+    elif slit_map.ndim == 2:
+        if slit_map.shape[0] != slit_x.size or slit_x.size != slit_y.size:
+            raise ValueError("slit_map first dimension must match slit_x and slit_y length.")
+        # Find the closest sampled slit position to the spectrum's WV0 location (not interpolating,
+        # just doing nearest neighbor lookup)
+        idx = np.argmin(np.hypot(slit_x - wv0_x, slit_y - wv0_y))
+        slit_curve = slit_map[idx]
+    else:
+        raise ValueError("slit_transmission map must be 1-D or 2-D.")
+
+    slit_curve = np.asarray(slit_curve, dtype=float).ravel()
+
+    # Require that the slit transmission is defined on the same size wavelength grid as SPEC
+    # note: should spec.slit_transmission() also return a wavelength array to make sure it's
+    # the same wavelength grid?
+    spec_wave = frame.hdu_list['SPEC_WAVE'].data
+    if slit_curve.size != spec_wave.size:
+        raise ValueError(
+            f"slit_transmission wavelength axis (len={slit_curve.size}) must match "
+            f"SPEC_WAVE length (len={spec_wave.size})."
+        )
+
+    return slit_curve
+

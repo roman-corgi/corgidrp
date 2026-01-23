@@ -2026,6 +2026,80 @@ class SpecFluxCal(Image):
             self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
+class SlitTransmission(Image):
+    """
+    Contains the slit transmission map of a defined slit. This consists of an
+    2D array with:
+        1/ Slit transmission map derived at different locations by interpolation.
+        2/ Corresponding locations along EXCAM +X direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+        3/ Corresponding locations along EXCAM +Y direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+        This is constructed as e.g.:
+        [
+        [nan,  1,     2,    3,   4 ], <- x-offsets
+        [1,    0.900, 0.950, 0.989, 1.000],
+        [2, 0.910, 0.960, 0.990, 1.010],
+        [3, 0.950, 1.000, 1.010, 1.050],
+        [4, 1.000, 1.001, 1.011, 1.060],
+         ^
+         y-offsets
+    ],
+
+    Args:
+        data_or_filepath (str or np.array): either a filepath string corresponding to an
+                                        existing SlitTransmission file saved to disk or an
+                                        2D array with the slit transmission information
+        date_valid (astropy.time.Time): date after which these parameters are valid
+
+    Attributes:
+         slit_map (2D array): interpolated slit transmission map
+         x_offset (1D array): locations along EXCAM +X direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+         y_offset (1D array): locations along EXCAM +Y direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+
+        # if this is a new SlitTransmission, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new SlitTransmission 
+        if isinstance(data_or_filepath, np.array):
+            if input_dataset is None:
+                raise ValueError("Must pass `input_dataset` to create new SlitTransmission calibration.")
+
+            self.ext_hdr['DATATYPE'] = 'SlitTransmission'
+            self.ext_hdr['DATALVL'] = 'CAL'
+            self._record_parent_filenames(input_dataset)
+            self.ext_hdr['HISTORY'] = "Stored Slit Transmission map."
+
+            # Generate default output filename
+            # Strip level suffix (e.g., _l2b) before adding calibration suffix
+            base = input_dataset[0].filename.split(".fits")[0]
+            self.filename = f"{base}_slit_cal.fits"
+            self.filename = re.sub('_l[0-9].', '', self.filename)
+            # File format checks
+            if self.data.ndim != 2:
+                raise ValueError('The slit transmission array must have 2 dimensions') 
+            if not np.isnan(self.data[0, 0]):
+                raise ValueError('The first value of the slit transmission '
+                                 'array (upper left) must be set to "nan"')
+
+        
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SlitTransmission':
+            raise ValueError("This file is not a valid SlitTransmission calibration.")
+
+        #convenience attributes
+        self.slit_map = self.data[1:,1:]
+        self.x_offset = self.data[0,1:]
+        self.y_offset = self.data[1:,0]
+        
+
 class FpamFsamCal(Image):
     """
     Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
