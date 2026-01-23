@@ -183,32 +183,47 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     l1_headers_dict = {}
     for l1_filename in l1_data_filelist:
         with fits.open(l1_filename) as hdul:
-            header_info = {
-                "primary": dict(hdul[0].header),
-            }
+            header_info = {}
+            # Only add header if it exists and not empty
+            if len(hdul) > 0:
+                primary_hdr_items = dict(hdul[0].header)
+                if primary_hdr_items:
+                    header_info["primary"] = primary_hdr_items
             if len(hdul) > 1:
-                header_info["ext1"] = dict(hdul[1].header)
+                ext1_hdr_items = dict(hdul[1].header)
+                if ext1_hdr_items:
+                    header_info["ext1"] = ext1_hdr_items
             if len(hdul) > 2:
-                header_info["ext2"] = dict(hdul[2].header)
+                ext2_hdr_items = dict(hdul[2].header)
+                if ext2_hdr_items:
+                    header_info["ext2"] = ext2_hdr_items
             if len(hdul) > 3:
-                header_info["ext3"] = dict(hdul[3].header)
+                ext3_hdr_items = dict(hdul[3].header)
+                if ext3_hdr_items:
+                    header_info["ext3"] = ext3_hdr_items
             if len(hdul) > 4:
-                header_info["ext4"] = dict(hdul[4].header)
+                ext4_hdr_items = dict(hdul[4].header)
+                if ext4_hdr_items:
+                    header_info["ext4"] = ext4_hdr_items
             l1_headers_dict[l1_filename] = header_info
         break  # Only process the first one, as in the original code
 
-    print("l1_headers_dict contents:", l1_headers_dict)  # Debug print to check contents
+    print("l1_headers_dict contents:")
     for fname, headers in l1_headers_dict.items():
         primary_header = headers.get("primary", {})
         ext1_header = headers.get("ext1", {})
-        phtcnt = primary_header.get("PHTCNT", "N/A")
-        ispc = ext1_header.get("ISPC", "N/A")
-        rn = ext1_header.get("RN", "N/A")
-        print(f"File: {fname}")
-        print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-        print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-        print(f"  RN: {rn} (dtype: {type(rn).__name__})")
 
+        print(f"File: {fname}")
+
+        if "PHTCNT" in primary_header:
+            phtcnt = primary_header["PHTCNT"]
+            print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
+        if "ISPC" in ext1_header:
+            ispc = ext1_header["ISPC"]
+            print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
+        if "RN" in ext1_header:
+            rn = ext1_header["RN"]
+            print(f"  RN: {rn} (dtype: {type(rn).__name__})")
 
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
     
@@ -224,30 +239,46 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     l2a_headers_dict = {}
     for l2a_filename in new_l2a_filenames:
         with fits.open(l2a_filename) as hdul:
-            header_info = {
-                "primary": dict(hdul[0].header),
-            }
+            header_info = {}
+            # Only add header if it exists and not empty
+            if len(hdul) > 0:
+                primary_hdr_items = dict(hdul[0].header)
+                if primary_hdr_items:
+                    header_info["primary"] = primary_hdr_items
             if len(hdul) > 1:
-                header_info["ext1"] = dict(hdul[1].header)
+                ext1_hdr_items = dict(hdul[1].header)
+                if ext1_hdr_items:
+                    header_info["ext1"] = ext1_hdr_items
             if len(hdul) > 2:
-                header_info["ext2"] = dict(hdul[2].header)
+                ext2_hdr_items = dict(hdul[2].header)
+                if ext2_hdr_items:
+                    header_info["ext2"] = ext2_hdr_items
             if len(hdul) > 3:
-                header_info["ext3"] = dict(hdul[3].header)
+                ext3_hdr_items = dict(hdul[3].header)
+                if ext3_hdr_items:
+                    header_info["ext3"] = ext3_hdr_items
             if len(hdul) > 4:
-                header_info["ext4"] = dict(hdul[4].header)
+                ext4_hdr_items = dict(hdul[4].header)
+                if ext4_hdr_items:
+                    header_info["ext4"] = ext4_hdr_items
             l2a_headers_dict[l2a_filename] = header_info
-        break
-    print("l2a_headers_dict contents:", l2a_headers_dict)  # Debug print to check contents
+        break  # Only process the first one, as in the original code
+
     for fname, headers in l2a_headers_dict.items():
         primary_header = headers.get("primary", {})
         ext1_header = headers.get("ext1", {})
-        phtcnt = primary_header.get("PHTCNT", "N/A")
-        ispc = ext1_header.get("ISPC", "N/A")
-        rn = ext1_header.get("RN", "N/A")
+
         print(f"File: {fname}")
-        print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-        print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-        print(f"  RN: {rn} (dtype: {type(rn).__name__})")
+
+        if "PHTCNT" in primary_header:
+            phtcnt = primary_header["PHTCNT"]
+            print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
+        if "ISPC" in ext1_header:
+            ispc = ext1_header["ISPC"]
+            print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
+        if "RN" in ext1_header:
+            rn = ext1_header["RN"]
+            print(f"  RN: {rn} (dtype: {type(rn).__name__})")
 
 
     ##### Check against TVAC data
