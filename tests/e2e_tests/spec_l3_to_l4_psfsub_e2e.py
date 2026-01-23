@@ -86,6 +86,9 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     l3_target_spot = sorted(glob.glob(os.path.join(target_spot_l3_output_dir, "cgi_*l3_.fits")))
     l3_files.extend(l3_target_spot)
     l3_dataset = Dataset(l3_files)
+    for frame in l3_dataset:
+        if 'PA_APER' not in frame.pri_hdr and 'ROLL' in frame.pri_hdr:
+            frame.pri_hdr['PA_APER'] = frame.pri_hdr['ROLL']
         
     logger.info('')
     
@@ -446,7 +449,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/home/schreiber/spec_sim/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
