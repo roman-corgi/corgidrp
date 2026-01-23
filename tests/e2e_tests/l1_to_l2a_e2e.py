@@ -196,6 +196,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
                 header_info["ext4"] = dict(hdul[4].header)
             l1_headers_dict[l1_filename] = header_info
         break  # Only process the first one, as in the original code
+
     print("l1_headers_dict contents:", l1_headers_dict)  # Debug print to check contents
     for fname, headers in l1_headers_dict.items():
         primary_header = headers.get("primary", {})
@@ -209,10 +210,46 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
         print(f"  RN: {rn} (dtype: {type(rn).__name__})")
 
 
-
-    import IPython; IPython.embed()
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
     
+    # Now do the same print as above, but for the new L2a files instead of the L1 files
+    # Gather new L2a FITS filenames from the output directory, excluding calibration products
+    all_files = [f for f in os.listdir(l2a_outputdir) if f.endswith('.fits')]
+    new_l2a_filenames = [
+        os.path.join(l2a_outputdir, f)
+        for f in all_files
+        if '_l2a' in f and '_cal' not in f
+    ]
+
+    l2a_headers_dict = {}
+    for l2a_filename in new_l2a_filenames:
+        with fits.open(l2a_filename) as hdul:
+            header_info = {
+                "primary": dict(hdul[0].header),
+            }
+            if len(hdul) > 1:
+                header_info["ext1"] = dict(hdul[1].header)
+            if len(hdul) > 2:
+                header_info["ext2"] = dict(hdul[2].header)
+            if len(hdul) > 3:
+                header_info["ext3"] = dict(hdul[3].header)
+            if len(hdul) > 4:
+                header_info["ext4"] = dict(hdul[4].header)
+            l2a_headers_dict[l2a_filename] = header_info
+        break
+    print("l2a_headers_dict contents:", l2a_headers_dict)  # Debug print to check contents
+    for fname, headers in l2a_headers_dict.items():
+        primary_header = headers.get("primary", {})
+        ext1_header = headers.get("ext1", {})
+        phtcnt = primary_header.get("PHTCNT", "N/A")
+        ispc = ext1_header.get("ISPC", "N/A")
+        rn = ext1_header.get("RN", "N/A")
+        print(f"File: {fname}")
+        print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
+        print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
+        print(f"  RN: {rn} (dtype: {type(rn).__name__})")
+
+
     ##### Check against TVAC data
     # Filter out calibration files and only get L2a data files
     all_files = [f for f in os.listdir(l2a_outputdir) if f.endswith('.fits')]
