@@ -179,7 +179,38 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(kgain)
 
     ####### Run the walker on some test_data
+    # Instead of printing headers, collect them into a dictionary for easier inspection or further processing.
+    l1_headers_dict = {}
+    for l1_filename in l1_data_filelist:
+        with fits.open(l1_filename) as hdul:
+            header_info = {
+                "primary": dict(hdul[0].header),
+            }
+            if len(hdul) > 1:
+                header_info["ext1"] = dict(hdul[1].header)
+            if len(hdul) > 2:
+                header_info["ext2"] = dict(hdul[2].header)
+            if len(hdul) > 3:
+                header_info["ext3"] = dict(hdul[3].header)
+            if len(hdul) > 4:
+                header_info["ext4"] = dict(hdul[4].header)
+            l1_headers_dict[l1_filename] = header_info
+        break  # Only process the first one, as in the original code
+    print("l1_headers_dict contents:", l1_headers_dict)  # Debug print to check contents
+    for fname, headers in l1_headers_dict.items():
+        primary_header = headers.get("primary", {})
+        ext1_header = headers.get("ext1", {})
+        phtcnt = primary_header.get("PHTCNT", "N/A")
+        ispc = ext1_header.get("ISPC", "N/A")
+        rn = ext1_header.get("RN", "N/A")
+        print(f"File: {fname}")
+        print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
+        print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
+        print(f"  RN: {rn} (dtype: {type(rn).__name__})")
 
+
+
+    import IPython; IPython.embed()
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
     
     ##### Check against TVAC data
@@ -231,7 +262,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Downloads/DRP E2E Test Files v2/E2E_Test_Data'
+    e2edata_dir = '/Users/michael/Desktop/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
