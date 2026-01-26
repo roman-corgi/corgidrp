@@ -5,7 +5,7 @@ from astropy.io import fits
 from scipy.interpolate import interp1d, LinearNDInterpolator
 import warnings
 from photutils.psf import fit_2dgaussian
-from corgidrp.data import Dataset, Image, FluxcalFactor
+from corgidrp.data import Dataset, Image, FluxcalFactor, SpecFluxCal
 import corgidrp.fluxcal as fluxcal
 from corgidrp import check
 from corgidrp.klip_fm import measure_noise
@@ -143,23 +143,24 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     return color_dataset
 
 
-def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
+def convert_spec_to_flux(input_dataset, fluxcal, slit_transmission = None):
     """
     Flux calibrate 1-D spectroscopy spectra stored in the L4 SPEC extension.
-    The function applies COL_COR when present, propagates calibration
-    uncertainties, and applies slit transmission correction if requested. Requires
-    the input dataset to have already been core-throughput corrected
+    The function propagates calibration uncertainties. It applies the spectral flux calibration,
+    if not available it can apply the fluxcal factor and color correction.
+    Requires the input dataset to have already been core-throughput corrected
     (ie SPEC header contains CTCOR=True).
 
     Args:
         input_dataset (corgidrp.data.Dataset): L4 dataset containing SPEC,
             SPEC_ERR, SPEC_DQ, SPEC_WAVE, and SPEC_WAVE_ERR extensions.
-        fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration
-            product used to scale the spectrum.
+        fluxcal (corgidrp.data.SpecFluxCal or corgidrp.data.FluxcalFactor): wavelength dependent flux calibration
+            or absolute flux calibration product used to convert the spectrum to absolute flux units erg/(s*cm^2*Å).
         slit_transmission (tuple or list of tuples, optional): slit throughput
             information from spec.slit_transmission(). Provide either a single
             (slit_map, slit_x, slit_y) tuple applied to every frame or a list
             containing one tuple per frame in input_dataset.
+
 
     Returns:
         corgidrp.data.Dataset: copy of the input dataset with the
@@ -167,9 +168,14 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         headers/history updated.
         
     """
-    if not isinstance(fluxcal_factor, FluxcalFactor):
-        raise TypeError("fluxcal_factor must be a corgidrp.data.FluxcalFactor instance.")
-
+    specflux = False
+    #check that the correct flux calibration file is used
+    if isinstance(fluxcal, SpecFluxCal):
+       specflux = True
+    else:
+        if not isinstance(fluxcal, FluxcalFactor):
+            raise TypeError("fluxcal must be a corgidrp.data.FluxcalFactor or SpecFluxCal instance.")
+    
     spec_dataset = input_dataset.copy()
 
     # Normalize slit transmission input to per-frame list
@@ -245,10 +251,19 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
             if 'SLITFAC' in spec_header:
                 del spec_header['SLITFAC']
 
-        # Apply flux calibration factor and color correction
-        color_cor_fac = frame.ext_hdr.get('COL_COR', 1.0)
-        factor = fluxcal_factor.fluxcal_fac / color_cor_fac
-        factor_error = fluxcal_factor.fluxcal_err / color_cor_fac
+        if specflux:
+            # check that the correct flux calibration file is used
+            if frame.ext_hdr["CFAMNAME"] != fluxcal.ext_hdr["CFAMNAME"]:
+                raise ValueError(f"the spec_fluxcal has another filter name {fluxcal.ext_hdr['CFAMNAME']}, "
+                                 f"than the observation {frame.ext_hdr['CFAMNAME']}.")
+            # Convert to flux units and propagate uncertainties
+            factor = fluxcal.specflux 
+            factor_error = fluxcal.specflux_err
+        else:
+            # Apply flux calibration factor and color correction
+            color_cor_fac = frame.ext_hdr.get('COL_COR', 1.0)
+            factor = fluxcal.fluxcal_fac / color_cor_fac
+            factor_error = fluxcal.fluxcal_err / color_cor_fac
 
         # Convert to flux units and propagate uncertainties
         spec_flux = spec * factor
@@ -259,16 +274,22 @@ def convert_spec_to_flux(input_dataset, fluxcal_factor, slit_transmission=None):
         spec_header['BUNIT'] = "erg/(s*cm^2*AA)"
         if 'SPEC_ERR' in frame.hdu_list:
             frame.hdu_list['SPEC_ERR'].header['BUNIT'] = "erg/(s*cm^2*AA)"
-
+    
+    if specflux:
         history_messages.append(
-            f"Calibrated 1D spectrum with fluxcal_factor={fluxcal_factor.fluxcal_fac}, "
-            f"COL_COR={color_cor_fac}, slit_correction={slit_applied}."
+             f"Calibrated 1D spectrum applying spectral flux calibration file:{fluxcal.filename}."
         )
-
-    if history_messages:
+        spec_dataset.update_after_processing_step(
+                " ".join(history_messages),
+                header_entries={"SPECUNIT": "erg/(s*cm^2*AA)"}
+        )
+    else:
+        history_messages.append(
+            f"Calibrated 1D spectrum by applying a broad band fluxcal_factor={fluxcal.fluxcal_fac} determined by aperture photometry, COL_COR={color_cor_fac}."
+        )
         spec_dataset.update_after_processing_step(
             " ".join(history_messages),
-            header_entries={"SPECUNIT": "erg/(s*cm^2*AA)", "FLUXFAC": fluxcal_factor.fluxcal_fac}
+            header_entries={"SPECUNIT": "erg/(s*cm^2*AA)", "FLUXFAC": fluxcal.fluxcal_fac}
         )
 
     return spec_dataset
@@ -437,20 +458,16 @@ def combine_spectra(input_dataset):
     return combined_spec, reference_wave, combined_err, rolls
 
 
-def compute_spec_flux_ratio(host_image, companion_image, fluxcal_factor,
-                            slit_transmission=None):
+def compute_spec_flux_ratio(host_image, companion_image):
     """
     Compute the flux ratio of a single companion image relative to a single
-    host image.
+    host image. Input should already be flux calibrated and slit transmission corrected.
 
     Args:
         host_image (corgidrp.data.Image): L4 image containing the host spectrum (can be a combined/
         weighted spectrum).
         companion_image (corgidrp.data.Image): L4 image containing the companion spectrum (can be 
         a combined/ weighted spectrum).
-        fluxcal_factor (corgidrp.data.FluxcalFactor): absolute flux calibration product.
-        slit_transmission (tuple, optional): slit throughput tuple
-            (slit_map, slit_x, slit_y) to apply during flux calibration.
 
     Returns:
         tuple: (flux_ratio, wavelength, metadata) where:
@@ -462,20 +479,14 @@ def compute_spec_flux_ratio(host_image, companion_image, fluxcal_factor,
                 - 'ratio_err': 1σ uncertainty on the flux ratio R(λ).
     """
 
-    # Flux calibrate both spectra so the ratio is computed in physical units.
-    host_ds = Dataset([host_image])
-    comp_ds = Dataset([companion_image])
-    host_cal = convert_spec_to_flux(host_ds, fluxcal_factor, slit_transmission=slit_transmission)
-    comp_cal = convert_spec_to_flux(comp_ds, fluxcal_factor, slit_transmission=slit_transmission)
-
-    host_spec = np.array(host_cal[0].hdu_list['SPEC'].data, dtype=float)
-    comp_spec = np.array(comp_cal[0].hdu_list['SPEC'].data, dtype=float)
-    host_err = np.array(host_cal[0].hdu_list['SPEC_ERR'].data, dtype=float)
-    comp_err = np.array(comp_cal[0].hdu_list['SPEC_ERR'].data, dtype=float)
+    host_spec = np.array(host_image.hdu_list['SPEC'].data, dtype=float)
+    comp_spec = np.array(companion_image.hdu_list['SPEC'].data, dtype=float)
+    host_err = np.array(host_image.hdu_list['SPEC_ERR'].data, dtype=float)
+    comp_err = np.array(companion_image.hdu_list['SPEC_ERR'].data, dtype=float)
     host_err = np.squeeze(host_err)
     comp_err = np.squeeze(comp_err)
-    host_wave = host_cal[0].hdu_list['SPEC_WAVE'].data
-    comp_wave = comp_cal[0].hdu_list['SPEC_WAVE'].data
+    host_wave = host_image.hdu_list['SPEC_WAVE'].data
+    comp_wave = companion_image.hdu_list['SPEC_WAVE'].data
 
     # Align wavelength grids if the host/companion spectra were sampled in opposite directions
     # (np.interp requires increasing x-coordinates).
