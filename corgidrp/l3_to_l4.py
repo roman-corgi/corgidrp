@@ -808,12 +808,12 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
 
         # look for WCS solutions
         if use_wcs is True:
-            pa_aper_deg = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
+            rotation_angle = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
 
         else:
             print('WARNING: using "PA_APER" instead of WCS to estimate the north position angle')
             # read the PA_APER angle parameter, assuming this info is recorded in the primary header as requested
-            pa_aper_deg = processed_data.pri_hdr['PA_APER']
+            rotation_angle = processed_data.pri_hdr['PA_APER']
 
         #Make 2D WCS header for derotation. 
         sci_hd_2D = sci_hd.copy()
@@ -825,10 +825,10 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
                 warnings.filterwarnings("ignore", category=FITSFixedWarning)
                 astr_hdr = WCS(sci_hd_2D)
         
-        sci_derot = derotate_arr(sci_data, pa_aper_deg, xcen,ycen,astr_hdr=astr_hdr,new_center=new_center) # astr_hdr is corrected at above lines
+        sci_derot = derotate_arr(sci_data, rotation_angle, xcen,ycen,astr_hdr=astr_hdr,new_center=new_center) # astr_hdr is corrected at above lines
         
         new_all_data.append(sci_derot)
-        log = f'FoV rotated by {pa_aper_deg}deg counterclockwise around center {xcen, ycen}'
+        log = f'FoV rotated by {rotation_angle}deg counterclockwise around center {xcen, ycen}'
         sci_hd['HISTORY'] = log
 
         # update WCS solutions
@@ -841,7 +841,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         #############
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = derotate_arr(err_data,pa_aper_deg, xcen,ycen,new_center=new_center) # err data shape is 1x1024x1024
+        err_derot = derotate_arr(err_data,rotation_angle, xcen,ycen,new_center=new_center) # err data shape is 1x1024x1024
         new_all_err.append(err_derot)
 
         #############
@@ -849,7 +849,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         # all DQ pixels must have integers
         dq_data = processed_data.dq
 
-        dq_derot = derotate_arr(dq_data,pa_aper_deg,xcen,ycen,
+        dq_derot = derotate_arr(dq_data,rotation_angle,xcen,ycen,
                                 is_dq=True,new_center=new_center)
 
         new_all_dq.append(dq_derot)

@@ -281,8 +281,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                         for cand_sep, cand_pa in cand_locs:
                             # Account for rotations, skip if any are too close
                             for pa_aper_deg in pa_aper_degs:
-                                # NOTE (TO DO?): rotation angle is not applied here, cand_pa_adj == cand_pa.
-                                # If rotation angle should be applied, cand_pa_adj = cand_pa + pa_aper_deg
+                                # NOTE: rotation angle is not applied here, cand_pa_adj == cand_pa.
+                                # It may not be necessary to loop over rolls here.
                                 cand_pa_adj = cand_pa
                                 dist = get_polar_dist((cand_sep,cand_pa_adj),inject_loc)
                                 if dist < res_elem:
