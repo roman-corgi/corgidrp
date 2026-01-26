@@ -60,6 +60,10 @@ def fix_headers(
                 # Set as float value with comment - ensures FITS stores it as numeric
                 exthdr['RN'] = (100.0, 'Read noise in electrons')
 
+            prihdr = fits_file[0].header
+            if 'PA_APER' not in prihdr and 'ROLL' in prihdr:
+                prihdr['PA_APER'] = prihdr['ROLL']
+
 
 def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     """Run the complete L1 to L3 spectroscopy data end-to-end test.
@@ -594,9 +598,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/ababuraj/roman/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
-    thisfile_dir = os.path.dirname(__file__)
-    outputdir = thisfile_dir
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    outputdir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
