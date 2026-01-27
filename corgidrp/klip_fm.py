@@ -63,8 +63,8 @@ def inject_psf(frame_in, ct_calibration, amp,
     frame = frame_in.copy()
 
     # Get closest psf model
-    frame_roll = frame.pri_hdr['ROLL']
-    rel_pa = pa_deg - frame_roll
+    pa_aper_deg = frame.pri_hdr['PA_APER']
+    rel_pa = pa_deg - pa_aper_deg
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
     psf_model = get_closest_psf(ct_calibration,
@@ -240,7 +240,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         
         sci_dataset = sci_dataset_in.copy()
 
-        rolls = [frame.pri_hdr['ROLL'] for frame in sci_dataset]
+        pa_aper_degs = [frame.pri_hdr['PA_APER'] for frame in sci_dataset]
         
         # Measure noise at each separation in psf subtracted dataset (for this kl mode)
         noise_vals = measure_noise(psfsub_dataset[0],seps,fwhm_pix,k,cand_locs)
@@ -279,8 +279,10 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                     if i==0:
                         too_close = False
                         for cand_sep, cand_pa in cand_locs:
-                            # Account for telescope roll angles, skip if any are too close
-                            for roll in rolls:
+                            # Account for rotations, skip if any are too close
+                            for pa_aper_deg in pa_aper_degs:
+                                # NOTE: rotation angle is not applied here, cand_pa_adj == cand_pa.
+                                # It may not be necessary to loop over rolls here.
                                 cand_pa_adj = cand_pa
                                 dist = get_polar_dist((cand_sep,cand_pa_adj),inject_loc)
                                 if dist < res_elem:

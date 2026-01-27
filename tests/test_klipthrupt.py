@@ -39,7 +39,7 @@ cenx, ceny = (25.,30.)
 st_amp = 100.
 noise_amp = 1e-3
 pl_contrast = 0.0
-rolls = [0,10.,0,0]
+pa_aper_degs = [0,10.,0,0]
 
 # Injection test settings
 inj_flux = 10.
@@ -138,13 +138,13 @@ def test_inject_psf():
     # Test 0 separation to make sure we can scale and center
     sep = 0.0
     pa = 0.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -161,13 +161,13 @@ def test_inject_psf():
     # Test separation of exactly 1 pixel
     sep = 1.0
     pa = 0.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (50,60)
     expected_peak = (ceny+1,cenx)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -182,13 +182,13 @@ def test_inject_psf():
     # Test PA
     sep = 1.0
     pa = 90.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx-1)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -200,16 +200,16 @@ def test_inject_psf():
     
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak
 
-    # Test Roll
+    # Test Rotation
     sep = 5.0
     pa = 0.0
-    roll = 90.0
+    pa_aper_deg = 90.0
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx+5)
 
     pri_hdr = fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -224,14 +224,14 @@ def test_inject_psf():
     # Test injecting a psf over the left edge of the array
     sep = 9.0
     pa = 90.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,21)
     ceny,cenx = (5,10)
     expected_peak_yx = (5,1)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -246,14 +246,14 @@ def test_inject_psf():
     # Test injecting a psf over the right edge of the array
     sep = 9.0
     pa = -90.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,21)
     ceny,cenx = (5,10)
     expected_peak_yx = (5,19)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -269,14 +269,14 @@ def test_inject_psf():
     # Test injecting a psf over the top edge of the array
     sep = 4.0
     pa = 0.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,21)
     ceny,cenx = (5,10)
     expected_peak_yx = (9,10)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -292,14 +292,14 @@ def test_inject_psf():
     # Test injecting a psf over the bottom edge of the array
     sep = 4.0
     pa = 180.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,21)
     ceny,cenx = (5,10)
     expected_peak_yx = (1,10)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -315,14 +315,14 @@ def test_inject_psf():
     # Test injecting a psf over the bottom left corner of the array
     sep = 4.0 * np.sqrt(2)
     pa = 135.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,11)
     ceny,cenx = (5,5)
     expected_peak_yx = (1,1)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -338,14 +338,14 @@ def test_inject_psf():
     # Test injecting a psf over the bottom right corner of the array
     sep = 4.0 * np.sqrt(2)
     pa = -135.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,11)
     ceny,cenx = (5,5)
     expected_peak_yx = (1,9)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -360,14 +360,14 @@ def test_inject_psf():
     # Test injecting a psf over the top left corner of the array
     sep = 4.0 * np.sqrt(2)
     pa = 45.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,11)
     ceny,cenx = (5,5)
     expected_peak_yx = (9,1)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -382,14 +382,14 @@ def test_inject_psf():
     # Test injecting a psf over the top right corner of the array
     sep = 4.0 * np.sqrt(2)
     pa = -45.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,11)
     ceny,cenx = (5,5)
     expected_peak_yx = (9,9)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -505,7 +505,7 @@ def test_meas_klip_ADI():
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -535,13 +535,13 @@ def test_meas_klip_ADI():
     
     # # Plot Psf subtraction result
     # if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
-    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
     # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
-    #     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+    #     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-pa_aper_degs[1],reshape=False,cval=0)) / 2,
     #                     [0.5,0.5],
     #                     cval=np.nan)
     # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
-    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-pa_aper_degs[1],reshape=False,cval=0)) / 2
     # import matplotlib.pyplot as plt
     # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
     # im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
@@ -609,7 +609,7 @@ def test_meas_klip_RDI():
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -678,7 +678,7 @@ def test_meas_klip_ADIRDI():
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -746,7 +746,7 @@ def test_psfsub_withklipandctmeas_adi():
     pl_loc = (20.,0.)
     est_pl_snr = pl_amp / noise_amp
     data_shape = [101,101]
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -776,11 +776,11 @@ def test_psfsub_withklipandctmeas_adi():
 
     # # Plot Psf subtraction result
     # if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
-    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
     # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
-    #     analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2
+    #     analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-pa_aper_degs[1],reshape=False,cval=0)) / 2
     # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
-    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-pa_aper_degs[1],reshape=False,cval=0)) / 2
     # import matplotlib.pyplot as plt
     # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
     # im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
@@ -928,7 +928,7 @@ def test_psfsub_withklipandctmeas_rdi():
     pl_loc = (20.,0.)
     est_pl_snr = pl_amp / noise_amp
     data_shape = (101,101)
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -995,7 +995,7 @@ def test_psfsub_withklipandctmeas_rdi():
     medsubtracted_data = psfsub_dataset[0].data[0] #- bg_level
 
     # # Plot Psf subtraction result
-    # analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    # analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
     # mask = create_circular_mask(analytical_result.shape[-2:],
     #                             r=3*fwhm_pix,
     #                             center=(psfsub_dataset[0].ext_hdr['STARLOCX'],
