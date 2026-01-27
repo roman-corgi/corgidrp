@@ -344,17 +344,18 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
     #fix_str_for_tvac(trad_dark_data_filelist)
-    while len(os.listdir(os.path.dirname(trad_dark_data_filelist[0]))) < 10000:
-        for f in trad_dark_data_filelist:
-            if f.endswith('l1_.fits'):
-                f_dest = f
-                filename = os.path.split(f_dest)[-1]
-                base_time = datetime.now()
-                time_offset = timedelta(seconds=trad_dark_data_filelist.index(f))
-                unique_time = base_time + time_offset
-                time_str = data.format_ftimeutc(unique_time.isoformat())
-                f_dest = f_dest[:len(f_dest)-25] + time_str + f_dest[len(f_dest)-9:]
-                shutil.copy(f, f_dest)
+    if True:
+        while len(os.listdir(os.path.dirname(trad_dark_data_filelist[0]))) < 10000:
+            for f in trad_dark_data_filelist:
+                if f.endswith('l1_.fits'):
+                    f_dest = f
+                    filename = os.path.split(f_dest)[-1]
+                    base_time = datetime.now()
+                    time_offset = timedelta(seconds=trad_dark_data_filelist.index(f))
+                    unique_time = base_time + time_offset
+                    time_str = data.format_ftimeutc(unique_time.isoformat())
+                    f_dest = f_dest[:len(f_dest)-25] + time_str + f_dest[len(f_dest)-9:]
+                    shutil.copy(f, f_dest)
     #trad_dark_input_files = []
     # for f in os.listdir(os.path.dirname(trad_dark_data_filelist[0])):
     #     file = os.path.join(os.path.dirname(trad_dark_data_filelist[0]), f)
@@ -453,7 +454,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
-    walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir) #, template="build_trad_dark_image.json")
+    corgidrp.chunk_size = 200
+    walker.walk_corgidrp(trad_dark_data_filelist[:1000], "", build_trad_dark_outputdir) #, template="build_trad_dark_image.json")
 
     # find cal file (naming convention for data.Dark class)
     for f in os.listdir(build_trad_dark_outputdir):
