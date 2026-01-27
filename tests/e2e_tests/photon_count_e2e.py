@@ -16,6 +16,70 @@ import corgidrp.detector as detector
 import shutil
 import warnings
 
+def fix_str_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Makes type for each header to what it should be.
+
+    Gets around EMGAIN_A being set to 1 in TVAC data.
+
+    Adds proper values to VISTYPE for the NoiseMap calibration: CGIVST_CAL_DRK
+    (data used to calibrate the dark noise sources).
+
+    This function is unnecessary with future data because data will have
+    the proper values in VISTYPE. 
+
+    Args:
+    list_of_fits (list): list of FITS files that need to be updated.
+
+    """
+    for file in list_of_fits:
+        with fits.open(file, mode='update') as fits_file:
+        #fits_file = fits.open(file)
+            exthdr = fits_file[1].header
+            prihdr = fits_file[0].header
+            errhdr = fits_file[2].header if len(fits_file) > 2 else None
+            dqhdr = fits_file[3].header if len(fits_file) > 3 else None
+            ref_errhdr = None
+            ref_dqhdr = None
+            prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
+            if exthdr['DATALVL'].lower() == 'l1':
+                ref_prihdr, ref_exthdr = mocks.create_default_L1_headers(exthdr['ARRTYPE'], prihdr['VISTYPE'])
+            elif exthdr['DATALVL'].lower() == 'l2a':
+                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr, ref_biashdr = mocks.create_default_L2a_headers(exthdr['ARRTYPE'])
+            elif exthdr['DATALVL'].lower() == 'l2b':
+                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr, ref_biashdr = mocks.create_default_L2b_headers(exthdr['ARRTYPE'])
+            elif exthdr['DATALVL'].lower() == 'cal':
+                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr = mocks.create_default_calibration_product_headers()
+            ##could add in more
+            else:
+                raise ValueError(f"Unrecognized DATALVL {exthdr['DATALVL']} in file {file}")
+            for el in [(ref_prihdr, prihdr), (ref_exthdr, exthdr), (ref_errhdr, errhdr), (ref_dqhdr, dqhdr)]:
+                if el[0] is None or el[1] is None:
+                    continue
+                for key in el[0].keys():
+                    if 'NAXIS' in key or 'HISTORY' in key:
+                        continue
+                    if key not in el[1].keys():
+                        el[1][key] = el[0][key]
+                    else: 
+                        if type(el[1][key]) != type(el[0][key]):
+                            type_class = type(el[0][key])
+                            if el[1][key] == 'N/A' and type_class != str:
+                                el[1][key] = el[0][key]
+                            else:
+                                el[1][key] = type_class(el[1][key])
+            # don't delete any headers that do not appear in the reference headers, although there shouldn't be any
+            if float(exthdr['EMGAIN_A']) == 1. and exthdr['HVCBIAS'] <= 0:
+                exthdr['EMGAIN_A'] = -1. #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+            if type(exthdr['EMGAIN_C']) is str:
+                exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+            
+            # Update FITS file
+            #fits_file.writeto(file, overwrite=True)
+            fits_file.flush()
+
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #Checks that a photon-counted master dark works fine in the pipeline, for both cases of master dark (PC master dark or synthesized master dark)
@@ -71,6 +135,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         l1_data_ill_filelist.append(os.path.join(output_ill_dir, f))
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
+    fix_str_for_tvac(l1_data_ill_filelist)
+    fix_str_for_tvac(l1_data_dark_filelist)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -92,6 +158,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     kgain.ext_hdr['RN'] = 100
     kgain.ext_hdr['RN_ERR'] = 0
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
+    fix_str_for_tvac([kgain.filepath])
     this_caldb.create_entry(kgain)
 
     # NoiseMap (meaningless data; won't be used in dark subtraction for this first test which instead uses PC master dark)
@@ -106,6 +173,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
+    fix_str_for_tvac([noise_map.filepath])
     this_caldb.create_entry(noise_map)
 
     here = os.path.abspath(os.path.dirname(__file__))
@@ -133,6 +201,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
+    fix_str_for_tvac([flat.filepath])
     this_caldb.create_entry(flat)
 
     # bad pixel map
@@ -140,6 +209,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
+    fix_str_for_tvac([bp_map.filepath])
     this_caldb.create_entry(bp_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not
@@ -382,7 +452,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

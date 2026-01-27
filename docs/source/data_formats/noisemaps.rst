@@ -388,13 +388,13 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | DRPNFILE   | int        | 80                             | # of files used to create this processed frame     |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPN_IMM    | float      | -13.403973166548543            | mean of the image-area fixed-pattern noise (e-). -9999 if no value supplied.    |
+| FPN_IMM    | float      | -13.403973166548543            | mean of the image-area fixed-pattern noise (e-). -999. if no value supplied.    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CIC_IMM    | float      | 0.14714925827229977            | mean of the image-area clock-induced charge (e-) -9999 if no value supplied.  |
+| CIC_IMM    | float      | 0.14714925827229977            | mean of the image-area clock-induced charge (e-) -999. if no value supplied.  |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DC_IMM     | float      | 0.016175918732291707           | mean of the image-area dark current (e-/s) -9999 if no value supplied.        |
+| DC_IMM     | float      | 0.016175918732291707           | mean of the image-area dark current (e-/s) -999. if no value supplied.        |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPN_IMME   | float      | -10.65038053230871             | median of the image-area fixed-pattern noise (e-) -9999 if no value supplied.  |
+| FPN_IMME   | float      | -10.65038053230871             | median of the image-area fixed-pattern noise (e-) -999. if no value supplied.  |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | HISTORY    | str        | Bias subtracted Removed 0 f... |                                                    |
 +------------+------------+--------------------------------+----------------------------------------------------+

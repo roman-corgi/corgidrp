@@ -379,7 +379,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to the frame
     exthdr['IS_BAD']        = False         # Whether frame is bad
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
-    exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
+    exthdr['FWC_EM_E']      = 0.0           # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
     exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
@@ -460,7 +460,7 @@ def create_default_L2a_TrapPump_headers(arrtype="SCI"):
     exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to the frame
     exthdr['IS_BAD']        = False         # Whether frame is bad
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
-    exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
+    exthdr['FWC_EM_E']      = 0.0           # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
     exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
@@ -530,8 +530,8 @@ def create_default_L2b_headers(arrtype="SCI"):
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
-    exthdr['RN']            = ''            # Read noise
-    exthdr['RN_ERR']        = ''            # Read noise error
+    exthdr['RN']            = -999.0        # Read noise
+    exthdr['RN_ERR']        = -999.0        # Read noise error
     exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
     exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
     exthdr['FRMSEL03'] = (None, "tip rms (Z2VAR) threshold") # record selection criteria
@@ -580,8 +580,8 @@ def create_default_L2b_TrapPump_headers(arrtype="SCI"):
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
-    exthdr['RN']            = ''            # Read noise
-    exthdr['RN_ERR']        = ''            # Read noise error
+    exthdr['RN']            = -999.         # Read noise
+    exthdr['RN_ERR']        = -999.         # Read noise error
     exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
     exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
     exthdr['FRMSEL03'] = (None, "tip rms (Z2VAR) threshold") # record selection criteria
@@ -2705,7 +2705,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     # in the function above somehow affects the content of the file
     rename_files_to_cgi_format(pattern=os.path.join(output_dir, "*K*Scheme_*TPUMP*.fits"), level_suffix="l1")
 
-def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0, cic=0.01, dark_current=8.33e-4, read_noise=100., bias=20000, qe=0.9):
+def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7., exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0, cic=0.01, dark_current=8.33e-4, read_noise=100., bias=20000, qe=0.9):
     '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
     Used for unit tests for photon counting.  
     
@@ -2819,7 +2819,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['EMGAIN_C'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
-        frame_dark.ext_hdr['RN'] = 100
+        frame_dark.ext_hdr['RN'] = 100.
         frame_dark.ext_hdr['KGAINPAR'] = kgain
         frame_dark.pri_hdr['PHTCNT'] = 1
         frame_dark.ext_hdr['ISPC'] = 1

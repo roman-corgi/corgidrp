@@ -291,6 +291,9 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                 if len(line_args) >= 5:
                     name = line_args[1].strip()
                     dtype = line_args[2].strip()
+                    if skip_hdu_structure_check:
+                        if 'NAXIS' in name.upper():
+                            continue
                     # Skip table header/delimiter rows
                     if name and dtype and name != 'Keyword' and name != '=' * len(name) and name != '-' * len(name) and not name.isdigit():
                         # Store keyword name, datatype, and HDU
@@ -1090,6 +1093,38 @@ def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
         # diff the two outputs
         compare_docs(ref_doc_contents, doc_contents, data_product_name="Dark")
 
+@pytest.mark.e2e
+def test_darks_comparison_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing Darks Comparison ===")
+    trad_data_file = glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits"))[0]
+    pc_data_files = glob.glob(os.path.join(e2eoutput_path, "photon_count_e2e", "*_drk_cal.fits"))
+    pc_data_file = sorted(pc_data_files, key=os.path.getmtime)[0]
+    synth_data_file = glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l2a_to_dnm", "calibrations", "*_drk_cal.fits"))[0]
+    
+    validate_cgi_filename(trad_data_file, 'drk_cal')
+    validate_cgi_filename(pc_data_file, 'drk_cal')
+    validate_cgi_filename(synth_data_file, 'drk_cal')
+
+    generate_fits_excel_documentation(trad_data_file, os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "trad_drk_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(pc_data_file, os.path.join(e2eoutput_path, "photon_count_e2e", "pc_drk_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(synth_data_file, os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l2a_to_dnm", "calibrations", "synth_drk_cal_documentation.xlsx"))
+
+    doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(trad_data_file) as hdulist:
+        trad_doc_contents = generate_template(hdulist)
+    with fits.open(pc_data_file) as hdulist:
+        pc_doc_contents = generate_template(hdulist)
+    with fits.open(synth_data_file) as hdulist:
+        synth_doc_contents = generate_template(hdulist)
+
+    # files' array shapes will be different, but check that the headers are the same
+    compare_docs(trad_doc_contents, pc_doc_contents, data_product_name="Dark (Traditional vs Photon Counting)", skip_hdu_structure_check=True)
+    compare_docs(trad_doc_contents, synth_doc_contents, data_product_name="Dark (Traditional vs Synthetic)", skip_hdu_structure_check=True)
+    compare_docs(pc_doc_contents, synth_doc_contents, data_product_name="Dark (Photon Counting vs Synthetic)", skip_hdu_structure_check=True)
 
 @pytest.mark.e2e
 def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -1519,5 +1554,6 @@ if __name__ == "__main__":
     test_spec_linespread_dataformat_e2e(e2edata_dir, outputdir)
     test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
     test_dark_dataformat_e2e(e2edata_dir, outputdir)
+    test_darks_comparison_e2e(e2edata_dir, outputdir)
     test_tpump_dataformat_e2e(e2edata_dir, outputdir)
     test_header_crossreference_e2e(e2edata_dir, outputdir)

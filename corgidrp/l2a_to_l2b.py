@@ -246,6 +246,8 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                 reject_flags[i] += 8 # use distinct bits in case it's useful
                 reject_reasons[i].append("tilt rms (Z3VAR) {0:.1f} > {1:.1f}"
                                          .format(frame.ext_hdr['Z3VAR'], tt_rms_thres))
+        if tt_rms_thres is None:
+            tt_rms_thres = -999. # to keep type consistency
         frame.ext_hdr['FRMSEL03'] = (tt_rms_thres, "tip rms (Z2VAR) threshold") # record selection criteria
         frame.ext_hdr['FRMSEL04'] = (tt_rms_thres, "tilt rms (Z3VAR) threshold") # record selection criteria
         
@@ -258,6 +260,8 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                 reject_flags[i] += 32 # use distinct bits in case it's useful
                 reject_reasons[i].append("tilt bias (Z3RES) {0:.1f} > {1:.1f}"
                                          .format(frame.ext_hdr['Z3RES'], tt_bias_thres))
+        if tt_bias_thres is None:
+            tt_bias_thres = -999. # to keep type consistency
         frame.ext_hdr['FRMSEL05'] = (tt_bias_thres, "tip bias (Z2RES) threshold") # record selection criteria
         frame.ext_hdr['FRMSEL06'] = (tt_bias_thres, "tilt bias (Z3RES) threshold") # record selection criteria
                 

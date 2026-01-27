@@ -26,10 +26,15 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-def set_obstype_for_darks(
+def fix_str_for_tvac(
     list_of_fits,
     ):
-    """ Adds proper values to VISTYPE for the NoiseMap calibration: CGIVST_CAL_DRK
+    """ 
+    Makes type for each header to what it should be.
+
+    Gets around EMGAIN_A being set to 1 in TVAC data.
+
+    Adds proper values to VISTYPE for the NoiseMap calibration: CGIVST_CAL_DRK
     (data used to calibrate the dark noise sources).
 
     This function is unnecessary with future data because data will have
@@ -39,18 +44,51 @@ def set_obstype_for_darks(
     list_of_fits (list): list of FITS files that need to be updated.
 
     """
-    # Folder with files
     for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
-            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-        prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-        prihdr['PHTCNT'] = False
-        #exthdr['ISPC'] = False
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
+        with fits.open(file, mode='update') as fits_file:
+        #fits_file = fits.open(file)
+            exthdr = fits_file[1].header
+            prihdr = fits_file[0].header
+            errhdr = fits_file[2].header if len(fits_file) > 2 else None
+            dqhdr = fits_file[3].header if len(fits_file) > 3 else None
+            ref_errhdr = None
+            ref_dqhdr = None
+            prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
+            if exthdr['DATALVL'].lower() == 'l1':
+                ref_prihdr, ref_exthdr = mocks.create_default_L1_headers(exthdr['ARRTYPE'], prihdr['VISTYPE'])
+            elif exthdr['DATALVL'].lower() == 'l2a':
+                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr, ref_biashdr = mocks.create_default_L2a_headers(exthdr['ARRTYPE'])
+            elif exthdr['DATALVL'].lower() == 'l2b':
+                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr, ref_biashdr = mocks.create_default_L2b_headers(exthdr['ARRTYPE'])
+            elif exthdr['DATALVL'].lower() == 'cal':
+                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr = mocks.create_default_calibration_product_headers()
+            ##could add in more
+            else:
+                raise ValueError(f"Unrecognized DATALVL {exthdr['DATALVL']} in file {file}")
+            for el in [(ref_prihdr, prihdr), (ref_exthdr, exthdr), (ref_errhdr, errhdr), (ref_dqhdr, dqhdr)]:
+                if el[0] is None or el[1] is None:
+                    continue
+                for key in el[0].keys():
+                    if 'NAXIS' in key or 'HISTORY' in key:
+                        continue
+                    if key not in el[1].keys():
+                        el[1][key] = el[0][key]
+                    else: 
+                        if type(el[1][key]) != type(el[0][key]):
+                            type_class = type(el[0][key])
+                            if el[1][key] == 'N/A' and type_class != str:
+                                el[1][key] = el[0][key]
+                            else:
+                                el[1][key] = type_class(el[1][key])
+            # don't delete any headers that do not appear in the reference headers, although there shouldn't be any
+            if float(exthdr['EMGAIN_A']) == 1. and exthdr['HVCBIAS'] <= 0:
+                exthdr['EMGAIN_A'] = -1. #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+            if type(exthdr['EMGAIN_C']) is str:
+                exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+            
+            # Update FITS file
+            #fits_file.writeto(file, overwrite=True)
+            fits_file.flush()
 
 
 
@@ -105,8 +143,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     l1_data_filelist = []
     for f in os.listdir(input_data_dir):
         if f.endswith('.fits'):
-            l1_data_filelist.append(os.path.join(input_data_dir, f))
-
+            l1_data_filelist.append(os.path.join(input_data_dir, f))    
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
@@ -130,14 +167,15 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     telem_rows_start = det_params.params['TELRSTRT']
     telem_rows_end = det_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
-    stack_arr_f_l1 = []
-    for f in os.listdir(l1_datadir):
-        file = os.path.join(l1_datadir, f)
-        if not file.endswith('.fits'):
-            continue
-        stack_arr_f_l1.append(file)
+    # stack_arr_f_l1 = []
+    # for f in os.listdir(l1_datadir):
+    #     file = os.path.join(l1_datadir, f)
+    #     if not file.endswith('.fits'):
+    #         continue
+    #     stack_arr_f_l1.append(file)
 
-    stackl1_dat = data.Dataset(stack_arr_f_l1)
+    # stackl1_dat = data.Dataset(stack_arr_f_l1)
+    stackl1_dat = data.Dataset(l1_data_filelist)
     splitl1, splitl1_params = stackl1_dat.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C'])
     stackl1_arr = []
     exptime_arr = []
@@ -188,6 +226,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
+    fix_str_for_tvac([nonlinear_cal.filepath])
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain calibration 
@@ -195,9 +234,10 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
-    kgain.ext_hdr['RN'] = 100
-    kgain.ext_hdr['RN_ERR'] = 0
+    kgain.ext_hdr['RN'] = 100.
+    kgain.ext_hdr['RN_ERR'] = 0.
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
+    fix_str_for_tvac([kgain.filepath])
     this_caldb.create_entry(kgain)
 
     # getting output filename
@@ -206,7 +246,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # output_filename = output_filenamel1.replace('L1','L2a',1)
 
     # Update VISTYPE to "DARK" for DRP run
-    set_obstype_for_darks(stack_arr_files)
+    fix_str_for_tvac(stack_arr_files)
     # update headers
     #fix_headers_for_tvac(stack_arr_files) 
 
@@ -332,17 +372,11 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     telem_rows_start = det_params.params['TELRSTRT']
     telem_rows_end = det_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
-    stack_arr_f_l1 = []
-    for f in os.listdir(l1_datadir):
-        file = os.path.join(l1_datadir, f)
-        if not file.endswith('.fits'):
-            continue
-        stack_arr_f_l1.append(file)
 
     # Need to run II&T code on L1 data b/c that's what II&T code expects as input
     # For DRP in this test, L2a is expected, so for consistency between the II&T and DRP tests, 
     # we process from L1 to L2a before inputting to DRP since that is what II&T code does with L1 input before calibration for noisemaps
-    stackl1_dat = data.Dataset(stack_arr_f_l1)
+    stackl1_dat = data.Dataset(l1_data_filelist)
     splitl1, splitl1_params = stackl1_dat.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C'])
     stackl1_arr = []
     # make folder for saving the II&T processed L2a files to be used by DRP code later
@@ -431,13 +465,14 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
-    kgain.ext_hdr['RN'] = 100
-    kgain.ext_hdr['RN_ERR'] = 0
+    kgain.ext_hdr['RN'] = 100.
+    kgain.ext_hdr['RN_ERR'] = 0.
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
+    fix_str_for_tvac([kgain.filepath])
     this_caldb.create_entry(kgain)
 
     # Update VISTPYE to "CGIVST_CAL_DRK" for DRP run
-    set_obstype_for_darks(l2a_filepaths)
+    fix_str_for_tvac(l2a_filepaths)
 
     ####### Run the DRP walker
     # template = "l2a_to_l2a_noisemap.json"
@@ -531,7 +566,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     #e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")
@@ -543,5 +578,5 @@ if __name__ == "__main__":
     
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_noisemap_calibration_from_l1(e2edata_dir, outputdir)
     test_noisemap_calibration_from_l2a(e2edata_dir, outputdir)
+    test_noisemap_calibration_from_l1(e2edata_dir, outputdir)

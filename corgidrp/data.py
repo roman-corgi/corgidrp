@@ -715,9 +715,56 @@ class Dark(Image):
             # TO-DO: check PC_STAT and whether this will be in L2s
             if 'PC_STAT' not in ext_hdr:
                 self.ext_hdr['PC_STAT'] = 'analog master dark'
+            # PC dark will have PCTHRESH in it, so make non-PC darks have that as well for consistency
+            if 'PCTHRESH' not in self.ext_hdr:
+                self.ext_hdr['PCTHRESH'] = -999. #keeping float format for consistency
+            # PC dark will have 1 more dimension than other darks due b/c the frames can be binned to make separate PC frames from subsets
+        
             # log all the data that went into making this calibration file
             if 'DRPNFILE' not in ext_hdr.keys() and input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
+            # PC master darks have NUM_FR, which may differ from DRPNFILE b/c of binning of frames (i.e., DRPNFILE would be # of bins * NUM_FR)
+            # Add in a null NUM_FR if not present for consistency with PC master darks
+            if 'NUM_FR' not in self.ext_hdr:
+                self.ext_hdr['NUM_FR'] = -999 #keeping int format for consistency
+            if "HISTORY" not in self.err_hdr:
+                self.err_hdr['HISTORY'] = ''
+            # PC frames (or others if non-standard recipe used) may have undergone frame selection, so add in null values if necessary so that all Dark products have same headers
+            if 'FRMSEL01' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL01'] = -999. #keeping float format for consistency
+            if 'FRMSEL02' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL02'] = False 
+            if 'FRMSEL03' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL03'] = -999. #keeping float format for consistency
+            if 'FRMSEL04' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL04'] = -999. #keeping float format for consistency
+            if 'FRMSEL05' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL05'] = -999. #keeping float format for consistency
+            if 'FRMSEL06' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL06'] = -999. #keeping float format for consistency
+            if 'KGAINPAR' not in self.err_hdr:
+                if 'KGAINPAR' in self.ext_hdr:
+                    self.err_hdr['KGAINPAR'] = self.ext_hdr['KGAINPAR']
+                else:
+                    self.err_hdr['KGAINPAR'] = -999. #keeping float format for consistency
+            if 'KGAIN_ER' not in self.err_hdr:
+                if 'KGAIN_ER' in self.ext_hdr:
+                    self.err_hdr['KGAIN_ER'] = self.ext_hdr['KGAIN_ER']
+                else:
+                    self.err_hdr['KGAIN_ER'] = -999. #keeping float format for consistency
+            if 'RN' not in self.err_hdr:
+                if 'RN' in self.ext_hdr:
+                    self.err_hdr['RN'] = self.ext_hdr['RN']
+                else:
+                    self.err_hdr['RN'] = -999. #keeping float format for consistency
+            if 'RN_ERR' not in self.err_hdr:
+                if 'RN_ERR' in self.ext_hdr:
+                    self.err_hdr['RN_ERR'] = self.ext_hdr['RN_ERR']
+                else:
+                    self.err_hdr['RN_ERR'] = -999. #keeping float format for consistency
+            if 'LAYER_1' not in self.err_hdr:
+                self.err_hdr['LAYER_1'] = 'combined_error' 
+            
 
             # add to history
             self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['EMGAIN_C'], self.ext_hdr['DRPNFILE'])
@@ -1303,12 +1350,11 @@ class KGain(Image):
         super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
 
         # initialize these headers that have been recently added so that older calib files still contain this keyword when initialized and allow for tests that don't require 
-        # these values to run smoothly; if these values are actually required for 
-        # a particular process, the user would be alerted since these values below would result in an error as they aren't numerical
+        # these values to run smoothly
         if 'RN' not in self.ext_hdr:
-            self.ext_hdr['RN'] = ''
+            self.ext_hdr['RN'] = -999.
         if 'RN_ERR' not in self.ext_hdr:
-            self.ext_hdr['RN_ERR'] = ''
+            self.ext_hdr['RN_ERR'] = -999.
         # File format checks
         if self.data.shape != (1,):
             raise ValueError('The KGain calibration data should be just one float value')
@@ -1546,16 +1592,16 @@ class DetectorNoiseMaps(Image):
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
         if 'FPN_IMM' not in self.ext_hdr.keys():
-            fpn_imm = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            fpn_imm = -999. #can't store NaN in FITS header, so do a number that's obviously wrong
             self.ext_hdr['FPN_IMM'] = fpn_imm
         if 'CIC_IMM' not in self.ext_hdr.keys():
-            cic_imm = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            cic_imm = -999. #can't store NaN in FITS header, so do a number that's obviously wrong
             self.ext_hdr['CIC_IMM'] = cic_imm
         if 'DC_IMM' not in self.ext_hdr.keys():
-            dc_imm = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            dc_imm = -999. #can't store NaN in FITS header, so do a number that's obviously wrong
             self.ext_hdr['DC_IMM'] = dc_imm
         if 'FPN_IMME' not in self.ext_hdr.keys():
-            fpn_imme = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            fpn_imme = -999. #can't store NaN in FITS header, so do a number that's obviously wrong
             self.ext_hdr['FPN_IMME'] = fpn_imme
 
 class DetectorParams(Image):
