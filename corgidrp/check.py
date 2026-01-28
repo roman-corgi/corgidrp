@@ -774,40 +774,28 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
     
     return output_excel_path
 
-def fix_hdrs_for_tvac(
-    list_of_fits,
-    output_dir,
-    header_template=None,
-    extra_preserve_pri_keys=None,
-    extra_preserve_img_keys=None,
-    move_pri_to_img_keys=None,
-    remove_pri_keys=None,
-    remove_img_keys=None,
-):
+def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
     """
-    Overwrite L1 headers with mock defaults while preserving select values.
+    Overwrite FITS headers with mock defaults while preserving certain values from originals.
+
+    Used for TVAC (and similar) data so pipeline expectations are met. Writes updated
+    files to output_dir; does not modify originals.
 
     Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-        output_dir (str): directory to write updated FITS files into.
-        header_template (callable, optional): function returning (pri_hdr, img_hdr).
+        list_of_fits (list): FITS file paths to update.
+        output_dir (str): Directory to write updated FITS files into.
+        header_template (callable, optional): Function returning (pri_hdr, img_hdr).
             Defaults to mocks.create_default_L1_headers.
-        extra_preserve_pri_keys (list, optional): additional primary header keys to preserve.
-        extra_preserve_img_keys (list, optional): additional image header keys to preserve.
-        move_pri_to_img_keys (list, optional): primary header keys to copy into image header.
-        remove_pri_keys (list, optional): primary header keys to remove from preservation.
-        remove_img_keys (list, optional): image header keys to remove from preservation.
 
     Returns:
-        list: list of updated FITS file paths written to output_dir.
+        list: Updated FITS file paths written to output_dir.
     """
-
     preserve_pri_keys = [
         'VISITID', 'CDMSVERS', 'FSWDVERS', 'ORIGIN', 'FILETIME',
         'VISTYPE', 'DATAVERS', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
         'SEGMENT', 'OBSNUM', 'VISNUM', 'TARGET', 'FILENAME',
+        'PSFREF',
     ]
-
     preserve_img_keys = [
         'XTENSION', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2',
         'PCOUNT', 'GCOUNT', 'BSCALE', 'BZERO', 'BUNIT',
@@ -835,19 +823,6 @@ def fix_hdrs_for_tvac(
         'DATALVL', 'MISSING',
     ]
 
-    if extra_preserve_pri_keys:
-        preserve_pri_keys += list(extra_preserve_pri_keys)
-    if extra_preserve_img_keys:
-        preserve_img_keys += list(extra_preserve_img_keys)
-    if move_pri_to_img_keys:
-        preserve_img_keys += list(move_pri_to_img_keys)
-    if remove_pri_keys:
-        remove_set = set(remove_pri_keys)
-        preserve_pri_keys = [key for key in preserve_pri_keys if key not in remove_set]
-    if remove_img_keys:
-        remove_set = set(remove_img_keys)
-        preserve_img_keys = [key for key in preserve_img_keys if key not in remove_set]
-
     if header_template is None:
         header_template = mocks.create_default_L1_headers
 
@@ -857,20 +832,8 @@ def fix_hdrs_for_tvac(
             orig_pri_hdr = hdul[0].header.copy()
             orig_img_hdr = hdul[1].header.copy()
 
-            arrtype = orig_img_hdr.get('ARRTYPE', 'SCI')
-            vistype = orig_pri_hdr.get('VISTYPE', 'CGIVST_TDD_OBS')
-            try:
-                header_result = header_template(
-                    arrtype=arrtype,
-                    vistype=vistype,
-                )
-            except TypeError:
-                header_result = header_template()
-
-            if isinstance(header_result, tuple) and len(header_result) >= 2:
-                mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
-            else:
-                raise ValueError("header_template must return at least (pri_hdr, img_hdr)")
+            header_result = header_template()
+            mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
 
             for key in preserve_pri_keys:
                 if key in orig_pri_hdr:
@@ -878,14 +841,10 @@ def fix_hdrs_for_tvac(
             for key in preserve_img_keys:
                 if key in orig_img_hdr:
                     mock_img_hdr[key] = orig_img_hdr[key]
-            if move_pri_to_img_keys:
-                for key in move_pri_to_img_keys:
-                    if key in orig_pri_hdr:
-                        mock_img_hdr[key] = orig_pri_hdr[key]
 
             if 'EMGAIN_A' in mock_img_hdr and 'HVCBIAS' in mock_img_hdr:
                 if float(mock_img_hdr['EMGAIN_A']) == 1 and mock_img_hdr['HVCBIAS'] <= 0:
-                    # SSC-updated TVAC files default EMGAIN_A=1 regardless of commanded gain
+                    # SSC TVAC files default EMGAIN_A=1 regardless of commanded gain
                     mock_img_hdr['EMGAIN_A'] = -1
             if 'EMGAIN_C' in mock_img_hdr and isinstance(mock_img_hdr['EMGAIN_C'], str):
                 mock_img_hdr['EMGAIN_C'] = float(mock_img_hdr['EMGAIN_C'])
