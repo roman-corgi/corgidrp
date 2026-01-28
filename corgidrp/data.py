@@ -2926,7 +2926,7 @@ class PyKLIPDataset(pyKLIP_Data):
             input_all += [data]
             centers_all += [centers]
             filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
-            PAs_all += [phead['ROLL']] * NINTS
+            PAs_all += [phead['PA_APER']] * NINTS
 
             # Get center wavelengths
             try:
