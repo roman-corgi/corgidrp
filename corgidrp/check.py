@@ -10,6 +10,7 @@ import os
 import glob
 import astropy.io.fits as fits
 import pandas as pd
+from corgidrp import mocks
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -772,3 +773,129 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
                 header_df.to_excel(writer, sheet_name=sheet_name, index=False)
     
     return output_excel_path
+
+def fix_hdrs_for_tvac(
+    list_of_fits,
+    output_dir,
+    header_template=None,
+    extra_preserve_pri_keys=None,
+    extra_preserve_img_keys=None,
+    move_pri_to_img_keys=None,
+    remove_pri_keys=None,
+    remove_img_keys=None,
+):
+    """
+    Overwrite L1 headers with mock defaults while preserving select values.
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+        output_dir (str): directory to write updated FITS files into.
+        header_template (callable, optional): function returning (pri_hdr, img_hdr).
+            Defaults to mocks.create_default_L1_headers.
+        extra_preserve_pri_keys (list, optional): additional primary header keys to preserve.
+        extra_preserve_img_keys (list, optional): additional image header keys to preserve.
+        move_pri_to_img_keys (list, optional): primary header keys to copy into image header.
+        remove_pri_keys (list, optional): primary header keys to remove from preservation.
+        remove_img_keys (list, optional): image header keys to remove from preservation.
+
+    Returns:
+        list: list of updated FITS file paths written to output_dir.
+    """
+
+    preserve_pri_keys = [
+        'VISITID', 'CDMSVERS', 'FSWDVERS', 'ORIGIN', 'FILETIME',
+        'VISTYPE', 'DATAVERS', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+        'SEGMENT', 'OBSNUM', 'VISNUM', 'TARGET', 'FILENAME',
+    ]
+
+    preserve_img_keys = [
+        'XTENSION', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2',
+        'PCOUNT', 'GCOUNT', 'BSCALE', 'BZERO', 'BUNIT',
+        'ARRTYPE', 'SCTSRT', 'SCTEND', 'STATUS', 'HVCBIAS',
+        'OPMODE', 'EXPTIME', 'EMGAIN_C', 'UNITYG', 'EMGAINA1',
+        'EMGAINA2', 'EMGAINA3', 'EMGAINA4', 'EMGAINA5', 'GAINTCAL',
+        'EXCAMT', 'LOCAMT', 'EMGAIN_A', 'KGAINPAR', 'CYCLES',
+        'LASTEXP', 'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP',
+        'NOVEREXP', 'ISPC', 'PROXET', 'FCMLOOP', 'FCMPOS',
+        'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR', 'FSMSG1',
+        'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY', 'EACQ_ROW',
+        'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+        'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR',
+        'Z3AVG', 'Z3RES', 'Z3VAR', '10SVALID', 'Z4AVG',
+        'Z4RES', 'Z5AVG', 'Z5RES', 'Z6AVG', 'Z6RES',
+        'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES', 'Z9AVG',
+        'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+        'Z12AVG', 'Z13AVG', 'Z14AVG', 'SPAM_H', 'SPAM_V',
+        'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V', 'FPAM_H', 'FPAM_V',
+        'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V', 'LSAM_H', 'LSAM_V',
+        'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V', 'FSAM_H', 'FSAM_V',
+        'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V', 'CFAM_H', 'CFAM_V',
+        'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V', 'DPAM_H', 'DPAM_V',
+        'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V', 'DATETIME', 'FTIMEUTC',
+        'DATALVL', 'MISSING',
+    ]
+
+    if extra_preserve_pri_keys:
+        preserve_pri_keys += list(extra_preserve_pri_keys)
+    if extra_preserve_img_keys:
+        preserve_img_keys += list(extra_preserve_img_keys)
+    if move_pri_to_img_keys:
+        preserve_img_keys += list(move_pri_to_img_keys)
+    if remove_pri_keys:
+        remove_set = set(remove_pri_keys)
+        preserve_pri_keys = [key for key in preserve_pri_keys if key not in remove_set]
+    if remove_img_keys:
+        remove_set = set(remove_img_keys)
+        preserve_img_keys = [key for key in preserve_img_keys if key not in remove_set]
+
+    if header_template is None:
+        header_template = mocks.create_default_L1_headers
+
+    updated_files = []
+    for file in list_of_fits:
+        with fits.open(file) as hdul:
+            orig_pri_hdr = hdul[0].header.copy()
+            orig_img_hdr = hdul[1].header.copy()
+
+            arrtype = orig_img_hdr.get('ARRTYPE', 'SCI')
+            vistype = orig_pri_hdr.get('VISTYPE', 'CGIVST_TDD_OBS')
+            try:
+                header_result = header_template(
+                    arrtype=arrtype,
+                    vistype=vistype,
+                )
+            except TypeError:
+                header_result = header_template()
+
+            if isinstance(header_result, tuple) and len(header_result) >= 2:
+                mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
+            else:
+                raise ValueError("header_template must return at least (pri_hdr, img_hdr)")
+
+            for key in preserve_pri_keys:
+                if key in orig_pri_hdr:
+                    mock_pri_hdr[key] = orig_pri_hdr[key]
+            for key in preserve_img_keys:
+                if key in orig_img_hdr:
+                    mock_img_hdr[key] = orig_img_hdr[key]
+            if move_pri_to_img_keys:
+                for key in move_pri_to_img_keys:
+                    if key in orig_pri_hdr:
+                        mock_img_hdr[key] = orig_pri_hdr[key]
+
+            if 'EMGAIN_A' in mock_img_hdr and 'HVCBIAS' in mock_img_hdr:
+                if float(mock_img_hdr['EMGAIN_A']) == 1 and mock_img_hdr['HVCBIAS'] <= 0:
+                    # SSC-updated TVAC files default EMGAIN_A=1 regardless of commanded gain
+                    mock_img_hdr['EMGAIN_A'] = -1
+            if 'EMGAIN_C' in mock_img_hdr and isinstance(mock_img_hdr['EMGAIN_C'], str):
+                mock_img_hdr['EMGAIN_C'] = float(mock_img_hdr['EMGAIN_C'])
+
+            hdul_copy = fits.HDUList([hdu.copy() for hdu in hdul])
+            hdul_copy[0].header = mock_pri_hdr
+            hdul_copy[1].header = mock_img_hdr
+
+            output_path = os.path.join(output_dir, os.path.basename(file))
+            hdul_copy.writeto(output_path, overwrite=True)
+            updated_files.append(output_path)
+
+    return updated_files

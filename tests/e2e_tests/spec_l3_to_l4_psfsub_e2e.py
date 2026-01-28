@@ -108,7 +108,8 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         check_dimensions(frame.data, (125, 125), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3', 'FSMLOS' : 1}, frame_info, logger)
-        verify_header_keywords(frame.ext_hdr, {'PSFREF', 'SATSPOTS'}, frame_info, logger)
+        verify_header_keywords(frame.pri_hdr, {'PSFREF'}, frame_info, logger)
+        verify_header_keywords(frame.ext_hdr, {'SATSPOTS'}, frame_info, logger)
         logger.info("")
     
     l3_files_dir = os.path.join(e2eoutput_path, "L3")

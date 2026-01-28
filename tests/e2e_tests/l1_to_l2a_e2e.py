@@ -10,6 +10,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import corgidrp.check as check
 import shutil
 
 try:
@@ -18,25 +19,6 @@ except:
     pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
-
-def fix_str_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Gets around EMGAIN_A being set to 1 in TVAC data.
-    
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
-            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-        if type(exthdr['EMGAIN_C']) is str:
-            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_l1_to_l2a(e2edata_path, e2eoutput_path):
@@ -84,11 +66,8 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
     mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration
 
-    # Copy files to input_data directory and update file list
-    l1_data_filelist = [
-        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-        for file_path in l1_data_filelist
-    ] 
+    # Update headers for TVAC and save into input_data directory
+    l1_data_filelist = check.fix_hdrs_for_tvac(l1_data_filelist, input_data_dir)
     #tvac_l2a_filelist = [os.path.join(l2a_datadir, os.listdir(l2a_datadir)[i]) for i in [0,1]] #[os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
     # run the L1 data through the II&T code to process to L2a
     tvac_l2a_filelist = []
@@ -122,9 +101,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
             hdul_copy.writeto(os.path.join(l2a_tvac_outputdir, l2a_tvac_filename), overwrite=True)
         tvac_l2a_filelist.append(os.path.join(l2a_tvac_outputdir, l2a_tvac_filename))
 
-    # fix headers for TVAC
-    #fix_headers_for_tvac(l1_data_filelist)
-    fix_str_for_tvac(l1_data_filelist)
+    # l1_data_filelist already points to updated header files
 
     ###### Setup necessary calibration files
     # add calibration file to caldb
@@ -231,7 +208,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Downloads/DRP E2E Test Files v2/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

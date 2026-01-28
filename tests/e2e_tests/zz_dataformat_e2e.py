@@ -1384,7 +1384,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         # Process each HDU
         for hdu_name in sorted(all_headers.keys()):
             # Get all keywords for this HDU
-            keywords = sorted(all_headers[hdu_name].keys())
+            keywords = list(all_headers[hdu_name].keys())
             
             ordered_products = ['L1']  # Start with L1
             
@@ -1491,6 +1491,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
+    test_header_crossreference_e2e(e2edata_dir, outputdir)
     test_astrom_dataformat_e2e(e2edata_dir, outputdir)
     test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
     test_ct_dataformat_e2e(e2edata_dir, outputdir)
@@ -1520,4 +1521,3 @@ if __name__ == "__main__":
     test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
     test_dark_dataformat_e2e(e2edata_dir, outputdir)
     test_tpump_dataformat_e2e(e2edata_dir, outputdir)
-    test_header_crossreference_e2e(e2edata_dir, outputdir)

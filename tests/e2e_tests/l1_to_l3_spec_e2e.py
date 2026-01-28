@@ -11,6 +11,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
+import corgidrp.check as check
 import shutil
 import logging
 import traceback
@@ -21,49 +22,6 @@ from corgidrp.photon_counting import get_pc_mean
 import warnings
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
-
-def fix_headers(
-    list_of_fits,
-    ):
-    """ 
-    Gets around EMGAIN_A being set to 1 in TVAC data and fixes string header values.
-    Also adds missing EACQ_ROW/COL headers if needed.
-    
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    for file in list_of_fits:
-        with fits.open(file, mode='update') as fits_file:
-            exthdr = fits_file[1].header
-            if 'EMGAIN_A' in exthdr and float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
-                exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-            if 'EMGAIN_C' in exthdr and type(exthdr['EMGAIN_C']) is str:
-                exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-            
-            # TO DO: flag sims bug that misspells EACQ_ROW/COL as EQCQ_COL
-            if 'EQCQ_COL' in exthdr:
-                del exthdr['EQCQ_COL']
-            
-            naxis1 = exthdr.get('NAXIS1', 1024)
-            naxis2 = exthdr.get('NAXIS2', 1024)
-            
-            # Fix EACQ_ROW/COL if missing, 0, or outside frame bounds
-            if 'EACQ_ROW' not in exthdr or exthdr['EACQ_ROW'] == 0 or exthdr['EACQ_ROW'] >= naxis2 // 2:
-                exthdr['EACQ_ROW'] = naxis2 // 2
-            if 'EACQ_COL' not in exthdr or exthdr.get('EACQ_COL', 0) == 0 or exthdr.get('EACQ_COL', 0) >= naxis1 // 2:
-                exthdr['EACQ_COL'] = naxis1 // 2
-
-            # Set RN (read noise) if missing, empty, or not a number - only for L2a data (required for photon counting)
-            # TO DO: this should be automatically handled previously in the pipeline
-            datalvl = exthdr.get('DATALVL', '')
-            if datalvl == 'L2a':
-                # Set as float value with comment - ensures FITS stores it as numeric
-                exthdr['RN'] = (100.0, 'Read noise in electrons')
-
-            prihdr = fits_file[0].header
-            if 'PA_APER' not in prihdr and 'ROLL' in prihdr:
-                prihdr['PA_APER'] = prihdr['ROLL']
-
 
 def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     """Run the complete L1 to L3 spectroscopy data end-to-end test.
@@ -268,13 +226,8 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Copy files to input_data directory and update file list
-    input_data_filelist = [
-        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-        for file_path in input_data_filelist
-    ] 
-    # fix headers
-    fix_headers(input_data_filelist)
+    # Update L1 headers for sims files
+    input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
 
     ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
     for file in input_data_filelist:
@@ -329,8 +282,6 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
     
     if l2a_filelist:
-        # Apply other header fixes
-        fix_headers(l2a_filelist)
         
         # Dark calibration: Create PC master dark from L2a frames (for PC data only)
         # This completes the calibration setup that began in the calibration products section above
@@ -412,8 +363,6 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     l2b_filelist = [os.path.join(l3_outputdir, f) for f in l2b_files]
     logger.info(f'L2a to L2b complete. Generated {len(l2b_filelist)} L2b files.')
     
-    # Fix L2b headers 
-    fix_headers(l2b_filelist)
     
     # Step 3: L2b -> L3 (using output from step 2)
     logger.info('Step 3: Running L2b to L3 spectroscopy recipe...')
@@ -599,7 +548,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
-    outputdir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    outputdir = '/Users/jmilton/Github/corgidrp/tests/e2e_tests'
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

@@ -13,36 +13,10 @@ from corgidrp import data
 from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
+from corgidrp import check
 import shutil
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
-
-def set_vistype_for_tvac(
-    list_of_fits,
-    ):
-    """ Adds proper values to VISTYPE for non-linearity calibration.
-
-    This function is unnecessary with future data because data will have
-    the proper values in VISTYPE. Hence, the "tvac" string in its name.
-
-    Args:
-    list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Adding VISTYPE='CGIVST_CAL_PUPIL_IMAGING' to TVAC data")
-    print("Adding VISTYPE='CGIVST_CAL_PUPIL_IMAGING' to TVAC data")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        # Adjust VISTYPE
-        if prihdr['VISTYPE'] == 'N/A':
-            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
-            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
-        exthdr = fits_file[1].header
-        if exthdr['EMGAIN_A'] == 1:
-            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
-
 
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
@@ -124,8 +98,16 @@ def test_nonlin_cal_e2e(
     ]
 
     # Set TVAC OBSNAME to MNFRAME/NONLIN (flight data should have these values)
-    #fix_headers_for_tvac(nonlin_l1_list)
-    set_vistype_for_tvac(nonlin_l1_list)
+    nonlin_l1_list = check.fix_hdrs_for_tvac(
+        nonlin_l1_list,
+        input_data_dir,
+        header_template=mocks.create_default_L1_headers,
+    )
+    for file in nonlin_l1_list:
+        with fits.open(file, mode='update') as fits_file:
+            prihdr = fits_file[0].header
+            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
+            prihdr['PHTCNT'] = False
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
