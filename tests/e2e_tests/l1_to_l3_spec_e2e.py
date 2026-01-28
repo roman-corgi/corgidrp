@@ -1,6 +1,5 @@
 import argparse
 import os
-import json
 import pytest
 import numpy as np
 import astropy.time as time
@@ -14,10 +13,9 @@ import corgidrp.astrom as astrom
 import shutil
 import logging
 import traceback
-from corgidrp.check import (check_filename_convention, check_dimensions, 
+from corgidrp.check import (check_filename_convention, check_dimensions,
                            verify_hdu_count, verify_header_keywords)
 from corgidrp.darks import build_synthesized_dark
-from corgidrp.photon_counting import get_pc_mean
 import warnings
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
@@ -296,7 +294,38 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     
     logger.info(f"Total input images validated: {len(input_dataset)}")
     logger.info('')
-    
+
+    # Print L1 header information
+    logger.info("L1 header information:")
+    l1_headers_dict = {}
+    for l1_filename in input_data_filelist[:1]:  # Just check first file
+        with fits.open(l1_filename) as hdul:
+            header_info = {}
+            if len(hdul) > 0:
+                primary_hdr_items = dict(hdul[0].header)
+                if primary_hdr_items:
+                    header_info["primary"] = primary_hdr_items
+            if len(hdul) > 1:
+                ext1_hdr_items = dict(hdul[1].header)
+                if ext1_hdr_items:
+                    header_info["ext1"] = ext1_hdr_items
+            l1_headers_dict[l1_filename] = header_info
+
+    for fname, headers in l1_headers_dict.items():
+        primary_header = headers.get("primary", {})
+        ext1_header = headers.get("ext1", {})
+        logger.info(f"File: {os.path.basename(fname)}")
+        if "PHTCNT" in primary_header:
+            phtcnt = primary_header["PHTCNT"]
+            logger.info(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
+        if "ISPC" in ext1_header:
+            ispc = ext1_header["ISPC"]
+            logger.info(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
+        if "RN" in ext1_header:
+            rn = ext1_header["RN"]
+            logger.info(f"  RN: {rn} (dtype: {type(rn).__name__})")
+    logger.info('')
+
     # ================================================================================
     # (3) Run Processing Pipeline
     # ================================================================================
@@ -314,7 +343,38 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     l2a_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2a.fits')]
     l2a_filelist = [os.path.join(l3_outputdir, f) for f in l2a_files]
     logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
-    
+
+    # Print L2a header information
+    logger.info("L2a header information:")
+    l2a_headers_dict = {}
+    for l2a_filename in l2a_filelist[:1]:  # Just check first file
+        with fits.open(l2a_filename) as hdul:
+            header_info = {}
+            if len(hdul) > 0:
+                primary_hdr_items = dict(hdul[0].header)
+                if primary_hdr_items:
+                    header_info["primary"] = primary_hdr_items
+            if len(hdul) > 1:
+                ext1_hdr_items = dict(hdul[1].header)
+                if ext1_hdr_items:
+                    header_info["ext1"] = ext1_hdr_items
+            l2a_headers_dict[l2a_filename] = header_info
+
+    for fname, headers in l2a_headers_dict.items():
+        primary_header = headers.get("primary", {})
+        ext1_header = headers.get("ext1", {})
+        logger.info(f"File: {os.path.basename(fname)}")
+        if "PHTCNT" in primary_header:
+            phtcnt = primary_header["PHTCNT"]
+            logger.info(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
+        if "ISPC" in ext1_header:
+            ispc = ext1_header["ISPC"]
+            logger.info(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
+        if "RN" in ext1_header:
+            rn = ext1_header["RN"]
+            logger.info(f"  RN: {rn} (dtype: {type(rn).__name__})")
+    logger.info('')
+
     if l2a_filelist:
         # Apply other header fixes
         fix_headers(l2a_filelist)
@@ -399,9 +459,40 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     l2b_filelist = [os.path.join(l3_outputdir, f) for f in l2b_files]
     logger.info(f'L2a to L2b complete. Generated {len(l2b_filelist)} L2b files.')
     
-    # Fix L2b headers 
+    # Fix L2b headers
     fix_headers(l2b_filelist)
-    
+
+    # Print L2b header information
+    logger.info("L2b header information:")
+    l2b_headers_dict = {}
+    for l2b_filename in l2b_filelist[:1]:  # Just check first file
+        with fits.open(l2b_filename) as hdul:
+            header_info = {}
+            if len(hdul) > 0:
+                primary_hdr_items = dict(hdul[0].header)
+                if primary_hdr_items:
+                    header_info["primary"] = primary_hdr_items
+            if len(hdul) > 1:
+                ext1_hdr_items = dict(hdul[1].header)
+                if ext1_hdr_items:
+                    header_info["ext1"] = ext1_hdr_items
+            l2b_headers_dict[l2b_filename] = header_info
+
+    for fname, headers in l2b_headers_dict.items():
+        primary_header = headers.get("primary", {})
+        ext1_header = headers.get("ext1", {})
+        logger.info(f"File: {os.path.basename(fname)}")
+        if "PHTCNT" in primary_header:
+            phtcnt = primary_header["PHTCNT"]
+            logger.info(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
+        if "ISPC" in ext1_header:
+            ispc = ext1_header["ISPC"]
+            logger.info(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
+        if "RN" in ext1_header:
+            rn = ext1_header["RN"]
+            logger.info(f"  RN: {rn} (dtype: {type(rn).__name__})")
+    logger.info('')
+
     # Step 3: L2b -> L3 (using output from step 2)
     logger.info('Step 3: Running L2b to L3 spectroscopy recipe...')
     walker.walk_corgidrp(l2b_filelist, "", l3_outputdir)
@@ -427,6 +518,37 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     logger.info(f"Found {len(new_l3_filenames)} L3 output files")
     for fname in new_l3_filenames:
         logger.info(f"  - {os.path.basename(fname)}")
+    logger.info('')
+
+    # Print L3 header information
+    logger.info("L3 header information:")
+    l3_headers_dict = {}
+    for l3_filename in new_l3_filenames[:1]:  # Just check first file
+        with fits.open(l3_filename) as hdul:
+            header_info = {}
+            if len(hdul) > 0:
+                primary_hdr_items = dict(hdul[0].header)
+                if primary_hdr_items:
+                    header_info["primary"] = primary_hdr_items
+            if len(hdul) > 1:
+                ext1_hdr_items = dict(hdul[1].header)
+                if ext1_hdr_items:
+                    header_info["ext1"] = ext1_hdr_items
+            l3_headers_dict[l3_filename] = header_info
+
+    for fname, headers in l3_headers_dict.items():
+        primary_header = headers.get("primary", {})
+        ext1_header = headers.get("ext1", {})
+        logger.info(f"File: {os.path.basename(fname)}")
+        if "PHTCNT" in primary_header:
+            phtcnt = primary_header["PHTCNT"]
+            logger.info(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
+        if "ISPC" in ext1_header:
+            ispc = ext1_header["ISPC"]
+            logger.info(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
+        if "RN" in ext1_header:
+            rn = ext1_header["RN"]
+            logger.info(f"  RN: {rn} (dtype: {type(rn).__name__})")
     logger.info('')
 
     # Check that each L3 file has proper headers and data
@@ -585,8 +707,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/maxwellmb/Data/corgi/corgidrp/e2e_test_data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
-    outputdir = " /Users/maxwellmb/Data/corgi/corgidrp/e2e_test_output/"
+    e2edata_dir = '/Users/michael/Desktop/E2E_Test_Data'
+    outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
