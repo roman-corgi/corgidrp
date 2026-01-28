@@ -57,7 +57,7 @@ def fix_headers_for_tvac(
         # exthdr['KGAINPAR'] = exthdr['KGAIN']
         if 'OBSNAME' not in prihdr:
             prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        prihdr['PHTCNT'] = False
+        prihdr['PHTCNT'] = 0
         exthdr['ISPC'] = False
         # Update FITS file
         fits_file.writeto(file, overwrite=True)

@@ -39,7 +39,7 @@ def fix_str_for_tvac(
             prihdr["OBSNAME"] = prihdr['OBSTYPE']
         else:
             prihdr["OBSNAME"] = "BORESITE"  # Default value
-        prihdr["PHTCNT"] = False
+        prihdr["PHTCNT"] = 0
         
         exthdr["ISPC"] = False
         
