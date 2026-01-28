@@ -128,13 +128,13 @@ def generate_header_table(hdu):
         str: rst table with hdulist structure
     """
 
-    header_table = '''
-+------------+------------+--------------------------------+----------------------------------------------------+
-| Keyword    | Datatype   | Example Value                  | Description                                        |
-+============+============+================================+====================================================+
-'''
-    row_template = "| {0:<10} | {1:<10} | {2:<30} | {3:<50} |"
-    row_delimiter = "+------------+------------+--------------------------------+----------------------------------------------------+"
+    _desc_w = 120
+    _delim = "+------------+------------+--------------------------------+" + "-" * (_desc_w + 2) + "+"
+    _header_delim = "+============+============+================================+" + "=" * (_desc_w + 2) + "+"
+    _header_row = "| Keyword    | Datatype   | Example Value                  | " + "Description".ljust(_desc_w) + " |"
+    header_table = "\n" + _delim + "\n" + _header_row + "\n" + _header_delim + "\n"
+    row_template = "| {0:<10} | {1:<10} | {2:<30} | {3:<" + str(_desc_w) + "} |"
+    row_delimiter = _delim
 
     history_recorded = False
     comment_recorded = False
@@ -161,13 +161,11 @@ def generate_header_table(hdu):
 
         example_value = str(hdr[key]).replace("\n", " ")
         if len(example_value) > 30:
-            # truncate string
             example_value = example_value[:27] + "..."
 
         description = hdr.comments[key]
-        if len(description) > 50:
-            # truncate string
-            description = description[:47] + "..."
+        if len(description) > _desc_w:
+            description = description[:_desc_w]
 
         if key[:4] == "FILE" and key[4:].isdigit():
             if filen_recorded:
