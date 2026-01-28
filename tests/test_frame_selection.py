@@ -20,10 +20,10 @@ def test_no_selection():
     # assert headers are filled out
     assert pruned_dataset[0].ext_hdr['FRMSEL01'] == 1
     assert pruned_dataset[0].ext_hdr['FRMSEL02'] == False
-    assert pruned_dataset[0].ext_hdr['FRMSEL03'] == None
-    assert pruned_dataset[0].ext_hdr['FRMSEL04'] == None
-    assert pruned_dataset[0].ext_hdr['FRMSEL05'] == None
-    assert pruned_dataset[0].ext_hdr['FRMSEL06'] == None
+    assert pruned_dataset[0].ext_hdr['FRMSEL03'] == -999.
+    assert pruned_dataset[0].ext_hdr['FRMSEL04'] == -999.
+    assert pruned_dataset[0].ext_hdr['FRMSEL05'] == -999.
+    assert pruned_dataset[0].ext_hdr['FRMSEL06'] == -999.
 
 def test_bpfrac_cutoff():
     """
