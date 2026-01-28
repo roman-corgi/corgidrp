@@ -4,8 +4,7 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d, LinearNDInterpolator
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal
-from corgidrp.combine import combine_subexposures
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal, SpecFilterOffset
 import os
 from astropy.io import ascii, fits
 from astropy.table import Table
@@ -37,19 +36,19 @@ def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
 
     Args:
         frame: the data - Array of size (y,x)
-        xguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
-        yguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
+        xguess: location to fit the 2d gaussian to (should be within +/-1 pixel of true peak)
+        yguess: location to fit the 2d gaussian to (should be within +/-1 pixel of true peak)
         xfwhm_guess: approximate x-axis fwhm to fit to
         yfwhm_guess: approximate y-axis fwhm to fit to    
         halfwidth: 1/2 the width of the box used for the fit
         halfheight: 1/2 the height of the box used for the fit
         guesspeak: approximate flux in peak pixel
-        oversample: odd integer >= 3; to represent detector pixels, overample and then bin the model by this factor 
+        oversample: odd integer >= 3; to represent detector pixels, oversample and then bin the model by this factor 
         refinefit: whether to refine the fit of the position of the guess
 
     Returns:
-        xfit: x position (only chagned if refinefit is True)
-        yfit: y position (only chagned if refinefit is True)
+        xfit: x position (only changed if refinefit is True)
+        yfit: y position (only changed if refinefit is True)
         xfwhm: x-axis fwhm of the PSF in pixels
         yfwhm: y-axis fwhm of the PSF in pixels
         peakflux: the peak value of the gaussian
@@ -1405,3 +1404,33 @@ def spec_fluxcal(dataset_or_image, calspec_file = None):
     spec_fluxcal_obj.ext_hdr.add_history(history_entry)
 
     return spec_fluxcal_obj
+
+
+def generate_filter_offset(offset_file = None):
+    """
+    read the csv filter file containing at least the band names and the pixel x/y offsets 
+    between the filters and generate a new SpecFilterOffset product.
+    
+    Args:
+       offset_file (str): file name of the filter file, if none it takes data/spectroscopy/CGI_bandpass_centers.csv
+       
+    Returns:
+       corgidrp.data.SpecFilterOffset: SpecFilterOffset product
+    """
+    if offset_file is None:
+        offset_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
+    table = ascii.read(offset_file, format = 'csv')
+    
+    offset_dict = {}
+    for i, col in enumerate(table.colnames):
+        if "filter" in col:
+            filter_name = table.columns[i].value
+        if "xoffset" in col:
+            xoffset = table.columns[i].value
+        if "yoffset" in col:
+            yoffset = table.columns[i].value
+    for i, filter in enumerate(filter_name):
+        offset_dict[str(filter)] = [float(xoffset[i]), float(yoffset[i])]
+    return SpecFilterOffset(offset_dict)
+    
+    

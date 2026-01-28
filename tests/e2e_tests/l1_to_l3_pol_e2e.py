@@ -47,9 +47,10 @@ def fix_headers(
                 if 'EACQ_COL' not in exthdr or exthdr.get('EACQ_COL', 0) == 0:
                     exthdr['EACQ_COL'] = naxis1 // 2
 
-            # TO DO: pol sims should have the correct VISTYPE
+            # TO DO: pol sims should have the correct VISTYPE, currently undefined
             prihdr = fits_file[0].header
-            prihdr['VISTYPE'] = 'CGIVST_CAL_POL_SETUP'
+            if 'PA_APER' not in prihdr and 'ROLL' in prihdr:
+                prihdr['PA_APER'] = prihdr['ROLL']
 
 
 def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
@@ -235,6 +236,8 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         for file_path in input_data_filelist
     ] 
     
+    fix_headers(input_data_filelist)
+
     # Validate all input images
     input_dataset = data.Dataset(input_data_filelist)
     
