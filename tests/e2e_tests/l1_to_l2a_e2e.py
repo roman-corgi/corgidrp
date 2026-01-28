@@ -66,7 +66,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
     mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration
 
-    # Update headers for TVAC and save into input_data directory
+    # Update headers for TVAC files
     l1_data_filelist = check.fix_hdrs_for_tvac(l1_data_filelist, input_data_dir)
     #tvac_l2a_filelist = [os.path.join(l2a_datadir, os.listdir(l2a_datadir)[i]) for i in [0,1]] #[os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
     # run the L1 data through the II&T code to process to L2a
@@ -101,7 +101,6 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
             hdul_copy.writeto(os.path.join(l2a_tvac_outputdir, l2a_tvac_filename), overwrite=True)
         tvac_l2a_filelist.append(os.path.join(l2a_tvac_outputdir, l2a_tvac_filename))
 
-    # l1_data_filelist already points to updated header files
 
     ###### Setup necessary calibration files
     # add calibration file to caldb

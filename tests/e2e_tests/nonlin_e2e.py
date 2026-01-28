@@ -97,7 +97,7 @@ def test_nonlin_cal_e2e(
         for file_path in nonlin_l1_list
     ]
 
-    # Set TVAC OBSNAME to MNFRAME/NONLIN (flight data should have these values)
+    # Update headers for TVAC files
     nonlin_l1_list = check.fix_hdrs_for_tvac(
         nonlin_l1_list,
         input_data_dir,

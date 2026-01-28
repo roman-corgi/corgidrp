@@ -128,13 +128,14 @@ def generate_header_table(hdu):
         str: rst table with hdulist structure
     """
 
-    _desc_w = 120
-    _delim = "+------------+------------+--------------------------------+" + "-" * (_desc_w + 2) + "+"
-    _header_delim = "+============+============+================================+" + "=" * (_desc_w + 2) + "+"
-    _header_row = "| Keyword    | Datatype   | Example Value                  | " + "Description".ljust(_desc_w) + " |"
-    header_table = "\n" + _delim + "\n" + _header_row + "\n" + _header_delim + "\n"
-    row_template = "| {0:<10} | {1:<10} | {2:<30} | {3:<" + str(_desc_w) + "} |"
-    row_delimiter = _delim
+    # setting this up so that the description column can be made as wide as needed
+    desc_w = 120
+    delim = "+------------+------------+--------------------------------+" + "-" * (desc_w + 2) + "+"
+    header_delim = "+============+============+================================+" + "=" * (desc_w + 2) + "+"
+    header_row = "| Keyword    | Datatype   | Example Value                  | " + "Description".ljust(desc_w) + " |"
+    header_table = "\n" + delim + "\n" + header_row + "\n" + header_delim + "\n"
+    row_template = "| {0:<10} | {1:<10} | {2:<30} | {3:<" + str(desc_w) + "} |"
+    row_delimiter = delim
 
     history_recorded = False
     comment_recorded = False
@@ -164,8 +165,8 @@ def generate_header_table(hdu):
             example_value = example_value[:27] + "..."
 
         description = hdr.comments[key]
-        if len(description) > _desc_w:
-            description = description[:_desc_w]
+        if len(description) > desc_w:
+            description = description[:desc_w]
 
         if key[:4] == "FILE" and key[4:].isdigit():
             if filen_recorded:

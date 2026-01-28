@@ -79,7 +79,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
 
-    # Update headers for TVAC without modifying originals
+    # Update headers for TVAC files
     l1_data_ill_filelist = check.fix_hdrs_for_tvac(l1_data_ill_filelist, output_ill_fixed_dir)
     l1_data_dark_filelist = check.fix_hdrs_for_tvac(l1_data_dark_filelist, output_dark_fixed_dir)
 

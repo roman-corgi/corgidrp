@@ -29,9 +29,9 @@ def patch_l2b_eacq_to_cropped_center(filelist):
 
     L2b frames have already been cropped by prescan_biassub in L1->L2a, but
     EACQ_ROW/EACQ_COL are still in full-frame coordinates. The L2b->L3 crop
-    step uses EACQ as the crop center, so patch L2b headers to the image
+    step uses EACQ as the crop center, so this updates L2b headers to the image
     center to avoid the crop window falling outside the data. This is only to
-    get the tests to work, the proper fix is to update EACQ when cropping in
+    get the tests to work, the better fix is to update EACQ when cropping in
     the pipeline.
 
     Args:

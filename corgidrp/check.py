@@ -778,17 +778,16 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
     """
     Overwrite FITS headers with mock defaults while preserving certain values from originals.
 
-    Used for TVAC (and similar) data so pipeline expectations are met. Writes updated
-    files to output_dir; does not modify originals.
+    Used for TVAC (and similar) data. Writes updated files to output_dir; does not modify originals.
 
     Args:
-        list_of_fits (list): FITS file paths to update.
-        output_dir (str): Directory to write updated FITS files into.
-        header_template (callable, optional): Function returning (pri_hdr, img_hdr).
+        list_of_fits (list): FITS file paths to update
+        output_dir (str): Directory to write updated FITS files to
+        header_template (callable, optional): Function returning headers.
             Defaults to mocks.create_default_L1_headers.
 
     Returns:
-        list: Updated FITS file paths written to output_dir.
+        list: Updated FITS file paths written to output_dir
     """
     preserve_pri_keys = [
         'VISITID', 'CDMSVERS', 'FSWDVERS', 'ORIGIN', 'FILETIME',

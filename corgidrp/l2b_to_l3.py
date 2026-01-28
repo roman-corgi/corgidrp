@@ -354,14 +354,12 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             if ("EACQ_COL" in exthdr.keys()) and ("EACQ_ROW" in exthdr.keys()):
                 centerxy = np.array([exthdr["EACQ_COL"],exthdr["EACQ_ROW"]])
             else: raise ValueError('centerxy not provided but EACQ_ROW/COL are missing from image extension header.')
-
         # Round to center to nearest half-pixel if size is even, nearest pixel if odd
         size_evenness = (np.array(sizexy) % 2) == 0
         centerxy_input = np.array(centerxy)
         centerxy = np.where(size_evenness,np.round(centerxy_input-0.5)+0.5,np.round(centerxy_input))
         if not np.all(centerxy == centerxy_input):
             print(f'Desired center was {centerxy_input}. Centering crop on {centerxy}.')
-
         # Crop the data
         start_ind = (centerxy + 0.5 - np.array(sizexy)/2).astype(int)
         end_ind = (centerxy + 0.5 + np.array(sizexy)/2).astype(int)
@@ -373,6 +371,7 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         right_pad = x2-frame_shape[-1] if (x2 > frame_shape[-1]) else 0
         below_pad = -y1 if (y1<0) else 0
         above_pad = y2-frame_shape[-2] if (y2 > frame_shape[-2]) else 0
+
 
         if frame.data.ndim == 2:
 

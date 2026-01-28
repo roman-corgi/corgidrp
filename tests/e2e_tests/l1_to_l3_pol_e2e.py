@@ -198,7 +198,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Update headers for TVAC and save into input_data directory
+    # Update headers
     input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
 
     # Validate all input images

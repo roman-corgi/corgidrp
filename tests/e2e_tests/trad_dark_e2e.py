@@ -458,7 +458,6 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
 
     TVAC_trad_dark = detector.slice_section(mean_frame, 'SCI', 'image')
 
-    print(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)))
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
     trad_dark = data.Dark(generated_trad_dark_file)
     assert trad_dark.ext_hdr['BUNIT'] == 'detected electron'
