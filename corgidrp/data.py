@@ -2699,7 +2699,8 @@ class PyKLIPDataset(pyKLIP_Data):
 
         # Set filter wavelengths
         self.wave_hlc = {'1F': 575e-9} # meters
-            
+        self.wave_spc = {'4F': 825e-9} # meters
+    
         # Read science and reference files.
         self.readdata(dataset, psflib_dataset, highpass)
         
@@ -2867,7 +2868,10 @@ class PyKLIPDataset(pyKLIP_Data):
             try:
                 CWAVEL = self.wave_hlc[CFAMNAME]
             except:
-                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
+                try:
+                    CWAVEL = self.wave_spc[CFAMNAME]
+                except: 
+                    raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
             
             # Rounding error introduced here?
             wvs_all += [CWAVEL] * NINTS

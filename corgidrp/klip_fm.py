@@ -208,6 +208,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     
     if sci_dataset_in[0].ext_hdr['CFAMNAME'] == '1F':
         lam = 573.8e-9 #m
+    elif sci_dataset_in[0].ext_hdr['CFAMNAME'] == '4F':
+        lam =825.8e-9 #m
     else:
         raise NotImplementedError("Only band 1 observations using CFAMNAME 1F are currently configured.")
 
@@ -220,13 +222,19 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     if seps is None:
         if sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'NFOV':
             owa_mas = 450. 
-            owa_pix = owa_mas / pixscale_mas   
+            owa_pix = owa_mas / pixscale_mas
+        if sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'WFOV':
+            owa_mas = 1447. 
+            owa_pix = owa_mas / pixscale_mas          
         else:
             raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
         
         if sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'HLC12_C2R1':
             iwa_mas = 140. 
             iwa_pix = iwa_mas / pixscale_mas 
+        elif sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'SPC34_R5C1':
+            iwa_mas = 425. 
+            iwa_pix = iwa_mas / pixscale_mas     
         else:
             raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
         
