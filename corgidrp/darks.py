@@ -517,8 +517,10 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         raise ValueError('The input weighting should be either True or False.')
     if detector_regions is None:
             detector_regions = detector_areas
-
-    datasets, _ = dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+    if dataset[0].data is None:
+        datasets, _ = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+    else:
+        datasets, _ = dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(datasets) <= 3:
         raise CalDarksLSQException('Number of sub-stacks in datasets must '
                 'be more than 3 for proper curve fit.')
@@ -858,8 +860,9 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     # now catch any elements that were negative for C and D:
     DC_map[DC_map < 0] = 0
     CIC_map[CIC_map < 0] = 0
-    #mean taken before zeroing out the negatives for C and D
+    #mean taken before zeroing out the negatives for C and D for better statistical representation of mean value)
     FPN_image_mean = np.mean(FPN_image_map)
+    FPN_image_median = np.median(FPN_image_map)
     CIC_image_mean = np.mean(CIC_image_map)
     DC_image_mean = np.mean(DC_image_map)
     CIC_image_map[CIC_image_map < 0] = 0
@@ -895,10 +898,18 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
                            input_err, input_dq, err_hdr=err_hdr)
     
     noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))
-    l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
+    l2a_data_filename = dataset[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
     noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
-    
+    noise_maps.ext_hdr['FPN_IMM'] = FPN_image_mean
+    noise_maps.ext_hdr['CIC_IMM'] = CIC_image_mean
+    noise_maps.ext_hdr['DC_IMM'] = DC_image_mean
+    noise_maps.ext_hdr['FPN_IMME'] = FPN_image_median
+    vals_list=[]
+    for w1,w2,w3 in zip(exptime_arr, EMgain_arr, mean_num_good_fr):
+        vals_list.append([float(w1),float(w2),float(w3)])
+    noise_maps.ext_hdr['HISTORY'] = 'Detector noise maps created with the following sets of (exposure time (in s), EM gain, and number of frames):  {0}'.format(vals_list)
+
     # uncomment for RAM check
     # mem = process.memory_info()
     # # peak_wset is only available on Windows; fall back to rss on other platforms
@@ -1008,6 +1019,11 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         prihdr = noise_maps.pri_hdr
         exthdr = noise_maps.ext_hdr
         errhdr = noise_maps.err_hdr
+        # remove keywords that would not appear in Dark not made from noise maps
+        for key in ['B_O', 'B_O_ERR', 'B_O_UNIT', 'FPN_IMM', 'CIC_IMM', 'DC_IMM',
+                    'FPN_IMME']:
+            if key in exthdr.keys():
+                del exthdr[key]
         exthdr['NAXIS1'] = Fd.shape[1]
         exthdr['NAXIS2'] = Fd.shape[0]
         exthdr['DATATYPE'] = 'Dark'

@@ -191,7 +191,7 @@ class CalDB:
             drp_version = ""
         
         if "OBSNUM" in entry.pri_hdr:
-            obsid = entry.pri_hdr["OBSNUM"]
+            obsid = str(entry.pri_hdr["OBSNUM"]) # force to be str
             if obsid is None:
                 obsid = ""
         else:
