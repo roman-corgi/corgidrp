@@ -223,7 +223,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         if sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'NFOV':
             owa_mas = 450. 
             owa_pix = owa_mas / pixscale_mas
-        if sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'WFOV':
+        elif sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'WFOV':
             owa_mas = 1447. 
             owa_pix = owa_mas / pixscale_mas          
         else:
