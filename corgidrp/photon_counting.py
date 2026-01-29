@@ -220,13 +220,13 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         # now get threshold to use for photon-counting
         read_noise = test_dataset[0].frames[0].ext_hdr['RN']
         # Ensure RN is numeric (FITS headers can sometimes preserve string values)
-        if isinstance(read_noise, str):
-            try:
-                read_noise = float(read_noise.strip()) if read_noise.strip() else 100.0
-            except (ValueError, TypeError, AttributeError):
-                read_noise = 100.0
-        else:
-            read_noise = float(read_noise)
+        # if isinstance(read_noise, str): NOTE shouldn't need this when default RN is float, like -999.0
+        #     try:
+        #         read_noise = float(read_noise.strip()) if read_noise.strip() else 100.0
+        #     except (ValueError, TypeError, AttributeError):
+        #         read_noise = 100.0
+        # else:
+        #     read_noise = float(read_noise)
         thresh = T_factor*read_noise
         if thresh < 0:
             raise PhotonCountException('thresh must be nonnegative')

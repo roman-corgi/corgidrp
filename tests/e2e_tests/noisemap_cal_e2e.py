@@ -79,7 +79,13 @@ def fix_str_for_tvac(
                             if el[1][key] == 'N/A' and type_class != str:
                                 el[1][key] = el[0][key]
                             else:
-                                el[1][key] = type_class(el[1][key])
+                                try:
+                                    el[1][key] = type_class(el[1][key])
+                                except: 
+                                    if el[1][key] == "OPEN":
+                                        el[1][key] = 0
+                                    elif el[1][key] == "CLOSED":
+                                        el[1][key] = 1
             # don't delete any headers that do not appear in the reference headers, although there shouldn't be any
             if float(exthdr['EMGAIN_A']) == 1. and exthdr['HVCBIAS'] <= 0:
                 exthdr['EMGAIN_A'] = -1. #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain

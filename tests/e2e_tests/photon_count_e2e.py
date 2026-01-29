@@ -43,7 +43,7 @@ def fix_str_for_tvac(
             dqhdr = fits_file[3].header if len(fits_file) > 3 else None
             ref_errhdr = None
             ref_dqhdr = None
-            prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
+            #prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
             if exthdr['DATALVL'].lower() == 'l1':
                 ref_prihdr, ref_exthdr = mocks.create_default_L1_headers(exthdr['ARRTYPE'], prihdr['VISTYPE'])
             elif exthdr['DATALVL'].lower() == 'l2a':
@@ -69,7 +69,13 @@ def fix_str_for_tvac(
                             if el[1][key] == 'N/A' and type_class != str:
                                 el[1][key] = el[0][key]
                             else:
-                                el[1][key] = type_class(el[1][key])
+                                try:
+                                    el[1][key] = type_class(el[1][key])
+                                except: 
+                                    if el[1][key] == "OPEN":
+                                        el[1][key] = 0
+                                    elif el[1][key] == "CLOSED":
+                                        el[1][key] = 1
             # don't delete any headers that do not appear in the reference headers, although there shouldn't be any
             if float(exthdr['EMGAIN_A']) == 1. and exthdr['HVCBIAS'] <= 0:
                 exthdr['EMGAIN_A'] = -1. #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
@@ -292,10 +298,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         assert pc_frame_err.min() >= 0
         assert pc_dark_frame_err.min() >= 0
 
-    # remove PC master dark
-    for f in os.listdir(output_dir):
-        if f.endswith('_drk_cal.fits'):
-            os.remove(os.path.join(output_dir, f))
+    # don't remove PC master dark b/c needed for zz_dataformat_e2e.py test
+    # for f in os.listdir(output_dir):
+    #     if f.endswith('_drk_cal.fits'):
+    #         os.remove(os.path.join(output_dir, f))
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -365,7 +371,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
         # slightly bigger rtol here for synthesized dark vs pc dark above
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.05)
-        assert pc_frame_err.min() >= 0
+        assert pc_frame_err.min() >= 0 
     
     # remove synthesized master dark
     for f in os.listdir(output_dir):
@@ -438,7 +444,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
         # using trad dark 
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02)
-        assert pc_frame_err.min() >= 0
+        assert pc_frame_err.min() >= 0 
 
     # Print success message
     print('e2e test for photon counting calibration passed')

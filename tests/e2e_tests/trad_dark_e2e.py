@@ -59,7 +59,8 @@ def fix_str_for_tvac(
             ##could add in more
             else:
                 raise ValueError(f"Unrecognized DATALVL {exthdr['DATALVL']} in file {file}")
-            for el in [(ref_prihdr, prihdr), (ref_exthdr, exthdr), (ref_errhdr, errhdr), (ref_dqhdr, dqhdr)]:
+            comparison_list = [(ref_prihdr, prihdr), (ref_exthdr, exthdr), (ref_errhdr, errhdr), (ref_dqhdr, dqhdr)]
+            for el in comparison_list:
                 if el[0] is None or el[1] is None:
                     continue
                 for key in el[0].keys():
@@ -73,7 +74,16 @@ def fix_str_for_tvac(
                             if el[1][key] == 'N/A' and type_class != str:
                                 el[1][key] = el[0][key]
                             else:
-                                el[1][key] = type_class(el[1][key])
+                                try:
+                                    el[1][key] = type_class(el[1][key])
+                                except: 
+                                    if el[1][key] == "OPEN":
+                                        el[1][key] = 0
+                                    elif el[1][key] == "CLOSED":
+                                        el[1][key] = 1
+            for key in ['HOWFSLNK', 'ISHOWFSC', 'SATSPOTS']:
+                if key in prihdr.keys():
+                    prihdr.pop(key)
             # don't delete any headers that do not appear in the reference headers, although there shouldn't be any
             if float(exthdr['EMGAIN_A']) == 1. and exthdr['HVCBIAS'] <= 0:
                 exthdr['EMGAIN_A'] = -1. #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
