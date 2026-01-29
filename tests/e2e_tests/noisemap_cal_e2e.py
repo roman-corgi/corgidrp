@@ -48,7 +48,7 @@ def set_obstype_for_darks(
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
         prihdr['PHTCNT'] = 0
-        #exthdr['ISPC'] = False
+        #exthdr['ISPC'] = 0
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 

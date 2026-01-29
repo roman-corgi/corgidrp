@@ -58,7 +58,7 @@ def fix_headers_for_tvac(
         if 'OBSNAME' not in prihdr:
             prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = 0
-        exthdr['ISPC'] = False
+        exthdr['ISPC'] = 0
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 

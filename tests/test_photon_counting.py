@@ -40,7 +40,7 @@ def test_pc():
 
     Tests that output average value of the photon-counted frames agrees with what was simulated (for the case of dark subtraction and no dark subtraction).
 
-    Tests that if 'ISPC' is in image header and if it is False, get_pc_mean() raises an exception.
+    Tests that if 'ISPC' is in image header and if it is 0, get_pc_mean() raises an exception.
 
     Tests that an exception occurs if the user input "inputmode" is inconsistent with the input dataset type.
 
@@ -148,10 +148,10 @@ def test_pc():
         get_pc_mean(dataset_err, safemode=False)
     # test ISPC header value
     with pytest.raises(PhotonCountException):
-        dataset_err.frames[0].ext_hdr['ISPC'] = False
+        dataset_err.frames[0].ext_hdr['ISPC'] = 0
         get_pc_mean(dataset_err, pc_master_dark=pc_dark)
-    # set to True now
-    dataset_err.frames[0].ext_hdr['ISPC'] = True
+    # set to 1 now
+    dataset_err.frames[0].ext_hdr['ISPC'] = 1
     # test inputmode's compatibility with dataset type
     with pytest.raises(PhotonCountException):
         get_pc_mean(dataset_err, pc_master_dark=pc_dark, inputmode='darks')
