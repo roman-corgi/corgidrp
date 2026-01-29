@@ -2037,39 +2037,35 @@ class SlitTransmission(Image):
         3/ Corresponding locations along EXCAM +Y direction with respect to the
           zero-point in (fractional) EXCAM pixels where the slit transmission has
           been derived.
-        This is constructed as e.g.:
-        [
-        [nan,  1,     2,    3,   4 ], <- x-offsets
-        [1,    0.900, 0.950, 0.989, 1.000],
-        [2, 0.910, 0.960, 0.990, 1.010],
-        [3, 0.950, 1.000, 1.010, 1.050],
-        [4, 1.000, 1.001, 1.011, 1.060],
-         ^
-         y-offsets
-    ],
-
+  
     Args:
         data_or_filepath (str or np.array): either a filepath string corresponding to an
                                         existing SlitTransmission file saved to disk or an
-                                        2D array with the slit transmission information
-        date_valid (astropy.time.Time): date after which these parameters are valid
-
+                                        2D array with the slit transmission map
+        x_offset (np.array): 1D array of x positions in slit
+        y_offset (np.array): 1D array of y positions in slit
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this SlitTransmission file 
+        (required only if raw 2D data is passed in)
+    
     Attributes:
-         slit_map (2D array): interpolated slit transmission map
-         x_offset (1D array): locations along EXCAM +X direction with respect to the
+        data (2D array): interpolated slit transmission map
+        x_offset (1D array): locations along EXCAM +X direction with respect to the
           zero-point in (fractional) EXCAM pixels where the slit transmission has
           been derived.
-         y_offset (1D array): locations along EXCAM +Y direction with respect to the
+        y_offset (1D array): locations along EXCAM +Y direction with respect to the
           zero-point in (fractional) EXCAM pixels where the slit transmission has
           been derived.
+        slitname: name of slit with measured transmission
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, x_offset = None, y_offset = None, input_dataset=None):
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
 
         # if this is a new SlitTransmission, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new SlitTransmission 
-        if isinstance(data_or_filepath, np.array):
+        if isinstance(data_or_filepath, np.ndarray):
             if input_dataset is None:
                 raise ValueError("Must pass `input_dataset` to create new SlitTransmission calibration.")
 
@@ -2081,25 +2077,68 @@ class SlitTransmission(Image):
             # Generate default output filename
             # Strip level suffix (e.g., _l2b) before adding calibration suffix
             base = input_dataset[0].filename.split(".fits")[0]
-            self.filename = f"{base}_slit_cal.fits"
+            self.filename = f"{base}_slittrans_cal.fits"
             self.filename = re.sub('_l[0-9].', '', self.filename)
             # File format checks
             if self.data.ndim != 2:
                 raise ValueError('The slit transmission array must have 2 dimensions') 
-            if not np.isnan(self.data[0, 0]):
-                raise ValueError('The first value of the slit transmission '
-                                 'array (upper left) must be set to "nan"')
 
-        
+            if x_offset is not None and y_offset is not None:
+                if len (x_offset) != len(y_offset):
+                    raise ValueError('x and y positions must have same array size')
+                elif len(x_offset) != self.data.shape[0]:
+                    raise ValueError('x and y positions do not fit to slit map size')
+                else:
+                    self.x_offset = x_offset
+                    self.y_offset = y_offset
+            else:
+                raise ValueError('The SlitTransmission calibration must have also the x- and y offset parameters')
+            self.xoff_hdr = fits.Header()
+            self.xoff_hdr["EXTNAME"] = "XOFF"
+            self.yoff_hdr = fits.Header()
+            self.yoff_hdr["EXTNAME"] = "YOFF"
+        else:
+            # a filepath is passed in
+            with fits.open(data_or_filepath) as hdulist:
+                #x/y offset is in FITS extension
+                self.x_offset = hdulist[2].data
+                self.xoff_hdr = hdulist[2].header    
+                self.y_offset = hdulist[3].data
+                self.yoff_hdr = hdulist[3].header    
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SlitTransmission':
             raise ValueError("This file is not a valid SlitTransmission calibration.")
-
-        #convenience attributes
-        self.slit_map = self.data[1:,1:]
-        self.x_offset = self.data[0,1:]
-        self.y_offset = self.data[1:,0]
+        self.slitname = self.ext_hdr['FSAMNAME']
         
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
 
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+
+        xoff_hdu = fits.ImageHDU(data=self.x_offset, header = self.xoff_hdr)
+        hdulist.append(xoff_hdu)
+        yoff_hdu = fits.ImageHDU(data=self.y_offset, header = self.yoff_hdr)
+        hdulist.append(yoff_hdu)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
+        
 class FpamFsamCal(Image):
     """
     Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
@@ -3420,7 +3459,8 @@ datatypes = { "Image" : Image,
               "SpecFilterOffset": SpecFilterOffset,
               "MuellerMatrix": MuellerMatrix,
               "NDMuellerMatrix": NDMuellerMatrix,
-              "SpecFluxCal": SpecFluxCal }
+              "SpecFluxCal": SpecFluxCal,
+              "SlitTransmission": SlitTransmission }
 
 
 def autoload(filepath):

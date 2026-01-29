@@ -2,7 +2,7 @@
 import os
 import numpy as np
 from astropy.io import fits
-from scipy.interpolate import interp1d, LinearNDInterpolator
+from scipy.interpolate import interp1d
 import warnings
 from photutils.psf import fit_2dgaussian
 from corgidrp.data import Dataset, Image, FluxcalFactor, SpecFluxCal
@@ -143,7 +143,7 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     return color_dataset
 
 
-def convert_spec_to_flux(input_dataset, fluxcal, slit_transmission = None):
+def convert_spec_to_flux(input_dataset, fluxcal):
     """
     Flux calibrate 1-D spectroscopy spectra stored in the L4 SPEC extension.
     The function propagates calibration uncertainties. It applies the spectral flux calibration,
@@ -156,11 +156,6 @@ def convert_spec_to_flux(input_dataset, fluxcal, slit_transmission = None):
             SPEC_ERR, SPEC_DQ, SPEC_WAVE, and SPEC_WAVE_ERR extensions.
         fluxcal (corgidrp.data.SpecFluxCal or corgidrp.data.FluxcalFactor): wavelength dependent flux calibration
             or absolute flux calibration product used to convert the spectrum to absolute flux units erg/(s*cm^2*Å).
-        slit_transmission (tuple or list of tuples, optional): slit throughput
-            information from spec.slit_transmission(). Provide either a single
-            (slit_map, slit_x, slit_y) tuple applied to every frame or a list
-            containing one tuple per frame in input_dataset.
-
 
     Returns:
         corgidrp.data.Dataset: copy of the input dataset with the
@@ -178,28 +173,7 @@ def convert_spec_to_flux(input_dataset, fluxcal, slit_transmission = None):
     
     spec_dataset = input_dataset.copy()
 
-    # Normalize slit transmission input to per-frame list
-    if slit_transmission is None:
-        slit_per_frame = [None] * len(spec_dataset)
-    elif isinstance(slit_transmission, tuple):
-        if len(slit_transmission) != 3:
-            raise TypeError("slit_transmission tuples must be (slit_map, slit_x, slit_y).")
-        slit_per_frame = [slit_transmission] * len(spec_dataset)
-    elif isinstance(slit_transmission, list):
-        if len(slit_transmission) not in (1, len(spec_dataset)):
-            raise ValueError("slit_transmission must have length 1 or match the dataset length.")
-        slit_per_frame = list(slit_transmission)
-        for tup in slit_per_frame:
-            if not (isinstance(tup, tuple) and len(tup) == 3):
-                raise TypeError("Each slit_transmission entry must be a (slit_map, slit_x, slit_y) tuple.")
-        if len(slit_per_frame) == 1 and len(spec_dataset) > 1:
-            slit_per_frame = slit_per_frame * len(spec_dataset)
-    else:
-        raise TypeError("slit_transmission must be None, a (slit_map, slit_x, slit_y) tuple, or a list of such tuples.")
-
-    history_messages = []
-
-    for idx, frame in enumerate(spec_dataset):
+    for frame in spec_dataset:
         if 'SPEC' not in frame.hdu_list:
             raise ValueError("Input dataset does not contain a 'SPEC' extension.")
 
@@ -214,42 +188,6 @@ def convert_spec_to_flux(input_dataset, fluxcal, slit_transmission = None):
 
         if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s/bin":
             raise ValueError("SPEC extension must have BUNIT 'photoelectron/s/bin' before flux calibration.")
-
-        # Apply algorithm throughput correction (ALGO_THRU) if present (PSF-subtracted frames)
-        if 'ALGO_THRU' in frame.hdu_list:
-            algo_thru = frame.hdu_list['ALGO_THRU'].data.astype(float)
-            if algo_thru.shape != spec.shape:
-                raise ValueError(
-                    f"ALGO_THRU shape {algo_thru.shape} must match SPEC shape {spec.shape}."
-                )
-            # Divide by algorithm throughput, accounting for zeros/non-finite
-            valid = np.isfinite(algo_thru) & (algo_thru != 0)
-            spec = np.divide(spec, algo_thru, out=np.full_like(spec, np.nan), where=valid)
-            spec_err = np.divide(spec_err, algo_thru, out=np.full_like(spec_err, np.nan), where=valid)
-            spec_header['ALGOCOR'] = True
-            history_messages.append("Applied algorithm throughput correction (ALGO_THRU).")
-
-        # Apply slit transmission correction
-        slit_vals = slit_per_frame[idx]
-        slit_applied = False
-        slit_curve = None
-        if slit_vals is not None:
-            slit_applied = True
-            slit_curve = np.asarray(select_slit_transmission_curve(frame, slit_vals), dtype=float)
-            if slit_curve.shape != spec.shape:
-                raise ValueError(
-                    f"slit_transmission curve shape {slit_curve.shape} must match SPEC shape {spec.shape}."
-                )
-            # Divide by wavelength-dependent slit transmission, accounting for zeros/non-finite
-            valid = np.isfinite(slit_curve) & (slit_curve != 0)
-            spec = np.divide(spec, slit_curve, out=np.full_like(spec, np.nan), where=valid)
-            spec_err = np.divide(spec_err, slit_curve, out=np.full_like(spec_err, np.nan), where=valid)
-            spec_header['SLITFAC'] = float(np.nanmean(slit_curve))
-            spec_header['SLITCOR'] = True
-        else:
-            spec_header['SLITCOR'] = False
-            if 'SLITFAC' in spec_header:
-                del spec_header['SLITFAC']
 
         if specflux:
             # check that the correct flux calibration file is used
@@ -272,26 +210,86 @@ def convert_spec_to_flux(input_dataset, fluxcal, slit_transmission = None):
         frame.hdu_list['SPEC'].data[:] = spec_flux
         frame.hdu_list['SPEC_ERR'].data[:] = spec_flux_err
         spec_header['BUNIT'] = "erg/(s*cm^2*AA)"
-        if 'SPEC_ERR' in frame.hdu_list:
-            frame.hdu_list['SPEC_ERR'].header['BUNIT'] = "erg/(s*cm^2*AA)"
+        frame.hdu_list['SPEC_ERR'].header['BUNIT'] = "erg/(s*cm^2*AA)"
     
     if specflux:
-        history_messages.append(
-             f"Calibrated 1D spectrum applying spectral flux calibration file:{fluxcal.filename}."
-        )
+        history_message = f"Calibrated 1D spectrum applying spectral flux calibration file:{fluxcal.filename}."
+    
         spec_dataset.update_after_processing_step(
-                " ".join(history_messages),
+                history_message,
                 header_entries={"SPECUNIT": "erg/(s*cm^2*AA)"}
         )
     else:
-        history_messages.append(
-            f"Calibrated 1D spectrum by applying a broad band fluxcal_factor={fluxcal.fluxcal_fac} determined by aperture photometry, COL_COR={color_cor_fac}."
-        )
+        history_message = f"Calibrated 1D spectrum by applying a broad band fluxcal_factor={fluxcal.fluxcal_fac} determined by aperture photometry, COL_COR={color_cor_fac}."
+            
         spec_dataset.update_after_processing_step(
-            " ".join(history_messages),
+            history_message,
             header_entries={"SPECUNIT": "erg/(s*cm^2*AA)", "FLUXFAC": fluxcal.fluxcal_fac}
         )
 
+    return spec_dataset
+
+def apply_slit_transmission(input_dataset, slit_transmission):
+    """
+        applies the slit transmission and the algorithm throughput correction (if available)
+        to a spectrometer input dataset of a corresponding slit observation.  
+        
+        Args:
+        input_dataset (corgidrp.data.Dataset): L4 dataset containing SPEC,
+            SPEC_ERR, SPEC_DQ, SPEC_WAVE, and SPEC_WAVE_ERR extensions.
+        slit_transmission (corgidrp.data.SlitTransmission: slit throughput
+            information and contains the (slit_map, slit_x, slit_y) tuple of a corresponding slit.
+    """
+    
+    spec_dataset = input_dataset.copy()
+
+    history_messages = []
+  
+    for frame in spec_dataset:
+        if 'SPEC' not in frame.hdu_list:
+            raise ValueError("Input dataset does not contain a 'SPEC' extension.")
+        if frame.ext_hdr["FSAMNAME"] != slit_transmission.slitname:
+            raise ValueError("Input dataset is not compatible to slit_transmission, different slits.")
+        spec = frame.hdu_list['SPEC'].data.astype(float, copy=True)
+        spec_header = frame.hdu_list['SPEC'].header
+        spec_err = frame.hdu_list['SPEC_ERR'].data.astype(float, copy=True)
+
+        if spec_header.get('BUNIT', '').strip().lower() != "photoelectron/s/bin":
+            raise ValueError("SPEC extension must have BUNIT 'photoelectron/s/bin' before flux calibration.")
+        # Apply algorithm throughput correction (ALGO_THRU) if present (PSF-subtracted frames)
+        if 'ALGO_THRU' in frame.hdu_list:
+            algo_thru = frame.hdu_list['ALGO_THRU'].data.astype(float)
+            if algo_thru.shape != spec.shape:
+                raise ValueError(
+                    f"ALGO_THRU shape {algo_thru.shape} must match SPEC shape {spec.shape}."
+                )
+            # Divide by algorithm throughput, accounting for zeros/non-finite
+            valid = np.isfinite(algo_thru) & (algo_thru != 0)
+            spec = np.divide(spec, algo_thru, out=np.full_like(spec, np.nan), where=valid)
+            spec_err = np.divide(spec_err, algo_thru, out=np.full_like(spec_err, np.nan), where=valid)
+            spec_header['ALGOCOR'] = True
+            history_messages.append("Applied algorithm throughput correction (ALGO_THRU).")
+
+        # Apply slit transmission correction
+        slit_curve = np.asarray(select_slit_transmission_curve(frame, slit_transmission), dtype=float)
+        if slit_curve.shape != spec.shape:
+            raise ValueError(
+                f"slit_transmission curve shape {slit_curve.shape} must match SPEC shape {spec.shape}."
+            )
+        # Divide by wavelength-dependent slit transmission, accounting for zeros/non-finite
+        valid = np.isfinite(slit_curve) & (slit_curve != 0)
+        spec = np.divide(spec, slit_curve, out=np.full_like(spec, np.nan), where=valid)
+        spec_err = np.divide(spec_err, slit_curve, out=np.full_like(spec_err, np.nan), where=valid)
+        frame.hdu_list['SPEC'].data[:] = spec
+        frame.hdu_list['SPEC_ERR'].data[:] = spec_err
+        
+        spec_header['SLITFAC'] = float(np.nanmean(slit_curve))
+        spec_header['SLITCOR'] = True
+        history_messages.append(f"spectrum is slit transmission corrected with mean factor={float(np.nanmean(slit_curve))}.")
+
+    spec_dataset.update_after_processing_step(
+        ".".join(history_messages)
+    )
     return spec_dataset
 
 
