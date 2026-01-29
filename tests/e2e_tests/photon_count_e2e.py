@@ -89,7 +89,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
-    kgain.ext_hdr['RN'] = 100
+    kgain.ext_hdr['RN'] = 100.0
     kgain.ext_hdr['RN_ERR'] = 0
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)

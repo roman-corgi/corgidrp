@@ -56,7 +56,7 @@ def fix_headers(
             datalvl = exthdr.get('DATALVL', '')
             if datalvl == 'L2a':
                 # Set as float value with comment - ensures FITS stores it as numeric
-                exthdr['RN'] = (100.0, 'Read noise in electrons')
+                exthdr['RN'] = (100.0, 'Read noise (electrons)')
 
 
 def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
