@@ -160,51 +160,17 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #### Pass the data to the walker ####
     #####################################
 
-    # now get any default cal files that might be needed; if any reside in the folder that are not
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
     # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
     # means the ones above will be preferentially selected
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     l2b_data_filelist = sorted(glob.glob(os.path.join(input_data_dir, "*.fits")))
-
-    # Print L2b header information
-    print("L2b header information:")
-    for l2b_filename in l2b_data_filelist[:1]:  # Just check first file
-        with fits.open(l2b_filename) as hdul:
-            primary_header = dict(hdul[0].header) if len(hdul) > 0 else {}
-            ext1_header = dict(hdul[1].header) if len(hdul) > 1 else {}
-            print(f"File: {os.path.basename(l2b_filename)}")
-            if "PHTCNT" in primary_header:
-                phtcnt = primary_header["PHTCNT"]
-                print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-            if "ISPC" in ext1_header:
-                ispc = ext1_header["ISPC"]
-                print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-            if "RN" in ext1_header:
-                rn = ext1_header["RN"]
-                print(f"  RN: {rn} (dtype: {type(rn).__name__})")
-
     walker.walk_corgidrp(l2b_data_filelist, "", l2b_to_l3_dir)
 
     #Read in an L3 file
     l3_filename = glob.glob(os.path.join(l2b_to_l3_dir, "*l3_.fits"))[0]
     l3_image = Image(l3_filename)
-
-    # Print L3 header information
-    print("L3 header information:")
-    with fits.open(l3_filename) as hdul:
-        primary_header = dict(hdul[0].header) if len(hdul) > 0 else {}
-        ext1_header = dict(hdul[1].header) if len(hdul) > 1 else {}
-        print(f"File: {os.path.basename(l3_filename)}")
-        if "PHTCNT" in primary_header:
-            phtcnt = primary_header["PHTCNT"]
-            print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-        if "ISPC" in ext1_header:
-            ispc = ext1_header["ISPC"]
-            print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-        if "RN" in ext1_header:
-            rn = ext1_header["RN"]
-            print(f"  RN: {rn} (dtype: {type(rn).__name__})")
 
     #Check if there's a WCS header
     assert l3_image.ext_hdr['CTYPE1'] == 'RA---TAN'
@@ -289,11 +255,11 @@ def test_l3_to_l4(e2eoutput_path):
     #### Read in the L3 data and run ####
     #####################################
 
-    # now get any default cal files that might be needed; if any reside in the folder that are not
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
     # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
     # means the ones above will be preferentially selected
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
-
+    
     l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
     walker.walk_corgidrp(l3_data_filelist, "", main_output_dir)
@@ -304,25 +270,8 @@ def test_l3_to_l4(e2eoutput_path):
 
     l4_filename = glob.glob(os.path.join(main_output_dir, "*l4_.fits"))[0]
     combined_image = Image(l4_filename)
-
-    # Print L4 header information
-    print("L4 header information:")
-    with fits.open(l4_filename) as hdul:
-        primary_header = dict(hdul[0].header) if len(hdul) > 0 else {}
-        ext1_header = dict(hdul[1].header) if len(hdul) > 1 else {}
-        print(f"File: {os.path.basename(l4_filename)}")
-        if "PHTCNT" in primary_header:
-            phtcnt = primary_header["PHTCNT"]
-            print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-        if "ISPC" in ext1_header:
-            ispc = ext1_header["ISPC"]
-            print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-        if "RN" in ext1_header:
-            rn = ext1_header["RN"]
-            print(f"  RN: {rn} (dtype: {type(rn).__name__})")
-
     assert combined_image.filename == l3_data_filelist[-1].split(os.path.sep)[-1].replace("_l3_", "_l4_")
-
+    
     #Find the sources and get their (x,y) coordinate
     y_source, x_source = np.unravel_index(np.nanargmax(combined_image.data), combined_image.data.shape)
     assert combined_image.dq[y_source, x_source] == 0 # check DQ
@@ -359,7 +308,7 @@ if __name__ == "__main__":
 
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = '/Users/michael/Desktop/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 

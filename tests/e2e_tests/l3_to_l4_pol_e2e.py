@@ -378,24 +378,6 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     logger.info(f"Total input images validated: {len(input_image_list)}")
     logger.info("")
 
-    # Print L3 header information
-    logger.info("L3 header information:")
-    for l3_filename in saved_files[:1]:  # Just check first file
-        with fits.open(l3_filename) as hdul:
-            primary_header = dict(hdul[0].header) if len(hdul) > 0 else {}
-            ext1_header = dict(hdul[1].header) if len(hdul) > 1 else {}
-            logger.info(f"File: {os.path.basename(l3_filename)}")
-            if "PHTCNT" in primary_header:
-                phtcnt = primary_header["PHTCNT"]
-                logger.info(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-            if "ISPC" in ext1_header:
-                ispc = ext1_header["ISPC"]
-                logger.info(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-            if "RN" in ext1_header:
-                rn = ext1_header["RN"]
-                logger.info(f"  RN: {rn} (dtype: {type(rn).__name__})")
-    logger.info('')
-
     # ================================================================================
     # (3) Run Processing Pipeline
     # ================================================================================
@@ -429,29 +411,11 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
         logger.info(f"L4 Output File Count: {n_l4_files}. Expected 1. FAIL")
 
 
-    #There should only be one.
+    #There should only be one. 
 
-    frame_info = "L4 Output Frame"
+    frame_info = f"L4 Output Frame"
 
     img = data.Image(l4_filelist[0])
-
-    # Print L4 header information
-    logger.info("L4 header information:")
-    with fits.open(l4_filelist[0]) as hdul:
-        primary_header = dict(hdul[0].header) if len(hdul) > 0 else {}
-        ext1_header = dict(hdul[1].header) if len(hdul) > 1 else {}
-        logger.info(f"File: {os.path.basename(l4_filelist[0])}")
-        if "PHTCNT" in primary_header:
-            phtcnt = primary_header["PHTCNT"]
-            logger.info(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-        if "ISPC" in ext1_header:
-            ispc = ext1_header["ISPC"]
-            logger.info(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-        if "RN" in ext1_header:
-            rn = ext1_header["RN"]
-            logger.info(f"  RN: {rn} (dtype: {type(rn).__name__})")
-    logger.info('')
-
     # Verify HDU count
     with fits.open(l4_filelist[0]) as hdul:
         verify_hdu_count(hdul, 6, frame_info, logger)  # L4 should have 5 HDUs
@@ -493,7 +457,8 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
 
 if __name__ == "__main__":
-    e2edata_dir = '/Users/michael/Desktop/E2E_Test_Data'
+    #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

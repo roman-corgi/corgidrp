@@ -219,164 +219,12 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
     ####### Run the walker on some test_data
 
-    l1_headers_dict = {}
-    for l1_filename in l1_data_filelist:
-        with fits.open(l1_filename) as hdul:
-            header_info = {}
-            # Only add header if it exists and not empty
-            if len(hdul) > 0:
-                primary_hdr_items = dict(hdul[0].header)
-                if primary_hdr_items:
-                    header_info["primary"] = primary_hdr_items
-            if len(hdul) > 1:
-                ext1_hdr_items = dict(hdul[1].header)
-                if ext1_hdr_items:
-                    header_info["ext1"] = ext1_hdr_items
-            if len(hdul) > 2:
-                ext2_hdr_items = dict(hdul[2].header)
-                if ext2_hdr_items:
-                    header_info["ext2"] = ext2_hdr_items
-            if len(hdul) > 3:
-                ext3_hdr_items = dict(hdul[3].header)
-                if ext3_hdr_items:
-                    header_info["ext3"] = ext3_hdr_items
-            if len(hdul) > 4:
-                ext4_hdr_items = dict(hdul[4].header)
-                if ext4_hdr_items:
-                    header_info["ext4"] = ext4_hdr_items
-            l1_headers_dict[l1_filename] = header_info
-        break  # Only process the first one, as in the original code
-
-    print("l1_headers_dict contents:")
-    for fname, headers in l1_headers_dict.items():
-        primary_header = headers.get("primary", {})
-        ext1_header = headers.get("ext1", {})
-
-        print(f"File: {fname}")
-
-        if "PHTCNT" in primary_header:
-            phtcnt = primary_header["PHTCNT"]
-            print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-        if "ISPC" in ext1_header:
-            ispc = ext1_header["ISPC"]
-            print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-        if "RN" in ext1_header:
-            rn = ext1_header["RN"]
-            print(f"  RN: {rn} (dtype: {type(rn).__name__})")
-
     # l1 -> l2a processing
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir)
 
-
-    # Now do the same print as above, but for the new L2a files instead of the L1 files
-    # Gather new L2a FITS filenames from the output directory, excluding calibration products
-    all_files = [f for f in os.listdir(l2a_outputdir) if f.endswith('.fits')]
-    new_l2a_filenames = [
-        os.path.join(l2a_outputdir, f)
-        for f in all_files
-        if '_l2a' in f and '_cal' not in f
-    ]
-
-    l2a_headers_dict = {}
-    for l2a_filename in new_l2a_filenames:
-        with fits.open(l2a_filename) as hdul:
-            header_info = {}
-            # Only add header if it exists and not empty
-            if len(hdul) > 0:
-                primary_hdr_items = dict(hdul[0].header)
-                if primary_hdr_items:
-                    header_info["primary"] = primary_hdr_items
-            if len(hdul) > 1:
-                ext1_hdr_items = dict(hdul[1].header)
-                if ext1_hdr_items:
-                    header_info["ext1"] = ext1_hdr_items
-            if len(hdul) > 2:
-                ext2_hdr_items = dict(hdul[2].header)
-                if ext2_hdr_items:
-                    header_info["ext2"] = ext2_hdr_items
-            if len(hdul) > 3:
-                ext3_hdr_items = dict(hdul[3].header)
-                if ext3_hdr_items:
-                    header_info["ext3"] = ext3_hdr_items
-            if len(hdul) > 4:
-                ext4_hdr_items = dict(hdul[4].header)
-                if ext4_hdr_items:
-                    header_info["ext4"] = ext4_hdr_items
-            l2a_headers_dict[l2a_filename] = header_info
-        break  # Only process the first one, as in the original code
-    print("L2A Headers")
-    for fname, headers in l2a_headers_dict.items():
-        primary_header = headers.get("primary", {})
-        ext1_header = headers.get("ext1", {})
-
-        print(f"File: {fname}")
-
-        if "PHTCNT" in primary_header:
-            phtcnt = primary_header["PHTCNT"]
-            print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-        if "ISPC" in ext1_header:
-            ispc = ext1_header["ISPC"]
-            print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-        if "RN" in ext1_header:
-            rn = ext1_header["RN"]
-            print(f"  RN: {rn} (dtype: {type(rn).__name__})")
     # l2a -> l2b processing
     new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')] #[os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
     walker.walk_corgidrp(new_l2a_filenames, "", test_outputdir)
-
-
-    # Now do the same print as above, but for the new L2a files instead of the L1 files
-    # Gather new L2a FITS filenames from the output directory, excluding calibration products
-    all_files = [f for f in os.listdir(test_outputdir) if f.endswith('.fits')]
-    new_l2b_filenames = [
-        os.path.join(test_outputdir, f)
-        for f in all_files
-        if '_l2b' in f and '_cal' not in f
-    ]
-
-    l2b_headers_dict = {}
-    for l2b_filename in new_l2b_filenames:
-        with fits.open(l2b_filename) as hdul:
-            header_info = {}
-            # Only add header if it exists and not empty
-            if len(hdul) > 0:
-                primary_hdr_items = dict(hdul[0].header)
-                if primary_hdr_items:
-                    header_info["primary"] = primary_hdr_items
-            if len(hdul) > 1:
-                ext1_hdr_items = dict(hdul[1].header)
-                if ext1_hdr_items:
-                    header_info["ext1"] = ext1_hdr_items
-            if len(hdul) > 2:
-                ext2_hdr_items = dict(hdul[2].header)
-                if ext2_hdr_items:
-                    header_info["ext2"] = ext2_hdr_items
-            if len(hdul) > 3:
-                ext3_hdr_items = dict(hdul[3].header)
-                if ext3_hdr_items:
-                    header_info["ext3"] = ext3_hdr_items
-            if len(hdul) > 4:
-                ext4_hdr_items = dict(hdul[4].header)
-                if ext4_hdr_items:
-                    header_info["ext4"] = ext4_hdr_items
-            l2b_headers_dict[l2b_filename] = header_info
-        break  # Only process the first one, as in the original code
-    print("L2B Headers")
-    for fname, headers in l2b_headers_dict.items():
-        primary_header = headers.get("primary", {})
-        ext1_header = headers.get("ext1", {})
-
-        print(f"File: {fname}")
-
-        if "PHTCNT" in primary_header:
-            phtcnt = primary_header["PHTCNT"]
-            print(f"  PHTCNT: {phtcnt} (dtype: {type(phtcnt).__name__})")
-        if "ISPC" in ext1_header:
-            ispc = ext1_header["ISPC"]
-            print(f"  ISPC: {ispc} (dtype: {type(ispc).__name__})")
-        if "RN" in ext1_header:
-            rn = ext1_header["RN"]
-            print(f"  RN: {rn} (dtype: {type(rn).__name__})")
 
     ##### Check against TVAC data
     # l2a data
@@ -441,7 +289,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/michael/Desktop/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
