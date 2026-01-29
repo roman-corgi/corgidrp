@@ -409,16 +409,16 @@ def test_apply_core_throughput_correction():
     assert np.isclose(frame.hdu_list['SPEC'].header['CTFAC'], ct_factor)
 
 
-def test_compute_spec_flux_ratio_single_roll():
-    """Flux ratio for one roll."""
+def test_compute_spec_flux_ratio_single_rotation():
+    """Flux ratio for one rotation."""
     host_spec = np.array([10.0, 12.0, 14.0, 16.0])
     comp_spec = np.array([5.0, 6.0, 7.0, 8.0])
     spec_err = np.full((1, host_spec.size), 0.2)
     wave = np.linspace(700, 760, host_spec.size)
 
-    host_ds = make_1d_spec_image(host_spec, spec_err, wave, roll='ROLL_A',
+    host_ds = make_1d_spec_image(host_spec, spec_err, wave, pa_aper_deg='A',
                                  exp_time=10.0, col_cor=True)
-    comp_ds = make_1d_spec_image(comp_spec, spec_err, wave, roll='ROLL_B',
+    comp_ds = make_1d_spec_image(comp_spec, spec_err, wave, pa_aper_deg='B',
                                  exp_time=10.0, col_cor=True)
 
     host_ds.ext_hdr['FSMLOS'] = 0
@@ -454,24 +454,24 @@ def test_compute_spec_flux_ratio_single_roll():
     result = (
         np.allclose(ratio, expected) and
         np.array_equal(wavelength, wave) and
-        metadata['roll'] == 'ROLL_A' and
-        metadata['companion_roll'] == 'ROLL_B' and
+        metadata['rotation'] == 'A' and
+        metadata['companion_rotation'] == 'B' and
         np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
     )
     
-    print('\ncompute_spec_flux_ratio single roll: ', end='')
+    print('\ncompute_spec_flux_ratio single rotation: ', end='')
     print_pass() if result else print_fail()
     assert result
 
 def test_compute_spec_flux_ratio_weighted():
-    """Combine spectra from multiple rolls, then compute a single flux ratio."""
+    """Combine spectra from multiple rotations, then compute a single flux ratio."""
     host_a = np.array([12.0, 14.0, 16.0, 18.0])
     comp_a = host_a * 0.5
     err_a = np.full((1, host_a.size), 0.3)
     wave_a = np.array([700.0, 710.0, 720.0, 730.0])
 
-    host_ds_a = make_1d_spec_image(host_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0, col_cor=True)
-    comp_ds_a = make_1d_spec_image(comp_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0, col_cor=True)
+    host_ds_a = make_1d_spec_image(host_a, err_a, wave_a, pa_aper_deg='A', exp_time=5.0, col_cor=True)
+    comp_ds_a = make_1d_spec_image(comp_a, err_a, wave_a, pa_aper_deg='A', exp_time=5.0, col_cor=True)
 
     host_b = np.array([8.0, 6.0, 4.0, 2.0])
     comp_b = np.array([1.0, 2.0, 3.0, 4.0])
@@ -479,18 +479,18 @@ def test_compute_spec_flux_ratio_weighted():
     wave_b_host = np.array([800.0, 780.0, 760.0, 740.0])
     wave_b_comp = np.array([790.0, 770.0, 750.0, 730.0])
 
-    host_ds_b = make_1d_spec_image(host_b, err_b, wave_b_host, roll='ROLL_B', exp_time=15.0, col_cor=True)
-    comp_ds_b = make_1d_spec_image(comp_b, err_b, wave_b_comp, roll='ROLL_B', exp_time=15.0, col_cor=True)
+    host_ds_b = make_1d_spec_image(host_b, err_b, wave_b_host, pa_aper_deg='B', exp_time=15.0, col_cor=True)
+    comp_ds_b = make_1d_spec_image(comp_b, err_b, wave_b_comp, pa_aper_deg='B', exp_time=15.0, col_cor=True)
 
     fluxcal_factor = make_mock_fluxcal_factor(1.8, err=0.05)
 
-    # Combine host spectra from rolls A and B (raw units)
-    host_comb_spec, host_comb_wave, host_comb_err, host_rolls = l4_to_tda.combine_spectra(
+    # Combine host spectra from rotations A and B (raw units)
+    host_comb_spec, host_comb_wave, host_comb_err, host_pa_aper_degs = l4_to_tda.combine_spectra(
         Dataset([host_ds_a, host_ds_b])
     )
 
-    # Combine companion spectra from rolls A and B (raw units)
-    comp_comb_spec, comp_comb_wave, comp_comb_err, comp_rolls = l4_to_tda.combine_spectra(
+    # Combine companion spectra from rotations A and B (raw units)
+    comp_comb_spec, comp_comb_wave, comp_comb_err, comp_pa_aper_degs = l4_to_tda.combine_spectra(
         Dataset([comp_ds_a, comp_ds_b])
     )
 
@@ -545,7 +545,7 @@ def test_compute_spec_flux_ratio_weighted():
         np.allclose(metadata['ratio_err'], expected_ratio_err, equal_nan=True)
         )
     
-    print('\ncompute_spec_flux_ratio weighted rolls: ', end='')
+    print('\ncompute_spec_flux_ratio weighted rotations: ', end='')
     print_pass() if result else print_fail()
     assert result
 
@@ -1126,6 +1126,6 @@ if __name__ == '__main__':
     test_convert_spec_to_flux_no_slit()
     test_convert_spec_to_flux_slit_scalar_map()
     test_apply_core_throughput_correction()
-    test_compute_spec_flux_ratio_single_roll()
+    test_compute_spec_flux_ratio_single_rotation()
     test_compute_spec_flux_ratio_weighted()
     test_l4_companion_photometry()

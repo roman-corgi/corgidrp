@@ -370,18 +370,18 @@ def combine_spectra(input_dataset):
             spectra and SPEC/SPEC_ERR/SPEC_WAVE extensions.
 
     Returns:
-        tuple: (combined_spec, wavelength, combined_err, rolls) where:
+        tuple: (combined_spec, wavelength, combined_err, rotations) where:
             - combined_spec (ndarray): weighted spectrum on the reference grid
             - wavelength (ndarray): reference wavelength grid
             - combined_err (ndarray): 1σ uncertainty of the combined spectrum
-            - rolls (list): list of roll angles 
+            - rotations (list): list of PA_APER angles 
     """
 
     # Collect per-frame spectra, uncertainties, and wavelength grids
     spec_list = []
     err_list = []
     wave_list = []
-    rolls = []
+    rotations = []
 
     for img in input_dataset:
         spec = np.array(img.hdu_list['SPEC'].data, dtype=float)
@@ -397,7 +397,7 @@ def combine_spectra(input_dataset):
         spec_list.append(spec)
         err_list.append(spec_err)
         wave_list.append(wave)
-        rolls.append(img.pri_hdr.get('ROLL'))
+        rotations.append(img.pri_hdr.get('PA_APER'))
 
     reference_wave = wave_list[0]
     ref_decreasing = reference_wave[0] > reference_wave[-1]
@@ -453,7 +453,7 @@ def combine_spectra(input_dataset):
     combined_spec = weighted_numer / weighted_denom
     combined_err = np.sqrt(1.0 / weighted_denom)
 
-    return combined_spec, reference_wave, combined_err, rolls
+    return combined_spec, reference_wave, combined_err, rotations
 
 
 def compute_spec_flux_ratio(host_image, companion_image):
@@ -472,8 +472,8 @@ def compute_spec_flux_ratio(host_image, companion_image):
             - flux_ratio (numpy.ndarray): companion/host spectrum R(λ).
             - wavelength (numpy.ndarray): wavelength array in nm.
             - metadata (dict): contains:
-                - 'roll': host roll angle
-                - 'companion_roll': companion roll angle 
+                - 'rotation': host PA_APER angle
+                - 'companion_rotation': companion PA_APER angle 
                 - 'ratio_err': 1σ uncertainty on the flux ratio R(λ).
     """
 
@@ -546,8 +546,8 @@ def compute_spec_flux_ratio(host_image, companion_image):
         ratio_unc[valid_unc] = np.sqrt(variance[valid_unc])
 
     metadata = {
-        'roll': host_image.pri_hdr.get('ROLL'),
-        'companion_roll': companion_image.pri_hdr.get('ROLL'),
+        'rotation': host_image.pri_hdr.get('PA_APER'),
+        'companion_rotation': companion_image.pri_hdr.get('PA_APER'),
         'ratio_err': ratio_unc,
     }
 
