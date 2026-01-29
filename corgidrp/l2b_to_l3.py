@@ -36,9 +36,11 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
             center_pixel[1] += offset[1]
         target_ra, target_dec = image.pri_hdr['RA'], image.pri_hdr['DEC']
         corrected_ra, corrected_dec = target_ra - ra_offset, target_dec - dec_offset
-        roll_ang = image.pri_hdr['ROLL']
+        pa_aper_deg = image.pri_hdr['PA_APER']
 
-        vert_ang = np.radians(northangle + roll_ang)  ## might be -roll_ang
+        #TO DO: double check this. northangle may be defined as the full rotation angle, 
+        # not north offset, in which case, adding the two below would be adding two absolute rotation angles from north
+        vert_ang = np.radians(northangle + pa_aper_deg)  ## might be -pa_aper_deg
         pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
         cdmatrix = pc * (platescale * 0.001) / 3600.
 

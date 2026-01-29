@@ -1,5 +1,6 @@
 import argparse
-import os
+import os, sys
+import json
 import pytest
 import numpy as np
 import astropy.time as time
@@ -46,9 +47,9 @@ def fix_headers(
             naxis2 = exthdr.get('NAXIS2', 1024)
             
             # Fix EACQ_ROW/COL if missing, 0, or outside frame bounds
-            if 'EACQ_ROW' not in exthdr or exthdr['EACQ_ROW'] == 0 or exthdr['EACQ_ROW'] >= naxis2:
+            if 'EACQ_ROW' not in exthdr or exthdr['EACQ_ROW'] == 0 or exthdr['EACQ_ROW'] >= naxis2 // 2:
                 exthdr['EACQ_ROW'] = naxis2 // 2
-            if 'EACQ_COL' not in exthdr or exthdr.get('EACQ_COL', 0) == 0 or exthdr.get('EACQ_COL', 0) >= naxis1:
+            if 'EACQ_COL' not in exthdr or exthdr.get('EACQ_COL', 0) == 0 or exthdr.get('EACQ_COL', 0) >= naxis1 // 2:
                 exthdr['EACQ_COL'] = naxis1 // 2
 
             # Set RN (read noise) if missing, empty, or not a number - only for L2a data (required for photon counting)
@@ -57,6 +58,10 @@ def fix_headers(
             if datalvl == 'L2a':
                 # Set as float value with comment - ensures FITS stores it as numeric
                 exthdr['RN'] = (100.0, 'Read noise (electrons)')
+
+            prihdr = fits_file[0].header
+            if 'PA_APER' not in prihdr and 'ROLL' in prihdr:
+                prihdr['PA_APER'] = prihdr['ROLL']
 
 
 def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
@@ -270,9 +275,18 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     # fix headers
     fix_headers(input_data_filelist)
 
+    ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
+    for file in input_data_filelist:
+        with fits.open(file, mode='update') as fits_file:
+            print(fits_file[1].header['EXPTIME'])
+            if fits_file[1].header['EXPTIME'] >= 100:
+                fits_file[1].data = fits_file[1].data/10.
+                fits_file[1].header['EXPTIME'] = fits_file[1].header['EXPTIME']/10.
+                print('Changed exposure time',fits_file[1].header['EXPTIME'])
+
     # Validate all input images
     input_dataset = data.Dataset(input_data_filelist)
-    
+
     for i, (frame, filepath) in enumerate(zip(input_dataset, input_data_filelist)):
         frame_info = f"L1 Input Frame {i}"
         
@@ -583,8 +597,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/maxwellmb/Data/corgi/corgidrp/e2e_test_data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
-    outputdir = " /Users/maxwellmb/Data/corgi/corgidrp/e2e_test_output/"
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    outputdir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

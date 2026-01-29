@@ -134,7 +134,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image = Image(big_array, mock_pri_header, mock_ext_header, err=big_err, input_hdulist=[bias_hdu])
         new_image.pri_hdr.set('FRAMET', 1)
         new_image.ext_hdr.set('EXPTIME', 1)
-        new_image.pri_hdr.set('ROLL', 0)
+        new_image.pri_hdr.set('PA_APER', 0)
         new_image.ext_hdr.set('CFAMNAME','1F')
         new_image.ext_hdr.set('FSMLOS', 0) # non-coron
         new_image.ext_hdr.set('LSAMNAME', 'OPEN') # non-coron
