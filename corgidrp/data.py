@@ -1308,7 +1308,7 @@ class KGain(Image):
         if 'RN' not in self.ext_hdr:
             self.ext_hdr['RN'] = 0.0
         if 'RN_ERR' not in self.ext_hdr:
-            self.ext_hdr['RN_ERR'] = 0.0
+            self.ext_hdr['RN_ERR'] = ''
         # File format checks
         if self.data.shape != (1,):
             raise ValueError('The KGain calibration data should be just one float value')
@@ -2880,7 +2880,7 @@ class PyKLIPDataset(pyKLIP_Data):
             input_all += [data]
             centers_all += [centers]
             filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
-            PAs_all += [phead['PA_APER']] * NINTS
+            PAs_all += [phead['ROLL']] * NINTS
 
             # Get center wavelengths
             try:

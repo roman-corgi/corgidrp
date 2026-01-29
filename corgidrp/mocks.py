@@ -531,7 +531,7 @@ def create_default_L2b_headers(arrtype="SCI"):
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
     exthdr['RN']            = 0.0           # Read noise (electrons)
-    exthdr['RN_ERR']        = 0.0           # Read noise error
+    exthdr['RN_ERR']        = ''            # Read noise error
     exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
     exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
     exthdr['FRMSEL03'] = (None, "tip rms (Z2VAR) threshold") # record selection criteria
