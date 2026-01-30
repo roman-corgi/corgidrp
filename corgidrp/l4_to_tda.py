@@ -235,10 +235,14 @@ def apply_slit_transmission(input_dataset, slit_transmission):
         to a spectrometer input dataset of a corresponding slit observation.  
         
         Args:
-        input_dataset (corgidrp.data.Dataset): L4 dataset containing SPEC,
-            SPEC_ERR, SPEC_DQ, SPEC_WAVE, and SPEC_WAVE_ERR extensions.
-        slit_transmission (corgidrp.data.SlitTransmission: slit throughput
-            information and contains the (slit_map, slit_x, slit_y) tuple of a corresponding slit.
+            input_dataset (corgidrp.data.Dataset): L4 dataset containing SPEC,
+                SPEC_ERR, SPEC_DQ, SPEC_WAVE, and SPEC_WAVE_ERR extensions.
+            slit_transmission (corgidrp.data.SlitTransmission): slit throughput
+                calibration product, contains the (slit_map, slit_x, slit_y) tuple of a corresponding slit.
+        
+        Returns:
+            corgidrp.data.Dataset: copy of the input dataset with the
+               SPEC/SPEC_ERR data corrected by slit transmission and headers/history updated.
     """
     
     spec_dataset = input_dataset.copy()
