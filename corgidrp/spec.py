@@ -11,7 +11,6 @@ from astropy.table import Table
 import astropy.modeling.models as models
 import astropy.modeling.fitting as fitting
 from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve, get_calspec_file
-from prompt_toolkit import input
 
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
