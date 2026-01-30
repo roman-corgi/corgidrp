@@ -60,7 +60,8 @@ labels = {data.Dark: "Dark",
           data.MuellerMatrix: "MuellerMatrix",
           data.NDMuellerMatrix: "NDMuellerMatrix",
           data.SpecFilterOffset: "SpecFilterOffset",
-          data.SpecFluxCal: "SpecFluxCal"
+          data.SpecFluxCal: "SpecFluxCal",
+          data.SlitTransmission: "SlitTransmission"
           }
 
 class CalDB:
