@@ -2050,14 +2050,13 @@ class SlitTransmission(Image):
         (required only if raw 2D data is passed in)
     
     Attributes:
-        data (2D array): interpolated slit transmission map
-        x_offset (1D array): locations along EXCAM +X direction with respect to the
+        x_offset (np.array): 1D array, locations along EXCAM +X direction with respect to the
           zero-point in (fractional) EXCAM pixels where the slit transmission has
           been derived.
-        y_offset (1D array): locations along EXCAM +Y direction with respect to the
+        y_offset (np.array): 1D array, locations along EXCAM +Y direction with respect to the
           zero-point in (fractional) EXCAM pixels where the slit transmission has
           been derived.
-        slitname: name of slit with measured transmission
+        slitname (str): name of slit with measured transmission
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, x_offset = None, y_offset = None, input_dataset=None):
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
