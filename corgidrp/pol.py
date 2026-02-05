@@ -3,7 +3,6 @@ import os
 import numpy as np
 import pandas as pd
 
-import corgidrp.check as check
 from corgidrp.data import Image, NDMuellerMatrix, MuellerMatrix, Dataset
 from corgidrp.fluxcal import aper_phot, measure_aper_flux_pol
 
@@ -346,15 +345,12 @@ def generate_mueller_matrix_cal(input_dataset,
     mueller_matrix_err[2,1] = mueller_elements_err[4]
     mueller_matrix_err[2,2] = mueller_elements_err[5]
 
-    # Merge headers for combined frame
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(dataset)
-    
     if is_nd:
-        mueller_matrix_obj = NDMuellerMatrix(mueller_matrix, pri_hdr=pri_hdr,
-                         ext_hdr=ext_hdr, err_hdr=err_hdr, input_dataset=dataset)
+        mueller_matrix_obj = NDMuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
+                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset)
     else:
-        mueller_matrix_obj = MuellerMatrix(mueller_matrix, pri_hdr=pri_hdr,
-                         ext_hdr=ext_hdr, err_hdr=err_hdr, input_dataset=dataset)
+        mueller_matrix_obj = MuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
+                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset)
 
     return mueller_matrix_obj
 

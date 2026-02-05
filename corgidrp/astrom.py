@@ -3,7 +3,6 @@ import os
 import warnings
 
 import corgidrp.data
-import corgidrp.check as check
 
 import astropy
 import astropy.io.ascii as ascii
@@ -1088,23 +1087,12 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
             if count >= num_frames:
                 sub_array = data_array[count - frames_to_combine:]
                 file_name = input_dataset[-1].filename
-                subset_indices = range(count - frames_to_combine, num_frames)
             else:
                 sub_array = data_array[count - frames_to_combine: count]
                 file_name = input_dataset[count].filename
-                subset_indices = range(count - frames_to_combine, count)
 
             comb = np.mean(sub_array, axis=0)
-            
-            # Get subset dataset for header merging
-            subset_dataset = corgidrp.data.Dataset([input_dataset[j] for j in subset_indices])
-            
-            # Merge headers for combined frame
-            pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(subset_dataset)
-            
-            # Create combined image with merged headers
-            im = corgidrp.data.Image(comb, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
-                                     err_hdr=err_hdr, dq_hdr=dq_hdr)
+            im = corgidrp.data.Image(comb, pri_hdr=input_dataset[count - frames_to_combine].pri_hdr, ext_hdr=input_dataset[0].ext_hdr)
             im.filename = file_name
             image_objects.append(im)
         

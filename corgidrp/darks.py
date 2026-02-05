@@ -320,15 +320,15 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         err = total_err
         data = mean_frame
 
-    # Merge headers for combined frame
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(dataset)
-    
-    # Update dimensions and data type
-    ext_hdr['NAXIS1'] = data.shape[1]
-    ext_hdr['NAXIS2'] = data.shape[0]
-    ext_hdr['DATATYPE'] = 'Dark'
+    # get from one of the noise maps and modify as needed
+    prihdr = dataset.frames[0].pri_hdr
+    exthdr = dataset.frames[0].ext_hdr
+    errhdr = dataset.frames[0].err_hdr
+    exthdr['NAXIS1'] = data.shape[1]
+    exthdr['NAXIS2'] = data.shape[0]
+    exthdr['DATATYPE'] = 'Dark'
 
-    master_dark = Dark(data, pri_hdr, ext_hdr, dataset, err, dq, err_hdr)
+    master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
     master_dark.ext_hdr['DRPNFILE'] = int(np.round(np.nanmean(unmasked_num)))
     master_dark.ext_hdr['BUNIT'] = 'detected electron'
     master_dark.err_hdr['BUNIT'] = 'detected electron'
@@ -868,26 +868,33 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     CIC_image_map[CIC_image_map < 0] = 0
     DC_image_map[DC_image_map < 0] = 0
 
-    # Merge headers (EMGAIN_C, EXPTIME, KGAINPAR may differ ?)
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(dataset,
-                                                                                allow_differing_keywords={'EMGAIN_C', 'EXPTIME', 'KGAINPAR'})
+    # assume headers from a dataset frame for headers of calibrated noise map
+    prihdr = datasets[0].frames[0].pri_hdr
+    exthdr = datasets[0].frames[0].ext_hdr
+    exthdr['EXPTIME'] = None
+    if 'EMGAIN_M' in exthdr.keys():
+        exthdr['EMGAIN_M'] = None
+    exthdr['EMGAIN_C'] = None
+    exthdr['KGAINPAR'] = None
+    exthdr['BUNIT'] = 'detected electron'
 
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected electron'
 
-
-    ext_hdr['DATATYPE'] = 'DetectorNoiseMaps'
+    exthdr['DATATYPE'] = 'DetectorNoiseMaps'
 
     # bias offset
-    ext_hdr['B_O'] = bias_offset
+    exthdr['B_O'] = bias_offset
     bo_err_bar = max(bias_offset_up - bias_offset,
                      bias_offset - bias_offset_low)
-    ext_hdr['B_O_ERR'] = bo_err_bar
-    ext_hdr['B_O_UNIT'] = 'DN'
+    exthdr['B_O_ERR'] = bo_err_bar
+    exthdr['B_O_UNIT'] = 'DN'
 
     input_stack = np.stack([FPN_map, CIC_map, DC_map])
     input_err = np.stack([[FPN_std_map, CIC_std_map, DC_std_map]])
     input_dq = np.stack([output_dq, output_dq, output_dq])
 
-    noise_maps = DetectorNoiseMaps(input_stack, pri_hdr.copy(), ext_hdr.copy(), dataset,
+    noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
     
     noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))

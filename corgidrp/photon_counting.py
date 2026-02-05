@@ -170,11 +170,6 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     list_err = [] # only used for dark processing case
     list_dq = [] # only used for dark processing case
     index_of_last_frame_used = num_bins*(len(input_dataset)//num_bins)
-    # initialize headers for dark case 
-    pri_hdr_dark = None
-    ext_hdr_dark = None
-    err_hdr_dark = None
-    dq_hdr_dark = None
     # this for loop ignores the remainder from the division above
     for i in range(num_bins):
         subset_frames = input_dataset.frames[bin_size*i:bin_size*(i+1)]
@@ -390,16 +385,17 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         combined_pc_mean[combined_pc_mean<0] = 0
         combined_err = np.sqrt(errs[0]**2 + errs[1]**2)
         combined_dq = np.bitwise_or(dqs[0], dqs[1])
-        
-        # Merge headers for combined frame
-        # Note: EXPTIME is kept as per-frame exposure time (all frames have identical EXPTIME)
-        # Total integration time = NUM_FR * EXPTIME
-        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(sub_dataset)
-        
-        # Get hdulist from last frame
         if dataset_copy:
+            pri_hdr = dataset[-1].pri_hdr.copy()
+            ext_hdr = dataset[-1].ext_hdr.copy()
+            err_hdr = dataset[-1].err_hdr.copy()
+            dq_hdr = dataset[-1].dq_hdr.copy()
             hdulist = dataset[-1].hdu_list.copy()
         else:
+            pri_hdr = dataset[-1].pri_hdr
+            ext_hdr = dataset[-1].ext_hdr
+            err_hdr = dataset[-1].err_hdr
+            dq_hdr = dataset[-1].dq_hdr
             hdulist = dataset[-1].hdu_list
 
         if val[0] != "CGIVST_CAL_DRK":  
@@ -407,21 +403,16 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                                 dq_hdr=dq_hdr, input_hdulist=hdulist) 
             new_image.filename = dataset[-1].filename.replace("L2a", "L2b")
             new_image.ext_hdr['PCTHRESH'] = thresh
+            new_image.ext_hdr['NUM_FR'] = len(sub_dataset) 
             # Set BUNIT to photoelectron after dark subtraction (same as dark_subtraction function for analog data)
             if dark_sub == "yes":
                 new_image.ext_hdr['BUNIT'] = 'photoelectron'
             new_image._record_parent_filenames(sub_dataset) 
             list_new_image.append(new_image)
         else:
-            # store the headers for master dark creation 
             list_new_image.append(combined_pc_mean)
             list_err.append(combined_err)
             list_dq.append(combined_dq)
-        
-            pri_hdr_dark = pri_hdr
-            ext_hdr_dark = ext_hdr
-            err_hdr_dark = err_hdr
-            dq_hdr_dark = dq_hdr
 
         # uncomment for RAM check
         # mem = process.memory_info()
@@ -438,13 +429,13 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         
         return pc_ill_dataset
     else:
-        ext_hdr_dark['PC_STAT'] = 'photon-counted master dark'
-        if len(list_new_image) > 0:
-            ext_hdr_dark['NAXIS1'] = list_new_image[0].shape[0]
-            ext_hdr_dark['NAXIS2'] = list_new_image[0].shape[1]
-        ext_hdr_dark['PCTHRESH'] = thresh
-        ext_hdr_dark.add_history("Photon-counted {0} dark frames for each master dark of the output dataset.  Number of subsets: {1}.  Total number of master darks in input dataset: {2}. Using T_factor={3} and niter={4}.".format(bin_size, num_bins, len(input_dataset), T_factor, niter))
-        pc_dark = data.Dark(np.stack(list_new_image), pri_hdr=pri_hdr_dark, ext_hdr=ext_hdr_dark, err=np.stack([list_err]), dq=np.stack(list_dq), err_hdr=err_hdr_dark, input_dataset=input_dataset[:index_of_last_frame_used])
+        ext_hdr['PC_STAT'] = 'photon-counted master dark'
+        ext_hdr['NAXIS1'] = combined_pc_mean.shape[0]
+        ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]
+        ext_hdr['PCTHRESH'] = thresh
+        ext_hdr['NUM_FR'] = len(sub_dataset) 
+        ext_hdr['HISTORY'] = "Photon-counted {0} dark frames for each master dark of the output dataset.  Number of subsets: {1}.  Total number of master darks in input dataset: {2}. Using T_factor={3} and niter={4}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter)
+        pc_dark = data.Dark(np.stack(list_new_image), pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err]), dq=np.stack(list_dq), err_hdr=err_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
         return pc_dark
 
 def corr_photon_count(nobs, nfr, t, g, mask_indices, niter=2):

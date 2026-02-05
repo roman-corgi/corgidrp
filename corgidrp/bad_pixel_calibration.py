@@ -1,7 +1,6 @@
 import numpy as np
 from corgidrp.data import BadPixelMap, Dataset, DetectorNoiseMaps
 from corgidrp.darks import build_synthesized_dark
-import corgidrp.check as check
 
 def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac = 0.8, fwidth = 32, dark_outputdir=None):
     """
@@ -45,16 +44,16 @@ def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac 
     #Combined the two maps 
     combined_badpixels = np.bitwise_or(hot_warm_pixels,dead_pixels)
 
-    # Merge headers from dark and flat (may differ in BUNIT, EXPTIME, EMGAIN_C, KGAINPAR?)
-    input_dataset = Dataset([master_dark, master_flat])
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers_for_combined_frame(input_dataset, 
-                                                                                 allow_differing_keywords={'BUNIT', 'EXPTIME', 'EMGAIN_C', 'KGAINPAR'})
+    dark_hdr = master_dark.pri_hdr.copy()
+    dark_ext_hdr = master_dark.ext_hdr.copy()
 
-    ext_hdr['DATALVL']  = 'CAL'
-    ext_hdr.add_history("Bad Pixel Map created using {} and {}".format(master_dark.filename, master_flat.filename))
+    dark_ext_hdr['DATALVL']  = 'CAL'
+    dark_ext_hdr['HISTORY'] = "Bad Pixel Map created using {} and {}".format(master_dark.filename,master_flat.filename)
+
+    input_dataset = Dataset([master_dark,master_flat])
 
     #Make the BadPixelMap object
-    badpixelmap = BadPixelMap(combined_badpixels, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=input_dataset)
+    badpixelmap = BadPixelMap(combined_badpixels,pri_hdr=dark_hdr,ext_hdr=dark_ext_hdr,input_dataset=input_dataset)
 
     return badpixelmap
     

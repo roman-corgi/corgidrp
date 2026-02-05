@@ -10,7 +10,6 @@ import os
 import glob
 import astropy.io.fits as fits
 import pandas as pd
-from astropy.time import Time
 from corgidrp import mocks
 
 # Set up module-level logger
@@ -776,169 +775,177 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
     return output_excel_path
 
 
-def merge_headers_for_combined_frame(input_dataset, allow_differing_keywords=None):
+# Default keyword sets for merge_headers_for_combined_frame
+last_frame_keywords_default = ['VISITID', 'MJDEND']
+averaged_keywords_default = (
+    ['EXCAMT'] +
+    [f'Z{i}AVG' for i in range(2, 15)] +
+    [f'Z{i}VAR' for i in range(2, 15)] +
+    [f'Z{i}ERR' for i in range(2, 15)]
+)
+deleted_keywords_default = ['SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+invalid_keywords_default = ['FTIMEUTC']
+file_keywords = {f'FILE{i}' for i in range(100)}
+differing_keywords_default = ['NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', file_keywords]
+
+
+def merge_headers_for_combined_frame(
+    input_dataset,
+    last_frame_keywords=last_frame_keywords_default,
+    averaged_keywords=averaged_keywords_default,
+    deleted_keywords=deleted_keywords_default,
+    invalid_keywords=invalid_keywords_default,
+    allow_differing_keywords=differing_keywords_default,
+):
     """
-    Logic for propagating header keywords from multiple input frames for a combined output frame.
-    
+    Merge headers from multiple input frames for a combined output frame.
+
+    Frames are sorted by MJDSRT (ascending); the chronologically last frame
+    provides the base headers and values for last_frame_keywords.
+
+    Header keywords are handled according to which set they belong to:
+
+    1. last_frame_keywords: use value from the chronologically last frame
+    2. averaged_keywords: average across all frames (Z{i}VAR uses pooled-variance)
+    3. deleted_keywords: remove keywords from output headers entirely
+    4. invalid_keywords: assign -999 with type matching original (int/float/str)
+    5. allow_differing_keywords: exempt from check that all frames must have the same value
+    6. all other keywords: must be identical across frames, raise error if not
+
     Args:
-        input_dataset (corgidrp.data.Dataset): Dataset of input frames to combine.
-        allow_differing_keywords (set, optional): Set of keywords that are allowed to differ
-            across frames (eg 'BUNIT', 'EMGAIN_C' for calibration products that combine
-            different types). 
+        input_dataset (corgidrp.data.Dataset): Dataset of input frames to combine
+        last_frame_keywords (list or set, optional): Keywords to take from the last
+            frame. Default: VISITID, MJDEND.
+        averaged_keywords (list or set, optional): Keywords to average across frames
+            frame. Default: EXCAMT, Z2AVG..Z14AVG, Z2VAR..Z14VAR, Z2ERR..Z14ERR.
+        deleted_keywords (list or set, optional): Keywords to remove from output headers
+            entirely. Default: SCTSRT, SCTEND, LOCAMT, CYCLES, LASTEXP.
+        invalid_keywords (list or set, optional): Keywords to set to -999 with the same
+            datatype as the original value. Default: FTIMEUTC. 
+        allow_differing_keywords (list or set, optional): Keywords exempt from check that
+            all frames must have the same value. Default: NUM_FR, DRPCTIME, DRPNFILE,
+            COMMENT, HISTORY, FILE0..FILE99.
+
     Returns:
-        tuple: (merged_pri_hdr, merged_ext_hdr, merged_err_hdr, merged_dq_hdr) as astropy.io.fits.Header objects
+        tuple: (merged_pri_hdr, merged_ext_hdr, merged_err_hdr, merged_dq_hdr)
     """
+    last_frame_keywords = set(last_frame_keywords)
+    averaged_keywords = set(averaged_keywords)
+    deleted_keywords = set(deleted_keywords)
+    invalid_keywords = set(invalid_keywords)
+    allow_differing_keywords = set(allow_differing_keywords)
 
-    # source frame index for cases where the header should be carried forward from the last frame
-    src_idx = len(input_dataset) - 1
-    
-    # Get source frame headers as starting point
-    pri_hdr = input_dataset[src_idx].pri_hdr.copy()
-    ext_hdr = input_dataset[src_idx].ext_hdr.copy()
-    err_hdr = input_dataset[src_idx].err_hdr.copy() if hasattr(input_dataset[src_idx], 'err_hdr') and input_dataset[src_idx].err_hdr is not None else fits.Header()
-    dq_hdr = input_dataset[src_idx].dq_hdr.copy() if hasattr(input_dataset[src_idx], 'dq_hdr') and input_dataset[src_idx].dq_hdr is not None else fits.Header()
-    
-    # Set 1: always updated keywords
-    # ----------------------------------------------------------------------
-    calculated_keywords = {'NUM_FR', 'SCTSRT', 'SCTEND', 'MJDSRT', 'MJDEND', 
-                           'FTIMEUTC', 'DRPCTIME', 'DRPNFILE'}
-    # FILE{} keywords should be updated by _record_parent_filenames
-    file_keywords = {f'FILE{i}' for i in range(100)}  # FILE0-FILE99
+    # Dataset may not be time-ordered, so sort by MJDSRT to define the last frame
+    # and define the header starting point
+    mjd_vals = [float(f.ext_hdr['MJDSRT']) for f in input_dataset]
+    sort_idx = np.argsort(mjd_vals)
+    time_ordered = input_dataset[sort_idx]
+    last = time_ordered[-1]
+    pri_hdr = last.pri_hdr.copy()
+    ext_hdr = last.ext_hdr.copy()
+    err_hdr = (
+        last.err_hdr.copy()
+        if hasattr(last, 'err_hdr') and last.err_hdr is not None
+        else fits.Header()
+    )
+    dq_hdr = (
+        last.dq_hdr.copy()
+        if hasattr(last, 'dq_hdr') and last.dq_hdr is not None
+        else fits.Header()
+    )
 
-    calculated_keywords = calculated_keywords | file_keywords
-
-    ext_hdr['NUM_FR'] = len(input_dataset)
-    if 'SCTSRT' in input_dataset[0].ext_hdr:
-        ext_hdr['SCTSRT'] = input_dataset[0].ext_hdr['SCTSRT']
-    if 'SCTEND' in input_dataset[-1].ext_hdr:
-        ext_hdr['SCTEND'] = input_dataset[-1].ext_hdr['SCTEND']
-    if 'MJDSRT' in input_dataset[0].ext_hdr:
-        ext_hdr['MJDSRT'] = input_dataset[0].ext_hdr['MJDSRT']
-    if 'MJDEND' in input_dataset[-1].ext_hdr:
-        ext_hdr['MJDEND'] = input_dataset[-1].ext_hdr['MJDEND']
-    if 'FTIMEUTC' in ext_hdr:
-        ext_hdr['FTIMEUTC'] = "-999"
-    ext_hdr['DRPCTIME'] = Time.now().isot
-    
-    # Set 2: must be identical (error/ don't process if different)
-    # ----------------------------------------------------------------------
-    must_match_keywords = {'DATALVL', 'EMGAIN_C', 'KGAINPAR', 'RN', 'EXPTIME', 'NAXIS1', 
-                           'NAXIS2', 'BUNIT', 'ARRTYPE', 'BSCALE', 'BZERO'}
-    
-    # Remove allow_differing_keywords from the list if provided
-    if allow_differing_keywords is not None:
-        must_match_keywords = must_match_keywords - allow_differing_keywords
-    
-    for key in must_match_keywords:
-        values = []
-        for frame in input_dataset:
-            if key in frame.ext_hdr:
-                values.append(frame.ext_hdr[key])
-        if len(set(values)) > 1:
-            raise ValueError(f"Keyword {key} must be identical across all frames. Found values: {set(values)}")
-    
-    # Set 3: average across frames 
-    # TO DO: add in telescope pointing keywords
-    # ----------------------------------------------------------------------
-    zernike_avg_keywords = {f'Z{i}AVG' for i in range(2, 15)}
-    zernike_var_keywords = {f'Z{i}VAR' for i in range(2, 15)}
-    zernike_err_keywords = {f'Z{i}ERR' for i in range(2, 15)} 
-    averaged_keywords = {'EXCAMT'} | zernike_avg_keywords | zernike_var_keywords | zernike_err_keywords
-
-    # simple averages
-    for key in {'EXCAMT'} | zernike_avg_keywords | zernike_err_keywords:
-        values = []
-        for frame in input_dataset:
-            if key in frame.ext_hdr:
-                values.append(frame.ext_hdr[key])
-        if values:
-            ext_hdr[key] = float(np.mean(values))
-
-    # total variance: mean(var_i) + mean((mu_i - mu)^2)
-    for i in range(2, 15):
-        avg_key = f'Z{i}AVG'
-        var_key = f'Z{i}VAR'
-        avg_values = []
-        var_values = []
-        for frame in input_dataset:
-            if avg_key in frame.ext_hdr:
-                avg_values.append(frame.ext_hdr[avg_key])
-            if var_key in frame.ext_hdr:
-                var_values.append(frame.ext_hdr[var_key])
-        if not var_values:
-            continue
-        if avg_values:
-            mu = float(np.mean(avg_values))
-            total_var = float(np.mean(var_values) + np.mean((np.array(avg_values) - mu) ** 2))
-            ext_hdr[var_key] = total_var
-        else:
-            ext_hdr[var_key] = float(np.mean(var_values))
-
-    # Set 4: always carry forward from last frame
-    # ----------------------------------------------------------------------
-    always_carry_forward_keywords = {'VISITID'}
-
-    visitids = [frame.pri_hdr.get('VISITID') for frame in input_dataset]
-    visitids_differ = len(set(visitids)) > 1 if len(visitids) > 0 else False
-    if visitids_differ:
-        pri_hdr['VISITID'] = input_dataset[-1].pri_hdr.get('VISITID', '')
-        ext_hdr.add_history("Combined frames from multiple visits; VISITID from last frame")
-    
-    # Set 5: FITS standard (auto-populated)
-    # ----------------------------------------------------------------------
-    skip_keywords = {'SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND', 'XTENSION', 
-                              'PCOUNT', 'GCOUNT', 'COMMENT', 'HISTORY'}
-    
-    # process all remaining headers
-    # ----------------------------------------------------------------------
-    first_frame = input_dataset[0]
-
-    # tuples of (header_object, header_attr, source_header, needs_check) for main headers
-    headers_to_process = [
-        (ext_hdr, 'ext_hdr', first_frame.ext_hdr if hasattr(first_frame, 'ext_hdr') else None, False),
-        (pri_hdr, 'pri_hdr', first_frame.pri_hdr if hasattr(first_frame, 'pri_hdr') else None, False),
-        (err_hdr, 'err_hdr', first_frame.err_hdr if hasattr(first_frame, 'err_hdr') and first_frame.err_hdr is not None else None, True),
-        (dq_hdr, 'dq_hdr', first_frame.dq_hdr if hasattr(first_frame, 'dq_hdr') and first_frame.dq_hdr is not None else None, True),
+    # Keyword set 1: use value from last frame for last_frame_keywords
+    headers_src = [
+        (pri_hdr, last.pri_hdr),
+        (ext_hdr, last.ext_hdr),
+        (err_hdr, getattr(last, 'err_hdr', None) or fits.Header()),
+        (dq_hdr, getattr(last, 'dq_hdr', None) or fits.Header()),
     ]
-    
-    # Headers to skip updating
-    skip_all_headers = calculated_keywords | file_keywords | must_match_keywords | averaged_keywords | always_carry_forward_keywords | skip_keywords | {'FILENAME'}
-    
-    for header, header_attr, source_header, needs_check in headers_to_process:
-        if source_header is None:
-            continue
-        
-        for key in source_header.keys():
-            if key in skip_all_headers:
-                continue
-            
-            # Get values across all frames
-            values = []
-            for frame in input_dataset:
-                if needs_check:
-                    frame_header = getattr(frame, header_attr, None)
-                    if frame_header is not None and key in frame_header:
-                        values.append(frame_header[key])
-                else:
-                    frame_header = getattr(frame, header_attr)
-                    if key in frame_header:
-                        values.append(frame_header[key])
-            
-            # if values differ set to -999
-            if len(set(values)) > 1 and key in header:
-                first_value = values[0] if values else None
-                if isinstance(first_value, (int, float)):
-                    header[key] = -999
-                else:
-                    header[key] = "-999"
+    for out_hdr, src_hdr in headers_src:
+        for key in last_frame_keywords:
+            if key in src_hdr:
+                out_hdr[key] = src_hdr[key]
 
-    # Add history entry
-    history_msg = f"Combined {len(input_dataset)} frames"
-    if visitids_differ:
-        history_msg += "; frames from multiple visits"
-    ext_hdr.add_history(history_msg)
-    
+
+    # Keyword set 2: average averaged_keywords (using mean or pooled-variance for Z{i}VAR)
+    for key in averaged_keywords:
+        is_zvar = (len(key) > 4 and key.startswith('Z') and key.endswith('VAR') and
+                   key[1:-3].isdigit())
+        if is_zvar:
+            i = int(key[1:-3])
+            avg_key, var_key = f'Z{i}AVG', key
+            avg_vals = [f.ext_hdr[avg_key] for f in input_dataset if avg_key in f.ext_hdr]
+            var_vals = [f.ext_hdr[var_key] for f in input_dataset if var_key in f.ext_hdr]
+            if not var_vals:
+                continue
+            if avg_vals:
+                mu = float(np.mean(avg_vals))
+                ext_hdr[var_key] = float(np.mean(var_vals) + np.mean((np.array(avg_vals) - mu) ** 2))
+            else:
+                ext_hdr[var_key] = float(np.mean(var_vals))
+        else:
+            values = [frame.ext_hdr[key] for frame in input_dataset if key in frame.ext_hdr]
+            if values:
+                ext_hdr[key] = float(np.mean(values))
+
+
+    # Keyword set 3: remove deleted_keywords from headers
+    for hdr in (pri_hdr, ext_hdr, err_hdr, dq_hdr):
+        for key in list(hdr.keys()):
+            if key in deleted_keywords:
+                del hdr[key]
+
+
+    # Keyword set 4: assign -999 to invalid_keywords
+    for key in invalid_keywords:
+        sample = None
+        for f in input_dataset:
+            for attr in ('ext_hdr', 'pri_hdr', 'err_hdr', 'dq_hdr'):
+                h = getattr(f, attr, None)
+                if h is not None and key in h:
+                    sample = h[key]
+                    break
+            if sample is not None:
+                break
+        if sample is None:
+            inv_val = "-999"
+        elif isinstance(sample, (int, np.integer)) or isinstance(sample, bool):
+            # TODO: what to do about bool?
+            inv_val = -999
+        elif isinstance(sample, (float, np.floating)):
+            inv_val = -999.0
+        else:
+            inv_val = "-999"
+        for hdr in (pri_hdr, ext_hdr, err_hdr, dq_hdr):
+            if key in hdr:
+                hdr[key] = inv_val
+
+
+    # All other keywords: must be identical across frames, error if not
+    exempt = last_frame_keywords | averaged_keywords | deleted_keywords | invalid_keywords | allow_differing_keywords
+
+    headers_info = [
+        ('ext_hdr', ext_hdr),
+        ('pri_hdr', pri_hdr),
+        ('err_hdr', err_hdr),
+        ('dq_hdr', dq_hdr),
+    ]
+    for header_attr, out_header in headers_info:
+        for key in list(out_header.keys()):
+            if key in exempt:
+                continue
+            values = []
+            for f in input_dataset:
+                h = getattr(f, header_attr, None)
+                if h is not None and key in h:
+                    values.append(h[key])
+            if len(values) > 1 and len(set(values)) > 1:
+                raise ValueError(
+                    f"Keyword {key} must be identical across all frames. Found: {set(values)}"
+                )
+
     return pri_hdr, ext_hdr, err_hdr, dq_hdr
+
 
 def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
     """
