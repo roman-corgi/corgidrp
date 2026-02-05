@@ -919,8 +919,6 @@ class LineSpread(Image):
         self.fwhm_err = self.gauss_par[5]
         
         #clean headers, see issue #712
-        if "SCTSRT" in self.ext_hdr:
-            self.ext_hdr['SCTSRT'] = "-999"
         if "SCTEND" in self.ext_hdr:
             self.ext_hdr['SCTEND'] = "-999"
         if "LOCAMT" in self.ext_hdr:
@@ -1042,8 +1040,6 @@ class DispersionModel(Image):
         self.dq = None
     
         #clean headers, see issue #712
-        if "SCTSRT" in self.ext_hdr:
-            self.ext_hdr['SCTSRT'] = "-999"
         if "SCTEND" in self.ext_hdr:
             self.ext_hdr['SCTEND'] = "-999"
         if "LOCAMT" in self.ext_hdr:
@@ -1949,8 +1945,6 @@ class FluxcalFactor(Image):
             self.pri_hdr['FILENAME'] = self.filename
         
         #clean headers, see issue #712
-        if "SCTSRT" in self.ext_hdr:
-            self.ext_hdr['SCTSRT'] = "-999"
         if "SCTEND" in self.ext_hdr:
             self.ext_hdr['SCTEND'] = "-999"
         if "LOCAMT" in self.ext_hdr:
