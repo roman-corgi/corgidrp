@@ -54,17 +54,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     output_ill_dir = os.path.join(input_data_dir, 'ill_l1_frames')
     output_dark_dir = os.path.join(input_data_dir, 'dark_l1_frames')
-    output_ill_fixed_dir = os.path.join(input_data_dir, 'ill_l1_frames_fixed')
-    output_dark_fixed_dir = os.path.join(input_data_dir, 'dark_l1_frames_fixed')
     output_l2a_dir = os.path.join(output_dir, 'l1_to_l2a')
     if not os.path.exists(output_ill_dir):
         os.makedirs(output_ill_dir)
     if not os.path.exists(output_dark_dir):
         os.makedirs(output_dark_dir)
-    if not os.path.exists(output_ill_fixed_dir):
-        os.makedirs(output_ill_fixed_dir)
-    if not os.path.exists(output_dark_fixed_dir):
-        os.makedirs(output_dark_fixed_dir)
     if not os.path.exists(output_l2a_dir):
         os.makedirs(output_l2a_dir)
 
@@ -80,8 +74,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
 
     # Update headers for TVAC files
-    l1_data_ill_filelist = check.fix_hdrs_for_tvac(l1_data_ill_filelist, output_ill_fixed_dir)
-    l1_data_dark_filelist = check.fix_hdrs_for_tvac(l1_data_dark_filelist, output_dark_fixed_dir)
+    l1_data_ill_filelist = check.fix_hdrs_for_tvac(l1_data_ill_filelist, output_ill_dir)
+    l1_data_dark_filelist = check.fix_hdrs_for_tvac(l1_data_dark_filelist, output_dark_dir)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')

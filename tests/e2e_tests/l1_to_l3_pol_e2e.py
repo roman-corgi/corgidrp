@@ -199,6 +199,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         os.makedirs(input_data_dir)
 
     # Update headers
+    # TO DO: pol sims should have the correct VISTYPE, currently undefined
     input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
 
     # Validate all input images
