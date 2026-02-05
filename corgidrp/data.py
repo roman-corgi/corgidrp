@@ -917,6 +917,18 @@ class LineSpread(Image):
         self.amp_err = self.gauss_par[3]
         self.wave_err = self.gauss_par[4]
         self.fwhm_err = self.gauss_par[5]
+        
+        #clean headers, see issue #712
+        if "SCTSRT" in self.ext_hdr:
+            self.ext_hdr['SCTSRT'] = "-999"
+        if "SCTEND" in self.ext_hdr:
+            self.ext_hdr['SCTEND'] = "-999"
+        if "LOCAMT" in self.ext_hdr:
+            self.ext_hdr['LOCAMT'] = "-999"
+        if "CYCLES" in self.ext_hdr:
+            self.ext_hdr['CYCLES'] = -999
+        if "LASTEXP" in self.ext_hdr:
+            self.ext_hdr['LASTEXP'] = -999
    
     def save(self, filedir=None, filename=None):
         """
@@ -1028,7 +1040,18 @@ class DispersionModel(Image):
         # Add err and dq attributes for walker compatibility (set to None since DispersionModel doesn't have these)
         self.err = None
         self.dq = None
-
+    
+        #clean headers, see issue #712
+        if "SCTSRT" in self.ext_hdr:
+            self.ext_hdr['SCTSRT'] = "-999"
+        if "SCTEND" in self.ext_hdr:
+            self.ext_hdr['SCTEND'] = "-999"
+        if "LOCAMT" in self.ext_hdr:
+            self.ext_hdr['LOCAMT'] = "-999"
+        if "CYCLES" in self.ext_hdr:
+            self.ext_hdr['CYCLES'] = -999
+        if "LASTEXP" in self.ext_hdr:
+            self.ext_hdr['LASTEXP'] = -999
 
     def save(self, filedir=None, filename=None):
         """
@@ -1924,6 +1947,18 @@ class FluxcalFactor(Image):
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
+        
+        #clean headers, see issue #712
+        if "SCTSRT" in self.ext_hdr:
+            self.ext_hdr['SCTSRT'] = "-999"
+        if "SCTEND" in self.ext_hdr:
+            self.ext_hdr['SCTEND'] = "-999"
+        if "LOCAMT" in self.ext_hdr:
+            self.ext_hdr['LOCAMT'] = "-999"
+        if "CYCLES" in self.ext_hdr:
+            self.ext_hdr['CYCLES'] = -999
+        if "LASTEXP" in self.ext_hdr:
+            self.ext_hdr['LASTEXP'] = -999
 
 class SpecFluxCal(Image):
     """
