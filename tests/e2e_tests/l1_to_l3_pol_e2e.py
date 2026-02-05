@@ -10,6 +10,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
+import corgidrp.check as check
 import shutil
 import logging
 import traceback
@@ -19,39 +20,6 @@ from corgidrp.check import (check_filename_convention, check_dimensions,
 import warnings
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
-
-def fix_headers(
-    list_of_fits,
-    ):
-    """ 
-    Gets around EMGAIN_A being set to 1 in TVAC data and fixes string header values.
-    Also adds missing EACQ_ROW/COL headers for L2b files if needed.
-    
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    for file in list_of_fits:
-        with fits.open(file, mode='update') as fits_file:
-            exthdr = fits_file[1].header
-            if 'EMGAIN_A' in exthdr and float(exthdr['EMGAIN_A']) == 1:
-                exthdr['EMGAIN_A'] = -1 
-            if 'EMGAIN_C' in exthdr and type(exthdr['EMGAIN_C']) is str:
-                exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-            
-            # TO DO: flag sims bug that misspells EACQ_ROW/COL
-            if exthdr.get('DATALVL') == 'L2b':
-                naxis1 = exthdr.get('NAXIS1', 1024)
-                naxis2 = exthdr.get('NAXIS2', 1024)
-                if 'EACQ_ROW' not in exthdr or exthdr['EACQ_ROW'] == 0:
-                    exthdr['EACQ_ROW'] = naxis2 // 2
-                if 'EACQ_COL' not in exthdr or exthdr.get('EACQ_COL', 0) == 0:
-                    exthdr['EACQ_COL'] = naxis1 // 2
-
-            # TO DO: pol sims should have the correct VISTYPE, currently undefined
-            prihdr = fits_file[0].header
-            if 'PA_APER' not in prihdr and 'ROLL' in prihdr:
-                prihdr['PA_APER'] = prihdr['ROLL']
-
 
 def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     """Run the complete L1 to L3 polarimetry data end-to-end test.
@@ -230,13 +198,9 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Copy files to input_data directory and update file list
-    input_data_filelist = [
-        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-        for file_path in input_data_filelist
-    ] 
-    
-    fix_headers(input_data_filelist)
+    # Update headers
+    # TO DO: pol sims should have the correct VISTYPE, currently undefined
+    input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
 
     # Validate all input images
     input_dataset = data.Dataset(input_data_filelist)
