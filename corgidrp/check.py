@@ -11,6 +11,7 @@ import glob
 import astropy.io.fits as fits
 import pandas as pd
 from astropy.time import Time
+from corgidrp import mocks
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -938,3 +939,87 @@ def merge_headers_for_combined_frame(input_dataset, allow_differing_keywords=Non
     ext_hdr.add_history(history_msg)
     
     return pri_hdr, ext_hdr, err_hdr, dq_hdr
+
+def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
+    """
+    Overwrite FITS headers with mock defaults while preserving certain values from originals.
+
+    Used for TVAC (and similar) data. Writes updated files to output_dir; does not modify originals.
+
+    Args:
+        list_of_fits (list): FITS file paths to update
+        output_dir (str): Directory to write updated FITS files to
+        header_template (callable, optional): Function returning headers.
+            Defaults to mocks.create_default_L1_headers.
+
+    Returns:
+        list: Updated FITS file paths written to output_dir
+    """
+    preserve_pri_keys = [
+        'VISITID', 'CDMSVERS', 'FSWDVERS', 'ORIGIN', 'FILETIME',
+        'VISTYPE', 'DATAVERS', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+        'SEGMENT', 'OBSNUM', 'VISNUM', 'TARGET', 'FILENAME',
+        'PSFREF',
+    ]
+    preserve_img_keys = [
+        'XTENSION', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2',
+        'PCOUNT', 'GCOUNT', 'BSCALE', 'BZERO', 'BUNIT',
+        'ARRTYPE', 'SCTSRT', 'SCTEND', 'STATUS', 'HVCBIAS',
+        'OPMODE', 'EXPTIME', 'EMGAIN_C', 'UNITYG', 'EMGAINA1',
+        'EMGAINA2', 'EMGAINA3', 'EMGAINA4', 'EMGAINA5', 'GAINTCAL',
+        'EXCAMT', 'LOCAMT', 'EMGAIN_A', 'KGAINPAR', 'CYCLES',
+        'LASTEXP', 'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP',
+        'NOVEREXP', 'ISPC', 'PROXET', 'FCMLOOP', 'FCMPOS',
+        'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR', 'FSMSG1',
+        'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY', 'EACQ_ROW',
+        'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+        'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR',
+        'Z3AVG', 'Z3RES', 'Z3VAR', '10SVALID', 'Z4AVG',
+        'Z4RES', 'Z5AVG', 'Z5RES', 'Z6AVG', 'Z6RES',
+        'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES', 'Z9AVG',
+        'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+        'Z12AVG', 'Z13AVG', 'Z14AVG', 'SPAM_H', 'SPAM_V',
+        'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V', 'FPAM_H', 'FPAM_V',
+        'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V', 'LSAM_H', 'LSAM_V',
+        'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V', 'FSAM_H', 'FSAM_V',
+        'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V', 'CFAM_H', 'CFAM_V',
+        'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V', 'DPAM_H', 'DPAM_V',
+        'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V', 'DATETIME', 'FTIMEUTC',
+        'DATALVL', 'MISSING',
+    ]
+
+    if header_template is None:
+        header_template = mocks.create_default_L1_headers
+
+    updated_files = []
+    for file in list_of_fits:
+        with fits.open(file) as hdul:
+            orig_pri_hdr = hdul[0].header.copy()
+            orig_img_hdr = hdul[1].header.copy()
+
+            header_result = header_template()
+            mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
+
+            for key in preserve_pri_keys:
+                if key in orig_pri_hdr:
+                    mock_pri_hdr[key] = orig_pri_hdr[key]
+            for key in preserve_img_keys:
+                if key in orig_img_hdr:
+                    mock_img_hdr[key] = orig_img_hdr[key]
+
+            if 'EMGAIN_A' in mock_img_hdr and 'HVCBIAS' in mock_img_hdr:
+                if float(mock_img_hdr['EMGAIN_A']) == 1 and mock_img_hdr['HVCBIAS'] <= 0:
+                    # SSC TVAC files default EMGAIN_A=1 regardless of commanded gain
+                    mock_img_hdr['EMGAIN_A'] = -1
+            if 'EMGAIN_C' in mock_img_hdr and isinstance(mock_img_hdr['EMGAIN_C'], str):
+                mock_img_hdr['EMGAIN_C'] = float(mock_img_hdr['EMGAIN_C'])
+
+            hdul_copy = fits.HDUList([hdu.copy() for hdu in hdul])
+            hdul_copy[0].header = mock_pri_hdr
+            hdul_copy[1].header = mock_img_hdr
+
+            output_path = os.path.join(output_dir, os.path.basename(file))
+            hdul_copy.writeto(output_path, overwrite=True)
+            updated_files.append(output_path)
+
+    return updated_files
