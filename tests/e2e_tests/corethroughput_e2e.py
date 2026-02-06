@@ -16,6 +16,7 @@ import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
 import corgidrp.l2b_to_l3 as l2b_to_l3
 from corgidrp import caldb
+from corgidrp.check import fix_hdrs_for_tvac
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -87,6 +88,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         list_of_fits=corethroughput_image_list, 
         output_dir=input_l2b_dir, 
         level_suffix="l2b"
+    )
+    corethroughput_data_filepath = fix_hdrs_for_tvac(
+        corethroughput_data_filepath,
+        input_l2b_dir,
+        header_template=mocks.create_default_L2b_headers,
     )
     
     # Initialize a connection to the calibration database
@@ -172,6 +178,11 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     dataset.save(filedir=l2b_data_dir)
     l2b_filenames = glob.glob(os.path.join(l2b_data_dir, '*.fits'))
     l2b_filenames.sort()
+    l2b_filenames = fix_hdrs_for_tvac(
+        l2b_filenames,
+        l2b_data_dir,
+        header_template=mocks.create_default_L2b_headers,
+    )
 
     walker.walk_corgidrp(l2b_filenames, '', corethroughput_outputdir)
     
@@ -212,7 +223,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     outputdir = thisfile_dir
-    e2edata_path = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_path = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,

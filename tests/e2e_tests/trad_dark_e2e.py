@@ -12,6 +12,7 @@ import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import corgidrp.check as check
 import shutil
 try:
     from proc_cgi_frame.gsw_process import Process, mean_combine
@@ -19,29 +20,6 @@ except:
     pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
-
-def fix_str_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Gets around EMGAIN_A being set to 1 in TVAC data.
-    
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
-            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-        if type(exthdr['EMGAIN_C']) is str:
-            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-        prihdr = fits_file[0].header
-        if prihdr['VISTYPE'] == 'N/A':
-            prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
-
 
 @pytest.mark.e2e
 def test_trad_dark(e2edata_path, e2eoutput_path):
@@ -104,15 +82,17 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
-    # Copy files to input_data directory and update file list
-    trad_dark_data_filelist = [
-        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-        for file_path in trad_dark_data_filelist
-    ]
+    # Update headers
+    trad_dark_data_filelist = check.fix_hdrs_for_tvac(
+        trad_dark_data_filelist,
+        input_data_dir,
+        header_template=mocks.create_default_L1_headers,
+    )
+    # Set correct vistype for darks
+    for filepath in trad_dark_data_filelist:
+        with fits.open(filepath, mode='update') as hdul:
+            hdul[0].header['VISTYPE'] = 'CGIVST_CAL_DRK'
 
-    # modify headers from TVAC to in-flight headers
-    #fix_headers_for_tvac(trad_dark_data_filelist)
-    fix_str_for_tvac(trad_dark_data_filelist)
 
 
     ###### Setup necessary calibration files
@@ -242,8 +222,8 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
-    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_l1_", "_l2a_", 1)) 
-    trad_dark_data = trad_dark_fits[1].data
+    with fits.open(generated_trad_dark_file) as trad_dark_fits:
+        trad_dark_data = trad_dark_fits[1].data
     ###################
     
     ##### Check against TVAC traditional dark result
@@ -328,8 +308,15 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
             trad_dark_data_filelist.append(os.path.join(input_data_dir, f))
 
     # modify headers from TVAC to in-flight headers
-    #fix_headers_for_tvac(trad_dark_data_filelist)
-    fix_str_for_tvac(trad_dark_data_filelist)
+    trad_dark_data_filelist = check.fix_hdrs_for_tvac(
+        trad_dark_data_filelist,
+        input_data_dir,
+        header_template=mocks.create_default_L1_headers,
+    )
+    # Set correct vistype for darks
+    for filepath in trad_dark_data_filelist:
+        with fits.open(filepath, mode='update') as hdul:
+            hdul[0].header['VISTYPE'] = 'CGIVST_CAL_DRK'
 
 
     ###### Setup necessary calibration files
@@ -417,6 +404,10 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
         if f.endswith('_drk_cal.fits'):
             trad_dark_filename = f
             break
+    if not trad_dark_filename or not trad_dark_filename.endswith('_drk_cal.fits'):
+        raise FileNotFoundError(
+            f"No *_drk_cal.fits found in {build_trad_dark_outputdir}; "
+        )
     generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, trad_dark_filename) 
     
     ###################### run II&T code on data
@@ -459,8 +450,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
-    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_l1_", "_l2a_", 1)) 
-    trad_dark_data = trad_dark_fits[1].data
+    with fits.open(generated_trad_dark_file) as trad_dark_fits:
+        trad_dark_data = trad_dark_fits[1].data
     ###################
     
     ##### Check against TVAC traditional dark result
@@ -488,7 +479,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir =  '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data' #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     outputdir = thisfile_dir
 
