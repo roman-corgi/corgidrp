@@ -815,9 +815,8 @@ def merge_headers(
     3. averaged_keywords: average across all frames (Z{i}VAR uses pooled-variance)
     4. deleted_keywords: remove keywords from output headers entirely
     5. invalid_keywords: assign -999 with type matching original (int/float/str)
-    6. allow_differing_keywords: exempt from check that all frames must have the same value
-    7. calculated_value_keywords: compute value for output (e.g. FILETIME = current time)
-    8. all other keywords: must be identical across frames; raise error if not
+    6. calculated_value_keywords: compute value for output (e.g. FILETIME = current time)
+    7. all other keywords: must be identical across frames; raise error if not
 
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset of input frames to merge.
@@ -909,6 +908,7 @@ def merge_headers(
     # Keyword set 5: assign -999 to invalid_keywords
     for key in invalid_keywords:
         sample = None
+        # figure out the datatype
         for f in input_dataset:
             for attr in ('ext_hdr', 'pri_hdr', 'err_hdr', 'dq_hdr'):
                 h = getattr(f, attr, None)
