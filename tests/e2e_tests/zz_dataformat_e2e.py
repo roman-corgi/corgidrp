@@ -128,13 +128,14 @@ def generate_header_table(hdu):
         str: rst table with hdulist structure
     """
 
-    header_table = '''
-+------------+------------+--------------------------------+----------------------------------------------------+
-| Keyword    | Datatype   | Example Value                  | Description                                        |
-+============+============+================================+====================================================+
-'''
-    row_template = "| {0:<10} | {1:<10} | {2:<30} | {3:<50} |"
-    row_delimiter = "+------------+------------+--------------------------------+----------------------------------------------------+"
+    # setting this up so that the description column can be made as wide as needed
+    desc_w = 120
+    delim = "+------------+------------+--------------------------------+" + "-" * (desc_w + 2) + "+"
+    header_delim = "+============+============+================================+" + "=" * (desc_w + 2) + "+"
+    header_row = "| Keyword    | Datatype   | Example Value                  | " + "Description".ljust(desc_w) + " |"
+    header_table = "\n" + delim + "\n" + header_row + "\n" + header_delim + "\n"
+    row_template = "| {0:<10} | {1:<10} | {2:<30} | {3:<" + str(desc_w) + "} |"
+    row_delimiter = delim
 
     history_recorded = False
     comment_recorded = False
@@ -161,13 +162,11 @@ def generate_header_table(hdu):
 
         example_value = str(hdr[key]).replace("\n", " ")
         if len(example_value) > 30:
-            # truncate string
             example_value = example_value[:27] + "..."
 
         description = hdr.comments[key]
-        if len(description) > 50:
-            # truncate string
-            description = description[:47] + "..."
+        if len(description) > desc_w:
+            description = description[:desc_w]
 
         if key[:4] == "FILE" and key[4:].isdigit():
             if filen_recorded:
@@ -1384,7 +1383,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         # Process each HDU
         for hdu_name in sorted(all_headers.keys()):
             # Get all keywords for this HDU
-            keywords = sorted(all_headers[hdu_name].keys())
+            keywords = list(all_headers[hdu_name].keys())
             
             ordered_products = ['L1']  # Start with L1
             
@@ -1491,6 +1490,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
+    test_header_crossreference_e2e(e2edata_dir, outputdir)
     test_astrom_dataformat_e2e(e2edata_dir, outputdir)
     test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
     test_ct_dataformat_e2e(e2edata_dir, outputdir)
@@ -1520,4 +1520,3 @@ if __name__ == "__main__":
     test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
     test_dark_dataformat_e2e(e2edata_dir, outputdir)
     test_tpump_dataformat_e2e(e2edata_dir, outputdir)
-    test_header_crossreference_e2e(e2edata_dir, outputdir)
