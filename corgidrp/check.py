@@ -3,6 +3,7 @@ Module to hold input-checking functions to minimize repetition
 
 Copied over from the II&T pipeline
 """
+import datetime
 import numbers
 import numpy as np
 import logging
@@ -775,71 +776,83 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
     return output_excel_path
 
 
-# Default keyword sets for merge_headers_for_combined_frame
+# Default keyword sets for merge_headers
+first_frame_keywords_default = ['MJDSRT']
 last_frame_keywords_default = ['VISITID', 'MJDEND']
 averaged_keywords_default = (
+    ['FSMSG1'] + ['FSMSG2'] + ['FSMSG3'] + ['FSMX'] + ['FSMY'] +
     ['EXCAMT'] +
     [f'Z{i}AVG' for i in range(2, 15)] +
     [f'Z{i}VAR' for i in range(2, 15)] +
-    [f'Z{i}ERR' for i in range(2, 15)]
+    [f'Z{i}RES' for i in range(2, 15)]
 )
 deleted_keywords_default = ['SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
-invalid_keywords_default = ['FTIMEUTC']
-file_keywords = {f'FILE{i}' for i in range(100)}
-differing_keywords_default = ['NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', file_keywords]
+invalid_keywords_default = ['FTIMEUTC', 'PROXET', 'DATETIME']
+calculated_value_keywords_default = ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME'] + [f'FILE{i}' for i in range(100)]
 
 
-def merge_headers_for_combined_frame(
+def merge_headers(
     input_dataset,
+    first_frame_keywords=first_frame_keywords_default,
     last_frame_keywords=last_frame_keywords_default,
     averaged_keywords=averaged_keywords_default,
     deleted_keywords=deleted_keywords_default,
     invalid_keywords=invalid_keywords_default,
-    allow_differing_keywords=differing_keywords_default,
+    calculated_value_keywords=calculated_value_keywords_default,
 ):
     """
-    Merge headers from multiple input frames for a combined output frame.
+    Merge headers from multiple input frames into a single header set.
+
+    Used when building combined frames or calibration products from a dataset of frames.
 
     Frames are sorted by MJDSRT (ascending); the chronologically last frame
     provides the base headers and values for last_frame_keywords.
 
     Header keywords are handled according to which set they belong to:
 
-    1. last_frame_keywords: use value from the chronologically last frame
-    2. averaged_keywords: average across all frames (Z{i}VAR uses pooled-variance)
-    3. deleted_keywords: remove keywords from output headers entirely
-    4. invalid_keywords: assign -999 with type matching original (int/float/str)
-    5. allow_differing_keywords: exempt from check that all frames must have the same value
-    6. all other keywords: must be identical across frames, raise error if not
+    1. first_frame_keywords: use value from the chronologically first frame
+    2. last_frame_keywords: use value from the chronologically last frame
+    3. averaged_keywords: average across all frames (Z{i}VAR uses pooled-variance)
+    4. deleted_keywords: remove keywords from output headers entirely
+    5. invalid_keywords: assign -999 with type matching original (int/float/str)
+    6. allow_differing_keywords: exempt from check that all frames must have the same value
+    7. calculated_value_keywords: compute value for output (e.g. FILETIME = current time)
+    8. all other keywords: must be identical across frames; raise error if not
 
     Args:
-        input_dataset (corgidrp.data.Dataset): Dataset of input frames to combine
+        input_dataset (corgidrp.data.Dataset): Dataset of input frames to merge.
+        first_frame_keywords (list or set, optional): Keywords to take from the first
+            frame. Default: MJDSRT.
         last_frame_keywords (list or set, optional): Keywords to take from the last
             frame. Default: VISITID, MJDEND.
-        averaged_keywords (list or set, optional): Keywords to average across frames
-            frame. Default: EXCAMT, Z2AVG..Z14AVG, Z2VAR..Z14VAR, Z2ERR..Z14ERR.
-        deleted_keywords (list or set, optional): Keywords to remove from output headers
-            entirely. Default: SCTSRT, SCTEND, LOCAMT, CYCLES, LASTEXP.
-        invalid_keywords (list or set, optional): Keywords to set to -999 with the same
-            datatype as the original value. Default: FTIMEUTC. 
-        allow_differing_keywords (list or set, optional): Keywords exempt from check that
-            all frames must have the same value. Default: NUM_FR, DRPCTIME, DRPNFILE,
-            COMMENT, HISTORY, FILE0..FILE99.
+        averaged_keywords (list or set, optional): Keywords to average across frames.
+            Default: EXCAMT, Z2AVG..Z14AVG, Z2VAR..Z14VAR, Z2ERR..Z14ERR.
+        deleted_keywords (list or set, optional): Keywords to remove from output headers.
+            Default: SCTSRT, SCTEND, LOCAMT, CYCLES, LASTEXP.
+        invalid_keywords (list or set, optional): Keywords to set to -999 with type
+            matching original (int/float/str). Default: FTIMEUTC.
+        allow_differing_keywords (list or set, optional): Keywords exempt from the
+            must be identical check. Default: NUM_FR, DRPCTIME, DRPNFILE, COMMENT, HISTORY,
+            FILE0..FILE99.
+        calculated_value_keywords (list or set, optional): Keywords whose value is computed
+            for the merged output (e.g. FILETIME = current UTC time). Default: FILETIME.
 
     Returns:
         tuple: (merged_pri_hdr, merged_ext_hdr, merged_err_hdr, merged_dq_hdr)
     """
+    first_frame_keywords = set(first_frame_keywords)
     last_frame_keywords = set(last_frame_keywords)
     averaged_keywords = set(averaged_keywords)
     deleted_keywords = set(deleted_keywords)
     invalid_keywords = set(invalid_keywords)
-    allow_differing_keywords = set(allow_differing_keywords)
+    calculated_value_keywords = set(calculated_value_keywords)
 
     # Dataset may not be time-ordered, so sort by MJDSRT to define the last frame
     # and define the header starting point
     mjd_vals = [float(f.ext_hdr['MJDSRT']) for f in input_dataset]
     sort_idx = np.argsort(mjd_vals)
     time_ordered = input_dataset[sort_idx]
+    first = time_ordered[0]
     last = time_ordered[-1]
     pri_hdr = last.pri_hdr.copy()
     ext_hdr = last.ext_hdr.copy()
@@ -854,28 +867,28 @@ def merge_headers_for_combined_frame(
         else fits.Header()
     )
 
-    # Keyword set 1: use value from last frame for last_frame_keywords
-    headers_src = [
-        (pri_hdr, last.pri_hdr),
-        (ext_hdr, last.ext_hdr),
-        (err_hdr, getattr(last, 'err_hdr', None) or fits.Header()),
-        (dq_hdr, getattr(last, 'dq_hdr', None) or fits.Header()),
-    ]
-    for out_hdr, src_hdr in headers_src:
+    headers = (pri_hdr, ext_hdr, err_hdr, dq_hdr)
+    last_hdrs = (last.pri_hdr, last.ext_hdr, getattr(last, 'err_hdr', None) or fits.Header(), getattr(last, 'dq_hdr', None) or fits.Header())
+    first_hdrs = (first.pri_hdr, first.ext_hdr, getattr(first, 'err_hdr', None) or fits.Header(), getattr(first, 'dq_hdr', None) or fits.Header())
+
+    # Keyword set 1 & 2: use values from last/first frame
+    for out_hdr, last_src, first_src in zip(headers, last_hdrs, first_hdrs):
         for key in last_frame_keywords:
-            if key in src_hdr:
-                out_hdr[key] = src_hdr[key]
+            if key in last_src:
+                out_hdr[key] = last_src[key]
+        for key in first_frame_keywords:
+            if key in first_src:
+                out_hdr[key] = first_src[key]
 
-
-    # Keyword set 2: average averaged_keywords (using mean or pooled-variance for Z{i}VAR)
+    # Keyword set 3: average averaged_keywords (using mean or pooled-variance for Z{i}VAR)
     for key in averaged_keywords:
         is_zvar = (len(key) > 4 and key.startswith('Z') and key.endswith('VAR') and
                    key[1:-3].isdigit())
         if is_zvar:
             i = int(key[1:-3])
             avg_key, var_key = f'Z{i}AVG', key
-            avg_vals = [f.ext_hdr[avg_key] for f in input_dataset if avg_key in f.ext_hdr]
-            var_vals = [f.ext_hdr[var_key] for f in input_dataset if var_key in f.ext_hdr]
+            avg_vals = [float(f.ext_hdr[avg_key]) for f in input_dataset if avg_key in f.ext_hdr]
+            var_vals = [float(f.ext_hdr[var_key]) for f in input_dataset if var_key in f.ext_hdr]
             if not var_vals:
                 continue
             if avg_vals:
@@ -884,19 +897,19 @@ def merge_headers_for_combined_frame(
             else:
                 ext_hdr[var_key] = float(np.mean(var_vals))
         else:
-            values = [frame.ext_hdr[key] for frame in input_dataset if key in frame.ext_hdr]
+            values = [float(frame.ext_hdr[key]) for frame in input_dataset if key in frame.ext_hdr]
             if values:
                 ext_hdr[key] = float(np.mean(values))
 
 
-    # Keyword set 3: remove deleted_keywords from headers
-    for hdr in (pri_hdr, ext_hdr, err_hdr, dq_hdr):
+    # Keyword set 4: remove deleted_keywords from headers
+    for hdr in headers:
         for key in list(hdr.keys()):
             if key in deleted_keywords:
                 del hdr[key]
 
 
-    # Keyword set 4: assign -999 to invalid_keywords
+    # Keyword set 5: assign -999 to invalid_keywords
     for key in invalid_keywords:
         sample = None
         for f in input_dataset:
@@ -916,21 +929,23 @@ def merge_headers_for_combined_frame(
             inv_val = -999.0
         else:
             inv_val = "-999"
-        for hdr in (pri_hdr, ext_hdr, err_hdr, dq_hdr):
+        for hdr in headers:
             if key in hdr:
                 hdr[key] = inv_val
 
+    # Keyword set 6: calculated_value_keywords - compute value
+    for key in calculated_value_keywords:
+        if key == 'FILETIME':
+            val = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            pri_hdr[key] = val
+            # add others as necessary
 
     # All other keywords: must be identical across frames, error if not
-    exempt = last_frame_keywords | averaged_keywords | deleted_keywords | invalid_keywords | allow_differing_keywords
+    exempt = (first_frame_keywords | last_frame_keywords | averaged_keywords |
+              deleted_keywords | invalid_keywords | calculated_value_keywords)
 
-    headers_info = [
-        ('ext_hdr', ext_hdr),
-        ('pri_hdr', pri_hdr),
-        ('err_hdr', err_hdr),
-        ('dq_hdr', dq_hdr),
-    ]
-    for header_attr, out_header in headers_info:
+    header_attrs = ('pri_hdr', 'ext_hdr', 'err_hdr', 'dq_hdr')
+    for header_attr, out_header in zip(header_attrs, headers):
         for key in list(out_header.keys()):
             if key in exempt:
                 continue
@@ -992,7 +1007,7 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
         'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V', 'CFAM_H', 'CFAM_V',
         'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V', 'DPAM_H', 'DPAM_V',
         'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V', 'DATETIME', 'FTIMEUTC',
-        'DATALVL', 'MISSING',
+        'DATALVL', 'MISSING', 'DATATYPE'
     ]
 
     if header_template is None:

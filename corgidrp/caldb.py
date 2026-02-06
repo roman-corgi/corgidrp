@@ -162,7 +162,7 @@ class CalDB:
             datatype = labels[entry.__class__]  # get the database str representation
         else:
             datatype = "Sci"
-        mjd = time.Time(entry.ext_hdr["SCTSRT"]).mjd
+        mjd = float(entry.ext_hdr["MJDSRT"])
 
         exptime = entry.ext_hdr["EXPTIME"]
         if exptime is None:
@@ -504,6 +504,7 @@ def initialize():
         prihdr['FILENAME'] = disp_filename
         exthdr['DATETIME'] = dt_str
         exthdr['FTIMEUTC'] = dt_str
+        exthdr['MJDSRT'] = float(dt.mjd)
         # not physically relevant since we are just constructing the calibration product for the dispersion model, not 
         # the observations that produced it, but just to avoid confusion, we set the values to something sensible
         exthdr['DPAMNAME'] = 'PRISM3' 

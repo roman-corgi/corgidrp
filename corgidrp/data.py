@@ -1421,8 +1421,14 @@ class BadPixelMap(Image):
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this bad pixel map (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
-        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                invalid_keywords=['FTIMEUTC', 'PROXET', 'DATETIME', 'BUNIT', 'EXPTIME', 'EMGAIN_C', 'DATATYPE']
+            )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new bad pixel map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new bad pixel map
@@ -1630,7 +1636,7 @@ class DetectorParams(Image):
                 raise ValueError("Input should either be a dictionary or a filepath string")
             pri_hdr = fits.Header()
             ext_hdr = fits.Header()
-            ext_hdr['SCTSRT'] = date_valid.isot # use this for validity date
+            ext_hdr['MJDSRT'] = date_valid.mjd
             ext_hdr['DRPVERSN'] =  corgidrp.__version__
             ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
@@ -1696,7 +1702,7 @@ class DetectorParams(Image):
             # use the start date for the filename by default
             self.filedir = "."
 
-            filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':','.')
+            filename = "DetectorParams_{0}.fits".format(self.ext_hdr['MJDSRT']).replace(':','.')
             self.filename = filename
             self.pri_hdr['FILENAME'] = self.filename
 
@@ -3373,7 +3379,7 @@ def autoload(filepath):
                 dtype = "Image"
             else:
                 errmsg = "Could not determine datatype for {0}. Data shape of {1} is not 2-D"
-                raise ValueError(errmsg.format(filepath, dtype))
+                raise ValueError(errmsg.format(filepath, hdulist[1].data.shape))
 
     # if we got here, we have a datatype
     data_class = datatypes[dtype]
