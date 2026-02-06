@@ -822,20 +822,17 @@ def merge_headers(
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset of input frames to merge.
         first_frame_keywords (list or set, optional): Keywords to take from the first
-            frame. Default: MJDSRT.
+            frame.
         last_frame_keywords (list or set, optional): Keywords to take from the last
-            frame. Default: VISITID, MJDEND.
+            frame.
         averaged_keywords (list or set, optional): Keywords to average across frames.
-            Default: EXCAMT, Z2AVG..Z14AVG, Z2VAR..Z14VAR, Z2ERR..Z14ERR.
         deleted_keywords (list or set, optional): Keywords to remove from output headers.
-            Default: SCTSRT, SCTEND, LOCAMT, CYCLES, LASTEXP.
         invalid_keywords (list or set, optional): Keywords to set to -999 with type
-            matching original (int/float/str). Default: FTIMEUTC.
+            matching original (int/float/str).
         allow_differing_keywords (list or set, optional): Keywords exempt from the
-            must be identical check. Default: NUM_FR, DRPCTIME, DRPNFILE, COMMENT, HISTORY,
-            FILE0..FILE99.
+            must be identical check.
         calculated_value_keywords (list or set, optional): Keywords whose value is computed
-            for the merged output (e.g. FILETIME = current UTC time). Default: FILETIME.
+            for the merged output (e.g. FILETIME = current UTC time).
 
     Returns:
         tuple: (merged_pri_hdr, merged_ext_hdr, merged_err_hdr, merged_dq_hdr)
