@@ -778,7 +778,7 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
 
 # Default keyword sets for merge_headers
 first_frame_keywords_default = ['MJDSRT']
-last_frame_keywords_default = ['VISITID', 'MJDEND']
+last_frame_keywords_default = ['VISITID', 'MJDEND',  'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4']
 averaged_keywords_default = (
     ['FSMSG1'] + ['FSMSG2'] + ['FSMSG3'] + ['FSMX'] + ['FSMY'] +
     ['EXCAMT'] +
@@ -788,7 +788,10 @@ averaged_keywords_default = (
 )
 deleted_keywords_default = ['SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
 invalid_keywords_default = ['FTIMEUTC', 'PROXET', 'DATETIME']
-calculated_value_keywords_default = ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME'] + [f'FILE{i}' for i in range(100)]
+calculated_value_keywords_default = (
+    ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']
+    + [f'FILE{i}' for i in range(100)]
+)
 
 
 def merge_headers(
@@ -799,6 +802,7 @@ def merge_headers(
     deleted_keywords=deleted_keywords_default,
     invalid_keywords=invalid_keywords_default,
     calculated_value_keywords=calculated_value_keywords_default,
+    any_true_keywords=None,
 ):
     """
     Merge headers from multiple input frames into a single header set.
@@ -815,8 +819,9 @@ def merge_headers(
     3. averaged_keywords: average across all frames (Z{i}VAR uses pooled-variance)
     4. deleted_keywords: remove keywords from output headers entirely
     5. invalid_keywords: assign -999 with type matching original (int/float/str)
-    6. calculated_value_keywords: compute value for output (e.g. FILETIME = current time)
-    7. all other keywords: must be identical across frames; raise error if not
+    6. calculated_value_keywords: compute value for output (eg FILETIME = current time)
+    7. any_true_keywords: if any frame has a true value for the keyword, use True. else False
+    8. all other keywords: must be identical across frames; raise error if not
 
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset of input frames to merge.
@@ -828,10 +833,10 @@ def merge_headers(
         deleted_keywords (list or set, optional): Keywords to remove from output headers.
         invalid_keywords (list or set, optional): Keywords to set to -999 with type
             matching original (int/float/str).
-        allow_differing_keywords (list or set, optional): Keywords exempt from the
-            must be identical check.
         calculated_value_keywords (list or set, optional): Keywords whose value is computed
             for the merged output (e.g. FILETIME = current UTC time).
+        any_true_keywords (list or set, optional): Keywords where output is True if any
+            frame has a truthy value, else False (e.g. DESMEAR, CTI_CORR).
 
     Returns:
         tuple: (merged_pri_hdr, merged_ext_hdr, merged_err_hdr, merged_dq_hdr)
@@ -842,6 +847,7 @@ def merge_headers(
     deleted_keywords = set(deleted_keywords)
     invalid_keywords = set(invalid_keywords)
     calculated_value_keywords = set(calculated_value_keywords)
+    any_true_keywords = set(any_true_keywords) if any_true_keywords else set()
 
     # Dataset may not be time-ordered, so sort by MJDSRT to define the last frame
     # and define the header starting point
@@ -937,9 +943,26 @@ def merge_headers(
             pri_hdr[key] = val
             # add others as necessary
 
+    # Keyword set 7: any_true_keywords - true if any frame has true value, else false
+    header_attr_pairs = [
+        ('pri_hdr', pri_hdr), ('ext_hdr', ext_hdr),
+        ('err_hdr', err_hdr), ('dq_hdr', dq_hdr)
+    ]
+    for key in any_true_keywords:
+        for attr, out_hdr in header_attr_pairs:
+            values = []
+            for f in input_dataset:
+                h = getattr(f, attr, None)
+                if h is not None and key in h:
+                    values.append(h[key])
+            if values:
+                any_true = any(bool(v) for v in values)
+                out_hdr[key] = any_true
+
     # All other keywords: must be identical across frames, error if not
     exempt = (first_frame_keywords | last_frame_keywords | averaged_keywords |
-              deleted_keywords | invalid_keywords | calculated_value_keywords)
+              deleted_keywords | invalid_keywords | calculated_value_keywords |
+              any_true_keywords)
 
     header_attrs = ('pri_hdr', 'ext_hdr', 'err_hdr', 'dq_hdr')
     for header_attr, out_header in zip(header_attrs, headers):

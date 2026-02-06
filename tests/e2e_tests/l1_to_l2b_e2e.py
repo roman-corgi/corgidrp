@@ -69,7 +69,16 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
-    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
+    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration
+    # Copy and fix mock cal headers 
+    mock_cal_dir = os.path.join(test_outputdir, 'mock_cal_input')
+    os.makedirs(mock_cal_dir, exist_ok=True)
+    mock_cal_filelist = [
+        shutil.copy2(f, os.path.join(mock_cal_dir, os.path.basename(f)))
+        for f in mock_cal_filelist
+    ]
+    mock_cal_filelist = check.fix_hdrs_for_tvac(mock_cal_filelist, mock_cal_dir)
+
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make calibration files using
