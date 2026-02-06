@@ -920,7 +920,7 @@ class LineSpread(Image):
         
         #clean headers, see issue #712
         if "SCTEND" in self.ext_hdr:
-            self.ext_hdr['SCTEND'] = "-999"
+            del self.ext_hdr['SCTEND']
         if "FRMTYPE" in self.ext_hdr:
             self.ext_hdr['FRMTYPE'] = "-999"
         if "LOCAMT" in self.ext_hdr:
@@ -1043,7 +1043,7 @@ class DispersionModel(Image):
     
         #clean headers, see issue #712
         if "SCTEND" in self.ext_hdr:
-            self.ext_hdr['SCTEND'] = "-999"
+            del self.ext_hdr['SCTEND']
         if "FRMTYPE" in self.ext_hdr:
             self.ext_hdr['FRMTYPE'] = "-999"
         if "LOCAMT" in self.ext_hdr:
@@ -1950,7 +1950,7 @@ class FluxcalFactor(Image):
         
         #clean headers, see issue #712
         if "SCTEND" in self.ext_hdr:
-            self.ext_hdr['SCTEND'] = "-999"
+            del self.ext_hdr['SCTEND']
         if "FRMTYPE" in self.ext_hdr:
             self.ext_hdr['FRMTYPE'] = "-999"
         if "LOCAMT" in self.ext_hdr:
