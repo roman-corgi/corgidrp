@@ -922,13 +922,13 @@ class LineSpread(Image):
         if "SCTEND" in self.ext_hdr:
             del self.ext_hdr['SCTEND']
         if "FRMTYPE" in self.ext_hdr:
-            self.ext_hdr['FRMTYPE'] = "-999"
+            del self.ext_hdr['FRMTYPE']
         if "LOCAMT" in self.ext_hdr:
-            self.ext_hdr['LOCAMT'] = -999
+            del self.ext_hdr['LOCAMT']
         if "CYCLES" in self.ext_hdr:
-            self.ext_hdr['CYCLES'] = -999
+            del self.ext_hdr['CYCLES']
         if "LASTEXP" in self.ext_hdr:
-            self.ext_hdr['LASTEXP'] = -999
+            del self.ext_hdr['LASTEXP']
    
     def save(self, filedir=None, filename=None):
         """
@@ -1045,13 +1045,13 @@ class DispersionModel(Image):
         if "SCTEND" in self.ext_hdr:
             del self.ext_hdr['SCTEND']
         if "FRMTYPE" in self.ext_hdr:
-            self.ext_hdr['FRMTYPE'] = "-999"
+            del self.ext_hdr['FRMTYPE']
         if "LOCAMT" in self.ext_hdr:
-            self.ext_hdr['LOCAMT'] = -999
+            del self.ext_hdr['LOCAMT']
         if "CYCLES" in self.ext_hdr:
-            self.ext_hdr['CYCLES'] = -999
+            del self.ext_hdr['CYCLES']
         if "LASTEXP" in self.ext_hdr:
-            self.ext_hdr['LASTEXP'] = -999
+            del self.ext_hdr['LASTEXP']
 
     def save(self, filedir=None, filename=None):
         """
@@ -1952,13 +1952,13 @@ class FluxcalFactor(Image):
         if "SCTEND" in self.ext_hdr:
             del self.ext_hdr['SCTEND']
         if "FRMTYPE" in self.ext_hdr:
-            self.ext_hdr['FRMTYPE'] = "-999"
+            del self.ext_hdr['FRMTYPE']
         if "LOCAMT" in self.ext_hdr:
-            self.ext_hdr['LOCAMT'] = -999
+            del self.ext_hdr['LOCAMT']
         if "CYCLES" in self.ext_hdr:
-            self.ext_hdr['CYCLES'] = -999
+            del self.ext_hdr['CYCLES']
         if "LASTEXP" in self.ext_hdr:
-            self.ext_hdr['LASTEXP'] = -999
+            del self.ext_hdr['LASTEXP']
 
 class SpecFluxCal(Image):
     """
