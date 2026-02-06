@@ -498,7 +498,8 @@ def initialize():
         spec_datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
         output_dir = corgidrp.default_cal_dir
         prihdr, exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
-        dt = time.Time("2024-02-10 00:00:00", scale='utc').to_datetime()
+        dt_time = time.Time("2024-02-10 00:00:00", scale='utc')
+        dt = dt_time.to_datetime()
         dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
         ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
         disp_filename = f"cgi_{prihdr['VISITID']}_{ftime}_l2b.fits"
