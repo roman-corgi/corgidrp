@@ -311,8 +311,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
-    this_caldb.scan_dir_for_new_entries(calibrations_dir)
-    
+
     ####### Run the CorGI DRP walker script
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
