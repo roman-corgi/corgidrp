@@ -267,9 +267,17 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
                     stellar_sys_wp_data = np.array([stellar_sys_o_beam * stellar_image_1, stellar_sys_e_beam * stellar_image_2])
 
-                    # create default header
-                    prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
-                    stellar_sys_wp_img = data.Image(stellar_sys_wp_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+                    # Create the new Image object passing in the error header
+                    prihdr,exthdr,errhdr,dqhdr=mocks.create_default_L3_headers()
+                    stellar_sys_wp_img=data.Image(stellar_sys_wp_data,
+                                                  pri_hdr=prihdr.copy(),
+                                                  ext_hdr=exthdr.copy(),
+                                                  err_hdr=errhdr.copy(),
+                                                  dq_hdr=dqhdr.copy())
+                    #Check if error header has LAYER_1
+                    #print(f"Image err_hdr has LAYER_1: {stellar_sys_wp_img.err_hdr.get('LAYER_1','NOT FOUND')}")
+                    #print("="*60+"\n")
+
                     #Update Headers
                     stellar_sys_wp_img.pri_hdr['TARGET'] = targetname
                     stellar_sys_wp_img.ext_hdr['DPAMNAME'] = wollaston
@@ -343,9 +351,13 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
                 stellar_nd_wp_data = np.array([stellar_nd_o_beam * stellar_image_1, stellar_nd_e_beam * stellar_image_2])
 
-                # create default header
-                prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
-                stellar_nd_wp_img = data.Image(stellar_nd_wp_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+                # create default header including error header this time
+                prihdr,exthdr,errhdr,dqhdr=mocks.create_default_L3_headers()
+                stellar_nd_wp_img=data.Image(stellar_nd_wp_data,
+                                             pri_hdr=prihdr.copy(),
+                                             ext_hdr=exthdr.copy(),
+                                             err_hdr=errhdr.copy(),
+                                             dq_hdr=dqhdr.copy())
                 #Update Headers
                 stellar_nd_wp_img.pri_hdr['TARGET'] = targetname
                 stellar_nd_wp_img.ext_hdr['DPAMNAME'] = wollaston

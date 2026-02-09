@@ -129,9 +129,16 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         bias_hdu.header['GCOUNT'] = 1
         bias_hdu.header['EXTNAME'] = 'BIAS'
 
-        #Create the new Image object
-        mock_pri_header, mock_ext_header, _, _, _ = create_default_L2b_headers()
-        new_image = Image(big_array, mock_pri_header, mock_ext_header, err=big_err, input_hdulist=[bias_hdu])
+        #Create the new Image object passing in the error header
+        mock_pri_header,mock_ext_header,mock_err_header,mock_dq_header,_=create_default_L2b_headers()
+        new_image=Image(big_array,mock_pri_header,mock_ext_header,
+                        err=big_err,err_hdr=mock_err_header,
+                        dq_hdr=mock_dq_header,
+                        input_hdulist=[bias_hdu])
+        # Check if LAYER_1 present in error header
+        #print(f"Image err_hdr has LAYER_1: {new_image.err_hdr.get('LAYER_1','NOT FOUND')}")
+        #print("="*60+"\n")
+
         new_image.pri_hdr.set('FRAMET', 1)
         new_image.ext_hdr.set('EXPTIME', 1)
         new_image.pri_hdr.set('PA_APER', 0)
@@ -248,6 +255,7 @@ def test_l3_to_l4(e2eoutput_path):
     prhd, exthd, errhdr, _ = create_default_L3_headers()
     fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhdr, input_dataset = mock_dataset)
 
+
     fluxcal_fac.save(filedir=calibrations_dir)
     this_caldb.create_entry(fluxcal_fac)
 
@@ -308,7 +316,7 @@ if __name__ == "__main__":
 
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/clarissardoo/Projects/E2E_Test_Data'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
