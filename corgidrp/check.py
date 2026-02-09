@@ -789,6 +789,8 @@ averaged_keywords_default = (
 )
 deleted_keywords_default = ['SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
 invalid_keywords_default = ['FTIMEUTC', 'PROXET', 'DATETIME']
+# FILETIME is the only one calculated in merge_heades, the others are calculated elsewhere in the
+# pipeline but are included here so that they are exempt from the identical check
 calculated_value_keywords_default = (
     ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']
     + [f'FILE{i}' for i in range(100)]

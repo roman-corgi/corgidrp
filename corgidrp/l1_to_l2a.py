@@ -410,6 +410,7 @@ def update_to_l2a(input_dataset):
 
     for frame in updated_dataset:
         # Merge_headers is called here to delete a subset of keywords that should not be carried past L1
+        
         pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(data.Dataset([frame]))
         frame.pri_hdr = pri_hdr
         frame.ext_hdr = ext_hdr
