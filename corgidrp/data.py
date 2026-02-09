@@ -1421,8 +1421,53 @@ class BadPixelMap(Image):
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this bad pixel map (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
-        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                any_true_keywords=['DESMEAR', 'CTI_CORR'],
+                invalid_keywords=[
+                    'FTIMEUTC', 'PROXET', 'DATETIME', 'BUNIT', 'EXPTIME', 'EMGAIN_C', 'DATATYPE',
+                    'VISTYPE', 'TARGET', 'KGAINPAR', 'SPBAL', 'DMZLOOP', 'OBSNUM',
+                    'VISITID', 'PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM','CPGSFILE', 'AUXFILE',
+                    'FILETIME', 'RA', 'DEC', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 'FRAMET', 'PAV3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 
+                    'WVJ_3', 'ISHOWFSC', 'ISACQ', 'ISFLAT', 'SATSPOTS', '1SVALID', '10SVALID', 'MJDEND',
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR',
+                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
+                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
+                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'ISHOWFSC', 'ISACQ', 'ISFLAT', 'SATSPOTS', '1SVALID', '10SVALID',
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR',
+                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
+                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
+                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                ]
+            )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new bad pixel map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new bad pixel map
@@ -1630,7 +1675,7 @@ class DetectorParams(Image):
                 raise ValueError("Input should either be a dictionary or a filepath string")
             pri_hdr = fits.Header()
             ext_hdr = fits.Header()
-            ext_hdr['SCTSRT'] = date_valid.isot # use this for validity date
+            ext_hdr['MJDSRT'] = date_valid.mjd
             ext_hdr['DRPVERSN'] =  corgidrp.__version__
             ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
@@ -1696,7 +1741,7 @@ class DetectorParams(Image):
             # use the start date for the filename by default
             self.filedir = "."
 
-            filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':','.')
+            filename = "DetectorParams_{0}.fits".format(self.ext_hdr['MJDSRT']).replace(':','.')
             self.filename = filename
             self.pri_hdr['FILENAME'] = self.filename
 
@@ -3373,7 +3418,7 @@ def autoload(filepath):
                 dtype = "Image"
             else:
                 errmsg = "Could not determine datatype for {0}. Data shape of {1} is not 2-D"
-                raise ValueError(errmsg.format(filepath, dtype))
+                raise ValueError(errmsg.format(filepath, hdulist[1].data.shape))
 
     # if we got here, we have a datatype
     data_class = datatypes[dtype]

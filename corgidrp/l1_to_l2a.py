@@ -2,6 +2,7 @@
 from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc, imaging_slice, imaging_area_geom
 import numpy as np
 import corgidrp.data as data
+import corgidrp.check as check
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
                     detector_regions=None, use_imaging_area = False, dataset_copy=True):
@@ -389,13 +390,14 @@ def update_to_l2a(input_dataset):
     """
     Updates the data level to L2a. Only works on L1 data.
 
-    Currently only checks that data is at the L1 level
+    Applies merge_headers to each frame (removes deleted keywords, applies other
+    header rules), then sets DATALVL to L2a and updates filenames.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L1-level)
 
     Returns:
-        corgidrp.data.Dataset: same dataset now at L2-level
+        corgidrp.data.Dataset: same dataset now at L2a level
     """
     # check that we are running this on L1 data
     for orig_frame in input_dataset:
@@ -407,7 +409,13 @@ def update_to_l2a(input_dataset):
     updated_dataset = input_dataset.copy(copy_data=False)
 
     for frame in updated_dataset:
-        # update header
+        # Merge_headers is called here to delete a subset of keywords that should not be carried past L1
+        
+        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(data.Dataset([frame]))
+        frame.pri_hdr = pri_hdr
+        frame.ext_hdr = ext_hdr
+        frame.err_hdr = err_hdr
+        frame.dq_hdr = dq_hdr
         frame.ext_hdr['DATALVL'] = "L2a"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
