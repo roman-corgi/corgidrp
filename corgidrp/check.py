@@ -9,6 +9,7 @@ import numpy as np
 import logging
 import os
 import glob
+import warnings
 import astropy.io.fits as fits
 import pandas as pd
 from corgidrp import mocks
@@ -793,15 +794,14 @@ calculated_value_keywords_default = (
     + [f'FILE{i}' for i in range(100)]
 )
 
-
 def merge_headers(
     input_dataset,
-    first_frame_keywords=first_frame_keywords_default,
-    last_frame_keywords=last_frame_keywords_default,
-    averaged_keywords=averaged_keywords_default,
-    deleted_keywords=deleted_keywords_default,
-    invalid_keywords=invalid_keywords_default,
-    calculated_value_keywords=calculated_value_keywords_default,
+    first_frame_keywords=None,
+    last_frame_keywords=None,
+    averaged_keywords=None,
+    deleted_keywords=None,
+    invalid_keywords=None,
+    calculated_value_keywords=None,
     any_true_keywords=None,
 ):
     """
@@ -823,6 +823,9 @@ def merge_headers(
     7. any_true_keywords: if any frame has a true value for the keyword, use True. else False
     8. all other keywords: must be identical across frames; raise error if not
 
+    Note/ TODO - Only the primary, image extension, error, and DQ headers are merged here.
+    Any additional HDUs listed in Image.hdu_list are not handled.
+
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset of input frames to merge.
         first_frame_keywords (list or set, optional): Keywords to take from the first
@@ -840,7 +843,21 @@ def merge_headers(
 
     Returns:
         tuple: (merged_pri_hdr, merged_ext_hdr, merged_err_hdr, merged_dq_hdr)
+   
     """
+    if first_frame_keywords is None:
+        first_frame_keywords = first_frame_keywords_default
+    if last_frame_keywords is None:
+        last_frame_keywords = last_frame_keywords_default
+    if averaged_keywords is None:
+        averaged_keywords = averaged_keywords_default
+    if deleted_keywords is None:
+        deleted_keywords = deleted_keywords_default
+    if invalid_keywords is None:
+        invalid_keywords = invalid_keywords_default
+    if calculated_value_keywords is None:
+        calculated_value_keywords = calculated_value_keywords_default
+
     first_frame_keywords = set(first_frame_keywords)
     last_frame_keywords = set(last_frame_keywords)
     averaged_keywords = set(averaged_keywords)
@@ -895,13 +912,43 @@ def merge_headers(
                 continue
             if avg_vals:
                 mu = float(np.mean(avg_vals))
-                ext_hdr[var_key] = float(np.mean(var_vals) + np.mean((np.array(avg_vals) - mu) ** 2))
+                existing_comment = ext_hdr.comments[var_key] if var_key in ext_hdr else None
+                if existing_comment and "previous second" in existing_comment:
+                    existing_comment = existing_comment.replace(
+                        "from previous second",
+                        "across input frames",
+                    )
+                ext_hdr.set(
+                    var_key,
+                    float(np.mean(var_vals) + np.mean((np.array(avg_vals) - mu) ** 2)),
+                    comment=existing_comment,
+                )
             else:
-                ext_hdr[var_key] = float(np.mean(var_vals))
+                existing_comment = ext_hdr.comments[var_key] if var_key in ext_hdr else None
+                if existing_comment and "previous second" in existing_comment:
+                    existing_comment = existing_comment.replace(
+                        "from previous second",
+                        "pooled variance across input frames",
+                    )
+                ext_hdr.set(
+                    var_key,
+                    float(np.mean(var_vals)),
+                    comment=existing_comment,
+                )
         else:
             values = [float(frame.ext_hdr[key]) for frame in input_dataset if key in frame.ext_hdr]
             if values:
-                ext_hdr[key] = float(np.mean(values))
+                existing_comment = ext_hdr.comments[key] if key in ext_hdr else None
+                if existing_comment and "previous second" in existing_comment:
+                    existing_comment = existing_comment.replace(
+                        "from previous second",
+                        "averaged across input frames",
+                    )
+                ext_hdr.set(
+                    key,
+                    float(np.mean(values)),
+                    comment=existing_comment,
+                )
 
 
     # Keyword set 4: remove deleted_keywords from headers
@@ -975,8 +1022,9 @@ def merge_headers(
                 if h is not None and key in h:
                     values.append(h[key])
             if len(values) > 1 and len(set(values)) > 1:
-                raise ValueError(
-                    f"Keyword {key} must be identical across all frames. Found: {set(values)}"
+                warnings.warn(
+                    f"Keyword {key} not identical across frames. Found: {set(values)}",
+                    RuntimeWarning,
                 )
 
     return pri_hdr, ext_hdr, err_hdr, dq_hdr
