@@ -1766,6 +1766,8 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         # update filename convention. The file convention should be
         # "CGI_[datalevel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
+    
+    for frame in updated_dataset:
         # modify/delete header keywords as L4 involves combination of multiple frames
         pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(updated_dataset, deleted_keywords=['CDELT1','CDELT2'],invalid_keywords=['PA_APER','EXCAMT','FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
                         'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
