@@ -10,6 +10,7 @@ from astropy.wcs import WCS
 
 import corgidrp
 from corgidrp import data
+from corgidrp import check
 from corgidrp.combine import derotate_arr, prop_err_dq, combine_subexposures
 from corgidrp import star_center
 from corgidrp.klip_fm import meas_klip_thrupt
@@ -1602,12 +1603,15 @@ def combine_polarization_states(input_dataset,
 
     #TODO: propagate DQ extension through matrix inversion, add DQ extension and header to output frame
 
+    # Merge headers from combined L3 polarimetry frames
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(derotated_dataset)
+
     # construct output
     output_frame = data.Image(stokes_datacube,
-                              pri_hdr=psf_subtracted_intensity.pri_hdr.copy(),
-                              ext_hdr=psf_subtracted_intensity.ext_hdr.copy(),
+                              pri_hdr=pri_hdr,
+                              ext_hdr=ext_hdr,
                               err=output_err,
-                              err_hdr=psf_subtracted_intensity.err_hdr.copy())
+                              err_hdr=err_hdr)
     
     output_frame.filename = dataset.frames[-1].filename
 
