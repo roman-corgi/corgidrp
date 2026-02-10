@@ -1024,8 +1024,11 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
                     'FPN_IMME']:
             if key in exthdr.keys():
                 del exthdr[key]
+        exthdr['NAXIS'] = 2
         exthdr['NAXIS1'] = Fd.shape[1]
         exthdr['NAXIS2'] = Fd.shape[0]
+        if 'NAXIS3' in exthdr:
+            del exthdr['NAXIS3']
         exthdr['DATATYPE'] = 'Dark'
         exthdr['EMGAIN_C'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
         exthdr['EXPTIME'] = t

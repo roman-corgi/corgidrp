@@ -8,6 +8,7 @@ import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
 import corgidrp
+import corgidrp.check as check
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
@@ -142,6 +143,15 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
             mock_cal_filelist.append(os.path.join(l1_datadir, filename))
         if len(mock_cal_filelist) == 2:
             break
+
+    # Copy and fix mock cal headers
+    mock_cal_dir = os.path.join(astrom_cal_outputdir, 'mock_cal_input')
+    os.makedirs(mock_cal_dir, exist_ok=True)
+    mock_cal_filelist = [
+        shutil.copy2(f, os.path.join(mock_cal_dir, os.path.basename(f)))
+        for f in mock_cal_filelist
+    ]
+    mock_cal_filelist = check.fix_hdrs_for_tvac(mock_cal_filelist, mock_cal_dir)
 
     # Fix string values
     fix_str_for_tvac(sim_data_filelist)

@@ -16,6 +16,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import corgidrp.check as check
 from corgidrp.darks import build_synthesized_dark
 
 try:
@@ -141,15 +142,20 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     input_data_dir = input_l1_dir
 
 
-    # Copy files to input_data directory with proper naming
-    for i, file_path in enumerate(l1_data_filelist):
-        shutil.copy2(file_path, input_data_dir)
-    
-    # Update l1_data_filelist to point to new files
-    l1_data_filelist = []
-    for f in os.listdir(input_data_dir):
-        if f.endswith('.fits'):
-            l1_data_filelist.append(os.path.join(input_data_dir, f))    
+    # Fix L1 headers in the copied inputs
+    l1_data_filelist = check.fix_hdrs_for_tvac(
+        l1_data_filelist,
+        input_data_dir,
+        header_template=mocks.create_default_L1_headers,
+    )
+
+    # Set VISTYPE/PHTCNT after header fix
+    for file in l1_data_filelist:
+        with fits.open(file, mode='update') as fits_file:
+            prihdr = fits_file[0].header
+            prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
+            prihdr['PHTCNT'] = False
+
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
@@ -173,12 +179,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     telem_rows_start = det_params.params['TELRSTRT']
     telem_rows_end = det_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
-    # stack_arr_f_l1 = []
-    # for f in os.listdir(l1_datadir):
-    #     file = os.path.join(l1_datadir, f)
-    #     if not file.endswith('.fits'):
-    #         continue
-    #     stack_arr_f_l1.append(file)
+    #stack_arr_f_l1 = list(l1_data_filelist)
 
     # stackl1_dat = data.Dataset(stack_arr_f_l1)
     stackl1_dat = data.Dataset(l1_data_filelist)
@@ -252,7 +253,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # output_filename = output_filenamel1.replace('L1','L2a',1)
 
     # Update VISTYPE to "DARK" for DRP run
-    fix_str_for_tvac(stack_arr_files)
+    #fix_str_for_tvac(stack_arr_files)
     # update headers
     #fix_headers_for_tvac(stack_arr_files) 
 
@@ -478,7 +479,13 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(kgain)
 
     # Update VISTPYE to "CGIVST_CAL_DRK" for DRP run
-    fix_str_for_tvac(l2a_filepaths)
+    #fix_str_for_tvac(l2a_filepaths)
+    for file in l2a_filepaths:
+        with fits.open(file, mode='update') as fits_file:
+            prihdr = fits_file[0].header
+            prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
+            prihdr['PHTCNT'] = False
+
 
     ####### Run the DRP walker
     # template = "l2a_to_l2a_noisemap.json"
