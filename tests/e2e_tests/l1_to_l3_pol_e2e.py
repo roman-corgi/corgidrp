@@ -78,6 +78,15 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         mock_cal_filelist = [os.path.join(l1_datadir, l1_files[i]) for i in [-2, -1]]
     else:
         mock_cal_filelist = [os.path.join(l1_datadir, f) for f in l1_files]
+    # Copy and fix mock cal headers
+    mock_cal_dir = os.path.join(l3_outputdir, 'mock_cal_input')
+    os.makedirs(mock_cal_dir, exist_ok=True)
+    mock_cal_filelist = [
+        shutil.copy2(f, os.path.join(mock_cal_dir, os.path.basename(f)))
+        for f in mock_cal_filelist
+    ]
+    mock_cal_filelist = check.fix_hdrs_for_tvac(mock_cal_filelist, mock_cal_dir)
+
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
     # Nonlinearity calibration
