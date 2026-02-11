@@ -162,6 +162,7 @@ class Dataset():
         # update history and header entries
         for img in self.frames:
             img.ext_hdr['HISTORY'] = history_entry
+            img.err_hdr['HISTORY'] = history_entry
             if header_entries:
                 for key, value in header_entries.items():
                     img.ext_hdr[key] = value
