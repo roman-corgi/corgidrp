@@ -646,10 +646,11 @@ def test_calculate_od_at_new_location(output_dir):
 
     # Build the NDFilterSweetSpotDataset
     ndcal_prihdr, ndcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
-    ndcal_exthdr["FPAM_H"] = 0.0
-    ndcal_exthdr["FPAM_V"] = 0.0
     nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
                                                     input_dataset=fake_input_dataset)
+    # Set FPAM_H/V after construction, since merge_headers invalidates them (this is done in create_nd_sweet_spot_datset in nd_filter_calibration.py as well)
+    nd_sweetspot_dataset.ext_hdr["FPAM_H"] = 0.0
+    nd_sweetspot_dataset.ext_hdr["FPAM_V"] = 0.0
  
     # Make a 5x5 mock 'clean_frame_entry' with a star at (2,2) => centroid (2,2)
     # Shift it by (3,3) => final location (5,5).
@@ -788,8 +789,8 @@ def main():
     test_calculate_od_at_new_location(output_dir)
 
     print("All tests PASSED")
-
+'''
 
 if __name__ == "__main__":
     main()
-'''
+
