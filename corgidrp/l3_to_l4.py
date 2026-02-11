@@ -1782,7 +1782,7 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         # "CGI_[datalevel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
         #updating filename in the primary header
-        frame.pri_hdr['FILENAME'] = frame.pri_hdr['FILENAME'].replace("_L3_", "_L4_", 1)
+        frame.pri_hdr['FILENAME'] = frame.filename
 
     history_msg = "Updated Data Level to L4"
     updated_dataset.update_after_processing_step(history_msg)
