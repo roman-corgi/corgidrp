@@ -1726,7 +1726,22 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     
     '''
     dataset = input_dataset.copy()
+    # average/delete header keywords as L4 involves combination of multiple frames
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(dataset, deleted_keywords=['CDELT1','CDELT2'],averaged_keywords=['PA_APER','EXCAMT','FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                        'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                        'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                        'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                        'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                        'Z10RES', 'Z11RES',
+                        'Z2VAR', 'Z3VAR'])
+    #combine frames                       
     dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling, combine_other_hdus=True)
+    #implement averaged keywords in combined dataset
+    for frame in dataset:
+        frame.pri_hdr = pri_hdr
+        frame.ext_hdr = ext_hdr
+        frame.err_hdr = err_hdr
+        frame.dq_hdr  = dq_hdr
     history_msg = f"Combined psf subtracted spectroscopy frames by applying {collapse}, result is a dataset with one frame"
     dataset.update_after_processing_step(history_msg)
     return dataset
@@ -1766,20 +1781,8 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         # update filename convention. The file convention should be
         # "CGI_[datalevel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
-    
-    for frame in updated_dataset:
-        # modify/delete header keywords as L4 involves combination of multiple frames
-        pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(updated_dataset, deleted_keywords=['CDELT1','CDELT2'],invalid_keywords=['PA_APER','EXCAMT','FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
-                        'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                        'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-                        'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-                        'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-                        'Z10RES', 'Z11RES',
-                        'Z2VAR', 'Z3VAR'])
-        frame.pri_hdr = pri_hdr
-        frame.ext_hdr = ext_hdr
-        frame.err_hdr = err_hdr
-        frame.dq_hdr  = dq_hdr
+        #updating filename in the primary header
+        frame.pri_hdr['FILENAME'] = frame.pri_hdr['FILENAME'].replace("_L1_", "_L4_", 1)
 
     history_msg = "Updated Data Level to L4"
     updated_dataset.update_after_processing_step(history_msg)
