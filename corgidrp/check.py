@@ -781,6 +781,8 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
 first_frame_keywords_default = ['MJDSRT']
 last_frame_keywords_default = ['VISITID', 'MJDEND',  'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4']
 averaged_keywords_default = (
+    ['RA'] + ['DEC'] + ['RAPM'] + ['DECPM'] + ['PA_V3'] + ['PA_APER'] + ['SVB_1'] + ['SVB_2'] + ['SVB_3'] +
+    ['ROLL'] + ['PITCH'] + ['YAW'] +
     ['FSMSG1'] + ['FSMSG2'] + ['FSMSG3'] + ['FSMX'] + ['FSMY'] +
     ['EXCAMT'] + ['NOVEREXP'] + ['PROXET'] +
     [f'Z{i}AVG' for i in range(2, 15)] +
