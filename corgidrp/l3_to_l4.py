@@ -1604,7 +1604,28 @@ def combine_polarization_states(input_dataset,
     #TODO: propagate DQ extension through matrix inversion, add DQ extension and header to output frame
 
     # Merge headers from combined L3 polarimetry frames
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(derotated_dataset)
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(
+        derotated_dataset,
+        invalid_keywords=[
+            'FTIMEUTC', 'PROXET', 'DATETIME', 'BUNIT', 'BITPIX', 'EXPTIME', 'EMGAIN_C', 'DATATYPE',
+            'VISTYPE', 'TARGET', 'KGAINPAR', 'SPBAL', 'DMZLOOP', 'OBSNUM',
+            'VISITID', 'PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+            'FILETIME', 'RA', 'DEC', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+            'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2',
+            'WBJ_3', 'ISHOWFSC', 'ISACQ', 'ISFLAT', 'SATSPOTS', '1SVALID', '10SVALID',
+            'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+            'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+            'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+            'HVCBIAS', 'STATUS', 'OPMODE', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
+            'BLNKTIME', 'BLNKCYC',
+            'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+            'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+            'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+            'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
+            'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+            'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+        ],
+    )
 
     # construct output
     output_frame = data.Image(stokes_datacube,
@@ -1614,6 +1635,7 @@ def combine_polarization_states(input_dataset,
                               err_hdr=err_hdr)
     
     output_frame.filename = dataset.frames[-1].filename
+    output_frame.pri_hdr['FILENAME'] = output_frame.filename
 
     updated_dataset = data.Dataset([output_frame])
 

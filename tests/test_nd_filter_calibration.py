@@ -789,8 +789,9 @@ def main():
     test_calculate_od_at_new_location(output_dir)
 
     print("All tests PASSED")
-'''
+
 
 if __name__ == "__main__":
     main()
+'''
 
