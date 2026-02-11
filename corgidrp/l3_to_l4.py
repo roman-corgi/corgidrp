@@ -1727,7 +1727,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     '''
     dataset = input_dataset.copy()
     # average/delete header keywords as L4 involves combination of multiple frames
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(dataset, deleted_keywords=['CDELT1','CDELT2'],averaged_keywords=['PA_APER','EXCAMT','FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(dataset, averaged_keywords=['PA_APER','EXCAMT','FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
                         'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
                         'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
                         'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
@@ -1782,7 +1782,7 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         # "CGI_[datalevel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
         #updating filename in the primary header
-        frame.pri_hdr['FILENAME'] = frame.pri_hdr['FILENAME'].replace("_L1_", "_L4_", 1)
+        frame.pri_hdr['FILENAME'] = frame.pri_hdr['FILENAME'].replace("_L3_", "_L4_", 1)
 
     history_msg = "Updated Data Level to L4"
     updated_dataset.update_after_processing_step(history_msg)
