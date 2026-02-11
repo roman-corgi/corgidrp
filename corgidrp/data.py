@@ -3169,7 +3169,7 @@ class NDFilterSweetSpotDataset(Image):
             pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
                 input_dataset,
                 invalid_keywords=[
-                'FTIMEUTC', 'PROXET', 'DATETIME', 'BUNIT', 'EXPTIME', 'EMGAIN_C', 'DATATYPE',
+                'FTIMEUTC', 'PROXET', 'DATETIME', 'BUNIT', 'BITPIX', 'EXPTIME', 'EMGAIN_C', 'DATATYPE',
                 'VISTYPE', 'TARGET', 'KGAINPAR', 'SPBAL', 'DMZLOOP', 'OBSNUM', 'CDMSVERS', 'FSWDVERS',
                 'VISITID', 'PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'CPGSFILE', 'AUXFILE',
                 'FILETIME', 'RA', 'DEC', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
@@ -3189,6 +3189,7 @@ class NDFilterSweetSpotDataset(Image):
                 'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
                 'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
                 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
             ],
             )
         else:
