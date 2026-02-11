@@ -636,7 +636,6 @@ def do_psf_subtraction(input_dataset,
     # NOTE: product of psfsubtraction should take: CGI_<Last science target VisitID>_<Last science target TimeUTC>_L<>.fits
     # upgrade to L4 should be done by a serpate receipe
     collapsed_dataset = data.Dataset(collapsed_frames)
-
     # let fits save handle NAXIS info in the err/dq headers.
     for err_key in list(sci_dataset[0].err_hdr): 
         if 'NAXIS' in err_key: 
@@ -645,13 +644,22 @@ def do_psf_subtraction(input_dataset,
         if 'NAXIS' in dq_key: 
             del sci_dataset[0].dq_hdr[dq_key]
 
+    # average/delete header keywords as L4 involves combination of multiple frames
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(collapsed_dataset, averaged_keywords=['PA_APER','EXCAMT','FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                        'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                        'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                        'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                        'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                        'Z10RES', 'Z11RES',
+                        'Z2VAR', 'Z3VAR'])
+    
     frame = data.Image(
             collapsed_dataset.all_data,
-            pri_hdr=pri_hdr, ext_hdr=collapsed_dataset[0].ext_hdr, 
+            pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
             err=collapsed_dataset.all_err[np.newaxis,:,0,:,:],
             dq=collapsed_dataset.all_dq,
-            err_hdr=sci_dataset[0].err_hdr,
-            dq_hdr=sci_dataset[0].dq_hdr,
+            err_hdr=err_hdr,
+            dq_hdr=dq_hdr,
         )
     
     frame.filename = sci_dataset.frames[-1].filename
