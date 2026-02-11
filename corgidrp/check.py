@@ -782,7 +782,7 @@ first_frame_keywords_default = ['MJDSRT']
 last_frame_keywords_default = ['VISITID', 'MJDEND',  'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4']
 averaged_keywords_default = (
     ['FSMSG1'] + ['FSMSG2'] + ['FSMSG3'] + ['FSMX'] + ['FSMY'] +
-    ['EXCAMT'] +
+    ['EXCAMT'] + ['NOVEREXP'] + ['PROXET'] +
     [f'Z{i}AVG' for i in range(2, 15)] +
     [f'Z{i}VAR' for i in range(2, 15)] +
     [f'Z{i}RES' for i in range(2, 15)]
@@ -795,6 +795,7 @@ calculated_value_keywords_default = (
     ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']
     + [f'FILE{i}' for i in range(100)]
 )
+any_true_keywords_default = ['OVEREXP']
 
 def merge_headers(
     input_dataset,

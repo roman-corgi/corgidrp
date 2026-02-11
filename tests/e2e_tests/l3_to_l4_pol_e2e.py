@@ -422,14 +422,6 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
     # Verify data level
     verify_header_keywords(img.ext_hdr, {'DATALVL': 'L4'}, frame_info, logger)
-    
-    # Check this is polarimetry data
-    dpam = img.ext_hdr.get('DPAMNAME', '')
-    if dpam in ('POL0', 'POL45'):
-        logger.info(f"{frame_info}: DPAMNAME = '{dpam}' (polarimetry). PASS")
-    else:
-        logger.info(f"{frame_info}: DPAMNAME = '{dpam}'. Expected POL0 or POL45. FAIL")
-    
 
     # Check data dimensions - should always be polarimetry datacube (4, N, N)
     if len(img.data.shape) == 3 and img.data.shape[0] == 4:

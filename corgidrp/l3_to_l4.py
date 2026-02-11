@@ -1607,23 +1607,27 @@ def combine_polarization_states(input_dataset,
     pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(
         derotated_dataset,
         invalid_keywords=[
-            'FTIMEUTC', 'PROXET', 'DATETIME', 'BUNIT', 'BITPIX', 'EXPTIME', 'EMGAIN_C', 'DATATYPE',
-            'VISTYPE', 'TARGET', 'KGAINPAR', 'SPBAL', 'DMZLOOP', 'OBSNUM',
-            'VISITID', 'PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'CPGSFILE', 'AUXFILE',
-            'FILETIME', 'RA', 'DEC', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
-            'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2',
-            'WBJ_3', 'ISHOWFSC', 'ISACQ', 'ISFLAT', 'SATSPOTS', '1SVALID', '10SVALID',
+            # Primary header keywords
+            'FILETIME', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+            'FRAMET', 'PA_V3', 'PA_APER',
+            'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+            'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+            # Extension header keywords
+            'EXPTIME', 'EMGAIN_C', 'KGAINPAR',
+            'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP',
             'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
             'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
             'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-            'HVCBIAS', 'STATUS', 'OPMODE', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
-            'BLNKTIME', 'BLNKCYC',
-            'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-            'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-            'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-            'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
+            'DMZLOOP',
+            '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+            '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+            'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+            'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+            'Z12AVG', 'Z13AVG', 'Z14AVG',
             'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+            'DATETIME', 'FTIMEUTC', 'DATATYPE',
             'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+            'STARLOCX', 'STARLOCY'
         ],
     )
 
@@ -1636,6 +1640,12 @@ def combine_polarization_states(input_dataset,
     
     output_frame.filename = dataset.frames[-1].filename
     output_frame.pri_hdr['FILENAME'] = output_frame.filename
+
+    # Copy KLIP-related keywords from PSF-subtracted frame
+    output_frame.pri_hdr['KLIP_ALG'] = psf_subtracted_intensity.pri_hdr['KLIP_ALG']
+    for kw in ['KLMODE0', 'PSFPARAM', 'PSFSUB', 'PYKLIPV']:
+        if kw in psf_subtracted_intensity.ext_hdr:
+            output_frame.ext_hdr[kw] = psf_subtracted_intensity.ext_hdr[kw]
 
     updated_dataset = data.Dataset([output_frame])
 
