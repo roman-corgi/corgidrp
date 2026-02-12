@@ -3235,8 +3235,30 @@ class MuellerMatrix(Image):
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this Mueller Matrix (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
-        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                invalid_keywords=[
+                    'VISITID', 'CDMSVERS', 'FSWDVERS', 'FILETIME', 'PROGNUM', 'EXECNUM','CAMPAIGN', 'SEGMENT','OBSNUM',
+                    'VISNUM', 'CPGSFILE', 'AUXFILE', 'TARGET', 'RA', 'DEC', 'EQUINOX', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 
+                    'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 
+                    'WBJ_1', 'WBJ_2', 'WBJ_3', 
+                    'SCTSRT', 'SCTEND', 'FRMTYPE','ISHOWSFC','ISACQ','SPBAL','ISFLAT','SATSPOTS','STATUS', 'HVCBIAS',
+                    'OPMODE','EXPTIME','EMGAIN_C','UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5',
+                    'GAINTCAL','EXCAMT','LOCAMT','EMGAIN_A','KGAINPAR','CYCLES','LASTEXP','BLNKTIME',
+                    'BLNKCYC','EXPCYC','OVEREXP','NOVEREXP','ISPC','PROXET','FCMLOOP','FCMPOS','FSMINNER','FSMLOS',
+                    'FSMPRFL','FSMRSTR','FSMSG1','FSMSG2','FSMSG3','FSMX','FSMY','EACQ_ROW','EACQ_COL','SB_FP_DX',
+                    'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY', 'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR','Z3AVG','Z3RES',
+                    'Z3VAR', '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG','Z5RES', 'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG',
+                    'Z8RES', 'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES','Z11AVG', 'Z11RES', 'Z12AVG', 'Z12RES', 'Z13AVG', 'Z13RES', 'Z14AVG',
+                    'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
+                    'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
+                    'DPAMNAME','DPAMSP_H','DPAMSP_V',
+                ]
+            )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
@@ -3285,7 +3307,30 @@ class NDMuellerMatrix(Image):
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
         # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                invalid_keywords=[
+                    'VISITID', 'CDMSVERS', 'FSWDVERS', 'FILETIME', 'PROGNUM', 'EXECNUM','CAMPAIGN', 'SEGMENT','OBSNUM',
+                    'VISNUM', 'CPGSFILE', 'AUXFILE', 'TARGET', 'RA', 'DEC', 'EQUINOX', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 
+                    'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 
+                    'WBJ_1', 'WBJ_2', 'WBJ_3', 
+                    'SCTSRT', 'SCTEND', 'FRMTYPE','ISHOWSFC','ISACQ','SPBAL','ISFLAT','SATSPOTS','STATUS', 'HVCBIAS',
+                    'OPMODE','EXPTIME','EMGAIN_C','UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5',
+                    'GAINTCAL','EXCAMT','LOCAMT','EMGAIN_A','KGAINPAR','CYCLES','LASTEXP','BLNKTIME',
+                    'BLNKCYC','EXPCYC','OVEREXP','NOVEREXP','ISPC','PROXET','FCMLOOP','FCMPOS','FSMINNER','FSMLOS',
+                    'FSMPRFL','FSMRSTR','FSMSG1','FSMSG2','FSMSG3','FSMX','FSMY','EACQ_ROW','EACQ_COL','SB_FP_DX',
+                    'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY', 'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR','Z3AVG','Z3RES',
+                    'Z3VAR', '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG','Z5RES', 'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG',
+                    'Z8RES', 'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES','Z11AVG', 'Z11RES', 'Z12AVG', 'Z12RES', 'Z13AVG', 'Z13RES', 'Z14AVG',
+                    'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
+                    'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR',
+                    'DPAMNAME','DPAMSP_H','DPAMSP_V',           
+                ]
+            )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new ND Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
