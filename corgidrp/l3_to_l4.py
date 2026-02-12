@@ -664,7 +664,8 @@ def do_psf_subtraction(input_dataset,
             'DATETIME', 'FTIMEUTC', 'DATATYPE'
         ],
         averaged_keywords=[
-            'EXCAMT', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+            'EXCAMT', 'NOVEREXP', 'PROXET',
+            'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
             'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
             'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
             'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
