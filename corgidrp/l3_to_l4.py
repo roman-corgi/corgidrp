@@ -465,7 +465,7 @@ def do_psf_subtraction(input_dataset,
     """
 
     sci_dataset = input_dataset.copy()
-    
+
     # Need CT calibration object to measure KLIP throughput and 1D core throughput
     if measure_klip_thrupt or measure_1d_core_thrupt:
         assert ct_calibration != None
@@ -612,6 +612,15 @@ def do_psf_subtraction(input_dataset,
                                               pixel_weights=None, axis=0, 
                                               collapse_method=klip_kwargs['time_collapse'])
 
+        # averaging certain header keywords
+        pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(derotated_output_dataset, averaged_keywords=['EXCAMT','FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                        'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                        'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                        'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                        'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                        'Z10RES', 'Z11RES',
+                        'Z2VAR', 'Z3VAR'])
+
         # Get the WCS from the derotated_output_dataset
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', FITSFixedWarning)
@@ -643,23 +652,16 @@ def do_psf_subtraction(input_dataset,
     for dq_key in list(sci_dataset[0].dq_hdr): 
         if 'NAXIS' in dq_key: 
             del sci_dataset[0].dq_hdr[dq_key]
+    # invalidate PA_APER for coronagraphic imaging
+    pri_hdr, _, _, _ = corgidrp.check.merge_headers(collapsed_dataset, invalid_keywords=['PA_APER'])
 
-    # average/delete header keywords as L4 involves combination of multiple frames
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(collapsed_dataset, averaged_keywords=['PA_APER','EXCAMT','FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
-                        'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                        'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-                        'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-                        'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-                        'Z10RES', 'Z11RES',
-                        'Z2VAR', 'Z3VAR'])
-    
     frame = data.Image(
             collapsed_dataset.all_data,
-            pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+            pri_hdr=pri_hdr, ext_hdr=collapsed_dataset[0].ext_hdr, 
             err=collapsed_dataset.all_err[np.newaxis,:,0,:,:],
             dq=collapsed_dataset.all_dq,
-            err_hdr=err_hdr,
-            dq_hdr=dq_hdr,
+            err_hdr=collapsed_dataset[0].err_hdr,
+            dq_hdr=collapsed_dataset[0].dq_hdr,
         )
     
     frame.filename = sci_dataset.frames[-1].filename
