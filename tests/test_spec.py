@@ -5,6 +5,7 @@ import logging
 import warnings
 from astropy.io import fits, ascii
 from astropy.table import Table
+from astropy import time
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset, SpecFluxCal
 import corgidrp.spec as steps
 from corgidrp.mocks import (create_default_L2b_headers,
@@ -390,7 +391,7 @@ def test_add_wavelength_map():
     image.ext_hdr['BUNIT'] = 'photoelectron/s'
     image.pri_hdr['TARGET'] = 'Vega'
     dataset = Dataset([image])
-    image.ext_hdr["MJDSRT"] = datetime.now().timestamp()
+    image.ext_hdr["MJDSRT"] = time.Time(image.ext_hdr["DRPCTIME"]).mjd
     
     global output_dataset
     output_dataset = l3_to_l4.add_wavelength_map(dataset, disp_model)
