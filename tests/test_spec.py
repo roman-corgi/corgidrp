@@ -390,6 +390,7 @@ def test_add_wavelength_map():
     image.ext_hdr['BUNIT'] = 'photoelectron/s'
     image.pri_hdr['TARGET'] = 'Vega'
     dataset = Dataset([image])
+    image.ext_hdr["MJDSRT"] = datetime.now().timestamp()
     
     global output_dataset
     output_dataset = l3_to_l4.add_wavelength_map(dataset, disp_model)

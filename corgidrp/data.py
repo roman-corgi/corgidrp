@@ -866,8 +866,25 @@ class LineSpread(Image):
         fwhm_err (float): fit error of the Gaussian fwhm
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, gauss_par=None, input_dataset=None):
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
-
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                any_true_keywords=['DESMEAR', 'CTI_CORR'],
+                invalid_keywords=[
+                    'FRMTYPE',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E'
+                ]
+            )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new LineSpread, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new LineSpread 
@@ -918,18 +935,6 @@ class LineSpread(Image):
         self.wave_err = self.gauss_par[4]
         self.fwhm_err = self.gauss_par[5]
         
-        #clean headers, see issue #712
-        if "SCTEND" in self.ext_hdr:
-            del self.ext_hdr['SCTEND']
-        if "FRMTYPE" in self.ext_hdr:
-            del self.ext_hdr['FRMTYPE']
-        if "LOCAMT" in self.ext_hdr:
-            del self.ext_hdr['LOCAMT']
-        if "CYCLES" in self.ext_hdr:
-            del self.ext_hdr['CYCLES']
-        if "LASTEXP" in self.ext_hdr:
-            del self.ext_hdr['LASTEXP']
-   
     def save(self, filedir=None, filename=None):
         """
         Save file to disk with user specified filepath
@@ -1041,18 +1046,6 @@ class DispersionModel(Image):
         self.err = None
         self.dq = None
     
-        #clean headers, see issue #712
-        if "SCTEND" in self.ext_hdr:
-            del self.ext_hdr['SCTEND']
-        if "FRMTYPE" in self.ext_hdr:
-            del self.ext_hdr['FRMTYPE']
-        if "LOCAMT" in self.ext_hdr:
-            del self.ext_hdr['LOCAMT']
-        if "CYCLES" in self.ext_hdr:
-            del self.ext_hdr['CYCLES']
-        if "LASTEXP" in self.ext_hdr:
-            del self.ext_hdr['LASTEXP']
-
     def save(self, filedir=None, filename=None):
         """
         Save file to disk with user specified filepath
@@ -1469,23 +1462,7 @@ class BadPixelMap(Image):
                     'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
                     'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
                     'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
-                    'ISHOWFSC', 'ISACQ', 'ISFLAT', 'SATSPOTS', '1SVALID', '10SVALID',
-                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
-                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
-                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-                    'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR',
-                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
-                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
-                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
-                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
-                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
-                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN'
                 ]
             )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
@@ -1918,8 +1895,26 @@ class FluxcalFactor(Image):
         fluxcal_err (float): the error of the flux cal factor for the corresponding filter
     """
     def __init__(self, data_or_filepath, err = None, pri_hdr=None, ext_hdr=None, err_hdr = None, input_dataset = None):
-       # run the image class contructor
-        super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                any_true_keywords=['DESMEAR', 'CTI_CORR'],
+                invalid_keywords=[
+                    'FRMTYPE',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E'
+                ]
+            )
+            # run the image class constructor
+            super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
         # if filepath passed in, just load in from disk as usual
         # File format checks
         if self.data.shape != (1,):
@@ -1993,17 +1988,6 @@ class FluxcalFactor(Image):
             self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
         
-        #clean headers, see issue #712
-        if "SCTEND" in self.ext_hdr:
-            del self.ext_hdr['SCTEND']
-        if "FRMTYPE" in self.ext_hdr:
-            del self.ext_hdr['FRMTYPE']
-        if "LOCAMT" in self.ext_hdr:
-            del self.ext_hdr['LOCAMT']
-        if "CYCLES" in self.ext_hdr:
-            del self.ext_hdr['CYCLES']
-        if "LASTEXP" in self.ext_hdr:
-            del self.ext_hdr['LASTEXP']
 
 class SpecFluxCal(Image):
     """

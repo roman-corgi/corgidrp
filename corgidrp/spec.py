@@ -11,7 +11,7 @@ from astropy.table import Table
 import astropy.modeling.models as models
 import astropy.modeling.fitting as fitting
 from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve, get_calspec_file
-
+import corgidrp
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     """
@@ -336,6 +336,22 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     if not isinstance(dataset, Dataset):
         raise TypeError("Input must be a corgidrp.data.Dataset object.")
 
+    pri_hdr_centroid, ext_hdr_centroid, _ , _ = corgidrp.check.merge_headers(
+                dataset,
+                any_true_keywords=['DESMEAR', 'CTI_CORR'],
+                invalid_keywords=[
+                    'FRMTYPE',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E'
+                ]
+        )
+
     if initial_cent is None:
         xcent, ycent = None, None
     else:
@@ -364,9 +380,6 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     ycent_temp = np.asarray(ycent_temp)
     centroids = np.zeros((len(dataset), 2))
     centroids_err = np.zeros((len(dataset), 2))
-
-    pri_hdr_centroid = dataset[0].pri_hdr.copy()
-    ext_hdr_centroid = dataset[0].ext_hdr.copy()
 
     filters = []
     for idx, frame in enumerate(dataset):
@@ -424,6 +437,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
         ext_hdr_centroid['FILTERS'] = ",".join(filters)
     else:
         ext_hdr_centroid['FILTERS'] = filters[0]
+
     calibration = SpectroscopyCentroidPSF(
         centroids,
         pri_hdr=pri_hdr_centroid,
