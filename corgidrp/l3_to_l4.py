@@ -642,26 +642,34 @@ def do_psf_subtraction(input_dataset,
     # upgrade to L4 should be done by a serpate receipe
     collapsed_dataset = data.Dataset(collapsed_frames)
 
+    # let fits save handle NAXIS info in the err/dq headers.
+    for err_key in list(sci_dataset[0].err_hdr): 
+        if 'NAXIS' in err_key: 
+            del sci_dataset[0].err_hdr[err_key]
+    for dq_key in list(sci_dataset[0].dq_hdr): 
+        if 'NAXIS' in dq_key: 
+            del sci_dataset[0].dq_hdr[dq_key]
+    
     # average/delete header keywords as L4 involves combination of multiple frames
-    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(
+    pri_hdr, ext_hdr, _, _ = check.merge_headers(
         collapsed_dataset,
         last_frame_keywords = ['VISITID', 'MJDEND'],
         # the first frame in collapsed dataset seems to contain the correct WCS, so
         # propagate that one
         first_frame_keywords = ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
-                                'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2'],
+                                'CRPIX1', 'CRPIX2'],
         invalid_keywords=[
             # Primary header keywords
             'FILETIME', 'PA_V3', 'PA_APER',
             'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
-            'FILENAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+            'WBJ_1', 'WBJ_2', 'WBJ_3',
             # Extension header keywords
-            'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
-            'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
             'DATETIME', 'FTIMEUTC', 'DATATYPE'
         ],
         averaged_keywords=[
             'EXCAMT', 'NOVEREXP', 'PROXET',
+            'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+            'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
             'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
             'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
             'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
@@ -675,8 +683,8 @@ def do_psf_subtraction(input_dataset,
             pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
             err=collapsed_dataset.all_err[np.newaxis,:,0,:,:],
             dq=collapsed_dataset.all_dq,
-            err_hdr=err_hdr,
-            dq_hdr=dq_hdr,
+            err_hdr=sci_dataset[0].err_hdr,
+            dq_hdr=sci_dataset[0].dq_hdr,
         )
     
     frame.filename = sci_dataset.frames[-1].filename
