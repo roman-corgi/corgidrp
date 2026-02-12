@@ -23,7 +23,7 @@ from corgidrp.mocks import (
     rename_files_to_cgi_format,
     make_1d_spec_image
 )
-from corgidrp.data import Image, Dataset, FluxcalFactor, get_stokes_intensity_image
+from corgidrp.data import Image, Dataset, FluxcalFactor, get_stokes_intensity_image, SlitTransmission
 from corgidrp.check import verify_header_keywords
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
@@ -249,22 +249,20 @@ def test_convert_spec_to_flux_basic():
     spec_vals = np.array([10.0, 12.0, 14.0, 16.0, 18.0])
     spec_err = np.array([[0.5, 0.6, 0.7, 0.8, 0.9]])
     wave = np.linspace(700, 800, len(spec_vals))
-    slit_factor = 0.85
-    slit_tuple = (np.array([np.full_like(spec_vals, slit_factor)]), np.array([0.0]), np.array([0.0]))
 
     image = make_1d_spec_image(spec_vals, spec_err, wave, col_cor=2.0)
     image.hdu_list['SPEC'].header['CTCOR'] = True  # Core throughput correction already applied
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
 
-    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor, slit_transmission=slit_tuple)
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor)
     frame = calibrated[0]
     spec_out = frame.hdu_list['SPEC'].data
     err_out = frame.hdu_list['SPEC_ERR'].data
 
-    expected_spec = (spec_vals / slit_factor) * (fluxcal_factor.fluxcal_fac / 2.0)
-    expected_err = np.sqrt(((spec_err[0] / slit_factor) * (fluxcal_factor.fluxcal_fac / 2.0))**2 +
-                           (((spec_vals / slit_factor) * fluxcal_factor.fluxcal_err / 2.0))**2)
+    expected_spec = spec_vals * (fluxcal_factor.fluxcal_fac / 2.0)
+    expected_err = np.sqrt((spec_err[0] * (fluxcal_factor.fluxcal_fac / 2.0))**2 +
+                           ((spec_vals * fluxcal_factor.fluxcal_err / 2.0))**2)
 
     result = np.allclose(spec_out, expected_spec) and np.allclose(err_out[0], expected_err)
     print('\nconvert_spec_to_flux basic case: ', end='')
@@ -273,7 +271,6 @@ def test_convert_spec_to_flux_basic():
     assert result
     assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.hdu_list['SPEC_ERR'].header['BUNIT'] == "erg/(s*cm^2*AA)"
-    assert frame.hdu_list['SPEC'].header['SLITCOR'] is True
     assert frame.ext_hdr['SPECUNIT'] == "erg/(s*cm^2*AA)"
 
 
@@ -301,13 +298,15 @@ def test_convert_spec_to_flux_no_slit():
     print_pass() if result else print_fail()
 
     assert result
-    assert frame.hdu_list['SPEC'].header['SLITCOR'] is False
     assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
 
 
 def test_convert_spec_to_flux_slit_scalar_map():
-    """Tuple slit transmission should produce a wavelength-dependent correction."""
+    """ 
+    test l4_to_tda.apply_slit_transmission and l4_to_tda.convert_spec_to_flux.
+    Tuple slit transmission should produce a wavelength-dependent correction.
+    """
     spec_vals = np.array([10.0, 12.0, 14.0, 16.0])
     spec_err = np.full((1, spec_vals.size), 0.5)
     wave = np.linspace(700, 730, spec_vals.size)
@@ -329,10 +328,12 @@ def test_convert_spec_to_flux_slit_scalar_map():
     slit_x = np.array([0.0, 20.0, 100.0])
     slit_y = np.zeros_like(slit_x)
 
+    slit_transmission = SlitTransmission(slit_map, pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, x_offset = slit_x, y_offset = slit_y, input_dataset = dataset)
+    corr_dataset = l4_to_tda.apply_slit_transmission(dataset, slit_transmission)
+
     calibrated = l4_to_tda.convert_spec_to_flux(
-        dataset,
-        fluxcal_factor,
-        slit_transmission=(slit_map, slit_x, slit_y),
+        corr_dataset,
+        fluxcal_factor
     )
     frame = calibrated[0]
     slit_factor = 0.45

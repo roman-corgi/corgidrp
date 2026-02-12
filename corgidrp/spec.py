@@ -4,12 +4,13 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d, LinearNDInterpolator
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal, SpecFilterOffset
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal, SpecFilterOffset, SlitTransmission
 import os
 from astropy.io import ascii, fits
 from astropy.table import Table
 import astropy.modeling.models as models
 import astropy.modeling.fitting as fitting
+import corgidrp
 from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve, get_calspec_file
 
 
@@ -1076,7 +1077,7 @@ def slit_transmission(
         subsets with the same FSMX, FSMY values. Options are 'mean' and 'median'.
 
     Returns:
-      3-element tuple with:
+      SlitTransmission calibration product containing:
         1/ Slit transmission map derived at different locations by interpolation.
         2/ Corresponding locations along EXCAM +X direction with respect to the
           zero-point in (fractional) EXCAM pixels where the slit transmission has
@@ -1227,10 +1228,25 @@ def slit_transmission(
     if np.all(np.isnan(slit_trans_interp)):
         raise ValueError('There are no valid target positions within the ' +
             'range of input PSF locations')
+    
+    pri_hdr, ext_hdr, _, _ = corgidrp.check.merge_headers(
+        dataset_slit,
+        any_true_keywords=['DESMEAR', 'CTI_CORR'],
+        invalid_keywords=[
+                    'FRMTYPE',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E'
+                ]
+        )
+    input_dataset = Dataset([frame for frame in dataset_slit] + [frame for frame in dataset_open])
+    slit_trans =  SlitTransmission(slit_trans_interp, pri_hdr = pri_hdr, ext_hdr = ext_hdr, x_offset = target_pix[0], y_offset = target_pix[1], input_dataset = input_dataset) 
+    return slit_trans
 
-    return (slit_trans_interp,
-        target_pix[0],
-        target_pix[1])
 
 def star_pos_spec(
     dataset,
@@ -1432,5 +1448,3 @@ def generate_filter_offset(offset_file = None):
     for i, filter in enumerate(filter_name):
         offset_dict[str(filter)] = [float(xoffset[i]), float(yoffset[i])]
     return SpecFilterOffset(offset_dict)
-    
-    
