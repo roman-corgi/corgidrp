@@ -4965,7 +4965,8 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     exthdr['LSAMNAME'] = observing_mode
     exthdr['FSMPRFL'] = observing_mode
 
-    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr,
+                       err_hdr=errhdr, dq_hdr=dqhdr)
 
     return image
 
@@ -5111,7 +5112,8 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     exthdr['LSAMNAME'] = observing_mode
     exthdr['FSMPRFL'] = observing_mode
     exthdr["SATSPOTS"] = 1
-    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr,
+                       err_hdr=errhdr, dq_hdr=dqhdr)
 
     return image
     

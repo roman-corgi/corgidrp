@@ -162,6 +162,7 @@ class Dataset():
         # update history and header entries
         for img in self.frames:
             img.ext_hdr['HISTORY'] = history_entry
+            img.err_hdr['HISTORY'] = history_entry
             if header_entries:
                 for key, value in header_entries.items():
                     img.ext_hdr[key] = value
@@ -1426,43 +1427,32 @@ class BadPixelMap(Image):
                 input_dataset,
                 any_true_keywords=['DESMEAR', 'CTI_CORR'],
                 invalid_keywords=[
-                    'FTIMEUTC', 'PROXET', 'DATETIME', 'BUNIT', 'EXPTIME', 'EMGAIN_C', 'DATATYPE',
-                    'VISTYPE', 'TARGET', 'KGAINPAR', 'SPBAL', 'DMZLOOP', 'OBSNUM',
-                    'VISITID', 'PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM','CPGSFILE', 'AUXFILE',
-                    'FILETIME', 'RA', 'DEC', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
-                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 
-                    'WBJ_3', 'ISHOWFSC', 'ISACQ', 'ISFLAT', 'SATSPOTS', '1SVALID', '10SVALID',
+                    # Primary header keywords
+                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    # Extension header keywords
+                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
+                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
                     'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
                     'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
                     'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-                    'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR',
+                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
                     'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
                     'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
                     'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
                     'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
                     'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
                     'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
-                    'ISHOWFSC', 'ISACQ', 'ISFLAT', 'SATSPOTS', '1SVALID', '10SVALID',
-                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
-                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
-                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-                    'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR',
-                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
-                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
-                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
-                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
-                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
-                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
                 ]
             )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
@@ -3129,7 +3119,8 @@ class PyKLIPDataset(pyKLIP_Data):
         hdul.close()
         
         pass
-    
+
+
 class NDFilterSweetSpotDataset(Image):
     """
     Class for an ND filter sweet spot dataset product.
@@ -3164,14 +3155,48 @@ class NDFilterSweetSpotDataset(Image):
         dq=None,
         err_hdr=None
     ):
-        # Run the standard Image constructor.
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                invalid_keywords=[
+                    # Primary header keywords
+                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    # Extension header keywords
+                    'BITPIX', 'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'STATUS', 'HVCBIAS', 'OPMODE',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR',
+                    'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
+                    'PROXET',
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP',
+                    '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'DATETIME', 'FTIMEUTC', 'DATATYPE',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                ],
+            )
+        else:
+            dq_hdr = None
         super().__init__(
             data_or_filepath,
             pri_hdr=pri_hdr,
             ext_hdr=ext_hdr,
             err=err,
             dq=dq,
-            err_hdr=err_hdr
+            err_hdr=err_hdr,
+            dq_hdr=dq_hdr
         )
 
         # 1. Check data shape: expect N×3 array for the sweet-spot dataset.
@@ -3195,6 +3220,7 @@ class NDFilterSweetSpotDataset(Image):
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?
 
+            self.pri_hdr['FILENAME'] = self.filename
             self.ext_hdr['DATATYPE'] = 'NDFilterSweetSpotDataset'
             self.ext_hdr['HISTORY'] = (
                 f"NDFilterSweetSpotDataset created from {self.ext_hdr.get('DRPNFILE','?')} frames"

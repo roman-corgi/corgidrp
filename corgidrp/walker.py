@@ -615,6 +615,14 @@ def run_recipe(recipe, save_recipe_file=True):
                 # run the step!
                 curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
 
+                # make sure RECIPE header is propagated to output
+                if isinstance(curr_dataset, data.Dataset):
+                    for frame in curr_dataset:
+                        if "RECIPE" not in frame.ext_hdr:
+                            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+                elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
+                    curr_dataset.ext_hdr["RECIPE"] = json.dumps(recipe)
+
     if not save_step:
         output_filepaths = None
 
