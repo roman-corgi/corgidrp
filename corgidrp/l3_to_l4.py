@@ -660,8 +660,8 @@ def do_psf_subtraction(input_dataset,
             pri_hdr=pri_hdr, ext_hdr=collapsed_dataset[0].ext_hdr, 
             err=collapsed_dataset.all_err[np.newaxis,:,0,:,:],
             dq=collapsed_dataset.all_dq,
-            err_hdr=collapsed_dataset[0].err_hdr,
-            dq_hdr=collapsed_dataset[0].dq_hdr,
+            err_hdr=sci_dataset[0].err_hdr,
+            dq_hdr=sci_dataset[0].dq_hdr,
         )
     
     frame.filename = sci_dataset.frames[-1].filename
