@@ -1011,7 +1011,7 @@ def merge_headers(
                     values.append(h[key])
             if values:
                 any_true = any(bool(v) for v in values)
-                out_hdr[key] = any_true
+                out_hdr[key] = int(any_true)
 
     # All other keywords: must be identical across frames, error if not
     exempt = (first_frame_keywords | last_frame_keywords | averaged_keywords |
