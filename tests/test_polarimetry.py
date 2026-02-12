@@ -655,8 +655,8 @@ def test_subtract_stellar_polarization():
        
     # construct mueller matrix calibration objects
     mm_prihdr, mm_exthdr, mm_errhdr, mm_dqhdr = mocks.create_default_calibration_product_headers()
-    system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
-    nd_mm_cal = data.MuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
+    system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[4:])
+    nd_mm_cal = data.NDMuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[:4])
 
     # run step function
     output_dataset = l3_to_l4.subtract_stellar_polarization(input_dataset=input_dataset, 
@@ -1340,10 +1340,10 @@ def test_compute_QphiUPhi():
 
 if __name__ == "__main__":
     #test_image_splitting()
-    test_calc_pol_p_and_pa_image()
+    # test_calc_pol_p_and_pa_image()
     #test_subtract_stellar_polarization()
-    #test_mueller_matrix_cal()
+    test_mueller_matrix_cal()
     #test_combine_polarization_states()
     #test_align_frames()
     # #test_calc_stokes_unocculted()
-    test_compute_QphiUPhi()
+    # test_compute_QphiUPhi()
