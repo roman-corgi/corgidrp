@@ -2104,8 +2104,8 @@ class SlitTransmission(Image):
         slitname (str): name of slit with measured transmission
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, x_offset = None, y_offset = None, input_dataset=None):
+        
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
-
 
         # if this is a new SlitTransmission, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new SlitTransmission 
@@ -2121,7 +2121,7 @@ class SlitTransmission(Image):
             # Generate default output filename
             # Strip level suffix (e.g., _l2b) before adding calibration suffix
             base = input_dataset[0].filename.split(".fits")[0]
-            self.filename = f"{base}_slittrans_cal.fits"
+            self.filename = f"{base}_slt_cal.fits"
             self.filename = re.sub('_l[0-9].', '', self.filename)
             # File format checks
             if self.data.ndim != 2:
@@ -2145,14 +2145,63 @@ class SlitTransmission(Image):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
                 #x/y offset is in FITS extension
-                self.x_offset = hdulist[2].data
-                self.xoff_hdr = hdulist[2].header    
-                self.y_offset = hdulist[3].data
-                self.yoff_hdr = hdulist[3].header    
+                self.x_offset = hdulist["XOFF"].data
+                self.xoff_hdr = hdulist["XOFF"].header    
+                self.y_offset = hdulist["YOFF"].data
+                self.yoff_hdr = hdulist["YOFF"].header    
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SlitTransmission':
             raise ValueError("This file is not a valid SlitTransmission calibration.")
         self.slitname = self.ext_hdr['FSAMNAME']
-        
+
+    def select_slit_transmission_curve(self, frame):
+        """
+        Select the slit-transmission curve for the frame from SlitTransmission cal product
+    
+        Args:
+            frame (corgidrp.data.Image): L4 spectroscopy frame whose WV0_X/WV0_Y
+                coordinates identify where the slit correction should be evaluated.
+
+        Returns:
+            numpy.ndarray: 1-D slit throughput curve sampled on the frame's SPEC
+            wavelength grid.
+        """
+        slit_map, slit_x, slit_y = self.data, self.x_offset, self.y_offset
+        slit_map = np.asarray(slit_map, dtype=float)
+        slit_x = np.asarray(slit_x, dtype=float)
+        slit_y = np.asarray(slit_y, dtype=float)
+        try:
+            wv0_x = float(frame.ext_hdr['WV0_X'])
+            wv0_y = float(frame.ext_hdr['WV0_Y'])
+        except KeyError as exc:
+            raise ValueError("Frame must contain WV0_X and WV0_Y for slit correction.") from exc
+
+        # Slit map should be (N_positions, N_wave) or already 1-D in wavelength
+        if slit_map.ndim == 1:
+            slit_curve = slit_map
+        elif slit_map.ndim == 2:
+            if slit_map.shape[0] != slit_x.size or slit_x.size != slit_y.size:
+                raise ValueError("slit_map first dimension must match slit_x and slit_y length.")
+            # Find the closest sampled slit position to the spectrum's WV0 location (not interpolating,
+            # just doing nearest neighbor lookup)
+            idx = np.argmin(np.hypot(slit_x - wv0_x, slit_y - wv0_y))
+            slit_curve = slit_map[idx]
+        else:
+            raise ValueError("slit_transmission map must be 1-D or 2-D.")
+
+        slit_curve = np.asarray(slit_curve, dtype=float).ravel()
+
+        # Require that the slit transmission is defined on the same size wavelength grid as SPEC
+        # note: should spec.slit_transmission() also return a wavelength array to make sure it's
+        # the same wavelength grid?
+        spec_wave = frame.hdu_list['SPEC_WAVE'].data
+        if slit_curve.size != spec_wave.size:
+            raise ValueError(
+                f"slit_transmission wavelength axis (len={slit_curve.size}) must match "
+                f"SPEC_WAVE length (len={spec_wave.size})."
+            )
+
+        return slit_curve
+
     def save(self, filedir=None, filename=None):
         """
         Save file to disk with user specified filepath

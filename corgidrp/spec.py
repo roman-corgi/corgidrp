@@ -10,6 +10,7 @@ from astropy.io import ascii, fits
 from astropy.table import Table
 import astropy.modeling.models as models
 import astropy.modeling.fitting as fitting
+import corgidrp
 from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve, get_calspec_file
 
 
@@ -1228,66 +1229,23 @@ def slit_transmission(
         raise ValueError('There are no valid target positions within the ' +
             'range of input PSF locations')
     
-    pri_hdr = dataset_slit[0].pri_hdr
-    ext_hdr = dataset_slit[0].ext_hdr
+    pri_hdr, ext_hdr, _, _ = corgidrp.check.merge_headers(
+        dataset_slit,
+        any_true_keywords=['DESMEAR', 'CTI_CORR'],
+        invalid_keywords=[
+                    'FRMTYPE',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E'
+                ]
+        )
     input_dataset = Dataset([frame for frame in dataset_slit] + [frame for frame in dataset_open])
     slit_trans =  SlitTransmission(slit_trans_interp, pri_hdr = pri_hdr, ext_hdr = ext_hdr, x_offset = target_pix[0], y_offset = target_pix[1], input_dataset = input_dataset) 
     return slit_trans
-
-def select_slit_transmission_curve(frame, slit_trans):
-    """
-    Select the slit-transmission curve for the frame from the tuple returned by
-    spec.slit_transmission.
-
-    Args:
-        frame (corgidrp.data.Image): L4 spectroscopy frame whose WV0_X/WV0_Y
-            coordinates identify where the slit correction should be evaluated.
-        slit_trans (corgidrp.data.SlitTransmission): 
-            SlitTransmission calibration product as output from spec.slit_transmission containing
-            (slit_map, slit_x, slit_y) arrays, where slit_map has shape
-            (N_positions, N_wavelengths) and slit_x/slit_y are 1-D arrays of
-            length N_positions giving the EXCAM coordinates of each position.
-
-    Returns:
-        numpy.ndarray: 1-D slit throughput curve sampled on the frame's SPEC
-        wavelength grid.
-    """
-    slit_map, slit_x, slit_y = slit_trans.data, slit_trans.x_offset, slit_trans.y_offset
-    slit_map = np.asarray(slit_map, dtype=float)
-    slit_x = np.asarray(slit_x, dtype=float)
-    slit_y = np.asarray(slit_y, dtype=float)
-    try:
-        wv0_x = float(frame.ext_hdr['WV0_X'])
-        wv0_y = float(frame.ext_hdr['WV0_Y'])
-    except KeyError as exc:
-        raise ValueError("Frame must contain WV0_X and WV0_Y for slit correction.") from exc
-
-    # Slit map should be (N_positions, N_wave) or already 1-D in wavelength
-    if slit_map.ndim == 1:
-        slit_curve = slit_map
-    elif slit_map.ndim == 2:
-        if slit_map.shape[0] != slit_x.size or slit_x.size != slit_y.size:
-            raise ValueError("slit_map first dimension must match slit_x and slit_y length.")
-        # Find the closest sampled slit position to the spectrum's WV0 location (not interpolating,
-        # just doing nearest neighbor lookup)
-        idx = np.argmin(np.hypot(slit_x - wv0_x, slit_y - wv0_y))
-        slit_curve = slit_map[idx]
-    else:
-        raise ValueError("slit_transmission map must be 1-D or 2-D.")
-
-    slit_curve = np.asarray(slit_curve, dtype=float).ravel()
-
-    # Require that the slit transmission is defined on the same size wavelength grid as SPEC
-    # note: should spec.slit_transmission() also return a wavelength array to make sure it's
-    # the same wavelength grid?
-    spec_wave = frame.hdu_list['SPEC_WAVE'].data
-    if slit_curve.size != spec_wave.size:
-        raise ValueError(
-            f"slit_transmission wavelength axis (len={slit_curve.size}) must match "
-            f"SPEC_WAVE length (len={spec_wave.size})."
-        )
-
-    return slit_curve
 
 
 def star_pos_spec(

@@ -5,6 +5,7 @@ import logging
 import warnings
 from astropy.io import fits, ascii
 from astropy.table import Table
+from astropy import time
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset, SpecFluxCal, SlitTransmission
 import corgidrp.spec as steps
 from corgidrp.mocks import (create_default_L2b_headers,
@@ -1136,6 +1137,7 @@ def test_slit_trans():
                 # Each different FSM position is a new set of data
                 spec_slit_cp = spec_slit.copy()
                 # Associate different FSM positions to each distinct FSM case
+                spec_slit_cp.ext_hdr["MJDSRT"] = time.Time(spec_slit_cp.ext_hdr["DRPCTIME"]).mjd
                 spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0]
                 spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1]
                 spec_slit_cp.ext_hdr['WV0_X'] = (spec_slit.ext_hdr['WV0_X']

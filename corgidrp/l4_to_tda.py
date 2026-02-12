@@ -11,7 +11,6 @@ from corgidrp import check
 from corgidrp.klip_fm import measure_noise
 from corgidrp.find_source import make_snmap, psf_scalesub
 from scipy.stats import gaussian_kde
-from corgidrp.spec import select_slit_transmission_curve
 
 def determine_app_mag(input_data, source_star, scale_factor = 1.):
     """
@@ -148,8 +147,9 @@ def convert_spec_to_flux(input_dataset, fluxcal):
     Flux calibrate 1-D spectroscopy spectra stored in the L4 SPEC extension.
     The function propagates calibration uncertainties. It applies the spectral flux calibration,
     if not available it can apply the fluxcal factor and color correction.
-    Requires the input dataset to have already been core-throughput corrected
-    (ie SPEC header contains CTCOR=True).
+    Requires the input dataset to have already been core-throughput
+    (ie SPEC header contains CTCOR=True) and 
+    slit transmission corrected (ie SPEC header contains SLITCOR=True).
 
     Args:
         input_dataset (corgidrp.data.Dataset): L4 dataset containing SPEC,
@@ -275,7 +275,7 @@ def apply_slit_transmission(input_dataset, slit_transmission):
             history_messages.append("Applied algorithm throughput correction (ALGO_THRU).")
 
         # Apply slit transmission correction
-        slit_curve = np.asarray(select_slit_transmission_curve(frame, slit_transmission), dtype=float)
+        slit_curve = np.asarray(slit_transmission.select_slit_transmission_curve(frame), dtype=float)
         if slit_curve.shape != spec.shape:
             raise ValueError(
                 f"slit_transmission curve shape {slit_curve.shape} must match SPEC shape {spec.shape}."
