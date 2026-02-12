@@ -3217,7 +3217,7 @@ class NDFilterSweetSpotDataset(Image):
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
                 self.filename = re.sub('_l[0-9].', '_ndf_cal', input_dataset[-1].filename)
-            # if no input_dataset is given, do we want to set the filename manually using
+            # if no input_dataset is given, do we want to set the filename manually using 
             # header values?
 
             self.pri_hdr['FILENAME'] = self.filename

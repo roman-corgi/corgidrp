@@ -1650,18 +1650,6 @@ def combine_polarization_states(input_dataset,
     output_frame.filename = dataset.frames[-1].filename
     output_frame.pri_hdr['FILENAME'] = output_frame.filename
 
-    # Copy KLIP-related keywords from PSF-subtracted frame
-    '''
-    output_frame.pri_hdr['KLIP_ALG'] = psf_subtracted_intensity.pri_hdr['KLIP_ALG']
-    for kw in ['KLMODE0', 'PSFPARAM', 'PSFSUB', 'PYKLIPV']:
-        if kw in psf_subtracted_intensity.ext_hdr:
-            output_frame.ext_hdr[kw] = psf_subtracted_intensity.ext_hdr[kw]
-
-    # Copy error-header keywords from PSF-subtracted frame
-    for kw in ['BUNIT', 'DESMEAR', 'KGAINPAR', 'KGAIN_ER', 'RN', 'LAYER_1']:
-        if kw in psf_subtracted_intensity.err_hdr:
-            output_frame.err_hdr[kw] = psf_subtracted_intensity.err_hdr[kw]
-    '''
     updated_dataset = data.Dataset([output_frame])
 
     #Append the KL_THRU HDU if it exists in the psf_subtracted_dataset

@@ -862,6 +862,8 @@ def merge_headers(
         invalid_keywords = invalid_keywords_default
     if calculated_value_keywords is None:
         calculated_value_keywords = calculated_value_keywords_default
+    if any_true_keywords is None:
+        any_true_keywords = any_true_keywords_default
 
     first_frame_keywords = set(first_frame_keywords)
     last_frame_keywords = set(last_frame_keywords)
@@ -918,8 +920,11 @@ def merge_headers(
             if avg_vals:
                 mu = float(np.mean(avg_vals))
                 existing_comment = ext_hdr.comments[var_key] if var_key in ext_hdr else None
-                if existing_comment and "from previous" in existing_comment:
-                    existing_comment = existing_comment.split("from previous")[0] + "across input frames"
+                if existing_comment and "previous second" in existing_comment:
+                    existing_comment = existing_comment.replace(
+                        "from previous second",
+                        "across input frames",
+                    )
                 ext_hdr.set(
                     var_key,
                     float(np.mean(var_vals) + np.mean((np.array(avg_vals) - mu) ** 2)),
@@ -927,8 +932,11 @@ def merge_headers(
                 )
             else:
                 existing_comment = ext_hdr.comments[var_key] if var_key in ext_hdr else None
-                if existing_comment and "from previous" in existing_comment:
-                    existing_comment = existing_comment.split("from previous")[0] + "pooled variance across input frames"
+                if existing_comment and "previous second" in existing_comment:
+                    existing_comment = existing_comment.replace(
+                        "from previous second",
+                        "pooled variance across input frames",
+                    )
                 ext_hdr.set(
                     var_key,
                     float(np.mean(var_vals)),
