@@ -918,11 +918,8 @@ def merge_headers(
             if avg_vals:
                 mu = float(np.mean(avg_vals))
                 existing_comment = ext_hdr.comments[var_key] if var_key in ext_hdr else None
-                if existing_comment and "previous second" in existing_comment:
-                    existing_comment = existing_comment.replace(
-                        "from previous second",
-                        "across input frames",
-                    )
+                if existing_comment and "from previous" in existing_comment:
+                    existing_comment = existing_comment.split("from previous")[0] + "across input frames"
                 ext_hdr.set(
                     var_key,
                     float(np.mean(var_vals) + np.mean((np.array(avg_vals) - mu) ** 2)),
@@ -930,11 +927,8 @@ def merge_headers(
                 )
             else:
                 existing_comment = ext_hdr.comments[var_key] if var_key in ext_hdr else None
-                if existing_comment and "previous second" in existing_comment:
-                    existing_comment = existing_comment.replace(
-                        "from previous second",
-                        "pooled variance across input frames",
-                    )
+                if existing_comment and "from previous" in existing_comment:
+                    existing_comment = existing_comment.split("from previous")[0] + "pooled variance across input frames"
                 ext_hdr.set(
                     var_key,
                     float(np.mean(var_vals)),
@@ -944,11 +938,8 @@ def merge_headers(
             values = [float(frame.ext_hdr[key]) for frame in input_dataset if key in frame.ext_hdr]
             if values:
                 existing_comment = ext_hdr.comments[key] if key in ext_hdr else None
-                if existing_comment and "previous second" in existing_comment:
-                    existing_comment = existing_comment.replace(
-                        "from previous second",
-                        "averaged across input frames",
-                    )
+                if existing_comment and "from previous" in existing_comment:
+                    existing_comment = existing_comment.split("from previous")[0] + "averaged across input frames"
                 ext_hdr.set(
                     key,
                     float(np.mean(values)),
