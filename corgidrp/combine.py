@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import corgidrp.data as data
 from pyklip.klip import rotate
+import corgidrp
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling, other_hdus=None):
     """
@@ -112,6 +113,26 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     if collapse.lower() not in ["mean", "median"]:
         raise ValueError("combine_subexposures can only collapse with mean or median")
 
+    # average/delete header keywords as L4 involves combination of multiple frames
+    pri_hdr_comb, ext_hdr_comb, err_hdr_comb, dq_hdr_comb = corgidrp.check.merge_headers(input_dataset, 
+    last_frame_keywords=['VISITID', 'MJDEND'],
+    first_frame_keywords=['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
+    deleted_keywords=['CDELT1', 'CDELT2'],
+    invalid_keywords=[
+                    #Primary header keywords
+                    'FILETIME', 'PA_V3', 'PA_APER','SVB_1', 'SVB_2', 'SVB_3', 
+                    'ROLL', 'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    #Extension header keywords
+                    'DATETIME', 'FTIMEUTC','DATATYPE'],
+    averaged_keywords=['PA_APER','EXCAMT','NOVEREXP','PROXET',
+                    'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR'])
+
     num_groups = len(input_dataset) // num_frames_per_group
     new_dataset = []
     for i in range(num_groups):
@@ -129,11 +150,11 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
 
 
         # grab the headers from the first frame in this sub sequence
-        pri_hdr = input_dataset[num_frames_per_group*i].pri_hdr.copy()
-        ext_hdr = input_dataset[num_frames_per_group*i].ext_hdr.copy()
+        pri_hdr = pri_hdr_comb
+        ext_hdr = ext_hdr_comb
         ext_hdr["NUM_FR"] = num_frames_per_group
-        err_hdr = input_dataset[num_frames_per_group*i].err_hdr.copy()
-        dq_hdr = input_dataset[num_frames_per_group*i].dq_hdr.copy()
+        err_hdr = err_hdr_comb
+        dq_hdr = dq_hdr_comb
         hdulist = input_dataset[num_frames_per_group*i].hdu_list.copy()
         # update other hdus if needed
         if combine_other_hdus:
