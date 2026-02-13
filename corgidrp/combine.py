@@ -116,6 +116,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     # we change header keywords only for the non-reference datasets
     if input_dataset[0].pri_hdr['PSFREF'] != 1:
         # average/delete header keywords as L4 involves combination of multiple frames
+        pri_hdr_comb, ext_hdr_comb, err_hdr_comb, dq_hdr_comb = corgidrp.check.merge_headers(input_dataset, 
         last_frame_keywords=['VISITID', 'MJDEND'],
         first_frame_keywords=['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
         deleted_keywords=['CDELT1','CDELT2'],
