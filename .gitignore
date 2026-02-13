@@ -77,9 +77,6 @@ tests/e2e_tests/pc_sim_test_data/*.json
 .exrc
 .idea/*
 
-# AI assistant files
-CLAUDE.md
-
 #jupyter cruft
 .ipynb_checkpoints
 
