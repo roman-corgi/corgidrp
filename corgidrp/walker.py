@@ -308,10 +308,10 @@ def guess_template(dataset):
         if 'VISTYPE' not in image.pri_hdr:
             # this is probably IIT test data. Do generic processing
             recipe_filename = "l1_to_l2b.json"
-        elif image.pri_hdr['VISTYPE'][:11] == "CGIVST_ENG_":
-            # if this is an ENG calibration visit
-            # for either pupil or image
-            recipe_filename = "l1_to_l2a_eng.json"
+        # elif image.pri_hdr['VISTYPE'][:11] == "CGIVST_ENG_":
+        #     # if this is an ENG calibration visit
+        #     # for either pupil or image
+        #     recipe_filename = "l1_to_l2a_eng.json"
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_BORESIGHT":
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_boresight.json'] #"l1_to_boresight.json"
             chained = True
