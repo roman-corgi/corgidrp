@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import argparse
 
-from corgidrp.data import Dataset, Image
+from corgidrp.data import Dataset, Image, SlitTransmission
 from corgidrp.check import check_filename_convention, verify_header_keywords
 from corgidrp import l4_to_tda, spec, mocks
 
@@ -115,12 +115,12 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     logger.info('Test 2: Unocculted Star in Astrophysical Units')
     logger.info("=" * 80)
 
-    # Step: Build a slit-transmission map (map, x, y) using the first non-coronagraphic wavelength grid
+    # Step: Build a slit-transmission calibration product (map, x, y) using the first non-coronagraphic wavelength grid
     reference_wave = noncoron_images[0].hdu_list['SPEC_WAVE'].data
     slit_map = np.ones((1, reference_wave.size), dtype=float)
     slit_x = np.array([noncoron_images[0].ext_hdr.get('WV0_X', 0.0)])
     slit_y = np.array([noncoron_images[0].ext_hdr.get('WV0_Y', 0.0)])
-    slit_transmission = (slit_map, slit_x, slit_y)
+    slit_transmission = SlitTransmission(slit_map, pri_hdr = noncoron_images[0].pri_hdr, ext_hdr = noncoron_images[0].ext_hdr, x_offset = slit_x, y_offset = slit_y, input_dataset = Dataset([noncoron_images[0]]))
     logger.info(f"Slit transmission map sample (first 5 bins): {slit_map[0][:5]}")
 
     # Step: Verify spectroscopy headers, extensions, COL_COR, and core throughput
@@ -226,10 +226,12 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
                         "    SPEC header has CTCOR=True; proceeding with "
                         "convert_spec_to_flux. PASS"
                     )
-
+            # TODO: why not outside the image loop?
+            # correct for slit transmission and algo thru
+            corrected_ds = l4_to_tda.apply_slit_transmission(Dataset([img]), slit_transmission)
             # Flux calibration 
             calibrated_img = l4_to_tda.convert_spec_to_flux(
-                Dataset([img]), fluxcal_factor, slit_transmission=slit_transmission
+                corrected_ds, fluxcal_factor
             )
             calibrated_spec = calibrated_img[0].hdu_list['SPEC'].data
             calibrated_err = calibrated_img[0].hdu_list['SPEC_ERR'].data
@@ -411,9 +413,11 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
             )
             ratio_err = metadata.get('ratio_err')
 
+        # correct for slit transmission and algo thru
+        comp_corrected_ds = l4_to_tda.apply_slit_transmission(Dataset([comp_comb]), slit_transmission)
         # Check algorithm throughput correction is applied
         comp_cal_check = l4_to_tda.convert_spec_to_flux(
-            Dataset([comp_comb]), fluxcal_factor, slit_transmission=slit_transmission
+            comp_corrected_ds, fluxcal_factor
         )
         comp_spec_hdr_cal = comp_cal_check[0].hdu_list['SPEC'].header
         if 'ALGOCOR' in comp_spec_hdr_cal:
