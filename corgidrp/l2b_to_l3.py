@@ -2,6 +2,7 @@ import numpy as np
 import astropy.wcs as wcs
 from corgidrp.spec import read_cent_wave
 from corgidrp import data
+from corgidrp import check
 
 # A file that holds the functions that transmogrify l2b data to l3 data 
 import numpy as np
@@ -354,14 +355,12 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             if ("EACQ_COL" in exthdr.keys()) and ("EACQ_ROW" in exthdr.keys()):
                 centerxy = np.array([exthdr["EACQ_COL"],exthdr["EACQ_ROW"]])
             else: raise ValueError('centerxy not provided but EACQ_ROW/COL are missing from image extension header.')
-        
         # Round to center to nearest half-pixel if size is even, nearest pixel if odd
         size_evenness = (np.array(sizexy) % 2) == 0
         centerxy_input = np.array(centerxy)
         centerxy = np.where(size_evenness,np.round(centerxy_input-0.5)+0.5,np.round(centerxy_input))
         if not np.all(centerxy == centerxy_input):
             print(f'Desired center was {centerxy_input}. Centering crop on {centerxy}.')
-            
         # Crop the data
         start_ind = (centerxy + 0.5 - np.array(sizexy)/2).astype(int)
         end_ind = (centerxy + 0.5 + np.array(sizexy)/2).astype(int)
@@ -373,7 +372,7 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         right_pad = x2-frame_shape[-1] if (x2 > frame_shape[-1]) else 0
         below_pad = -y1 if (y1<0) else 0
         above_pad = y2-frame_shape[-2] if (y2 > frame_shape[-2]) else 0
-        
+
 
         if frame.data.ndim == 2:
 
@@ -472,7 +471,7 @@ def update_to_l3(input_dataset):
     Returns:
         corgidrp.data.Dataset: same dataset now at L3-level
     """
-    # check that we are running this on L1 data
+    # check that we are running this on L2b data
     for orig_frame in input_dataset:
         if orig_frame.ext_hdr['DATALVL'] != "L2b":
             err_msg = "{0} needs to be L2b data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
@@ -482,7 +481,12 @@ def update_to_l3(input_dataset):
     updated_dataset = input_dataset.copy(copy_data=False)
 
     for frame in updated_dataset:
-        # update header
+        # Apply header rules to each frame
+        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(data.Dataset([frame]))
+        frame.pri_hdr = pri_hdr
+        frame.ext_hdr = ext_hdr
+        frame.err_hdr = err_hdr
+        frame.dq_hdr = dq_hdr
         frame.ext_hdr['DATALVL'] = "L3"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1

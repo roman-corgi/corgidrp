@@ -13,6 +13,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import corgidrp.check as check
 import shutil
 import warnings
 
@@ -71,6 +72,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         l1_data_ill_filelist.append(os.path.join(output_ill_dir, f))
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
+
+    # Update headers for TVAC files
+    l1_data_ill_filelist = check.fix_hdrs_for_tvac(l1_data_ill_filelist, output_ill_dir)
+    l1_data_dark_filelist = check.fix_hdrs_for_tvac(l1_data_dark_filelist, output_dark_dir)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')

@@ -381,7 +381,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
     exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
-    exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
+    exthdr['RECIPE']        = 'Mock'        # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
     exthdr['HISTORY']       = ''            # History comments
@@ -462,7 +462,7 @@ def create_default_L2a_TrapPump_headers(arrtype="SCI"):
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
     exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
-    exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
+    exthdr['RECIPE']        = 'Mock'        # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
     exthdr['HISTORY']       = ''            # History comments
@@ -4965,7 +4965,8 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     exthdr['LSAMNAME'] = observing_mode
     exthdr['FSMPRFL'] = observing_mode
 
-    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr,
+                       err_hdr=errhdr, dq_hdr=dqhdr)
 
     return image
 
@@ -5111,7 +5112,8 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     exthdr['LSAMNAME'] = observing_mode
     exthdr['FSMPRFL'] = observing_mode
     exthdr["SATSPOTS"] = 1
-    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr,
+                       err_hdr=errhdr, dq_hdr=dqhdr)
 
     return image
     
