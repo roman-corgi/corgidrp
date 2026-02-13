@@ -2423,6 +2423,10 @@ class CoreThroughputCalibration(Image):
             self.pri_hdr = pri_hdr
             ext_hdr['EXTNAME'] = 'PSFCUBE'
             ext_hdr['BUNIT'] = 'photoelectron/pix/s'
+            ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
+                'observing sequence. PSFs are not normalized. They are the '
+                'images of the off-axis source. The data cube is centered '
+                'around each PSF location')
             self.ext_hdr = ext_hdr
             self.err_hdr = err_hdr
             self.dq_hdr = dq_hdr

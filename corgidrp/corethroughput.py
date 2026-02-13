@@ -302,15 +302,6 @@ def generate_psf_cube(
 
     # PSF cube header
     ext_hdr = dataset[0].ext_hdr
-    # Add history
-    ext_hdr['HISTORY'] = ('Core Throughput calibration derived from a '
-        f'set of frames from {dataset[0].ext_hdr["DATETIME"]} to '
-        f'{dataset[-1].ext_hdr["DATETIME"]}')
-    # Add specific information
-    ext_hdr['BUNIT'] = 'photoelectron/pix/s'
-    ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
-        'observing sequence. PSFs are not normalized. They are the images of the '
-        'off-axis source. The data cube is centered around each PSF location')
     # Add EXTNAME
     psf_hdu = fits.ImageHDU(data=psf_cube, header=ext_hdr, name='PSFCUBE')
 
