@@ -84,7 +84,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
         with fits.open(file, mode='update') as fits_file:
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-            prihdr['PHTCNT'] = False
+            prihdr['PHTCNT'] = 0
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -169,7 +169,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
-    kgain.ext_hdr['RN'] = 100
+    kgain.ext_hdr['RN'] = 100.0
     kgain.ext_hdr['RN_ERR'] = 0
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)
@@ -403,7 +403,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
-    kgain.ext_hdr['RN'] = 100
+    kgain.ext_hdr['RN'] = 100.0
     kgain.ext_hdr['RN_ERR'] = 0
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
     this_caldb.create_entry(kgain)
@@ -413,7 +413,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
         with fits.open(file, mode='update') as fits_file:
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-            prihdr['PHTCNT'] = False
+            prihdr['PHTCNT'] = 0
 
 
     ####### Run the DRP walker

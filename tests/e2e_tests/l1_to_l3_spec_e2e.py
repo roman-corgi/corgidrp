@@ -157,19 +157,17 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
 
     # Check if data is PC or analog to determine which type of dark to create
     sample_l1_files = [f for f in os.listdir(l1_datadir) if f.endswith('l1.fits') or f.endswith('l1_.fits')]
-    is_pc_data = False
+    is_pc_data = 0
     if sample_l1_files:
         sample_l1_file = os.path.join(l1_datadir, sample_l1_files[0])
         with fits.open(sample_l1_file) as hdul:
             exthdr = hdul[1].header
             if 'ISPC' in exthdr:
-                ispc_val = exthdr.get('ISPC')
-                if ispc_val in (1, True):
-                    is_pc_data = True
-                elif ispc_val in (0, False):
-                    is_pc_data = False
+                ispc_val = int(exthdr.get('ISPC'))
+                if ispc_val in (0, 1):
+                    is_pc_data = ispc_val
                 else:
-                    raise ValueError(f"Expected True or False for ISPC value in header: {ispc_val}.")
+                    raise ValueError(f"Expected 0 or 1 for ISPC value in header: {ispc_val}.")
             else:
                 raise ValueError("Missing ISPC keyword in L1 header. Cannot determine PC vs analog.")
     

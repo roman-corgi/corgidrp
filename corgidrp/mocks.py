@@ -580,7 +580,7 @@ def create_default_L2b_TrapPump_headers(arrtype="SCI"):
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
-    exthdr['RN']            = ''            # Read noise
+    exthdr['RN']            = 0.0           # Read noise
     exthdr['RN_ERR']        = ''            # Read noise error
     exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
     exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
@@ -2797,7 +2797,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.ext_hdr['EMGAIN_C'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
-        frame.ext_hdr['RN'] = 100
+        frame.ext_hdr['RN'] = 100.0
         frame.ext_hdr['KGAINPAR'] = kgain
         frame.pri_hdr['PHTCNT'] = 1
         frame.ext_hdr['ISPC'] = 1
@@ -2820,7 +2820,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['EMGAIN_C'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
-        frame_dark.ext_hdr['RN'] = 100
+        frame_dark.ext_hdr['RN'] = 100.0
         frame_dark.ext_hdr['KGAINPAR'] = kgain
         frame_dark.pri_hdr['PHTCNT'] = 1
         frame_dark.ext_hdr['ISPC'] = 1
