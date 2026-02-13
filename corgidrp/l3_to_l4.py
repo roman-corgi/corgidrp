@@ -656,7 +656,7 @@ def do_psf_subtraction(input_dataset,
         last_frame_keywords = ['VISITID', 'MJDEND'],
         # the first frame in collapsed dataset seems to contain the correct WCS, so
         # propagate that one
-        first_frame_keywords = ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+        first_frame_keywords = ['MJDSRT', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
                                 'CRPIX1', 'CRPIX2'],
         invalid_keywords=[
             # Primary header keywords
