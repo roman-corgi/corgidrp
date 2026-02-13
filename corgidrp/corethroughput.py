@@ -307,7 +307,7 @@ def generate_psf_cube(
         f'set of frames from {dataset[0].ext_hdr["DATETIME"]} to '
         f'{dataset[-1].ext_hdr["DATETIME"]}')
     # Add specific information
-    ext_hdr['UNITS'] = 'photoelectron/pix/s'
+    ext_hdr['BUNIT'] = 'photoelectron/pix/s'
     ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
         'observing sequence. PSFs are not normalized. They are the images of the '
         'off-axis source. The data cube is centered around each PSF location')

@@ -3588,8 +3588,7 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
         dq=dq_cube,
         dq_hdr=dq_hdr,
         input_dataset=data.Dataset([data.Image(np.array([0.]),
-                                 pri_hdr=fits.Header(),
-                                 ext_hdr=fits.Header())]))
+                                 *create_default_L2b_headers()[:2])]))
 
     return ct_cal
 

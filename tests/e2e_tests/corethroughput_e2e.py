@@ -192,7 +192,8 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
     
     # run the recipe directly to check out it comes
-    dataset_normed = l2b_to_l3.divide_by_exptime(dataset)
+    dataset_l2b = data.Dataset(l2b_filenames)
+    dataset_normed = l2b_to_l3.divide_by_exptime(dataset_l2b)
     ct_cal_sim = corethroughput.generate_ct_cal(dataset_normed)
 
     # Asserts
