@@ -1777,7 +1777,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
     last_frame_keywords=['VISITID', 'MJDEND'],
     first_frame_keywords=['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
-    deleted_keywords=['CDELT1','CDELT2'],
+    deleted_keywords=['CDELT1','CDELT2','FILE0'], #we re-add FILE0 below
     invalid_keywords=[
                     #Primary header keywords
                     'FILETIME', 'PA_V3', 'PA_APER','SVB_1', 'SVB_2', 'SVB_3', 
@@ -1803,6 +1803,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
         frame.ext_hdr = ext_hdr_comb
         frame.ext_hdr['DRPNFILE'] = drpnfile
         frame.ext_hdr['NUM_FR'] = num_fr
+        frame._record_parent_filenames(input_dataset)
     
     history_msg = f"Combined psf subtracted spectroscopy frames by applying {collapse}, result is a dataset with one frame"
     dataset.update_after_processing_step(history_msg)
