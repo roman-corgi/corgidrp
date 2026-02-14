@@ -107,7 +107,7 @@ def test_nonlin_cal_e2e(
         with fits.open(file, mode='update') as fits_file:
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
-            prihdr['PHTCNT'] = 0
+            prihdr['PHTCNT'] = "False"
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
