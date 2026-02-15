@@ -248,8 +248,8 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
-    ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
-    ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
+    ext_hdr['B_O'] = 0. # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
+    ext_hdr['B_O_ERR'] = 0. # was not estimated with the II&T code
 
     # Create a DetectorNoiseMaps object and save it
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,

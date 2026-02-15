@@ -178,8 +178,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     # KGain
     kgain_val = 8.7
     # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
-    ext_hdr['RN'] = 100
-    ext_hdr['RN_ERR'] = 0
+    ext_hdr['RN'] = 100.
+    ext_hdr['RN_ERR'] = 0.
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
     ptc = np.column_stack([signal_array, noise_array])
@@ -204,8 +204,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
@@ -400,8 +400,8 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     # KGain
     kgain_val = 8.7
     # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
-    ext_hdr['RN'] = 100
-    ext_hdr['RN_ERR'] = 0
+    ext_hdr['RN'] = 100.
+    ext_hdr['RN_ERR'] = 0.
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
     ptc = np.column_stack([signal_array, noise_array])
@@ -426,8 +426,8 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)

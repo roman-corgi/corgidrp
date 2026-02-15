@@ -2797,7 +2797,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.ext_hdr['EMGAIN_C'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
-        frame.ext_hdr['RN'] = 100
+        frame.ext_hdr['RN'] = read_noise
         frame.ext_hdr['KGAINPAR'] = kgain
         frame.pri_hdr['PHTCNT'] = 1
         frame.ext_hdr['ISPC'] = 1
@@ -2820,7 +2820,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['EMGAIN_C'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
-        frame_dark.ext_hdr['RN'] = 100.
+        frame_dark.ext_hdr['RN'] = read_noise
         frame_dark.ext_hdr['KGAINPAR'] = kgain
         frame_dark.pri_hdr['PHTCNT'] = 1
         frame_dark.ext_hdr['ISPC'] = 1
@@ -2846,7 +2846,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7
         bad_frame.filename = f'cgi_{visitid}_{time_str}_l1_.fits'
         frame_e_list.append(bad_frame)
         bad_dark_frame = frame_dark.copy()
-        bad_dark_frame.ext_hdr['OVEREXP'] = True
+        bad_dark_frame.ext_hdr['OVEREXP'] = 1
         # Generate CGI filename for bad dark frames
         time_offset = datetime.timedelta(seconds=Ndarks + i + 1000)  # Offset to avoid conflicts
         unique_time = base_time + time_offset

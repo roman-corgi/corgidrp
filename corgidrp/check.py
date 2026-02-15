@@ -1063,7 +1063,7 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
         'EMGAINA2', 'EMGAINA3', 'EMGAINA4', 'EMGAINA5', 'GAINTCAL',
         'EXCAMT', 'LOCAMT', 'EMGAIN_A', 'KGAINPAR', 'CYCLES',
         'LASTEXP', 'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP',
-        'NOVEREXP', 'ISPC', 'PROXET', 'FCMLOOP', 'FCMPOS',
+        'NOVEREXP', 'ISPC', 'PROXET', 'FCMPOS', 'FCMLOOP',
         'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR', 'FSMSG1',
         'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY', 'EACQ_ROW',
         'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
@@ -1096,15 +1096,34 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
 
             for key in preserve_pri_keys:
                 if key in orig_pri_hdr:
-                    mock_pri_hdr[key] = orig_pri_hdr[key]
+                    type_class = type(mock_pri_hdr[key])
+                    if orig_pri_hdr[key] == 'N/A' and type_class != str:
+                        continue #PSFREF meets this condition
+                    try:
+                        mock_pri_hdr[key] = type_class(orig_pri_hdr[key])
+                    except:
+                        mock_pri_hdr[key] = orig_pri_hdr[key]
             for key in preserve_img_keys:
                 if key in orig_img_hdr:
-                    mock_img_hdr[key] = orig_img_hdr[key]
+                    type_class = type(mock_img_hdr[key])
+                    try:
+                        mock_img_hdr[key] = type_class(orig_img_hdr[key])
+                    except:
+                        mock_img_hdr[key] = orig_img_hdr[key]
+
+            # These 3 are exceptions: these strings in the TVAC files but should be int
+            for key in ['FCMLOOP', 'FSMINNER', 'FSMLOS']:
+                if orig_img_hdr[key] == 'OPEN':
+                    mock_img_hdr[key] = 0
+                elif orig_img_hdr[key] == 'CLOSED':
+                    mock_img_hdr[key] = 1
 
             if 'EMGAIN_A' in mock_img_hdr and 'HVCBIAS' in mock_img_hdr:
-                if float(mock_img_hdr['EMGAIN_A']) == 1 and mock_img_hdr['HVCBIAS'] <= 0:
+                if float(mock_img_hdr['EMGAIN_A']) == 1. and mock_img_hdr['HVCBIAS'] <= 0:
                     # SSC TVAC files default EMGAIN_A=1 regardless of commanded gain
-                    mock_img_hdr['EMGAIN_A'] = -1
+                    mock_img_hdr['EMGAIN_A'] = -1.
+            if 'EMGAIN_A' in mock_img_hdr:
+                mock_img_hdr['EMGAIN_A'] = float(mock_img_hdr['EMGAIN_A'])
             if 'EMGAIN_C' in mock_img_hdr and isinstance(mock_img_hdr['EMGAIN_C'], str):
                 mock_img_hdr['EMGAIN_C'] = float(mock_img_hdr['EMGAIN_C'])
 

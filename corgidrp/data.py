@@ -700,9 +700,9 @@ class Dark(Image):
         err_hdr (astropy.io.fits.Header): the error header (required only if raw data is passed in)
         dq (np.array): the DQ array (required only if raw data is passed in)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None, dq_hdr = None):
        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr)
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr, dq_hdr=dq_hdr)
 
         # if this is a new dark, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new dark
@@ -1569,9 +1569,9 @@ class DetectorNoiseMaps(Image):
         err_hdr (astropy.io.fits.Header): the error header (required only if data is passed in for data_or_filepath)
 
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None, dq_hdr=None):
        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr)
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr, dq_hdr=dq_hdr)
 
         # File format checks
         if self.data.ndim != 3 or self.data.shape[0] != 3:

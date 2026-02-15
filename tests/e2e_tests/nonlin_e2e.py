@@ -107,7 +107,7 @@ def test_nonlin_cal_e2e(
         with fits.open(file, mode='update') as fits_file:
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
-            prihdr['PHTCNT'] = False
+            prihdr['PHTCNT'] = 0
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'# '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 

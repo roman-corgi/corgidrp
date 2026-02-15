@@ -99,8 +99,8 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
 
     # Create a DetectorNoiseMaps object and save it
     ext_hdr_dnm = ext_hdr.copy()
-    ext_hdr_dnm['B_O'] = 0
-    ext_hdr_dnm['B_O_ERR'] = 0
+    ext_hdr_dnm['B_O'] = 0.
+    ext_hdr_dnm['B_O_ERR'] = 0.
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr_dnm,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)

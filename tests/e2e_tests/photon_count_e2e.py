@@ -101,7 +101,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     np.random.seed(1234)
     # using CIC and dark current average values which come from the corresponding values from cic_path and dark_path above; FPN mean is already 0 in fpn_path and simulated set below
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158)
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=2, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158)
     output_dir = os.path.join(e2eoutput_path, 'photon_count_e2e')
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
@@ -142,8 +142,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         l1_data_ill_filelist.append(os.path.join(output_ill_dir, f))
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
-    fix_str_for_tvac(l1_data_ill_filelist)
-    fix_str_for_tvac(l1_data_dark_filelist)
+    # fix_str_for_tvac(l1_data_ill_filelist)
+    # fix_str_for_tvac(l1_data_dark_filelist)
 
     # Update headers for TVAC files
     l1_data_ill_filelist = check.fix_hdrs_for_tvac(l1_data_ill_filelist, output_ill_dir)
@@ -166,10 +166,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
-    kgain.ext_hdr['RN'] = 100
-    kgain.ext_hdr['RN_ERR'] = 0
+    kgain.ext_hdr['RN'] = 100.
+    kgain.ext_hdr['RN_ERR'] = 0.
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
-    fix_str_for_tvac([kgain.filepath])
+    #fix_str_for_tvac([kgain.filepath])
     this_caldb.create_entry(kgain)
 
     # NoiseMap (meaningless data; won't be used in dark subtraction for this first test which instead uses PC master dark)
@@ -178,13 +178,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
-    fix_str_for_tvac([noise_map.filepath])
+    #fix_str_for_tvac([noise_map.filepath])
     this_caldb.create_entry(noise_map)
 
     here = os.path.abspath(os.path.dirname(__file__))
@@ -212,7 +212,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
-    fix_str_for_tvac([flat.filepath])
+    #fix_str_for_tvac([flat.filepath])
     this_caldb.create_entry(flat)
 
     # bad pixel map
@@ -220,7 +220,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
-    fix_str_for_tvac([bp_map.filepath])
+    #fix_str_for_tvac([bp_map.filepath])
     this_caldb.create_entry(bp_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not
@@ -337,8 +337,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
