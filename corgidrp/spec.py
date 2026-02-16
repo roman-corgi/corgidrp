@@ -343,7 +343,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
                 invalid_keywords=[
                     #pri header
                     'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 
-                    'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3', 'VISITID', 
                     #ext header
                     'FRMTYPE', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS', 'STATUS',
                     'HVCBIAS', 'OPMODE', 'EMGAIN_C', 'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
@@ -355,7 +355,8 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
                     'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
-                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN'
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V'
                 ]
         )
 
@@ -657,6 +658,7 @@ def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_fil
     ext_hdr["REFWAVE"] = ref_wavlen
     ext_hdr["BAND"] = ref_cfam
     ext_hdr["BANDFRAC"] = bandpass_frac
+    ext_hdr["CFAMNAME"] = ref_cfam
     corgi_dispersion_profile = DispersionModel(
         disp_dict, pri_hdr = pri_hdr, ext_hdr = ext_hdr
     )
