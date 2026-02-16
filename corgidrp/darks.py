@@ -5,7 +5,7 @@ from astropy.io import fits
 
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
-from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_invalid_keywords, typical_bool_keywords
+from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset
 
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
@@ -320,9 +320,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         err = total_err
         data = mean_frame
 
-    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset, 
-                                                        any_true_keywords=typical_bool_keywords,
-                                                        invalid_keywords=typical_invalid_keywords)
+    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset)
     
     exthdr['NAXIS1'] = data.shape[1]
     exthdr['NAXIS2'] = data.shape[0]
@@ -868,9 +866,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     CIC_image_map[CIC_image_map < 0] = 0
     DC_image_map[DC_image_map < 0] = 0
 
-    prihdr, exthdr, err_hdr, dq_hdr = check.merge_headers(dataset, 
-                                                          any_true_keywords=typical_bool_keywords,
-                                                          invalid_keywords=typical_invalid_keywords)
+    prihdr, exthdr, err_hdr, dq_hdr = check.merge_headers(dataset)
     if 'EMGAIN_M' in exthdr.keys():
         exthdr['EMGAIN_M'] = -999.
     exthdr['BUNIT'] = 'detected electron'
