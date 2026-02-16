@@ -119,6 +119,8 @@ class Dataset():
                 filenames.append(frame.filename)
 
         for filename, frame in zip(filenames, self.frames):
+            ##redoing the change to the FILENAME keyword to cover our bases
+            frame.pri_hdr['FILENAME'] = frame.filename
             frame.save(filename=filename, filedir=filedir)
 
         # relink frames with all_data
