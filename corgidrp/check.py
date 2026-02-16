@@ -870,11 +870,12 @@ def merge_headers(
     calculated_value_keywords = set(calculated_value_keywords)
     any_true_keywords = set(any_true_keywords) if any_true_keywords else set()
 
+    cp_dataset = input_dataset.copy(copy_data=False)
     # Dataset may not be time-ordered, so sort by MJDSRT to define the last frame
     # and define the header starting point
-    mjd_vals = [float(f.ext_hdr['MJDSRT']) for f in input_dataset]
+    mjd_vals = [float(f.ext_hdr['MJDSRT']) for f in cp_dataset]
     sort_idx = np.argsort(mjd_vals)
-    time_ordered = input_dataset[sort_idx]
+    time_ordered = cp_dataset[sort_idx]
     first = time_ordered[0]
     last = time_ordered[-1]
     pri_hdr = last.pri_hdr.copy()
@@ -910,8 +911,8 @@ def merge_headers(
         if is_zvar:
             i = int(key[1:-3])
             avg_key, var_key = f'Z{i}AVG', key
-            avg_vals = [float(f.ext_hdr[avg_key]) for f in input_dataset if avg_key in f.ext_hdr]
-            var_vals = [float(f.ext_hdr[var_key]) for f in input_dataset if var_key in f.ext_hdr]
+            avg_vals = [float(f.ext_hdr[avg_key]) for f in cp_dataset if avg_key in f.ext_hdr]
+            var_vals = [float(f.ext_hdr[var_key]) for f in cp_dataset if var_key in f.ext_hdr]
             if not var_vals:
                 continue
             if avg_vals:
@@ -940,7 +941,7 @@ def merge_headers(
                     comment=existing_comment,
                 )
         else:
-            values = [float(frame.ext_hdr[key]) for frame in input_dataset if key in frame.ext_hdr]
+            values = [float(frame.ext_hdr[key]) for frame in cp_dataset if key in frame.ext_hdr]
             if values:
                 existing_comment = ext_hdr.comments[key] if key in ext_hdr else None
                 if existing_comment and "previous second" in existing_comment:
@@ -966,7 +967,7 @@ def merge_headers(
     for key in invalid_keywords:
         sample = None
         # figure out the datatype
-        for f in input_dataset:
+        for f in cp_dataset:
             for attr in ('ext_hdr', 'pri_hdr', 'err_hdr', 'dq_hdr'):
                 h = getattr(f, attr, None)
                 if h is not None and key in h:
@@ -1002,7 +1003,7 @@ def merge_headers(
     for key in any_true_keywords:
         for attr, out_hdr in header_attr_pairs:
             values = []
-            for f in input_dataset:
+            for f in cp_dataset:
                 h = getattr(f, attr, None)
                 if h is not None and key in h:
                     values.append(h[key])
@@ -1021,7 +1022,7 @@ def merge_headers(
             if key in exempt:
                 continue
             values = []
-            for f in input_dataset:
+            for f in cp_dataset:
                 h = getattr(f, header_attr, None)
                 if h is not None and key in h:
                     values.append(h[key])

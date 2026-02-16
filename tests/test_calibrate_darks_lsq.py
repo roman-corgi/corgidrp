@@ -5,8 +5,7 @@ import pickle
 import warnings
 import numpy as np
 
-from corgidrp.darks import (calibrate_darks_lsq,
-            CalDarksLSQException)
+from corgidrp.darks import calibrate_darks_lsq, CalDarksLSQException
 from corgidrp.detector import slice_section, imaging_area_geom, imaging_slice
 from corgidrp.mocks import create_synthesized_master_dark_calib, rename_files_to_cgi_format
 from corgidrp.mocks import detector_areas_test as dat
