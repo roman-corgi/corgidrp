@@ -140,7 +140,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     
     # raw science data to mock from
-    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "CGI_*.fits"))
+    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "cgi_*.fits"))
     fix_str_for_tvac(l1_dark_filelist)
     l1_dark_filelist.sort()
     # l1_dark_dataset = data.Dataset(l1_dark_filelist[:len(raster_dataset)])
@@ -379,11 +379,11 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
                                                     radius=90, snr=250000, snr_constant=9.66, flat_map=input_flat, 
                                                     raster_radius=40, raster_subexps=6)
     logger.info('='*80)
-    logger.info('Test Case 1: Raster scanned image for Neptune')
+    logger.info('Test Case 1: Raster scanned image for Uranus')
     logger.info('='*80)
     
     # raw science data to mock from
-    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "CGI_*.fits"))
+    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "cgi_*.fits"))
     fix_str_for_tvac(l1_dark_filelist)
     l1_dark_filelist.sort()
     # l1_dark_dataset = data.Dataset(l1_dark_filelist[:len(raster_dataset)])
@@ -519,7 +519,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     
     outputdir = thisfile_dir
-    e2edata_dir =  "/Users/polaris/Roman_CGI_flatfielding/pol_flatfielding/corgi"
+    e2edata_dir =  "/Users/polaris/Roman_CGI_flatfielding/pol_flatfielding/corgi/E2E_Test_Data"
 
     ap = argparse.ArgumentParser(description="run the l2b-> Flatfield end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
