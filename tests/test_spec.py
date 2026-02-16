@@ -5,7 +5,8 @@ import logging
 import warnings
 from astropy.io import fits, ascii
 from astropy.table import Table
-from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset, SpecFluxCal
+from astropy import time
+from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset, SpecFluxCal, SlitTransmission
 import corgidrp.spec as steps
 from corgidrp.mocks import (create_default_L2b_headers,
     create_default_L3_headers, get_formatted_filename, make_1d_spec_image, make_mock_fluxcal_factor)
@@ -1136,6 +1137,7 @@ def test_slit_trans():
                 # Each different FSM position is a new set of data
                 spec_slit_cp = spec_slit.copy()
                 # Associate different FSM positions to each distinct FSM case
+                spec_slit_cp.ext_hdr["MJDSRT"] = time.Time(spec_slit_cp.ext_hdr["DRPCTIME"]).mjd
                 spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0]
                 spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1]
                 spec_slit_cp.ext_hdr['WV0_X'] = (spec_slit.ext_hdr['WV0_X']
@@ -1307,11 +1309,23 @@ def test_slit_trans():
         logger.info("")
 
         # Estimate slit transmission
-        slit_trans_out, slit_pos_x, slit_pos_y = steps.slit_transmission(
+        slit_trans = steps.slit_transmission(
             spec_slit_ds, spec_open_ds,
             x_range=[xrange0, xrange1],
             y_range=[yrange0, yrange1],
         )
+        slit_trans_out = slit_trans.data
+        slit_pos_x = slit_trans.x_offset
+        slit_pos_y = slit_trans.y_offset
+        #test SlitTransmission class
+        assert slit_trans.slitname == fsam_expected
+        slit_trans.save(filedir = output_dir, filename = "slit_trans_test.fits")
+        slit_trans_load = SlitTransmission(os.path.join(output_dir, "slit_trans_test.fits"))
+        assert np.array_equal(slit_trans_load.data, slit_trans.data)
+        assert np.array_equal(slit_trans_load.x_offset, slit_trans.x_offset)
+        assert np.array_equal(slit_trans_load.y_offset, slit_trans.y_offset)
+        assert slit_trans.slitname == slit_trans_load.slitname
+
         # Check interpolation values are as expected or close to them
         slit_trans_design = np.ones_like(slit_trans_out)
         for idx in range(slit_trans_out.shape[0]):
@@ -1355,6 +1369,14 @@ def test_slit_trans():
         mean_trans = slit_trans_out.mean()
         logger.info(f'    Peak transmission value: {peak_trans}')
         logger.info(f'    Mean transmission value: {mean_trans}')
+
+        """test l4_to_tda.apply_slit_transmission"""
+        spec_in = spec_slit_ds[0].hdu_list['SPEC'].data
+        corrected_ds = l4_to_tda.apply_slit_transmission(spec_slit_ds, slit_trans)
+        spec_out = corrected_ds[0].hdu_list['SPEC'].data
+        assert corrected_ds[0].hdu_list['SPEC'].header['SLITCOR'] == True
+        assert corrected_ds[0].hdu_list['SPEC'].header['SLITFAC'] == np.nanmean(slit_trans.data[0])
+        assert np.allclose(spec_in/spec_out, slit_trans.data[0])
 
 def test_star_pos():
     """ Test translation of a position on EXCAM measured in polar coordinates

@@ -784,7 +784,7 @@ averaged_keywords_default = (
     ['RA'] + ['DEC'] + ['RAPM'] + ['DECPM'] + ['PA_V3'] + ['PA_APER'] + ['SVB_1'] + ['SVB_2'] + ['SVB_3'] +
     ['ROLL'] + ['PITCH'] + ['YAW'] +
     ['FSMSG1'] + ['FSMSG2'] + ['FSMSG3'] + ['FSMX'] + ['FSMY'] +
-    ['EXCAMT'] +
+    ['EXCAMT'] + ['NOVEREXP'] + ['PROXET'] +
     [f'Z{i}AVG' for i in range(2, 15)] +
     [f'Z{i}VAR' for i in range(2, 15)] +
     [f'Z{i}RES' for i in range(2, 15)]
@@ -797,6 +797,7 @@ calculated_value_keywords_default = (
     ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']
     + [f'FILE{i}' for i in range(100)]
 )
+any_true_keywords_default = ['OVEREXP']
 
 def merge_headers(
     input_dataset,
@@ -861,6 +862,8 @@ def merge_headers(
         invalid_keywords = invalid_keywords_default
     if calculated_value_keywords is None:
         calculated_value_keywords = calculated_value_keywords_default
+    if any_true_keywords is None:
+        any_true_keywords = any_true_keywords_default
 
     first_frame_keywords = set(first_frame_keywords)
     last_frame_keywords = set(last_frame_keywords)
@@ -1009,7 +1012,7 @@ def merge_headers(
                     values.append(h[key])
             if values:
                 any_true = any(bool(v) for v in values)
-                out_hdr[key] = any_true
+                out_hdr[key] = int(any_true)
 
     # All other keywords: must be identical across frames, error if not
     exempt = (first_frame_keywords | last_frame_keywords | averaged_keywords |
