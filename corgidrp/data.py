@@ -1778,7 +1778,8 @@ class AstrometricCalibration(Image):
                     'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
                     'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
                     'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
-                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3'],
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    'STAR1','STAR2','STAR3','STAR4','STAR5'] + ['STAR{0}'.format(i) for i in range(6, 1000)],
                 deleted_keywords=['SATSPOTS','ISHOWFSC','HOWFSLNK'])
 
             _, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
@@ -1804,7 +1805,7 @@ class AstrometricCalibration(Image):
                     'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
                     'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
                     'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME',
-                    'STAR1','STAR2','STAR3','STAR4','STAR5'],
+                    'STAR1','STAR2','STAR3','STAR4','STAR5'] + ['STAR{0}'.format(i) for i in range(6, 1000)],
                 averaged_keywords=['EXCAMT']
             )        
             # run the image class constructor
