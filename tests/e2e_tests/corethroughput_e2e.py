@@ -162,6 +162,7 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
         new_image.pri_hdr['VISTYPE'] = 'CGIVST_CAL_CORETHRPT'
         new_image.ext_hdr['DATALVL'] = "L2b"
         new_image.ext_hdr['BUNIT'] = "photoelectron"
+        new_image.ext_hdr['EXPTIME'] = 1.0
         ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])
         new_image.filename = f'cgi_{new_image.pri_hdr["VISITID"]}_{ftimeutc}_l2b.fits'
         images.append(new_image)
