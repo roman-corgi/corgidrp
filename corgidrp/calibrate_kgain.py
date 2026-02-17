@@ -793,23 +793,27 @@ def calibrate_kgain(dataset_kgain,
              compiled_binned_shot_deviations]
     ptc = np.column_stack(ptc_list)
 
-    prhd = dataset_kgain.frames[0].pri_hdr
-    exthd = dataset_kgain.frames[0].ext_hdr
+    invalid_krn_keywords = data.typical_cal_invalid_keywords + ['EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'HVCBIAS']
+    # Remove specific keywords
+    for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'OBSNUM']:
+        if key in invalid_krn_keywords:
+            invalid_krn_keywords.remove(key)
+    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset_kgain, any_true_keywords=data.typical_bool_keywords, invalid_keywords=invalid_krn_keywords)
     # Read noise and error
-    exthd['RN'] = mean_rn_gauss_e
+    exthdr['RN'] = mean_rn_gauss_e
     
     # rn err depends on spread of data that determines rn and the error in kgain,
     # so use error propagation to find error in (rn in DN)*kgain
     kgain_err = np.nanstd(kgain_clipped)
     rn_err_DN = np.nanstd(rn_gauss)
     rn_err_e = np.sqrt((kgain*rn_err_DN)**2 + (mean_rn_gauss_DN*kgain_err)**2)
-    exthd['RN_ERR'] = rn_err_e
-    exthd['RN_UNIT'] = 'detected electron'
+    exthdr['RN_ERR'] = rn_err_e
+    exthdr['RN_UNIT'] = 'detected electron'
     
     # Update history
-    exthd['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthd['DATETIME']}"
+    exthdr['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthdr['DATETIME']}"
 
-    k_gain = data.KGain(kgain, err = kgain_err, ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
+    k_gain = data.KGain(kgain, err = kgain_err, ptc = ptc, pri_hdr = prihdr, ext_hdr = exthdr, input_dataset=dataset_kgain, err_hdr=errhdr, dq_hdr=dqhdr)
     
     return k_gain
 
