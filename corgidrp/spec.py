@@ -443,6 +443,8 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
         ext_hdr_centroid['FILTERS'] = ",".join(filters)
     else:
         ext_hdr_centroid['FILTERS'] = filters[0]
+    # set CFAMNAME to the PRISM band
+    ext_hdr_centroid['CFAMNAME'] = cfam[0]
     calibration = SpectroscopyCentroidPSF(
         centroids,
         pri_hdr=pri_hdr_centroid.copy(),
