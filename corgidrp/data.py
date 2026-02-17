@@ -53,14 +53,16 @@ class Dataset():
                 fr = Image(filepath)
                 if no_data:
                     fr.data = None
-                    if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_err:
+                    #if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_err: XXX
+                    if no_err:
                         #in this case, the frames are L1 and don't yet
                         # have err and dq, so don't set those
                         # to None so that each frame is given
                         # the default starting err and dq for further
                         # pipeline processes
                         fr.err = None
-                    if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_dq:
+                    #if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_dq: XXX
+                    if no_dq:
                         fr.dq = None
                 self.frames.append(fr)
         else:
@@ -102,13 +104,16 @@ class Dataset():
     def __len__(self):
         return len(self.frames)
 
-    def save(self, filedir=None, filenames=None):
+    def save(self, filedir=None, filenames=None, ram_heavy_save=False):
         """
         Save each file of data in this dataset into directory
 
         Args:
             filedir (str): directory to save the files. Default: the existing filedir for each file
             filenames (list): a list of output filenames for each file. Default: unchanged filenames
+            ram_heavy_save (bool):  If True, the input is assumed to have no data loaded into memory. (Only metadata was 
+            manipulated in step leading up to save_data.) The data is loaded from the filepath frame by frame, and 
+            each Image is saved to outputdir.  Defaults to False.
 
         """
         # if filenames are not passed, use the default ones
@@ -119,16 +124,26 @@ class Dataset():
                 filenames.append(frame.filename)
 
         for filename, frame in zip(filenames, self.frames):
+            if ram_heavy_save: 
+                temp_frame = Image(frame.filepath)
+                if frame.data is None:
+                    frame.data = temp_frame.data
+                if frame.err is None:
+                    frame.err = temp_frame.err
+                for name in frame.hdu_names: # by construction hdus other than the usual err and dq
+                    if frame.hdu_list[name] is None: 
+                        frame.hdu_list[name].data = temp_frame.hdu_list[name].data
             frame.save(filename=filename, filedir=filedir)
 
-        # relink frames with all_data
-        self.all_data = np.array([frame.data for frame in self.frames])
-        self.all_err = np.array([frame.err for frame in self.frames])
-        self.all_dq = np.array([frame.dq for frame in self.frames])
-        for i, frame in enumerate(self.frames):
-            frame.data = self.all_data[i]
-            frame.err = self.all_err[i]
-            frame.dq = self.all_dq[i]
+        if not ram_heavy_save:
+            # relink frames with all_data
+            self.all_data = np.array([frame.data for frame in self.frames])
+            self.all_err = np.array([frame.err for frame in self.frames])
+            self.all_dq = np.array([frame.dq for frame in self.frames])
+            for i, frame in enumerate(self.frames):
+                frame.data = self.all_data[i]
+                frame.err = self.all_err[i]
+                frame.dq = self.all_dq[i]
 
     def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None,
                                      update_err_header=True):

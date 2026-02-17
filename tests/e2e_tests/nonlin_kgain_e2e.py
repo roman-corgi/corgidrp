@@ -65,28 +65,28 @@ def test_nonlin_and_kgain_e2e(
     """
 
     # figure out paths, assuming everything is located in the same relative location
-    nonlin_l1_datadir = os.path.join(e2edata_path,
-        'TV-20_EXCAM_noise_characterization', 'nonlin')
-    kgain_l1_datadir = os.path.join(e2edata_path,
-        'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
+    # nonlin_l1_datadir = os.path.join(e2edata_path,
+    #     'TV-20_EXCAM_noise_characterization', 'nonlin')
+    # kgain_l1_datadir = os.path.join(e2edata_path,
+    #     'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
 
-    e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_kgain_cal_e2e')
+    # e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_kgain_cal_e2e')
 
-    if not os.path.exists(nonlin_l1_datadir):
-        raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
-            f'in {nonlin_l1_datadir}')
-    if not os.path.exists(kgain_l1_datadir):
-        raise FileNotFoundError('Please store L1 data used to calibrate kgain',
-            f'in {kgain_l1_datadir}')
+    # if not os.path.exists(nonlin_l1_datadir):
+    #     raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
+    #         f'in {nonlin_l1_datadir}')
+    # if not os.path.exists(kgain_l1_datadir):
+    #     raise FileNotFoundError('Please store L1 data used to calibrate kgain',
+    #         f'in {kgain_l1_datadir}')
 
     if os.path.exists(e2eoutput_path):
         shutil.rmtree(e2eoutput_path)
     os.makedirs(e2eoutput_path)
 
     # Create input_data subfolder
-    input_data_dir = os.path.join(e2eoutput_path, 'input_l1')
-    if not os.path.exists(input_data_dir):
-        os.makedirs(input_data_dir)
+    # input_data_dir = os.path.join(e2eoutput_path, 'input_l1')
+    # if not os.path.exists(input_data_dir):
+    #     os.makedirs(input_data_dir)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -96,26 +96,28 @@ def test_nonlin_and_kgain_e2e(
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
-    # Define the raw science data to process
-    nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
-    nonlin_l1_list.sort()
-    kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
-    kgain_l1_list.sort()
+    # # Define the raw science data to process
+    # nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
+    # nonlin_l1_list.sort()
+    # kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
+    # kgain_l1_list.sort()
     
-    pupilimg_l1_list = nonlin_l1_list # start with the nonlin filelist
-    for filepath in kgain_l1_list:
-        if filepath.lower().endswith('.fits'):
-            pupilimg_l1_list.append(filepath)
+    # pupilimg_l1_list = nonlin_l1_list # start with the nonlin filelist
+    # for filepath in kgain_l1_list:
+    #     if filepath.lower().endswith('.fits'):
+    #         pupilimg_l1_list.append(filepath)
 
-    # Copy files to input_data directory and update file list
-    nonlin_l1_list = [
-        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-        for file_path in nonlin_l1_list
-    ]
+    # # Copy files to input_data directory and update file list
+    # nonlin_l1_list = [
+    #     shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+    #     for file_path in nonlin_l1_list
+    #]
 
+    input_data_dir = os.path.join(os.path.dirname(__file__), 'simdata')
+    pupilimg_l1_list = glob.glob(os.path.join(input_data_dir, "*.fits"))
 
     # Set TVAC data to have VISTYPE=CGIVST_CAL_PUPIL_IMAGING (flight data should have these values)
-    set_vistype_for_tvac(pupilimg_l1_list)
+    #set_vistype_for_tvac(pupilimg_l1_list)
     #fix_headers_for_tvac(pupilimg_l1_list)
 
    # now get any default cal files that might be needed; if any reside in the folder that are not 

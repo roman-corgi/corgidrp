@@ -320,7 +320,7 @@ def guess_template(dataset):
                 recipe_filename = ["build_trad_dark_image_1.json", "build_trad_dark_image_2.json"] #"build_trad_dark_image.json"
                 chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
-            recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
+            recipe_filename = ["l1_to_l2a_nonlin_1.json", "l1_to_l2a_nonlin_2.json", "l1_to_l2a_nonlin_3.json"]# XXX, "l1_to_kgain.json"] #["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
             if len(fsm_unique) > 1:
@@ -404,7 +404,7 @@ def guess_template(dataset):
     return recipe_filename, chained
 
 @profile
-def save_data(dataset_or_image, outputdir, suffix=""):
+def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
     """
     Saves the dataset or image that has currently been outputted by the last step function.
     Records calibration frames into the caldb during the process
@@ -414,12 +414,15 @@ def save_data(dataset_or_image, outputdir, suffix=""):
         outputdir (str): path to directory where files should be saved
         suffix (str): optional suffix to tack onto the filename.
                       E.g.: `test.fits` with `suffix="dark"` becomes `test_dark.fits`
+        ram_heavy_save (bool):  If True, the input is assumed to have no data loaded into memory. (Only metadata was 
+            manipulated in step leading up to save_data.) The data is loaded from the filepath frame by frame, and 
+            each Image is saved to outputdir.  Defaults to False.
     """
     # convert everything to dataset to make life easier
     if isinstance(dataset_or_image, data.Image):
         dataset = data.Dataset([dataset_or_image])
     else:
-        dataset = dataset_or_image
+        dataset = dataset_or_image        
 
     # add suffix to ending if necessary
     if len(suffix) > 0:
@@ -436,7 +439,7 @@ def save_data(dataset_or_image, outputdir, suffix=""):
         filenames = None
 
     # save!
-    dataset.save(filedir=outputdir, filenames=filenames)
+    dataset.save(filedir=outputdir, filenames=filenames, ram_heavy_save=ram_heavy_save)
 
     # add calibration data to caldb as necessary
     for image in dataset:
@@ -508,7 +511,7 @@ def run_recipe(recipe, save_recipe_file=True):
     for filelist in filelist_chunks:
         if recipe["inputs"]:
             if ram_heavy_bool:
-                curr_dataset = data.Dataset(filelist, no_data=True)
+                curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
                 recipe_temp = recipe.copy()
                 recipe_temp["inputs"] = 'see RECIPE header value in {0}'.format(curr_dataset[0].filepath)
             else:
@@ -539,8 +542,11 @@ def run_recipe(recipe, save_recipe_file=True):
                     suffix =  step["keywords"]["suffix"]
                 else:
                     suffix = ''
-
-                save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
+                if "keywords" in step and "ram_heavy_save" in step["keywords"]:
+                    ram_heavy_save = step["keywords"]["ram_heavy_save"]
+                else:
+                    ram_heavy_save = False
+                save_data(curr_dataset, recipe["outputdir"], suffix=suffix, ram_heavy_save=ram_heavy_save)
                 if isinstance(curr_dataset, data.Dataset):
                     output_filepaths += [frame.filepath for frame in curr_dataset]
                 else:

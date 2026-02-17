@@ -362,7 +362,8 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2' #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    outputdir = r'E:\E2E_tests'#thisfile_dir
+    e2edata_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3'
 
     if False: # making e2e simulated data, which is ENG and includes nonlinearity
         nonlin_path = os.path.join(e2edata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")

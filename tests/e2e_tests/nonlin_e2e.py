@@ -14,6 +14,9 @@ from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
 import shutil
+import logging
+from datetime import date
+from memory_profiler import profile
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
@@ -43,7 +46,7 @@ def set_vistype_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-
+@profile
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
     e2edata_path,
@@ -66,6 +69,12 @@ def test_nonlin_cal_e2e(
             coefficients for different values of DN and EM is stored.
 
     """
+    import tracemalloc
+    tracemalloc.start()
+
+    import psutil
+    pr = psutil.Process()
+    import datetime
 
     # figure out paths, assuming everything is located in the same relative location
     nonlin_l1_datadir = os.path.join(e2edata_path,
@@ -111,21 +120,25 @@ def test_nonlin_cal_e2e(
         raise FileNotFoundError(f"TVAC reference nonlinearity file not found at {tvac_nonlin_file}")
 
     # Define the raw science data to process
-    nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
-    nonlin_l1_list.sort()
-    kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
-    kgain_l1_list.sort()
-    nonlin_l1_list = nonlin_l1_list + kgain_l1_list
+    # nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
+    # nonlin_l1_list.sort()
+    # kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
+    # kgain_l1_list.sort()
+    # nonlin_l1_list = nonlin_l1_list + kgain_l1_list
 
     # Copy files to input_data directory and update file list
-    nonlin_l1_list = [
-        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-        for file_path in nonlin_l1_list
-    ]
-
+    # nonlin_l1_list = [
+    #     shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+    #     for file_path in nonlin_l1_list
+    # ]
+    
+    input_data_dir = r'E:\E2E_Test_Data3\E2E_Test_Data3\simdata' #os.path.join(os.path.dirname(__file__), 'simdata')
+    nonlin_l1_list = glob.glob(os.path.join(input_data_dir, "*.fits"))
+    print("number of files: ", len(nonlin_l1_list))
+    
     # Set TVAC OBSNAME to MNFRAME/NONLIN (flight data should have these values)
     #fix_headers_for_tvac(nonlin_l1_list)
-    set_vistype_for_tvac(nonlin_l1_list)
+    # set_vistype_for_tvac(nonlin_l1_list)
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
@@ -139,7 +152,7 @@ def test_nonlin_cal_e2e(
     pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
-    mock_input_dataset = data.Dataset(nonlin_l1_list)
+    mock_input_dataset = data.Dataset(nonlin_l1_list[:3])
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat,
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
@@ -166,14 +179,37 @@ def test_nonlin_cal_e2e(
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     # Run the walker on some test_data
     print('Running walker')
-    #walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path, "l1_to_l2a_nonlin.json")
-    recipe = walker.autogen_recipe(nonlin_l1_list, e2eoutput_path)
-    ### Modify they keywords of some of the steps
-    for step in recipe[0]['steps']:
-        if step['name'] == "calibrate_nonlin":
-            step['keywords']['apply_dq'] = False # full shaped pupil FOV
-            step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
-    walker.run_recipe(recipe[0], save_recipe_file=True)
+    #walker.walk_corgidrp(nonlin_l1_list[:866], '', e2eoutput_path, "l1_to_l2a_nonlin_3.json")
+    walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path)
+    # recipe = walker.autogen_recipe(nonlin_l1_list, e2eoutput_path)
+    # ### Modify they keywords of some of the steps
+    # for step in recipe[0]['steps']:
+    #     if step['name'] == "calibrate_nonlin":
+    #         step['keywords']['apply_dq'] = False # full shaped pupil FOV
+    #         step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
+    # walker.run_recipe(recipe[0], save_recipe_file=True)
+    
+    mem = pr.memory_info()
+    # peak_wset is only available on Windows; fall back to rss on other platforms
+    if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+        peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+    else:
+        peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+    print(f"noisemap_cal_e2e peak memory usage:  {peak_memory:.2f} MB")
+    logging.basicConfig(filename=os.path.join(os.path.dirname(__file__), "sorting_e2e_memory_usage.log"), level=logging.INFO)
+    todays_date = date.today()
+    logging.info(todays_date.strftime("%Y-%m-%d"))
+    logging.info(f"psutil sorting e2e peak memory usage:  {peak_memory} MB")
+    # Get current and peak memory usage
+    current, peak = tracemalloc.get_traced_memory()
+
+    # Stop tracing
+    tracemalloc.stop()
+
+    # Print the peak memory usage
+    print(f"tracemalloc Peak memory usage was {peak / (1024 * 1024):.2f} MB")
+    logging.info(f"tracemalloc sorting e2e peak memory usage:  {peak/(1024 * 1024)} MB")
+
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
@@ -202,21 +238,22 @@ def test_nonlin_cal_e2e(
     rel_out_tvac_perc = 100*(nonlin_out_table[1:,1:]/nonlin_tvac_table[1:,1:]-1)
 
     # Summary figure
-    plt.figure(figsize=(10,6))
-    em_list = nonlin_out_table[0,1:]
-    for i_em, em_val in enumerate(em_list):
-        plt.plot(nonlin_out_table[1:,0], rel_out_tvac_perc[:,i_em], label=f'EM={em_val:.1f}')
-    plt.xlabel('DN value', fontsize=14)
-    plt.ylabel('Relative difference (%)', fontsize=14)
-    plt.title('Comparison of ENG/CORGI DRP NL table for a given DN and EM value',
-        fontsize=14)
-    plt.legend()
-    plt.grid()
-    plt.savefig(os.path.join(e2eoutput_path,nonlin_drp_filename[:-5]+".png"))
-    print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
-        f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
-        f'rms={np.std(rel_out_tvac_perc):1.1e} %')
-    print(f'Figure saved: {os.path.join(e2eoutput_path,nonlin_drp_filename[:-5])}.png')
+    if False:
+        plt.figure(figsize=(10,6))
+        em_list = nonlin_out_table[0,1:]
+        for i_em, em_val in enumerate(em_list):
+            plt.plot(nonlin_out_table[1:,0], rel_out_tvac_perc[:,i_em], label=f'EM={em_val:.1f}')
+        plt.xlabel('DN value', fontsize=14)
+        plt.ylabel('Relative difference (%)', fontsize=14)
+        plt.title('Comparison of ENG/CORGI DRP NL table for a given DN and EM value',
+            fontsize=14)
+        plt.legend()
+        plt.grid()
+        plt.savefig(os.path.join(e2eoutput_path,nonlin_drp_filename[:-5]+".png"))
+        print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
+            f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
+            f'rms={np.std(rel_out_tvac_perc):1.1e} %')
+        print(f'Figure saved: {os.path.join(e2eoutput_path,nonlin_drp_filename[:-5])}.png')
 
     # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
@@ -237,6 +274,9 @@ if __name__ == "__main__":
     e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
+
+    OUTPUT_DIR = r'E:\E2E_tests'#thisfile_dir
+    e2edata_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3'
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

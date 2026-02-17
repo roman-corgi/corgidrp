@@ -158,7 +158,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image', detector_regions=None, pct_oversat_lim=20):
+                       mode='image', detector_regions=None, pct_oversat_lim=20, dataset_copy=True):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -201,6 +201,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
             and will be discarded. Frame saturations equal to this argument are not discarded.
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+            the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
 
     Returns:
         corgidrp.data.Dataset:
@@ -212,8 +214,10 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     if detector_regions is None:
         detector_regions = detector_areas
 
-    # you should make a copy the dataset to start
-    initial_dataset = input_dataset.copy()
+    if dataset_copy:
+        # you should make a copy the dataset to start
+        initial_dataset = input_dataset.copy()
+    else: initial_dataset = input_dataset
 
     # Calculate the full well capacity for every frame in the dataset
     if k_gain is None:
@@ -247,7 +251,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         frame.ext_hdr['SAT_DN'] = initial_sat_fwcs[i]
 
     # Remove images that are too saturated to remove cosmics in a timely manner
-    crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim)
+    crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim, dataset_copy=dataset_copy)
     crmasked_cube = crmasked_dataset.all_data
 
     sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])
@@ -334,7 +338,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
 
     return linearized_dataset
 
-def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20):
+def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20, dataset_copy=True):
     """
     Discards images from the dataset that have more than a frac_frame_sat_limit fraction of values
     over the sat_thresh limit. Also removes corresponding fwc elements from sat_fwc array.
@@ -348,12 +352,16 @@ def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20):
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
             and will be discarded, Frame saturations equal to this argument are not discarded.
-
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+            the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
         pruned_sat_fwcs (list): input sat_fwcs with corresponding saturated frame fwcs removed
     """
-    pruned_dataset = input_dataset.copy()
+    if dataset_copy:
+        pruned_dataset = input_dataset.copy()
+    else:
+        pruned_dataset = input_dataset
     reject_flag = np.zeros(len(input_dataset))
     reject_reason = {}
 

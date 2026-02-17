@@ -1,0 +1,23 @@
+{
+    "name" : "l1_to_l2a_nonlin_1",
+    "template" : true,
+    "ram_heavy" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {   "name" : "sort_pupilimg_frames",
+              "keywords" : {
+                "cal_type" : "non-lin"
+              }
+        },
+        {
+            "name" : "save",
+            "keywords" : {
+                "ram_heavy_save" : true
+            }
+        }
+    ]
+}

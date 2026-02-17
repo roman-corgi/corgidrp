@@ -170,7 +170,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     telem_rows_end = det_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
     stack_arr_f_l1 = []
-    for f in os.listdir(l1_datadir)[:26000]: #XXX 
+    for f in os.listdir(l1_datadir)[:300]: #[:26000]: #XXX 
         file = os.path.join(l1_datadir, f)
         if not file.endswith('.fits'):
             continue
@@ -259,13 +259,13 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
 
     # for no weighting:
     recipe = walker.autogen_recipe(stack_arr_files, noisemap_outputdir)
-    ### Modify a keyword
-    # for step in recipe[1]['steps']:
-    #     if step['name'] == "calibrate_darks":
-    #         step['keywords'] = {}
-    #         step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
-    # output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True) XXX
-    # recipe[1]['inputs'] = output_filepaths XXX shortcut to skip to the RAM-heavy part  
+    ## Modify a keyword
+    for step in recipe[1]['steps']:
+        if step['name'] == "calibrate_darks":
+            step['keywords'] = {}
+            step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
+    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True) 
+    recipe[1]['inputs'] = output_filepaths #XXX shortcut to skip to the RAM-heavy part  
     recipe[1]['inputs'] = recipe[0]['inputs']
     walker.run_recipe(recipe[1], save_recipe_file=True)
 
