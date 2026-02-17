@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import argparse
 
-from corgidrp.data import Dataset, Image
+from corgidrp.data import Dataset, Image, SlitTransmission
 from corgidrp.check import check_filename_convention, verify_header_keywords
 from corgidrp import l4_to_tda, spec, mocks
 
@@ -90,7 +90,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
             # Filename + basic header checks
             check_filename_convention(img.filename, 'cgi_*_l4_.fits', f"    ", logger, data_level='l4_')
             verify_header_keywords(img.ext_hdr, {'DATALVL': 'L4', 'DPAMNAME': 'PRISM3', 'BUNIT': 'photoelectron/s'}, f"    ", logger)
-            verify_header_keywords(img.pri_hdr, {'ROLL'}, f"    ", logger)
+            verify_header_keywords(img.pri_hdr, {'PA_APER'}, f"    ", logger)
             verify_header_keywords(img.ext_hdr, {'WAVLEN0', 'WV0_X', 'WV0_XERR', 'WV0_Y', 'WV0_YERR', 'WV0_DIMX', 'WV0_DIMY'}, f"    ", logger)
 
             # Wavelength grid checks (monotonicity + NaNs)
@@ -115,12 +115,12 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
     logger.info('Test 2: Unocculted Star in Astrophysical Units')
     logger.info("=" * 80)
 
-    # Step: Build a slit-transmission map (map, x, y) using the first non-coronagraphic wavelength grid
+    # Step: Build a slit-transmission calibration product (map, x, y) using the first non-coronagraphic wavelength grid
     reference_wave = noncoron_images[0].hdu_list['SPEC_WAVE'].data
     slit_map = np.ones((1, reference_wave.size), dtype=float)
     slit_x = np.array([noncoron_images[0].ext_hdr.get('WV0_X', 0.0)])
     slit_y = np.array([noncoron_images[0].ext_hdr.get('WV0_Y', 0.0)])
-    slit_transmission = (slit_map, slit_x, slit_y)
+    slit_transmission = SlitTransmission(slit_map, pri_hdr = noncoron_images[0].pri_hdr, ext_hdr = noncoron_images[0].ext_hdr, x_offset = slit_x, y_offset = slit_y, input_dataset = Dataset([noncoron_images[0]]))
     logger.info(f"Slit transmission map sample (first 5 bins): {slit_map[0][:5]}")
 
     # Step: Verify spectroscopy headers, extensions, COL_COR, and core throughput
@@ -226,10 +226,12 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
                         "    SPEC header has CTCOR=True; proceeding with "
                         "convert_spec_to_flux. PASS"
                     )
-
+            # TODO: why not outside the image loop?
+            # correct for slit transmission and algo thru
+            corrected_ds = l4_to_tda.apply_slit_transmission(Dataset([img]), slit_transmission)
             # Flux calibration 
             calibrated_img = l4_to_tda.convert_spec_to_flux(
-                Dataset([img]), fluxcal_factor, slit_transmission=slit_transmission
+                corrected_ds, fluxcal_factor
             )
             calibrated_spec = calibrated_img[0].hdu_list['SPEC'].data
             calibrated_err = calibrated_img[0].hdu_list['SPEC_ERR'].data
@@ -282,8 +284,8 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
 
         logger.info(f'Number of host L4 spectra used: {len(host_images)}')
         logger.info(f'Number of companion L4 spectra used: {len(comp_images)}')
-        logger.info(f'Host rolls: {[img.pri_hdr.get("ROLL") for img in host_images]}')
-        logger.info(f'Companion rolls: {[img.pri_hdr.get("ROLL") for img in comp_images]}')
+        logger.info(f'Host rotation angles: {[img.pri_hdr.get("PA_APER") for img in host_images]}')
+        logger.info(f'Companion rotation angles: {[img.pri_hdr.get("PA_APER") for img in comp_images]}')
 
         # Check that all host and companion cubes contain a SPEC_WAVE (wavelength) extension.
         host_wave_ext = all('SPEC_WAVE' in img.hdu_list for img in host_images)
@@ -301,8 +303,8 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         host_ds = Dataset(host_images)
         comp_ds = Dataset(comp_images)
 
-        host_spec, host_wave, host_err, host_rolls = l4_to_tda.combine_spectra(host_ds)
-        comp_spec, comp_wave, comp_err, comp_rolls = l4_to_tda.combine_spectra(comp_ds)
+        host_spec, host_wave, host_err, host_rotation_angles = l4_to_tda.combine_spectra(host_ds)
+        comp_spec, comp_wave, comp_err, comp_rotation_angles = l4_to_tda.combine_spectra(comp_ds)
 
         # Check monotonicity and length of the combined wavelength grids.
         host_mono = np.all(np.diff(host_wave) >= 0) or np.all(np.diff(host_wave) <= 0)
@@ -404,18 +406,18 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
             wavelength = host_wave
             ratio_err = np.full_like(host_wave, np.nan, dtype=float)
         else:
-            # Compute flux ratio (this internally calls convert_spec_to_flux which applies ALGO_THRU correction)
+            # Compute flux ratio)
             flux_ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
                 host_comb,
-                comp_comb,
-                fluxcal_factor,
-                slit_transmission=slit_transmission,
+                comp_comb
             )
             ratio_err = metadata.get('ratio_err')
 
+        # correct for slit transmission and algo thru
+        comp_corrected_ds = l4_to_tda.apply_slit_transmission(Dataset([comp_comb]), slit_transmission)
         # Check algorithm throughput correction is applied
         comp_cal_check = l4_to_tda.convert_spec_to_flux(
-            Dataset([comp_comb]), fluxcal_factor, slit_transmission=slit_transmission
+            comp_corrected_ds, fluxcal_factor
         )
         comp_spec_hdr_cal = comp_cal_check[0].hdu_list['SPEC'].header
         if 'ALGOCOR' in comp_spec_hdr_cal:

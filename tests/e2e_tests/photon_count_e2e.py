@@ -13,7 +13,9 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import corgidrp.check as check
 import shutil
+import warnings
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
@@ -71,6 +73,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
 
+    # Update headers for TVAC files
+    l1_data_ill_filelist = check.fix_hdrs_for_tvac(l1_data_ill_filelist, output_ill_dir)
+    l1_data_dark_filelist = check.fix_hdrs_for_tvac(l1_data_dark_filelist, output_dark_dir)
+
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
@@ -84,7 +90,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
-    mock_input_dataset = data.Dataset(l1_data_ill_filelist)
+    mock_input_dataset = data.Dataset(l1_data_ill_filelist[:5])
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
@@ -163,7 +169,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # make PC illuminated, subtracting the PC dark
     # below I leave out the template specification to check that the walker recipe guesser works as expected
     # L1 to L2a
-    walker.walk_corgidrp(l1_data_ill_filelist, '', output_l2a_dir)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=UserWarning)
+        walker.walk_corgidrp(l1_data_ill_filelist, '', output_l2a_dir)
 
     # grab L2a files to go to L2b
     l2a_files = []
@@ -180,7 +189,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = master_dark_filepath_list[0] # to find PC dark
     recipe[0]['drpconfig']['chunk_size'] = 80 # exercise chunk size; RAM-heavy status exercised in this test
-    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=UserWarning)
+        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
     recipe[1]['inputs'] = output_filepaths
     output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
     # files are overwritten with same filenames
@@ -268,7 +280,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # go from L2a, where now dark subtraction should be performed using the noise_map made above, 
     # and get_pc_mean() should ignore the Dark created from noise_map when it 
     # detects that dark-subtraction has already occurred (during the dark_subtraction() step)
-    walker.walk_corgidrp(l2a_files, '', output_dir)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=UserWarning)
+        walker.walk_corgidrp(l2a_files, '', output_dir)
 
     # get photon-counted frame
     master_ill_filename_list = []
@@ -334,7 +349,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = trad_dark_cal.filepath # to find traditional dark
-    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=UserWarning)
+        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
     recipe[1]['inputs'] = output_filepaths
     output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
     recipe[2]['inputs'] = output_filepaths1

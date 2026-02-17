@@ -19,7 +19,7 @@ import corgidrp
 import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
-                           get_latest_cal_file)
+                           get_latest_cal_file, fix_hdrs_for_tvac)
 
 
 
@@ -54,7 +54,11 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
     if existing_files:
         logger.info(f"Found {len(existing_files)} existing L3 files in {e2edata_path}")
         logger.info("Using existing input files (skipping generation)")
-        saved_files = existing_files
+        saved_files = fix_hdrs_for_tvac(
+            existing_files,
+            e2edata_path,
+            header_template=create_default_L3_headers,
+        )
         l3_dataset_with_filenames = Dataset(saved_files)
     else:
         logger.info("No existing input files found. Generating new input files...")

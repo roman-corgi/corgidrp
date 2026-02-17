@@ -16,6 +16,7 @@ import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
 import corgidrp.l2b_to_l3 as l2b_to_l3
 from corgidrp import caldb
+from corgidrp.check import fix_hdrs_for_tvac
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -88,6 +89,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         output_dir=input_l2b_dir, 
         level_suffix="l2b"
     )
+    corethroughput_data_filepath = fix_hdrs_for_tvac(
+        corethroughput_data_filepath,
+        input_l2b_dir,
+        header_template=mocks.create_default_L2b_headers,
+    )
     
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -157,6 +163,7 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
         new_image.pri_hdr['VISTYPE'] = 'CGIVST_CAL_CORETHRPT'
         new_image.ext_hdr['DATALVL'] = "L2b"
         new_image.ext_hdr['BUNIT'] = "photoelectron"
+        new_image.ext_hdr['EXPTIME'] = 1.0
         ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])
         new_image.filename = f'cgi_{new_image.pri_hdr["VISITID"]}_{ftimeutc}_l2b.fits'
         images.append(new_image)
@@ -173,6 +180,11 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     dataset.save(filedir=l2b_data_dir)
     l2b_filenames = glob.glob(os.path.join(l2b_data_dir, '*.fits'))
     l2b_filenames.sort()
+    l2b_filenames = fix_hdrs_for_tvac(
+        l2b_filenames,
+        l2b_data_dir,
+        header_template=mocks.create_default_L2b_headers,
+    )
 
     walker.walk_corgidrp(l2b_filenames, '', corethroughput_outputdir)
     
@@ -182,7 +194,8 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
     
     # run the recipe directly to check out it comes
-    dataset_normed = l2b_to_l3.divide_by_exptime(dataset)
+    dataset_l2b = data.Dataset(l2b_filenames)
+    dataset_normed = l2b_to_l3.divide_by_exptime(dataset_l2b)
     ct_cal_sim = corethroughput.generate_ct_cal(dataset_normed)
 
     # Asserts

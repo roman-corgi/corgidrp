@@ -4,9 +4,7 @@ import numpy as np
 from astropy.io import fits
 import corgidrp
 from corgidrp.data import Image
-from corgidrp.mocks import (create_default_L2b_headers, create_default_L3_headers, 
-                            create_synthetic_satellite_spot_image, create_ct_psfs)
-from corgidrp.l4_to_tda import find_source
+from corgidrp.mocks import (create_default_L2b_headers, create_default_L3_headers)
 import corgidrp.mocks as mocks
 import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
@@ -16,7 +14,6 @@ import pyklip.fakes
 import pytest
 import glob
 import shutil
-import pathlib
 from datetime import datetime, timedelta
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
@@ -25,14 +22,14 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     '''
 
-    An end-to-end test that takes the OS11 data and runs it through the L2b to L4 pipeline.
+    An end-to-end test that takes the noncoronagraphic OS11 data and runs it through the L2b to L4 pipeline.
 
         It checks that: 
             - The two OS11 planets are detected within 1 pixel of their expected separations
             - The calibration files are correctly associated with the output file
 
         Data needed: 
-            - Coronagraphic dataset - taken from OS11 data
+            - Noncoronagraphic dataset - taken from OS11 data
             - Reference star dataset - taken from OS11 data
             - Satellite spot dataset - created in the test
         
@@ -95,15 +92,11 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #### Put the OS 11 data into L2B format ####
     ############################################
 
-    #Read in the PSFs
+    #Read in the images
     input_file = 'hlc_os11_no_fpm.fits'
     input_hdul = fits.open(os.path.join(e2edata_path, "hlc_os11_v3", input_file))
-    input_image = input_hdul[0].data
+    input_data = input_hdul[0].data
     header = input_hdul[0].header
-    # I think we work with (0,0) at the center of the pixel
-    # if we work with (0, 0) at the bottom left corner of the pixel, then remove the -0.5
-    psf_center_x = header['XCENTER'] - 0.5
-    psf_center_y = header['YCENTER'] - 0.5
     
     # number of frames we are making
     num_frames = 5
@@ -115,23 +108,19 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
         big_array = np.zeros(big_array_size)
         big_rows, big_cols = big_array_size
-        small_rows, small_cols = input_image.shape
+        small_rows, small_cols = input_data.shape
 
         # Find the middle indices for the big array
         row_start = (big_rows - small_rows) // 2
         col_start = (big_cols - small_cols) // 2
 
         # Insert the small array into the middle of the big array
-        input_psf = input_image / np.nanmax(input_image) * 1000 # peak counts of 1000
-        big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] += input_psf
+        input_img = input_data / np.nanmax(input_data) * 1000 # peak counts of 1000
+        big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] += input_img
 
         # add some gaussian noise so each frame is not the same. 1 count of noise
         big_array += np.random.normal(loc=0, scale=1, size=big_array.shape)
         big_err = np.ones(big_array.shape) * 1.0
-
-        #Update the PSF Center. Might have columns and row mixed up; doesn't matter for now since psf_center_x and psf_center_y are the same. 
-        new_psf_center_x = psf_center_x + col_start
-        new_psf_center_y = psf_center_y + row_start
 
         #Make a BIAS HDU
         bias_hdu = fits.ImageHDU(data=np.zeros_like(big_array[0]))
@@ -140,20 +129,24 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         bias_hdu.header['GCOUNT'] = 1
         bias_hdu.header['EXTNAME'] = 'BIAS'
 
-        #Create the new Image object
-        mock_pri_header, mock_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-        new_image = Image(big_array, mock_pri_header, mock_ext_header, err=big_err, input_hdulist=[bias_hdu])
-        # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
-        # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
+        #Create the new Image object passing in the error header
+        mock_pri_header,mock_ext_header,mock_err_header,mock_dq_header,_=create_default_L2b_headers()
+        new_image=Image(big_array,mock_pri_header,mock_ext_header,
+                        err=big_err,err_hdr=mock_err_header,
+                        dq_hdr=mock_dq_header,
+                        input_hdulist=[bias_hdu])
+        # Check if LAYER_1 present in error header
+        #print(f"Image err_hdr has LAYER_1: {new_image.err_hdr.get('LAYER_1','NOT FOUND')}")
+        #print("="*60+"\n")
+
         new_image.pri_hdr.set('FRAMET', 1)
         new_image.ext_hdr.set('EXPTIME', 1)
-        new_image.pri_hdr.set('ROLL', 0)
+        new_image.pri_hdr.set('PA_APER', 0)
         new_image.ext_hdr.set('CFAMNAME','1F')
         new_image.ext_hdr.set('FSMLOS', 0) # non-coron
         new_image.ext_hdr.set('LSAMNAME', 'OPEN') # non-coron
 
         # Generate proper filename with visitid and current time
-        current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
         visitid = "0200001999001000001"  # Use consistent visitid
         unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
         new_image.filename = f"cgi_{visitid}_{unique_time}_l2b.fits"
@@ -196,14 +189,12 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #Clean up
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
-    # shutil.rmtree(e2e_data_path)
-    # shutil.rmtree(e2eoutput_path)
     
 
 @pytest.mark.e2e
 def test_l3_to_l4(e2eoutput_path):
     '''
-    An end-to-end test that takes the L3 data and runs it through the L3 to L4 pipeline.
+    An end-to-end test that takes the noncoronagraphic L3 data and runs it through the L3 to L4 pipeline.
 
         It checks that: 
             - The two OS11 planets are detected within 1 pixel of their expected separations
@@ -261,8 +252,9 @@ def test_l3_to_l4(e2eoutput_path):
     #Create a mock flux calibration file
     fluxcal_factor = 2e-12
     fluxcal_factor_error = 1e-14
-    prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
+    prhd, exthd, errhdr, _ = create_default_L3_headers()
     fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhdr, input_dataset = mock_dataset)
+
 
     fluxcal_fac.save(filedir=calibrations_dir)
     this_caldb.create_entry(fluxcal_fac)
@@ -281,7 +273,7 @@ def test_l3_to_l4(e2eoutput_path):
     walker.walk_corgidrp(l3_data_filelist, "", main_output_dir)
 
     ########################################################################
-    #### Read in the psf_subtracted images and test for source detection ###
+    #### Read in the images and test for source detection ###
     ########################################################################
 
     l4_filename = glob.glob(os.path.join(main_output_dir, "*l4_.fits"))[0]
@@ -291,7 +283,7 @@ def test_l3_to_l4(e2eoutput_path):
     #Find the sources and get their (x,y) coordinate
     y_source, x_source = np.unravel_index(np.nanargmax(combined_image.data), combined_image.data.shape)
     assert combined_image.dq[y_source, x_source] == 0 # check DQ
-    peakflux, fwhm, x_source, y_source = pyklip.fakes.gaussfit2d(combined_image.data, x_source, y_source, guesspeak=np.nanmax(combined_image.data))
+    peakflux, _, x_source, y_source = pyklip.fakes.gaussfit2d(combined_image.data, x_source, y_source, guesspeak=np.nanmax(combined_image.data))
     xcen = combined_image.ext_hdr['CRPIX1']
     ycen = combined_image.ext_hdr['CRPIX2']
     assert np.isclose(x_source, xcen, atol=1)
@@ -311,8 +303,6 @@ def test_l3_to_l4(e2eoutput_path):
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
-    # shutil.rmtree(e2eoutput_path_l4)
-    # shutil.rmtree(e2eintput_path)
 
 
 
@@ -326,7 +316,7 @@ if __name__ == "__main__":
 
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/clarissardoo/Projects/E2E_Test_Data'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 

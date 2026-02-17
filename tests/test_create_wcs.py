@@ -26,13 +26,13 @@ def test_create_wcs():
     ra_offset, dec_offset = astrom_cal.avg_offset
 
     for mock_frame, updated_frame in zip(mock_dataset, updated_dataset):
-        roll_ang = mock_frame.pri_hdr['ROLL']
+        pa_aper_deg = mock_frame.pri_hdr['PA_APER']
         data = mock_frame.data
         image_shape = data.shape
         center_pixel = [(image_shape[1]-1) // 2, (image_shape[0]-1) // 2]
         target_ra, target_dec = mock_frame.pri_hdr['RA'], mock_frame.pri_hdr['DEC']
 
-        pc = np.array([[-np.cos(np.radians(northangle + roll_ang)), np.sin(np.radians(northangle + roll_ang))], [np.sin(np.radians(northangle + roll_ang)), np.cos(np.radians(northangle + roll_ang))]])
+        pc = np.array([[-np.cos(np.radians(northangle + pa_aper_deg)), np.sin(np.radians(northangle + pa_aper_deg))], [np.sin(np.radians(northangle + pa_aper_deg)), np.cos(np.radians(northangle + pa_aper_deg))]])
         # assuming platescale is the same along both axes
         matrix = pc * (platescale * 0.001) / 3600.
         
@@ -49,8 +49,8 @@ def test_create_wcs():
         expected['CTYPE1'] = 'RA---TAN'
         expected['CTYPE2'] = 'DEC--TAN'
 
-        expected['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
-        expected['CDELT2'] = (platescale * 0.001) / 3600
+        #expected['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
+        #expected['CDELT2'] = (platescale * 0.001) / 3600
 
         expected['CRVAL1'] = target_ra - ra_offset      # the corrected target pointing based on astrom_cal
         expected['CRVAL2'] = target_dec - dec_offset

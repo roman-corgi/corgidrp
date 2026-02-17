@@ -177,7 +177,7 @@ def autogen_recipe(filelist, outputdir, template=None):
         dataset0 = data.Dataset([filelist[0]])
         first_frame = dataset0[0]
         # don't need the actual data, especially if it would take up a lot of RAM just to hold it in cache
-        dataset = data.Dataset(filelist, no_data=True)
+        dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
 
     # if user didn't pass in template
     if template is None:
@@ -308,10 +308,10 @@ def guess_template(dataset):
         if 'VISTYPE' not in image.pri_hdr:
             # this is probably IIT test data. Do generic processing
             recipe_filename = "l1_to_l2b.json"
-        elif image.pri_hdr['VISTYPE'][:11] == "CGIVST_ENG_":
-            # if this is an ENG calibration visit
-            # for either pupil or image
-            recipe_filename = "l1_to_l2a_eng.json"
+        # elif image.pri_hdr['VISTYPE'][:11] == "CGIVST_ENG_":
+        #     # if this is an ENG calibration visit
+        #     # for either pupil or image
+        #     recipe_filename = "l1_to_l2a_eng.json"
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_BORESIGHT":
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_boresight.json'] #"l1_to_boresight.json"
             chained = True
@@ -460,7 +460,6 @@ def save_data(dataset_or_image, outputdir, suffix=""):
             this_caldb.create_entry(image)
 
 
-
 def run_recipe(recipe, save_recipe_file=True):
     """
     Run the specified recipe
@@ -526,11 +525,17 @@ def run_recipe(recipe, save_recipe_file=True):
         if recipe["inputs"]:
             if ram_heavy_bool:
                 curr_dataset = data.Dataset(filelist, no_data=True)
+                recipe_temp = recipe.copy()
+                # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
+                recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
             else:
                 curr_dataset = data.Dataset(filelist)
+                recipe_temp = recipe
             # write the recipe into the image extension header
-            for frame in curr_dataset:
-                frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+            curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
+            if len(curr_dataset) > 1:
+                for frame in curr_dataset[:-1]:
+                    frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
         # execute each pipeline step
         print('Executing recipe: {0}'.format(recipe['name']))
         if ram_increment_bool and len(filelist_chunks) > 1:
@@ -580,8 +585,16 @@ def run_recipe(recipe, save_recipe_file=True):
                         _fill_in_calib_files(step, this_caldb, ref_image)
 
                         # also update the recipe we used in the headers
-                        for frame in list_of_frames:
-                            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+                        if ram_heavy_bool:
+                            recipe_temp = recipe.copy()
+                            # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
+                            recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
+                        else: 
+                            recipe_temp = recipe
+                        list_of_frames[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
+                        if len(list_of_frames) > 1:
+                            for frame in list_of_frames[:-1]:
+                                frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
 
 
                     # load the calibration files in from disk
@@ -601,6 +614,14 @@ def run_recipe(recipe, save_recipe_file=True):
 
                 # run the step!
                 curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
+
+                # make sure RECIPE header is propagated to output
+                if isinstance(curr_dataset, data.Dataset):
+                    for frame in curr_dataset:
+                        if "RECIPE" not in frame.ext_hdr:
+                            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+                elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
+                    curr_dataset.ext_hdr["RECIPE"] = json.dumps(recipe)
 
     if not save_step:
         output_filepaths = None

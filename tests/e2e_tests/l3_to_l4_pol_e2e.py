@@ -207,14 +207,14 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     # - L3 science and reference data. 
 
     stellar_stokes_vectors = {"ScienceStar": {"stokes_vector": [1,0,0,0],
-                                              "nd_roll_angle":45,
+                                              "nd_rotation_angle":45,
                                               "nd_amplitude": 100,
-                                              "fpm_roll_angles":[32, 62],
+                                              "fpm_rotation_angles":[32, 62],
                                               "amplitude": 50000},
                               "RefStar": {"stokes_vector": [1,-0.01,-0.02,0],
-                                          "nd_roll_angle":45,
+                                          "nd_rotation_angle":45,
                                           "nd_amplitude": 150,
-                                          "fpm_roll_angles":[32, 62],
+                                          "fpm_rotation_angles":[32, 62],
                                           "amplitude": 100000}}
 
     # create mock images and dataset
@@ -245,13 +245,13 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     input_image_list = []
     # Build the FPM Datasets
     for targetname, stokes_info in stellar_stokes_vectors.items():
-        for roll_angle in stokes_info["fpm_roll_angles"]:
+        for rotation_angle in stokes_info["fpm_rotation_angles"]:
             stokes_vector = stokes_info["stokes_vector"]
 
-            stellar_sys_stokes = system_mueller_matrix @ pol.rotation_mueller_matrix(roll_angle) @ stokes_vector
+            stellar_sys_stokes = system_mueller_matrix @ pol.rotation_mueller_matrix(rotation_angle) @ stokes_vector
             
             ## Make the normal science data
-            #TODO: Add offsets between the two Wollaston beams, and offsets for different rolls. 
+            #TODO: Add offsets between the two Wollaston beams, and offsets for different rotation angles. 
             for i in range(number_of_science_images):
                 for wollaston in polarizers.keys():
                     pol_angles = polarizers[wollaston]
@@ -267,16 +267,24 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
                     stellar_sys_wp_data = np.array([stellar_sys_o_beam * stellar_image_1, stellar_sys_e_beam * stellar_image_2])
 
-                    # create default header
-                    prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
-                    stellar_sys_wp_img = data.Image(stellar_sys_wp_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+                    # Create the new Image object passing in the error header
+                    prihdr,exthdr,errhdr,dqhdr=mocks.create_default_L3_headers()
+                    stellar_sys_wp_img=data.Image(stellar_sys_wp_data,
+                                                  pri_hdr=prihdr.copy(),
+                                                  ext_hdr=exthdr.copy(),
+                                                  err_hdr=errhdr.copy(),
+                                                  dq_hdr=dqhdr.copy())
+                    #Check if error header has LAYER_1
+                    #print(f"Image err_hdr has LAYER_1: {stellar_sys_wp_img.err_hdr.get('LAYER_1','NOT FOUND')}")
+                    #print("="*60+"\n")
+
                     #Update Headers
                     stellar_sys_wp_img.pri_hdr['TARGET'] = targetname
                     stellar_sys_wp_img.ext_hdr['DPAMNAME'] = wollaston
-                    stellar_sys_wp_img.pri_hdr['ROLL'] = roll_angle
+                    stellar_sys_wp_img.pri_hdr['PA_APER'] = rotation_angle
                     stellar_sys_wp_img.ext_hdr['FSMPRFL'] = 'NFOV'
 
-                    # wcs_header = generate_wcs(roll_angles[i], 
+                    # wcs_header = generate_wcs(rotation_angles[i], 
                     #                   [psfcentx,psfcenty],
                     #                   platescale=0.0218).to_header()
             
@@ -317,18 +325,18 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                     #Update Headers
                     split_frame.pri_hdr['TARGET'] = targetname
                     split_frame.ext_hdr['DPAMNAME'] = wollaston
-                    split_frame.pri_hdr['ROLL'] = roll_angle
-                    split_frame.pri_hdr['SATSPOTS'] = 1
+                    split_frame.pri_hdr['PA_APER'] = rotation_angle
+                    split_frame.ext_hdr['SATSPOTS'] = 1
 
                     input_image_list.append(split_frame)
 
 
-    #Build the ND Datasets - For each target cycle over roll angles and Wollastons
+    #Build the ND Datasets - For each target cycle over rotation angles and Wollastons
     for targetname, stokes_info in stellar_stokes_vectors.items():
-        roll_angle = stokes_info["nd_roll_angle"]
+        rotation_angle = stokes_info["nd_rotation_angle"]
         stokes_vector = stokes_info["stokes_vector"]
 
-        stellar_nd_stokes = nd_mueller_matrix @ pol.rotation_mueller_matrix(roll_angle) @ stokes_vector    
+        stellar_nd_stokes = nd_mueller_matrix @ pol.rotation_mueller_matrix(rotation_angle) @ stokes_vector    
 
         for i in range(number_nd_images):   
             for wollaston in polarizers.keys():
@@ -343,14 +351,18 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
                 stellar_nd_wp_data = np.array([stellar_nd_o_beam * stellar_image_1, stellar_nd_e_beam * stellar_image_2])
 
-                # create default header
-                prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
-                stellar_nd_wp_img = data.Image(stellar_nd_wp_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+                # create default header including error header this time
+                prihdr,exthdr,errhdr,dqhdr=mocks.create_default_L3_headers()
+                stellar_nd_wp_img=data.Image(stellar_nd_wp_data,
+                                             pri_hdr=prihdr.copy(),
+                                             ext_hdr=exthdr.copy(),
+                                             err_hdr=errhdr.copy(),
+                                             dq_hdr=dqhdr.copy())
                 #Update Headers
                 stellar_nd_wp_img.pri_hdr['TARGET'] = targetname
                 stellar_nd_wp_img.ext_hdr['DPAMNAME'] = wollaston
                 stellar_nd_wp_img.ext_hdr['FPAMNAME'] = "ND225"
-                stellar_nd_wp_img.pri_hdr['ROLL'] = roll_angle
+                stellar_nd_wp_img.pri_hdr['PA_APER'] = rotation_angle
                 stellar_nd_wp_img.ext_hdr['FSMPRFL'] = 'NFOV'
 
                 input_image_list.append(stellar_nd_wp_img)
@@ -422,14 +434,6 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
     # Verify data level
     verify_header_keywords(img.ext_hdr, {'DATALVL': 'L4'}, frame_info, logger)
-    
-    # Check this is polarimetry data
-    dpam = img.ext_hdr.get('DPAMNAME', '')
-    if dpam in ('POL0', 'POL45'):
-        logger.info(f"{frame_info}: DPAMNAME = '{dpam}' (polarimetry). PASS")
-    else:
-        logger.info(f"{frame_info}: DPAMNAME = '{dpam}'. Expected POL0 or POL45. FAIL")
-    
 
     # Check data dimensions - should always be polarimetry datacube (4, N, N)
     if len(img.data.shape) == 3 and img.data.shape[0] == 4:

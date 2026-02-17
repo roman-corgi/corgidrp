@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import corgidrp.data as data
 from pyklip.klip import rotate
+import corgidrp
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling, other_hdus=None):
     """
@@ -153,22 +154,54 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
 
         new_image._record_parent_filenames(input_dataset[num_frames_per_group*i:num_frames_per_group*(i+1)])   
         new_dataset.append(new_image)
+
     new_dataset = data.Dataset(new_dataset)
+    drpnfile = new_dataset[0].ext_hdr['DRPNFILE']
+    # Here we change header keywords only for the combined non-coronagraphic imaging datasets
+    if (input_dataset[0].ext_hdr['DPAMNAME'] == 'IMAGING' and input_dataset[0].ext_hdr['LSAMNAME'] == 'OPEN') and input_dataset[0].ext_hdr['DATALVL'] == 'L3':
+        # average/delete header keywords as L4 involves combination of multiple frames
+        pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
+        last_frame_keywords=['VISITID', 'MJDEND'],
+        first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
+        deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
+        invalid_keywords=[
+                        #Primary header keywords
+                        'FILETIME', 'PA_V3', 'PA_APER','SVB_1', 'SVB_2', 'SVB_3', 
+                        'ROLL', 'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                        #Extension header keywords
+                        'DATETIME', 'FTIMEUTC','DATATYPE'],
+        averaged_keywords=['EXCAMT','NOVEREXP','PROXET',
+                        'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                        'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                        'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                        'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                        'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                        'Z10RES', 'Z11RES',
+                        'Z2VAR', 'Z3VAR'])
+        # incorporate modified headers in L4 dataset
+        for img in new_dataset:
+            img.pri_hdr = pri_hdr_comb
+            img.ext_hdr = ext_hdr_comb
+            img.ext_hdr['NUM_FR'] = num_frames_per_group
+            img.ext_hdr['DRPNFILE'] = drpnfile 
+            img._record_parent_filenames(input_dataset)
+
     new_dataset.update_after_processing_step("Combine_subexposures: combined every {0} frames by {1}".format(num_frames_per_group, collapse))
 
     return new_dataset
 
 
-def derotate_arr(data_arr,roll_angle, xcen,ycen,new_center=None,astr_hdr=None,
+def derotate_arr(data_arr,pa_aper_deg, xcen,ycen,new_center=None,astr_hdr=None,
                  is_dq=False,dq_round_threshold=0.05):
-    """Derotates an array based on the provided roll angle, about the provided
+    """Derotates an array based on the provided PA_APER angle, about the provided
     center. Treats DQ arrays specially, converting to float to do the rotation, 
     and converting back to np.int64 afterwards. DQ output becomes only zeros and
     ones, so detailed DQ flag information is not preserved.
 
     Args:
         data_arr (np.array): an array with 2-4 dimensions
-        roll_angle (float): telescope roll angle in degrees
+        pa_aper_deg (float): position angle (measured counter-clockwise) of the detector y axis from 
+            celestial north (degrees)
         xcen (float): x-coordinate of center about which to rotate
         ycen (float): y-coordinate of center about which to rotate
         new_center (tuple, optional): tuple of x- and y- coordinate of the new center to shift to.
@@ -185,14 +218,14 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,new_center=None,astr_hdr=None,
         data_arr = data_arr.astype(np.float32)
 
     if data_arr.ndim == 2:
-        derotated_arr = rotate(data_arr,roll_angle,(xcen,ycen),
+        derotated_arr = rotate(data_arr,pa_aper_deg,(xcen,ycen),
                                new_center=new_center,
                                astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
     
     elif data_arr.ndim == 3:
         derotated_arr = []
         for i,im in enumerate(data_arr):
-            derotated_im = rotate(im,roll_angle,(xcen,ycen),
+            derotated_im = rotate(im,pa_aper_deg,(xcen,ycen),
                                new_center=new_center,
                                astr_hdr=astr_hdr if (i==0) else None) # astr_hdr is corrected only once
         
@@ -205,7 +238,7 @@ def derotate_arr(data_arr,roll_angle, xcen,ycen,new_center=None,astr_hdr=None,
         for s,set in enumerate(data_arr):
             derotated_set = []
             for i,im in enumerate(set):
-                derotated_im = rotate(im,roll_angle,(xcen,ycen),
+                derotated_im = rotate(im,pa_aper_deg,(xcen,ycen),
                                new_center=new_center,
                                astr_hdr=astr_hdr if (i==0 and s==0) else None) # astr_hdr is corrected only once
         
@@ -307,11 +340,11 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1,new_center=None):
     derotated_dq_arr = []
     derotated_err_arr = []
     for i,frame in enumerate(sci_dataset):
-        roll = frame.pri_hdr['ROLL']
+        pa_aper_deg = frame.pri_hdr['PA_APER']
         xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
         
-        derotated_dq = derotate_arr(aligned_sci_dq_arr[i],roll, xcen,ycen,is_dq=True)
-        derotated_err = derotate_arr(aligned_sci_err_arr[i],roll, xcen,ycen)
+        derotated_dq = derotate_arr(aligned_sci_dq_arr[i],pa_aper_deg, xcen,ycen,is_dq=True)
+        derotated_err = derotate_arr(aligned_sci_err_arr[i],pa_aper_deg, xcen,ycen)
         
         derotated_dq_arr.append(derotated_dq)
         derotated_err_arr.append(derotated_err)

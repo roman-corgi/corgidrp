@@ -23,7 +23,7 @@ from corgidrp.mocks import (
     rename_files_to_cgi_format,
     make_1d_spec_image
 )
-from corgidrp.data import Image, Dataset, FluxcalFactor, get_stokes_intensity_image
+from corgidrp.data import Image, Dataset, FluxcalFactor, get_stokes_intensity_image, SlitTransmission
 from corgidrp.check import verify_header_keywords
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
@@ -249,22 +249,20 @@ def test_convert_spec_to_flux_basic():
     spec_vals = np.array([10.0, 12.0, 14.0, 16.0, 18.0])
     spec_err = np.array([[0.5, 0.6, 0.7, 0.8, 0.9]])
     wave = np.linspace(700, 800, len(spec_vals))
-    slit_factor = 0.85
-    slit_tuple = (np.array([np.full_like(spec_vals, slit_factor)]), np.array([0.0]), np.array([0.0]))
 
     image = make_1d_spec_image(spec_vals, spec_err, wave, col_cor=2.0)
     image.hdu_list['SPEC'].header['CTCOR'] = True  # Core throughput correction already applied
     dataset = Dataset([image])
     fluxcal_factor = make_mock_fluxcal_factor(2.0, err=0.2)
 
-    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor, slit_transmission=slit_tuple)
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor)
     frame = calibrated[0]
     spec_out = frame.hdu_list['SPEC'].data
     err_out = frame.hdu_list['SPEC_ERR'].data
 
-    expected_spec = (spec_vals / slit_factor) * (fluxcal_factor.fluxcal_fac / 2.0)
-    expected_err = np.sqrt(((spec_err[0] / slit_factor) * (fluxcal_factor.fluxcal_fac / 2.0))**2 +
-                           (((spec_vals / slit_factor) * fluxcal_factor.fluxcal_err / 2.0))**2)
+    expected_spec = spec_vals * (fluxcal_factor.fluxcal_fac / 2.0)
+    expected_err = np.sqrt((spec_err[0] * (fluxcal_factor.fluxcal_fac / 2.0))**2 +
+                           ((spec_vals * fluxcal_factor.fluxcal_err / 2.0))**2)
 
     result = np.allclose(spec_out, expected_spec) and np.allclose(err_out[0], expected_err)
     print('\nconvert_spec_to_flux basic case: ', end='')
@@ -273,7 +271,6 @@ def test_convert_spec_to_flux_basic():
     assert result
     assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.hdu_list['SPEC_ERR'].header['BUNIT'] == "erg/(s*cm^2*AA)"
-    assert frame.hdu_list['SPEC'].header['SLITCOR'] is True
     assert frame.ext_hdr['SPECUNIT'] == "erg/(s*cm^2*AA)"
 
 
@@ -301,13 +298,15 @@ def test_convert_spec_to_flux_no_slit():
     print_pass() if result else print_fail()
 
     assert result
-    assert frame.hdu_list['SPEC'].header['SLITCOR'] is False
     assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
 
 
 def test_convert_spec_to_flux_slit_scalar_map():
-    """Tuple slit transmission should produce a wavelength-dependent correction."""
+    """ 
+    test l4_to_tda.apply_slit_transmission and l4_to_tda.convert_spec_to_flux.
+    Tuple slit transmission should produce a wavelength-dependent correction.
+    """
     spec_vals = np.array([10.0, 12.0, 14.0, 16.0])
     spec_err = np.full((1, spec_vals.size), 0.5)
     wave = np.linspace(700, 730, spec_vals.size)
@@ -329,10 +328,12 @@ def test_convert_spec_to_flux_slit_scalar_map():
     slit_x = np.array([0.0, 20.0, 100.0])
     slit_y = np.zeros_like(slit_x)
 
+    slit_transmission = SlitTransmission(slit_map, pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, x_offset = slit_x, y_offset = slit_y, input_dataset = dataset)
+    corr_dataset = l4_to_tda.apply_slit_transmission(dataset, slit_transmission)
+
     calibrated = l4_to_tda.convert_spec_to_flux(
-        dataset,
-        fluxcal_factor,
-        slit_transmission=(slit_map, slit_x, slit_y),
+        corr_dataset,
+        fluxcal_factor
     )
     frame = calibrated[0]
     slit_factor = 0.45
@@ -409,16 +410,16 @@ def test_apply_core_throughput_correction():
     assert np.isclose(frame.hdu_list['SPEC'].header['CTFAC'], ct_factor)
 
 
-def test_compute_spec_flux_ratio_single_roll():
-    """Flux ratio for one roll."""
+def test_compute_spec_flux_ratio_single_rotation():
+    """Flux ratio for one rotation."""
     host_spec = np.array([10.0, 12.0, 14.0, 16.0])
     comp_spec = np.array([5.0, 6.0, 7.0, 8.0])
     spec_err = np.full((1, host_spec.size), 0.2)
     wave = np.linspace(700, 760, host_spec.size)
 
-    host_ds = make_1d_spec_image(host_spec, spec_err, wave, roll='ROLL_A',
+    host_ds = make_1d_spec_image(host_spec, spec_err, wave, pa_aper_deg='A',
                                  exp_time=10.0, col_cor=True)
-    comp_ds = make_1d_spec_image(comp_spec, spec_err, wave, roll='ROLL_B',
+    comp_ds = make_1d_spec_image(comp_spec, spec_err, wave, pa_aper_deg='B',
                                  exp_time=10.0, col_cor=True)
 
     host_ds.ext_hdr['FSMLOS'] = 0
@@ -448,32 +449,30 @@ def test_compute_spec_flux_ratio_single_roll():
         ((comp_spec_flux * host_err_flux) / (host_spec_flux ** 2)) ** 2
     )
 
-    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_ds, comp_ds, fluxcal_factor)
+    ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(host_cal[0], comp_cal[0])
     expected = comp_spec / host_spec
 
     result = (
         np.allclose(ratio, expected) and
         np.array_equal(wavelength, wave) and
-        metadata['roll'] == 'ROLL_A' and
-        metadata['companion_roll'] == 'ROLL_B' and
+        metadata['rotation'] == 'A' and
+        metadata['companion_rotation'] == 'B' and
         np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
     )
-    print('\ncompute_spec_flux_ratio single roll: ', end='')
+    
+    print('\ncompute_spec_flux_ratio single rotation: ', end='')
     print_pass() if result else print_fail()
-
     assert result
-    assert np.allclose(metadata['ratio_err'], ratio_err_expected, equal_nan=True)
-
 
 def test_compute_spec_flux_ratio_weighted():
-    """Combine spectra from multiple rolls, then compute a single flux ratio."""
+    """Combine spectra from multiple rotations, then compute a single flux ratio."""
     host_a = np.array([12.0, 14.0, 16.0, 18.0])
     comp_a = host_a * 0.5
     err_a = np.full((1, host_a.size), 0.3)
     wave_a = np.array([700.0, 710.0, 720.0, 730.0])
 
-    host_ds_a = make_1d_spec_image(host_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0, col_cor=True)
-    comp_ds_a = make_1d_spec_image(comp_a, err_a, wave_a, roll='ROLL_A', exp_time=5.0, col_cor=True)
+    host_ds_a = make_1d_spec_image(host_a, err_a, wave_a, pa_aper_deg='A', exp_time=5.0, col_cor=True)
+    comp_ds_a = make_1d_spec_image(comp_a, err_a, wave_a, pa_aper_deg='A', exp_time=5.0, col_cor=True)
 
     host_b = np.array([8.0, 6.0, 4.0, 2.0])
     comp_b = np.array([1.0, 2.0, 3.0, 4.0])
@@ -481,18 +480,18 @@ def test_compute_spec_flux_ratio_weighted():
     wave_b_host = np.array([800.0, 780.0, 760.0, 740.0])
     wave_b_comp = np.array([790.0, 770.0, 750.0, 730.0])
 
-    host_ds_b = make_1d_spec_image(host_b, err_b, wave_b_host, roll='ROLL_B', exp_time=15.0, col_cor=True)
-    comp_ds_b = make_1d_spec_image(comp_b, err_b, wave_b_comp, roll='ROLL_B', exp_time=15.0, col_cor=True)
+    host_ds_b = make_1d_spec_image(host_b, err_b, wave_b_host, pa_aper_deg='B', exp_time=15.0, col_cor=True)
+    comp_ds_b = make_1d_spec_image(comp_b, err_b, wave_b_comp, pa_aper_deg='B', exp_time=15.0, col_cor=True)
 
     fluxcal_factor = make_mock_fluxcal_factor(1.8, err=0.05)
 
-    # Combine host spectra from rolls A and B (raw units)
-    host_comb_spec, host_comb_wave, host_comb_err, host_rolls = l4_to_tda.combine_spectra(
+    # Combine host spectra from rotations A and B (raw units)
+    host_comb_spec, host_comb_wave, host_comb_err, host_pa_aper_degs = l4_to_tda.combine_spectra(
         Dataset([host_ds_a, host_ds_b])
     )
 
-    # Combine companion spectra from rolls A and B (raw units)
-    comp_comb_spec, comp_comb_wave, comp_comb_err, comp_rolls = l4_to_tda.combine_spectra(
+    # Combine companion spectra from rotations A and B (raw units)
+    comp_comb_spec, comp_comb_wave, comp_comb_err, comp_pa_aper_degs = l4_to_tda.combine_spectra(
         Dataset([comp_ds_a, comp_ds_b])
     )
 
@@ -531,7 +530,7 @@ def test_compute_spec_flux_ratio_weighted():
 
     # Compute flux ratio using the combined spectra (production path)
     ratio, wavelength, metadata = l4_to_tda.compute_spec_flux_ratio(
-        host_comb_image, comp_comb_image, fluxcal_factor
+        host_cal[0], comp_cal[0]
     )
 
     # Expected ratio and uncertainty in flux units
@@ -540,15 +539,15 @@ def test_compute_spec_flux_ratio_weighted():
         (comp_err_flux / host_flux) ** 2
         + ((comp_flux * host_err_flux) / (host_flux ** 2)) ** 2
     )
-
+    
     result = (
-        np.allclose(ratio, expected_ratio, equal_nan=True)
-        and np.array_equal(wavelength, host_comb_wave)
-        and np.allclose(metadata['ratio_err'], expected_ratio_err, equal_nan=True)
-    )
-    print('\ncompute_spec_flux_ratio weighted rolls: ', end='')
+        np.allclose(ratio, expected_ratio, equal_nan=True) and
+        np.array_equal(wavelength, host_comb_wave) and
+        np.allclose(metadata['ratio_err'], expected_ratio_err, equal_nan=True)
+        )
+    
+    print('\ncompute_spec_flux_ratio weighted rotations: ', end='')
     print_pass() if result else print_fail()
-
     assert result
 
 def test_abs_fluxcal():
@@ -1128,6 +1127,6 @@ if __name__ == '__main__':
     test_convert_spec_to_flux_no_slit()
     test_convert_spec_to_flux_slit_scalar_map()
     test_apply_core_throughput_correction()
-    test_compute_spec_flux_ratio_single_roll()
+    test_compute_spec_flux_ratio_single_rotation()
     test_compute_spec_flux_ratio_weighted()
     test_l4_companion_photometry()

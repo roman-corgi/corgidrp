@@ -10,6 +10,7 @@ from astropy.wcs import WCS
 
 import corgidrp
 from corgidrp import data
+from corgidrp import check
 from corgidrp.combine import derotate_arr, prop_err_dq, combine_subexposures
 from corgidrp import star_center
 from corgidrp.klip_fm import meas_klip_thrupt
@@ -191,7 +192,7 @@ def find_star(input_dataset,
               drop_satspots_frames=True):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that 
-    contain satellite spots (indicated by ``SATSPOTS=1`` in the primary header). The 
+    contain satellite spots (indicated by ``SATSPOTS=1`` in the image header). The 
     function computes the median of all science frames (``SATSPOTS=0``) and the median 
     of all satellite spot frames (``SATSPOTS=1``), then estimates the star location 
     based on these median images and the initial guess provided.
@@ -310,10 +311,11 @@ def find_star(input_dataset,
         sci_frames = []
         sat_spot_frames = []
         for frame in split_dataset.frames:
-            if frame.pri_hdr["SATSPOTS"] == 0:
+            satspots = frame.ext_hdr["SATSPOTS"]
+            if satspots == 0:
                 sci_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
-            elif frame.pri_hdr["SATSPOTS"] == 1:
+            elif satspots == 1:
                 sat_spot_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
             else:
@@ -358,7 +360,7 @@ def find_star(input_dataset,
             #align second slice on first slice and drop satellite spot images if necessary
             shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.pri_hdr["SATSPOTS"] == 0 :
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
                     aligned_slice = shift(frame.data[1], shift_value)
                     frame.data[1] = aligned_slice
                     frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]
@@ -552,7 +554,7 @@ def do_psf_subtraction(input_dataset,
                                                       dq_thresh)
 
     # Derotate & align PSF subtracted frames
-    # pyklip_dataset.output shape: (len numbasis, n_rolls, n_wls, y, x)
+    # pyklip_dataset.output shape: (len numbasis, n_pa_aper_degs, n_wls, y, x)
 
     output = pyklip_dataset.output
     collapsed_frames = []
@@ -569,7 +571,9 @@ def do_psf_subtraction(input_dataset,
 
             # Add relevant info from the pyklip headers:
             pri_hdr = sci_dataset[rr].pri_hdr.copy()
-            ext_hdr = sci_dataset[rr].ext_hdr.copy()    
+            ext_hdr = sci_dataset[rr].ext_hdr.copy() 
+            err_hdr = sci_dataset[rr].err_hdr.copy()   
+            dq_hdr = sci_dataset[rr].dq_hdr.copy()
 
             result_fpath = os.path.join(outdir_mode,f'{fileprefix}-KLmodes-all.fits')   
             pyklip_hdr = fits.getheader(result_fpath)
@@ -591,6 +595,7 @@ def do_psf_subtraction(input_dataset,
             
             frame = data.Image(psfsub_frame_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                        err_hdr=err_hdr, dq_hdr=dq_hdr
                         )
             frames.append(frame)
 
@@ -623,6 +628,7 @@ def do_psf_subtraction(input_dataset,
     
         collapsed_frame = data.Image(collapsed_psfsub_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                        err_hdr=err_hdr, dq_hdr=dq_hdr,
                         err=err_out_collapsed,
                         dq=dq_out_collapsed
                         )
@@ -643,10 +649,38 @@ def do_psf_subtraction(input_dataset,
     for dq_key in list(sci_dataset[0].dq_hdr): 
         if 'NAXIS' in dq_key: 
             del sci_dataset[0].dq_hdr[dq_key]
+    
+    # average/delete header keywords as L4 involves combination of multiple frames
+    pri_hdr, ext_hdr, _, _ = check.merge_headers(
+        collapsed_dataset,
+        last_frame_keywords = ['VISITID', 'MJDEND'],
+        # the first frame in collapsed dataset seems to contain the correct WCS, so
+        # propagate that one
+        first_frame_keywords = ['MJDSRT', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                                'CRPIX1', 'CRPIX2'],
+        invalid_keywords=[
+            # Primary header keywords
+            'FILETIME', 'PA_V3', 'PA_APER',
+            'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+            'WBJ_1', 'WBJ_2', 'WBJ_3',
+            # Extension header keywords
+            'DATETIME', 'FTIMEUTC', 'DATATYPE'
+        ],
+        averaged_keywords=[
+            'EXCAMT', 'NOVEREXP', 'PROXET',
+            'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+            'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+            'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+            'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+            'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+            'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+            'Z12AVG', 'Z13AVG', 'Z14AVG'
+        ]
+    )
 
     frame = data.Image(
             collapsed_dataset.all_data,
-            pri_hdr=pri_hdr, ext_hdr=collapsed_dataset[0].ext_hdr, 
+            pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
             err=collapsed_dataset.all_err[np.newaxis,:,0,:,:],
             dq=collapsed_dataset.all_dq,
             err_hdr=sci_dataset[0].err_hdr,
@@ -742,7 +776,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
     The northup function looks for 'STARLOCX' and 'STARLOCY' for the star location. If not, it uses the center of the FoV as the star location.
-    With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
+    With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'PA_APER' header keyword if use_wcs is False (not recommended).
     TODO: Update pixel locations that are saved in the header!
     TODO: Add tests for behavior of new_center
     
@@ -807,12 +841,12 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
 
         # look for WCS solutions
         if use_wcs is True:
-            roll_angle = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
+            rotation_angle = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
 
         else:
-            print('WARNING: using "ROLL" instead of WCS to estimate the north position angle')
-            # read the roll angle parameter, assuming this info is recorded in the primary header as requested
-            roll_angle = processed_data.pri_hdr['ROLL']
+            print('WARNING: using "PA_APER" instead of WCS to estimate the north position angle')
+            # read the PA_APER angle parameter, assuming this info is recorded in the primary header as requested
+            rotation_angle = processed_data.pri_hdr['PA_APER']
 
         #Make 2D WCS header for derotation. 
         sci_hd_2D = sci_hd.copy()
@@ -824,10 +858,10 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
                 warnings.filterwarnings("ignore", category=FITSFixedWarning)
                 astr_hdr = WCS(sci_hd_2D)
         
-        sci_derot = derotate_arr(sci_data,roll_angle, xcen,ycen,astr_hdr=astr_hdr,new_center=new_center) # astr_hdr is corrected at above lines
+        sci_derot = derotate_arr(sci_data, rotation_angle, xcen,ycen,astr_hdr=astr_hdr,new_center=new_center) # astr_hdr is corrected at above lines
         
         new_all_data.append(sci_derot)
-        log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
+        log = f'FoV rotated by {rotation_angle}deg counterclockwise around center {xcen, ycen}'
         sci_hd['HISTORY'] = log
 
         # update WCS solutions
@@ -840,7 +874,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         #############
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = derotate_arr(err_data,roll_angle, xcen,ycen,new_center=new_center) # err data shape is 1x1024x1024
+        err_derot = derotate_arr(err_data,rotation_angle, xcen,ycen,new_center=new_center) # err data shape is 1x1024x1024
         new_all_err.append(err_derot)
 
         #############
@@ -848,7 +882,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         # all DQ pixels must have integers
         dq_data = processed_data.dq
 
-        dq_derot = derotate_arr(dq_data,roll_angle,xcen,ycen,
+        dq_derot = derotate_arr(dq_data,rotation_angle,xcen,ycen,
                                 is_dq=True,new_center=new_center)
 
         new_all_dq.append(dq_derot)
@@ -860,13 +894,14 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     return processed_dataset
 
 
-def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
+def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
     """ 
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
 
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
+        spec_filter_offset (corgidrp.data.SpecFilterOffset): instance of SpecFilterOffset calibration class
         template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
                                                   path is taken
         xcent_guess (float): initial x guess for the centroid fit for all frames
@@ -921,8 +956,9 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
     
     nb_filter = sat_dataset[0].ext_hdr["CFAMNAME"]
     bb_filter = nb_filter[0]
-    cen_wave, _, xoff_nb, yoff_nb = read_cent_wave(nb_filter)
-    _, _, xoff_bb, yoff_bb = read_cent_wave(bb_filter)
+    cen_wave, _, _, _ = read_cent_wave(nb_filter)
+    xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
+    xoff_bb, yoff_bb = spec_filter_offset.get_offsets(bb_filter)
     # Correct the centroid for the filter-to-filter image offset, so that
     # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
     if bb_nb_dx is not None and bb_nb_dy is not None:
@@ -1205,7 +1241,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
-                                               taken with both wollastons at the same roll angle. All frames for the
+                                               taken with both wollastons at the same telescope rotation angle. All frames for the
                                                same target star must have the same x and y dimensions
         system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the system without a ND filter
         nd_mueller_matrix_cal (corgidrp.data.NDMuellerMatrix): mueller matrix calibration of the system with the ND filter used for unocculted observations
@@ -1289,10 +1325,10 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         # construct stokes vector after instrument with ND filter
         S_nd = [I_nd, Q_nd, U_nd, V_nd]
 
-        # S_nd = M_nd * R(roll_angle) * S_in
-        # invert M_nd * R(roll_angle) to recover S_in
-        roll_angle = unocculted_pol0_img.pri_hdr['ROLL']
-        total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(roll_angle)
+        # S_nd = M_nd * R(pa_aper_deg) * S_in
+        # invert M_nd * R(pa_aper_deg) to recover S_in
+        pa_aper_deg = unocculted_pol0_img.pri_hdr['PA_APER']
+        total_system_mm_nd = nd_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(pa_aper_deg)
         system_nd_inv = np.linalg.pinv(total_system_mm_nd)
         S_in = system_nd_inv @ S_nd
 
@@ -1322,8 +1358,8 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         # subtract stellar polarization from the rest of the frames
         for frame in coron_frames:
             # propagate S_in back through the non-ND system mueller matrix to calculate star polarization as observed with coronagraph mask
-            frame_roll_angle = frame.pri_hdr['ROLL']
-            total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_roll_angle)
+            frame_pa_aper_deg = frame.pri_hdr['PA_APER']
+            total_system_mm = system_mueller_matrix_cal.data @ pol.rotation_mueller_matrix(frame_pa_aper_deg)
             S_out = total_system_mm @ S_in
             # construct I0, I45, I90, and I135 back from stokes vector
             I_0_star = (S_out[0] + S_out[1]) / 2
@@ -1412,7 +1448,7 @@ def combine_polarization_states(input_dataset,
         input_dataset (corgidrp.data.Dataset): a dataset of polarimetric Images (L3-level), should be of the same size and same target
         system_mueller_matrix_cal (corgidrp.data.MuellerMatrix): mueller matrix calibration of the instrument
         svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
-        use_wcs (bool, optional): Uses WCS coordinates to rotate northup, defaults to true. If false, uses roll angle header instead.
+        use_wcs (bool, optional): Uses WCS coordinates to rotate northup, defaults to true. If false, uses PA_APER header instead.
         rot_center (string, optional): Define the center to rotate the images with respect to. Options are 'im_center', 'starloc',
             or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header.
         ct_calibration (corgidrp.data.CoreThroughputCalibration, optional): For PSF Subtraction. core throughput calibration object. Required 
@@ -1556,9 +1592,9 @@ def combine_polarization_states(input_dataset,
         output_intensities_cov[2*i,2*i,:,:] = derotated_dataset.frames[i].err[0,0,:,:]**2
         output_intensities_cov[(2*i)+1,(2*i)+1,:,:] = derotated_dataset.frames[i].err[0,1,:,:]**2
         ## fill in measurement matrix
-        # roll angle rotation matrix
-        roll = derotated_dataset.frames[i].pri_hdr['ROLL']
-        rotation_mm = pol.rotation_mueller_matrix(roll)
+        # PA_APER rotation matrix
+        pa_aper_deg = derotated_dataset.frames[i].pri_hdr['PA_APER']
+        rotation_mm = pol.rotation_mueller_matrix(pa_aper_deg)
         if derotated_dataset.frames[i].ext_hdr['DPAMNAME'] == 'POL0':
             # use correct polarizer mueller matrix depending on wollaston used
             # o and e denotes ordinary and extraordinary axis of the wollaston
@@ -1567,7 +1603,7 @@ def combine_polarization_states(input_dataset,
         else:
             polarizer_mm_o = pol.lin_polarizer_mueller_matrix(45)
             polarizer_mm_e = pol.lin_polarizer_mueller_matrix(135)
-        # construct full mueller matrix with roll angle and wollaston
+        # construct full mueller matrix with PA_APER angle and wollaston
         total_mm_o = polarizer_mm_o @ system_mm @ rotation_mm
         total_mm_e = polarizer_mm_e @ system_mm @ rotation_mm
         # row at current index of the measurement matrix corresponds to the first row of the full system mueller matrix
@@ -1600,14 +1636,26 @@ def combine_polarization_states(input_dataset,
 
     #TODO: propagate DQ extension through matrix inversion, add DQ extension and header to output frame
 
+    # Delete additional headers from stokes data cube (after combined headers have been done in 
+    # do_psf_subtraction)
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(
+        psf_subtracted_dataset,
+        invalid_keywords=[
+            'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+        ],
+    )
+    ext_hdr['CTYPE3'] = 'STOKES'
+
+
     # construct output
     output_frame = data.Image(stokes_datacube,
-                              pri_hdr=psf_subtracted_intensity.pri_hdr.copy(),
-                              ext_hdr=psf_subtracted_intensity.ext_hdr.copy(),
+                              pri_hdr=pri_hdr,
+                              ext_hdr=ext_hdr,
                               err=output_err,
-                              err_hdr=psf_subtracted_intensity.err_hdr.copy())
+                              err_hdr=err_hdr)
     
     output_frame.filename = dataset.frames[-1].filename
+    output_frame.pri_hdr['FILENAME'] = output_frame.filename
 
     updated_dataset = data.Dataset([output_frame])
 
@@ -1724,7 +1772,40 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     
     '''
     dataset = input_dataset.copy()
+
+    # Here we change header keywords for both spec mode datasets (coron/non-coron)
+    # average/delete header keywords as L4 involves combination of multiple frames
+    pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
+    last_frame_keywords=['VISITID', 'MJDEND'],
+    first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
+    deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
+    invalid_keywords=[
+                    #Primary header keywords
+                    'FILETIME', 'PA_V3', 'PA_APER','SVB_1', 'SVB_2', 'SVB_3', 
+                    'ROLL', 'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    #Extension header keywords
+                    'DATETIME', 'FTIMEUTC','DATATYPE'],
+    averaged_keywords=['EXCAMT','NOVEREXP','PROXET',
+                    'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR']) 
+    #combine frames                       
     dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling, combine_other_hdus=True)
+    #certain headers are added in combine_subexposures, we manually add them in
+    drpnfile = dataset[0].ext_hdr['DRPNFILE']
+    num_fr = dataset[0].ext_hdr['NUM_FR']
+    # incorporate modified headers in L4 dataset
+    for frame in dataset:
+        frame.pri_hdr = pri_hdr_comb
+        frame.ext_hdr = ext_hdr_comb
+        frame.ext_hdr['DRPNFILE'] = drpnfile
+        frame.ext_hdr['NUM_FR'] = num_fr
+        frame._record_parent_filenames(input_dataset)
+    
     history_msg = f"Combined psf subtracted spectroscopy frames by applying {collapse}, result is a dataset with one frame"
     dataset.update_after_processing_step(history_msg)
     return dataset
@@ -1764,6 +1845,8 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         # update filename convention. The file convention should be
         # "CGI_[datalevel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
+        #updating filename in the primary header
+        frame.pri_hdr['FILENAME'] = frame.filename
 
     history_msg = "Updated Data Level to L4"
     updated_dataset.update_after_processing_step(history_msg)
