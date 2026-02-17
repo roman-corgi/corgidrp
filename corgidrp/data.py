@@ -1332,7 +1332,7 @@ class KGain(Image):
         # these values to run smoothly; if these values are actually required for 
         # a particular process, the user would be alerted since these values below would result in an error as they aren't numerical
         if 'RN' not in self.ext_hdr:
-            self.ext_hdr['RN'] = ''
+            self.ext_hdr['RN'] = 0.0
         if 'RN_ERR' not in self.ext_hdr:
             self.ext_hdr['RN_ERR'] = ''
         # File format checks
