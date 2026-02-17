@@ -1776,7 +1776,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     # average/delete header keywords as L4 involves combination of multiple frames
     pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
     last_frame_keywords=['VISITID', 'MJDEND'],
-    first_frame_keywords=['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
+    first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
     deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
     invalid_keywords=[
                     #Primary header keywords
