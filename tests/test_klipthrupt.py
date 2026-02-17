@@ -11,7 +11,7 @@ from pyklip.fakes import gaussfit2d
 import pytest
 import numpy as np
 import os
-
+import itertools
 ## Helper functions/quantities
 
 lam = 573.8e-9 #m
@@ -729,8 +729,8 @@ def test_compare_RDI_ADI():
 
     assert mean_adi < mean_rdi
 
-
-def test_psfsub_withklipandctmeas_adi():
+@pytest.mark.parametrize("coro_type,FOV,band", [("HLC", "NFOV", "1"), ("SPC", "WFOV", "4F")])
+def test_psfsub_withklipandctmeas_adi(coro_type,FOV,band):
     """Check that KLIP throughput and CT calibration can be run as part 
     of the PSF subtraction step function. Check that KLIP throughput and 
     core throughput sample the same separations by default. Check that an 
@@ -754,7 +754,13 @@ def test_psfsub_withklipandctmeas_adi():
                                             pl_sep=pl_loc[0],
                                             data_shape=data_shape,
                                 )
-
+    if coro_type == "SPC":
+        for im in mock_sci:
+            im.ext_hdr['SPAMNAME'] = FOV
+            im.ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
+            im.ext_hdr['LSAMNAME'] = FOV
+            im.ext_hdr['CFAMNAME'] = band
+            
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
     ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
@@ -911,8 +917,8 @@ def test_psfsub_withklipandctmeas_adi():
 
     assert pl_counts == pytest.approx(recovered_pl_counts_ktcorrected,rel = 0.10) 
 
-
-def test_psfsub_withklipandctmeas_rdi():
+@pytest.mark.parametrize("coro_type,FOV,band", [("HLC", "NFOV", "1"), ("SPC", "WFOV", "4F")])
+def test_psfsub_withklipandctmeas_rdi(coro_type,FOV,band):
     """Check that KLIP throughput and CT calibration can be run as part 
     of the PSF subtraction step function. Check that KLIP throughput and 
     core throughput sample the same separations by default. Check that an 
@@ -936,7 +942,13 @@ def test_psfsub_withklipandctmeas_rdi():
                                             pl_sep=pl_loc[0],
                                             data_shape=data_shape
                                 )
-
+    complete_dataset = [mock_sci,mock_ref]
+    if coro_type == "SPC":
+        for im in itertools.chain(*complete_dataset):                                
+            im.ext_hdr['SPAMNAME'] = FOV
+            im.ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
+            im.ext_hdr['LSAMNAME'] = FOV
+            im.ext_hdr['CFAMNAME'] = band
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
     ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
