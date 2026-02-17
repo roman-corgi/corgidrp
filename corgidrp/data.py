@@ -119,6 +119,8 @@ class Dataset():
                 filenames.append(frame.filename)
 
         for filename, frame in zip(filenames, self.frames):
+            ##redoing the change to the FILENAME keyword to cover our bases
+            frame.pri_hdr['FILENAME'] = frame.filename
             frame.save(filename=filename, filedir=filedir)
 
         # relink frames with all_data
@@ -1792,8 +1794,49 @@ class AstrometricCalibration(Image):
 
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
-        # run the image class constructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
+        if input_dataset is not None:
+            # Primary header keywords
+            pri_hdr, _, _, _ = corgidrp.check.merge_headers(
+                input_dataset,
+                invalid_keywords=['VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    'STAR1','STAR2','STAR3','STAR4','STAR5'] + ['STAR{0}'.format(i) for i in range(6, 1000)],
+                deleted_keywords=['SATSPOTS','ISHOWFSC','HOWFSLNK'])
+
+            _, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                any_true_keywords=['DESMEAR', 'CTI_CORR'],
+                invalid_keywords=[
+                    # Extension header keywords
+                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
+                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
+                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
+                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME',
+                    'STAR1','STAR2','STAR3','STAR4','STAR5'] + ['STAR{0}'.format(i) for i in range(6, 1000)],
+                averaged_keywords=['EXCAMT']
+            )        
+            # run the image class constructor
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
 
         # File format checks
         if type(self.data) != np.ndarray:
@@ -2442,6 +2485,42 @@ class CoreThroughputCalibration(Image):
         if self.ct_excam.shape[1] != self.data.shape[0]:
             raise ValueError('The core throughput map must have one PSF location '
                 'and CT value for each PSF.')
+        
+        if input_dataset is not None:
+            # Filter to off-axis PSF frames only (exclude pupil images) to check
+            # that PAM keywords are consistent across all images
+            offaxis_frames = [f for f in input_dataset
+                              if f.ext_hdr.get('DPAMNAME') != 'PUPIL']
+            offaxis_dataset = Dataset(offaxis_frames)
+
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                offaxis_dataset, averaged_keywords = [
+                    'RA', 'DEC', 'RAPM', 'DECPM', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3'
+                    'ROLL', 'PITCH', 'YAW', 'EXCAMT', 'NOVEREXP', 'PROXET',
+                    'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    ],
+                    invalid_keywords = [
+                        'FTIMEUTC', 'PROXET', 'DATETIME', 'FSMSG1',
+                        'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                        ]
+                )
+        
+            # Apply merged headers from PSF part of the dataset back to the output 
+            self.pri_hdr = pri_hdr
+            ext_hdr['EXTNAME'] = 'PSFCUBE'
+            ext_hdr['BUNIT'] = 'photoelectron/pix/s'
+            ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
+                'observing sequence. PSFs are not normalized. They are the '
+                'images of the off-axis source. The data cube is centered '
+                'around each PSF location')
+            self.ext_hdr = ext_hdr
+            self.err_hdr = err_hdr
+            self.dq_hdr = dq_hdr
+
 
         # Additional bookkeeping for a calibration file:
         # If this is a new calibration file, we need to bookkeep it in the header

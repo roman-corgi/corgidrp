@@ -493,6 +493,8 @@ def update_to_l2b(input_dataset):
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l2a", "_l2b", 1)
+        #updating filename in the primary header
+        frame.pri_hdr['FILENAME'] = frame.filename
 
     history_msg = "Updated Data Level to L2b"
     updated_dataset.update_after_processing_step(history_msg)
