@@ -866,7 +866,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     CIC_image_map[CIC_image_map < 0] = 0
     DC_image_map[DC_image_map < 0] = 0
 
-    prihdr, exthdr, err_hdr, dq_hdr = check.merge_headers(dataset)
+    prihdr, exthdr, err_hdr, dq_hdr = check.merge_headers(dataset, invalid_keywords=['FTIMEUTC', 'PROXET', 'DATETIME', 'EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR'])
     if 'EMGAIN_M' in exthdr.keys():
         exthdr['EMGAIN_M'] = -999.
     exthdr['BUNIT'] = 'detected electron'
