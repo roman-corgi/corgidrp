@@ -336,7 +336,6 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     """
     if not isinstance(dataset, Dataset):
         raise TypeError("Input must be a corgidrp.data.Dataset object.")
-
     pri_hdr_centroid, ext_hdr_centroid, _ , _ = corgidrp.check.merge_headers(
                 dataset,
                 any_true_keywords=['DESMEAR', 'CTI_CORR'],
@@ -359,7 +358,6 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
                     'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V'
                 ]
         )
-
     if initial_cent is None:
         xcent, ycent = None, None
     else:
@@ -445,11 +443,10 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
         ext_hdr_centroid['FILTERS'] = ",".join(filters)
     else:
         ext_hdr_centroid['FILTERS'] = filters[0]
-
     calibration = SpectroscopyCentroidPSF(
         centroids,
-        pri_hdr=pri_hdr_centroid,
-        ext_hdr=ext_hdr_centroid,
+        pri_hdr=pri_hdr_centroid.copy(),
+        ext_hdr=ext_hdr_centroid.copy(),
         err_hdr = fits.Header(),
         err = centroids_err,
         input_dataset=dataset
