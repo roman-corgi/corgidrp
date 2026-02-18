@@ -297,6 +297,7 @@ def test_calibrate_dispersion_model():
     file_path = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
+    filename = file_path.split("/")[-1]
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
     ext_hdr["DPAMNAME"] = 'PRISM3'
     ext_hdr["FSAMNAME"] = 'OPEN'
@@ -318,6 +319,8 @@ def test_calibrate_dispersion_model():
         data_2d = np.copy(noisy_data_array[i])
         err = np.zeros_like(data_2d)
         dq = np.zeros_like(data_2d, dtype=int)
+        filen = f"{i}_"+filename
+        pri_hdr['FILENAME'] = filen
         image = Image(
             data_or_filepath=data_2d,
             pri_hdr=pri_hdr.copy(),
@@ -325,6 +328,7 @@ def test_calibrate_dispersion_model():
             err=err,
             dq=dq
         )
+        image.filename = filen
         image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i].upper()
         psf_images.append(image)
 
@@ -333,7 +337,6 @@ def test_calibrate_dispersion_model():
     psf_centroid = steps.compute_psf_centroid(
         dataset=dataset
     )
-    
     spec_filter_offset = SpecFilterOffset({})
     disp_model = steps.calibrate_dispersion_model(psf_centroid, spec_filter_offset)
     disp_model.save(output_dir, disp_model.filename)
@@ -391,6 +394,7 @@ def test_add_wavelength_map():
     image.ext_hdr['BUNIT'] = 'photoelectron/s'
     image.pri_hdr['TARGET'] = 'Vega'
     dataset = Dataset([image])
+    image.ext_hdr["MJDSRT"] = time.Time(image.ext_hdr["DRPCTIME"]).mjd
     
     global output_dataset
     output_dataset = l3_to_l4.add_wavelength_map(dataset, disp_model)
