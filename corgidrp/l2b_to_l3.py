@@ -58,8 +58,8 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
         wcs_info['CTYPE1'] = 'RA---TAN'
         wcs_info['CTYPE2'] = 'DEC--TAN'
 
-        wcs_info['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
-        wcs_info['CDELT2'] = (platescale * 0.001) / 3600
+        #wcs_info['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
+        #wcs_info['CDELT2'] = (platescale * 0.001) / 3600
 
         wcs_info['CRVAL1'] = corrected_ra
         wcs_info['CRVAL2'] = corrected_dec
@@ -491,6 +491,8 @@ def update_to_l3(input_dataset):
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l2b", "_l3_", 1)
+        #updating filename in the primary header
+        frame.pri_hdr['FILENAME'] = frame.filename
 
     history_msg = "Updated Data Level to L3"
     updated_dataset.update_after_processing_step(history_msg)

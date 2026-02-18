@@ -192,9 +192,9 @@ def find_star(input_dataset,
               drop_satspots_frames=True):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that 
-    contain satellite spots (indicated by ``SATSPOTS=1`` in the image header). The 
-    function computes the median of all science frames (``SATSPOTS=0``) and the median 
-    of all satellite spot frames (``SATSPOTS=1``), then estimates the star location 
+    contain satellite spots (indicated by ``SATSPOTS=True`` in the image header). The 
+    function computes the median of all science frames (``SATSPOTS=False``) and the median 
+    of all satellite spot frames (``SATSPOTS=True``), then estimates the star location 
     based on these median images and the initial guess provided.
 
     The star's (x, y) location is stored in each frame's extension header under 
@@ -254,7 +254,7 @@ def find_star(input_dataset,
     Args:
         input_dataset (corgidrp.data.Dataset):
             A dataset of L3-level frames. Frames should be labeled in their primary 
-            headers with ``SATSPOTS=0`` (science frames) or ``SATSPOTS=1`` 
+            headers with ``SATSPOTS=False`` (science frames) or ``SATSPOTS=True`` 
             (satellite spot frames).
         star_coordinate_guess (tuple of float or None, optional):
             Initial guess for the star's (x, y) location as absolute coordinates.
@@ -269,7 +269,7 @@ def find_star(input_dataset,
             otherwise defaults for the mode will be used:
             If None, default parameters corresponding to the specified observing_mode will be used.     
         drop_satspots_frames (bool, optional):
-            If True, frames with satellite spots (``SATSPOTS=1``) will be removed from 
+            If True, frames with satellite spots (``SATSPOTS=True``) will be removed from 
             the returned dataset. Defaults to True.
 
     Returns:
@@ -312,10 +312,10 @@ def find_star(input_dataset,
         sat_spot_frames = []
         for frame in split_dataset.frames:
             satspots = frame.ext_hdr["SATSPOTS"]
-            if satspots == 0:
+            if satspots == False:
                 sci_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
-            elif satspots == 1:
+            elif satspots == True:
                 sat_spot_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
             else:
@@ -360,7 +360,7 @@ def find_star(input_dataset,
             #align second slice on first slice and drop satellite spot images if necessary
             shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
                     aligned_slice = shift(frame.data[1], shift_value)
                     frame.data[1] = aligned_slice
                     frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]
@@ -1771,7 +1771,40 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     
     '''
     dataset = input_dataset.copy()
+
+    # Here we change header keywords for both spec mode datasets (coron/non-coron)
+    # average/delete header keywords as L4 involves combination of multiple frames
+    pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
+    last_frame_keywords=['VISITID', 'MJDEND'],
+    first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
+    deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
+    invalid_keywords=[
+                    #Primary header keywords
+                    'FILETIME', 'PA_V3', 'PA_APER','SVB_1', 'SVB_2', 'SVB_3', 
+                    'ROLL', 'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    #Extension header keywords
+                    'DATETIME', 'FTIMEUTC','DATATYPE'],
+    averaged_keywords=['EXCAMT','NOVEREXP','PROXET',
+                    'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR']) 
+    #combine frames                       
     dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling, combine_other_hdus=True)
+    #certain headers are added in combine_subexposures, we manually add them in
+    drpnfile = dataset[0].ext_hdr['DRPNFILE']
+    num_fr = dataset[0].ext_hdr['NUM_FR']
+    # incorporate modified headers in L4 dataset
+    for frame in dataset:
+        frame.pri_hdr = pri_hdr_comb
+        frame.ext_hdr = ext_hdr_comb
+        frame.ext_hdr['DRPNFILE'] = drpnfile
+        frame.ext_hdr['NUM_FR'] = num_fr
+        frame._record_parent_filenames(input_dataset)
+    
     history_msg = f"Combined psf subtracted spectroscopy frames by applying {collapse}, result is a dataset with one frame"
     dataset.update_after_processing_step(history_msg)
     return dataset
@@ -1811,6 +1844,8 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         # update filename convention. The file convention should be
         # "CGI_[datalevel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
+        #updating filename in the primary header
+        frame.pri_hdr['FILENAME'] = frame.filename
 
     history_msg = "Updated Data Level to L4"
     updated_dataset.update_after_processing_step(history_msg)

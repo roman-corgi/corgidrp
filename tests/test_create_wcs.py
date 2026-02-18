@@ -49,8 +49,8 @@ def test_create_wcs():
         expected['CTYPE1'] = 'RA---TAN'
         expected['CTYPE2'] = 'DEC--TAN'
 
-        expected['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
-        expected['CDELT2'] = (platescale * 0.001) / 3600
+        #expected['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
+        #expected['CDELT2'] = (platescale * 0.001) / 3600
 
         expected['CRVAL1'] = target_ra - ra_offset      # the corrected target pointing based on astrom_cal
         expected['CRVAL2'] = target_dec - dec_offset
