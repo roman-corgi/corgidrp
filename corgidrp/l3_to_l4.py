@@ -1115,8 +1115,7 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
             whts = 1./np.square(err_cutout[0])
             spec = np.nansum(image_cutout * whts, axis = 1) / np.nansum (whts, axis = 1) * (2 * halfwidth + 1)
             err[0] = 1./np.sqrt(np.nansum(whts, axis = 1))
-            # Use float64 to maintain precision when input is float32
-            algo_thru_spec = np.nanmean(algo_thru_cutout[:,None] * whts, axis = 1, dtype=np.float64) / np.nanmean (whts, axis = 1, dtype=np.float64) 
+            algo_thru_spec = np.nanmean(algo_thru_cutout[:,None] * whts, axis = 1) / np.nanmean (whts, axis = 1) 
             weight_str = "weights applied"
         else:
             spec = np.nansum(image_cutout, axis=1)

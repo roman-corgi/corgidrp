@@ -1032,21 +1032,19 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
         wave_err.append(errors[1])
         fwhm_err.append(errors[2] * 8 * np.log(2))
 
-    # Use float64 for accumulation precision, then cast to image_dtype
-    mean_peak = np.mean(np.array(peak), dtype=np.float64)
-    mean_fwhm = np.mean(np.array(fwhm), dtype=np.float64)
-    mean_wave = np.mean(np.array(wave), dtype=np.float64)
-    mean_peak_err = np.sqrt(np.sum(np.array(peak_err), dtype=np.float64))
-    mean_wave_err = np.sqrt(np.sum(np.array(wave_err), dtype=np.float64))
-    mean_fwhm_err = np.sqrt(np.sum(np.array(fwhm_err), dtype=np.float64))
-    mean_flux_profile = np.mean(np.array(flux_profile), axis=0, dtype=np.float64)
-    mean_wavlens = np.mean(np.array(wavlens), axis=0, dtype=np.float64)
+    mean_peak = np.mean(np.array(peak))
+    mean_fwhm = np.mean(np.array(fwhm))
+    mean_wave = np.mean(np.array(wave))
+    mean_peak_err = np.sqrt(np.sum(np.array(peak_err)))
+    mean_wave_err = np.sqrt(np.sum(np.array(wave_err)))
+    mean_fwhm_err = np.sqrt(np.sum(np.array(fwhm_err)))
+    mean_flux_profile = np.mean(np.array(flux_profile), axis = 0)
+    mean_wavlens = np.mean(np.array(wavlens), axis = 0)
     prihdr = nar_dataset[0].pri_hdr.copy()
     exthdr = nar_dataset[0].ext_hdr.copy()
 
-    # Cast to configured image_dtype to ensure consistent bit depth
-    ls_data = np.array([mean_wavlens, mean_flux_profile], dtype=corgidrp.image_dtype)
-    gauss_profile = np.array([mean_peak, mean_wave, mean_fwhm, mean_peak_err, mean_wave_err, mean_fwhm_err], dtype=corgidrp.image_dtype)
+    ls_data = np.array([mean_wavlens, mean_flux_profile])
+    gauss_profile = np.array([mean_peak, mean_wave, mean_fwhm, mean_peak_err, mean_wave_err, mean_fwhm_err])
 
     line_spread = LineSpread(ls_data, pri_hdr = prihdr, ext_hdr = exthdr, gauss_par = gauss_profile, input_dataset = nar_dataset)
     return line_spread

@@ -32,15 +32,13 @@ def create_flatfield(flat_dataset):
     """
 
 
-    # Use float64 to maintain precision when input is float32
-    combined_frame = np.nanmean(flat_dataset.all_data, axis=0, dtype=np.float64)
+    combined_frame = np.nanmean(flat_dataset.all_data, axis=0)
 
     flat_field = data.FlatField(combined_frame, pri_hdr=flat_dataset[0].pri_hdr.copy(),
                          ext_hdr=flat_dataset[0].ext_hdr.copy(), input_dataset=flat_dataset)
 
     #determine the standard error of the mean: stddev/sqrt(n_frames)
-    # Use float64 to maintain precision when input is float32
-    flat_field.err = np.nanstd(flat_dataset.all_data, axis=0, dtype=np.float64)/np.sqrt(len(flat_dataset))
+    flat_field.err = np.nanstd(flat_dataset.all_data, axis=0)/np.sqrt(len(flat_dataset))
     flat_field.err=flat_field.err.reshape((1,)+flat_field.err.shape) # Get it into the right dimension
 
 
@@ -99,8 +97,7 @@ def flatfield_residuals(dataset, N=None):
     matched_filters_smooth = [gauss(matched_filters[i],3) for i in range(len(matched_filters))] 
 
     #Estimate the initial uncertainty (standard error of the mean/median) for each filter group.
-    # Use float64 to maintain precision when input is float32
-    sigma_matched_filters = np.array([np.nanstd(images_split[i], axis=0, dtype=np.float64) / np.sqrt(M) for i in np.arange(N)])
+    sigma_matched_filters = np.array([np.nanstd(images_split[i], axis=0) / np.sqrt(M) for i in np.arange(N)])
     # Apply the same smoothing (Gauss(sigma=3)) to the error maps as was applied to the filters.
     sigma_matched_filters_smooth = [gauss(sigma_matched_filters[i], 3) for i in range(N)]
 

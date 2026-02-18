@@ -287,8 +287,7 @@ def apply_slit_transmission(input_dataset, slit_transmission):
         frame.hdu_list['SPEC'].data[:] = spec
         frame.hdu_list['SPEC_ERR'].data[:] = spec_err
         
-            # Use float64 to maintain precision when input is float32
-        spec_header['SLITFAC'] = float(np.nanmean(slit_curve, dtype=np.float64))
+        spec_header['SLITFAC'] = float(np.nanmean(slit_curve))
         spec_header['SLITCOR'] = True
         history_messages.append(f"spectrum is slit transmission corrected with mean factor={float(np.nanmean(slit_curve))}.")
 

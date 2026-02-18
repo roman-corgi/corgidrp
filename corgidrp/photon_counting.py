@@ -260,8 +260,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                 frame_data = temp_frame.data
                 frame_err = temp_frame.err[0]
                 bool_map = temp_frame.dq.astype(bool).astype(float)
-                # Use float64 to maintain precision when input is float32
-                if np.nanmean(frame_data[considered_indices], dtype=np.float64)/em_gain > pc_ecount_max:
+                if np.nanmean(frame_data[considered_indices])/em_gain > pc_ecount_max:
                     if safemode:
                         raise Exception('average # of electrons/pixel is > pc_ecount_max, which means '
                         'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
@@ -294,8 +293,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                     frame_pc_coadded_up = np.nansum([frame_pc_coadded_up, frames_pc_masked_up], axis=0)
                     frame_pc_coadded_low = np.nansum([frame_pc_coadded_low, frames_pc_masked_low], axis=0)
         else:    
-            # Use float64 to maintain precision when input is float32
-            if np.nanmean(dataset.all_data[:, considered_indices], dtype=np.float64)/em_gain > pc_ecount_max:
+            if np.nanmean(dataset.all_data[:, considered_indices])/em_gain > pc_ecount_max:
                 if safemode:
                     raise Exception('average # of electrons/pixel is > pc_ecount_max, which means '
                     'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '

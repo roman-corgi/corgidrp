@@ -40,9 +40,7 @@ def test_flat_div():
     # check the level of counts in flatfield is approximately correct
     assert np.mean(flat_frame.data) == pytest.approx(1, abs=1e-2)
     # check that the error is determined correctly
-    # Use allclose for float32 precision differences (flat.py uses np.nanstd with dtype=np.float64)
-    expected_err = np.nanstd(flat_dataset.all_data, axis=0, dtype=np.float64) / np.sqrt(len(flat_dataset))
-    assert np.allclose(expected_err, flat_frame.err[0], rtol=1e-5, atol=1e-8)
+    assert np.array_equal(np.std(flat_dataset.all_data, axis = 0)/np.sqrt(len(flat_dataset)), flat_frame.err[0])
 	# save flatfield
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     flat_filename = "sim_flat_calib.fits"
