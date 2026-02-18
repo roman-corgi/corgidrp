@@ -1108,8 +1108,8 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
                         mock_pri_hdr[key] = orig_pri_hdr[key]
             for key in preserve_img_keys:
                 if key in orig_img_hdr:
-                    type_class = type(mock_img_hdr[key])
                     try:
+                        type_class = type(mock_img_hdr[key])
                         mock_img_hdr[key] = type_class(orig_img_hdr[key])
                     except:
                         mock_img_hdr[key] = orig_img_hdr[key]
@@ -1129,6 +1129,11 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
                 mock_img_hdr['EMGAIN_A'] = float(mock_img_hdr['EMGAIN_A'])
             if 'EMGAIN_C' in mock_img_hdr and isinstance(mock_img_hdr['EMGAIN_C'], str):
                 mock_img_hdr['EMGAIN_C'] = float(mock_img_hdr['EMGAIN_C'])
+
+            # these keys were removed completely
+            for key in ['SATSPOTS', 'ISHOWFSC', 'HOWFSLNK']:
+                if key in mock_pri_hdr:
+                    del mock_pri_hdr[key]
 
             hdul_copy = fits.HDUList([hdu.copy() for hdu in hdul])
             hdul_copy[0].header = mock_pri_hdr

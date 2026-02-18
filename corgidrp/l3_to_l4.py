@@ -192,9 +192,9 @@ def find_star(input_dataset,
               drop_satspots_frames=True):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that 
-    contain satellite spots (indicated by ``SATSPOTS=1`` in the image header). The 
-    function computes the median of all science frames (``SATSPOTS=0``) and the median 
-    of all satellite spot frames (``SATSPOTS=1``), then estimates the star location 
+    contain satellite spots (indicated by ``SATSPOTS=True`` in the image header). The 
+    function computes the median of all science frames (``SATSPOTS=False``) and the median 
+    of all satellite spot frames (``SATSPOTS=True``), then estimates the star location 
     based on these median images and the initial guess provided.
 
     The star's (x, y) location is stored in each frame's extension header under 
@@ -254,7 +254,7 @@ def find_star(input_dataset,
     Args:
         input_dataset (corgidrp.data.Dataset):
             A dataset of L3-level frames. Frames should be labeled in their primary 
-            headers with ``SATSPOTS=0`` (science frames) or ``SATSPOTS=1`` 
+            headers with ``SATSPOTS=False`` (science frames) or ``SATSPOTS=True`` 
             (satellite spot frames).
         star_coordinate_guess (tuple of float or None, optional):
             Initial guess for the star's (x, y) location as absolute coordinates.
@@ -269,7 +269,7 @@ def find_star(input_dataset,
             otherwise defaults for the mode will be used:
             If None, default parameters corresponding to the specified observing_mode will be used.     
         drop_satspots_frames (bool, optional):
-            If True, frames with satellite spots (``SATSPOTS=1``) will be removed from 
+            If True, frames with satellite spots (``SATSPOTS=True``) will be removed from 
             the returned dataset. Defaults to True.
 
     Returns:
@@ -312,10 +312,10 @@ def find_star(input_dataset,
         sat_spot_frames = []
         for frame in split_dataset.frames:
             satspots = frame.ext_hdr["SATSPOTS"]
-            if satspots == 0:
+            if satspots == False:
                 sci_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
-            elif satspots == 1:
+            elif satspots == True:
                 sat_spot_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
             else:
@@ -360,7 +360,7 @@ def find_star(input_dataset,
             #align second slice on first slice and drop satellite spot images if necessary
             shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
                     aligned_slice = shift(frame.data[1], shift_value)
                     frame.data[1] = aligned_slice
                     frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]

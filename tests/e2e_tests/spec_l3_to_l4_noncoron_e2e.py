@@ -78,7 +78,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
         pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
-        ext_hdr["FSMLOS"] = False
+        ext_hdr["FSMLOS"] = 0
         # add a fake satellite spot image from a small band simulation
         image_spot = Image(psf_array_spot, pri_hdr = pri_hdr.copy(), ext_hdr = ext_hdr.copy(),
                            err =np.zeros_like(psf_array_spot), err_hdr = errhdr.copy(),
@@ -438,7 +438,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'# '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

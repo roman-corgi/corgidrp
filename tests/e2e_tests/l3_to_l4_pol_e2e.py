@@ -326,7 +326,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                     split_frame.pri_hdr['TARGET'] = targetname
                     split_frame.ext_hdr['DPAMNAME'] = wollaston
                     split_frame.pri_hdr['PA_APER'] = rotation_angle
-                    split_frame.ext_hdr['SATSPOTS'] = 1
+                    split_frame.ext_hdr['SATSPOTS'] = True
 
                     input_image_list.append(split_frame)
 
