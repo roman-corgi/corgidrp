@@ -216,7 +216,10 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
 def sort_pupilimg_frames(
     dataset_in,
     cal_type='', 
-    actual_visit=True):
+    actual_visit=True,
+    nl_gain1_aux='NF0006.aux',
+    leave_out_aux='NF0021.aux',
+    mixed_aux='NF0007.aux'):
     """ 
     Sorting algorithm that given a dataset will output a dataset with the
     frames used to generate a mean frame and the frames used to calibrate
@@ -239,6 +242,12 @@ def sort_pupilimg_frames(
         the letters within parenthesis are optional.
       actual_visit (bool): if True, the dataset is expected to be a dataset from an actual visit (frames taken in the specific order for the visit), 
         as opposed to a generic collection of files from which we might extract files that satisfy the requirements of the calibration script. Default is True.
+      nl_gain1_aux (str): filename of AUX file containing unity-gain nonlin frames.  Defaults to the planned name of the file.  If files do not have the header AUXFILE, 
+        this keyword is not used.
+      leave_out_aux (str): filename of AUX file containing frames in the observation not relevant to k gain or nonlin (i.e., EM gain cal). Defaults to the planned name of the file.  If files do not have the header AUXFILE, 
+        this keyword is not used.
+      mixed_aux (str): filename of AUX file containing both nonlin (at EM gain of 20) and EM gain cal frames. Used to discard the EM gain files. Defaults to the planned name of the file.  If files do not have the header AUXFILE, 
+        this keyword is not used.
 
     Returns:
 
@@ -251,11 +260,15 @@ def sort_pupilimg_frames(
             if 'PUPIL' not in val.upper():
                 raise Exception(f'Expected DPAMNAME to contain PUPIL, but found {val}.')
         del split_dpam
-        split_cfam, vals = dataset_in.split_dataset(exthdr_keywords=['CFAMNAME'])
-        for val in vals:
-            if 'DARK' in val.upper():
-                raise Exception(f'CFAMNAME should not be DARK.')
-        del split_cfam
+        frames_to_keep = []
+        for frame in dataset_in:
+            if ('DARK' not in frame.ext_hdr['CFAMNAME'].upper()) and \
+                ((frame.pri_hdr['AUXFILE'].upper() != leave_out_aux.upper()) or \
+                (frame.pri_hdr['AUXFILE'].upper() == mixed_aux.upper() and float(frame.ext_hdr['EMGAIN_C']) == 20.0)):
+                frames_to_keep.append(frame)
+        if len(frames_to_keep) == 0:
+            raise Exception("Input dataset appears to have no files relevant for k gain/nonlin calibration.")
+        dataset_in = data.Dataset(frames_to_keep) #overwrite
     split_datetime_ds, _ = dataset_in.split_dataset(exthdr_keywords=['DATETIME'])
     for ds in split_datetime_ds:
         if len(ds) > 1:
@@ -323,7 +336,7 @@ def sort_pupilimg_frames(
     # Remove MNFRAME frames from unity gain frames
     split_exptime[0].remove(split_exptime[0][idx_mean_frame])
     split_exptime[1].remove(split_exptime[1][idx_mean_frame])
-    # in the datasets, use the AUXFILE with the most frames
+    # in the datasets, use the AUXFILE with the most frames unless the specific AUXFILE name available
     unity_gain_exptimes_auxs = []
     for dataset in split_exptime[0]:
         subs, vals = dataset.split_dataset(prihdr_keywords=['AUXFILE'])
@@ -331,7 +344,10 @@ def sort_pupilimg_frames(
         if len(subs_lengths) == 0:
             unity_gain_exptimes_auxs.append(dataset)  # no AUXFILE value, so use the dataset as is
         else:
-            dominant_ind = np.argmax(subs_lengths)
+            # if nl_gain1_aux in vals:
+            #     dominant_ind = vals.index(nl_gain1_aux)
+            # else: XXX
+            dominant_ind = np.argmax(subs_lengths) # works if no EM gain cal files included in input dataset, but in general, they will be 
             unity_gain_exptimes_auxs.append(subs[dominant_ind])
     inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, unity_gain_filepath_list = sort_remove_frames(unity_gain_exptimes_auxs, cal_type=cal_type, actual_visit=actual_visit)
     if actual_visit and (inds_leave_out is None or del_rep_inds_tot is None):
@@ -372,7 +388,7 @@ def sort_pupilimg_frames(
         nonlin_emgain = []
         for idx_gain_set, gain_set in enumerate(split_cmdgain[0]):
             nonunity_split_exptime = gain_set.split_dataset(exthdr_keywords=['EXPTIME'])
-            # in the datasets, use the AUXFILE with the most frames
+            # in the datasets, use the AUXFILE with the most frames unless the specific AUXFILE name available
             exptimes_auxs = []
             for dataset in nonunity_split_exptime[0]:
                 subs, vals = dataset.split_dataset(prihdr_keywords=['AUXFILE'])
