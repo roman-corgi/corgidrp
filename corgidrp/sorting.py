@@ -21,12 +21,12 @@ def extract_datetime(datetime_str):
     return output
 
 def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
-    '''For a given EM gain, this function groups frames consecutive in time stamp into 
-    groups with the same exposure time.  Then it finds the two sets with the same 
-    exposure time that are the most separated in time.  It then examines any other sets 
-    with repeated exposure times, keeps the set of those with the most frames, and 
+    '''For a given EM gain, this function groups frames consecutive in time stamp into
+    groups with the same exposure time.  Then it finds the two sets with the same
+    exposure time that are the most separated in time.  It then examines any other sets
+    with repeated exposure times, keeps the set of those with the most frames, and
     discards the rest.
-     
+
     Args:
       dataset_in_list (list of corgidrp.Dataset): list of datasets with all the frames to be sorted.
       cal_type (string): the calibration type. Case insensitive.
@@ -34,9 +34,9 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
         'k-gain' or 'kgain' for K-gain calibration
         'non-lin(earity)', 'nonlin(earity)' for non-linearity calibration, where
         the letters within parenthesis are optional.
-      actual_visit (bool): if True, the dataset is expected to be a dataset from an actual visit (frames taken in the specific order for the visit), 
+      actual_visit (bool): if True, the dataset is expected to be a dataset from an actual visit (frames taken in the specific order for the visit),
         as opposed to a generic collection of files from which we might extract files that satisfy the requirements of the calibration script. Default is True.
-        
+
     Returns:
       inds_leave_out (list): list of indices of frames to be left out of the final
         dataset.
@@ -44,10 +44,10 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
         left out of the final dataset.
       exptime_cons (list): list of exposure times for the sets, including the ones to be excluded.
       count_cons (list): list of number of frames for each exposure time set, including the ones to be excluded.
-      filepath_list (list): list of file paths for the frames, including the ones to be excluded.    
+      filepath_list (list): list of file paths for the frames, including the ones to be excluded.
     '''
-    
-    
+
+
     # Frames must be taken consecutively
     cal_frame_time_list = []
     exptime_list = []
@@ -104,10 +104,10 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
     # Beyond this boundary would mean going into the territory of EM gain calibration frames
     ########
     # Find the longest set of consecutive positive values in boundary_wo_indices
-    boundary_wo_indices = np.where(np.diff(exptime_cons_wo_repeats) < 0)[0] 
-    if len(boundary_wo_indices) > 0:  
-        if len(boundary_wo_indices) == 1: 
-            # if the boundary is nearer to the beginning 
+    boundary_wo_indices = np.where(np.diff(exptime_cons_wo_repeats) < 0)[0]
+    if len(boundary_wo_indices) > 0:
+        if len(boundary_wo_indices) == 1:
+            # if the boundary is nearer to the beginning
             if len(exptime_cons_wo_repeats) - 1 - boundary_wo_indices[0] > boundary_wo_indices[0] - 1:
                 boundary_index = None
                 lower_boundary_wo_index = boundary_wo_indices[0]
@@ -118,7 +118,7 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
                 boundary_exptime = exptime_cons_wo_repeats[boundary_wo_index]
                 boundary_index = np.where(exptime_cons == boundary_exptime)[0][0] # only one occurence since not a repeated set
                 lower_boundary_index = 0
-        else: 
+        else:
             # Find largest run of consecutive indices
             boundary_diffwo_index = np.argmax(np.diff(boundary_wo_indices))+1
             lower_boundary_diffwo_index = boundary_diffwo_index - 1
@@ -128,9 +128,9 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
             lower_boundary_exptime = exptime_cons_wo_repeats[lower_boundary_wo_index]
             boundary_index = np.where(exptime_cons == boundary_exptime)[0][0] # only one occurence since not a repeated set
             lower_boundary_index = np.where(exptime_cons == lower_boundary_exptime)[0][0]
-        
+
     else:
-        boundary_index = None 
+        boundary_index = None
         lower_boundary_index = 0
 
     set1 = None
@@ -173,8 +173,8 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
                 if arr_within_boundary.size > 1: # otherwise, not a repeated set effectively
                     del_rep_inds = np.where(count_cons[arr_within_boundary] != np.max(count_cons[arr_within_boundary]))[0]
                     if len(del_rep_inds) == 0: # then all within arr have the same number of frames
-                        # then just pick one 
-                        del_rep_inds = np.array([arr_within_boundary[0]]) 
+                        # then just pick one
+                        del_rep_inds = np.array([arr_within_boundary[0]])
                 else:
                     del_rep_inds = np.array([]) # append nothing
             del_rep_inds_tot = np.append(del_rep_inds_tot, del_rep_inds)
@@ -202,7 +202,7 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
                 for k in range(time_ind1, time_ind2+1):
                         ind_remove = np.where(cal_frame_time_list == cal_frame_time_list_sorted[k])[0][0]
                         inds_leave_out.append(ind_remove)
-        # also remove repeated sets if k gain since no drift correction employed for k gain calibration 
+        # also remove repeated sets if k gain since no drift correction employed for k gain calibration
         # (and so that no exposure time is more heavily weighted than another)
         del_rep_inds_tot = np.append(del_rep_inds_tot, set2)
         time_ind1 = np.sum(count_cons[0:set2]).astype(int) # first of exposure time set
@@ -215,12 +215,9 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
 
 def sort_pupilimg_frames(
     dataset_in,
-    cal_type='', 
-    actual_visit=True,
-    nl_gain1_aux='NF0006.aux',
-    leave_out_aux='NF0021.aux',
-    mixed_aux='NF0007.aux'):
-    """ 
+    cal_type='',
+    actual_visit=True):
+    """
     Sorting algorithm that given a dataset will output a dataset with the
     frames used to generate a mean frame and the frames used to calibrate
     the calibration type: k-gain. non-linearity.
@@ -232,22 +229,16 @@ def sort_pupilimg_frames(
     Args:
       dataset_in (corgidrp.Dataset): dataset with all the frames to be sorted.
         By default, it is expected to contain all the frames from the PUPILIMG
-        visit files associated with a calibration campaign.  
-        Function works if data in Datset is None (useful for large RAM-heavy Dataset), 
-        and data is loaded in at the end.  
+        visit files associated with a calibration campaign.
+        Function works if data in Datset is None (useful for large RAM-heavy Dataset),
+        and data is loaded in at the end.
       cal_type (string): the calibration type. Case insensitive.
         Accepted values are:
         'k-gain' or 'kgain' for K-gain calibration
         'non-lin(earity)', 'nonlin(earity)' for non-linearity calibration, where
         the letters within parenthesis are optional.
-      actual_visit (bool): if True, the dataset is expected to be a dataset from an actual visit (frames taken in the specific order for the visit), 
+      actual_visit (bool): if True, the dataset is expected to be a dataset from an actual visit (frames taken in the specific order for the visit),
         as opposed to a generic collection of files from which we might extract files that satisfy the requirements of the calibration script. Default is True.
-      nl_gain1_aux (str): filename of AUX file containing unity-gain nonlin frames.  Defaults to the planned name of the file.  If files do not have the header AUXFILE, 
-        this keyword is not used.
-      leave_out_aux (str): filename of AUX file containing frames in the observation not relevant to k gain or nonlin (i.e., EM gain cal). Defaults to the planned name of the file.  If files do not have the header AUXFILE, 
-        this keyword is not used.
-      mixed_aux (str): filename of AUX file containing both nonlin (at EM gain of 20) and EM gain cal frames. Used to discard the EM gain files. Defaults to the planned name of the file.  If files do not have the header AUXFILE, 
-        this keyword is not used.
 
     Returns:
 
@@ -261,10 +252,8 @@ def sort_pupilimg_frames(
                 raise Exception(f'Expected DPAMNAME to contain PUPIL, but found {val}.')
         del split_dpam
         frames_to_keep = []
-        for frame in dataset_in:
-            if ('DARK' not in frame.ext_hdr['CFAMNAME'].upper()) and \
-                ((frame.pri_hdr['AUXFILE'].upper() != leave_out_aux.upper()) or \
-                (frame.pri_hdr['AUXFILE'].upper() == mixed_aux.upper() and float(frame.ext_hdr['EMGAIN_C']) == 20.0)):
+        for frame in dataset_in: # rejecting all DARK frames, which are only used for EM gain cal
+            if ('DARK' not in frame.ext_hdr['CFAMNAME'].upper()):
                 frames_to_keep.append(frame)
         if len(frames_to_keep) == 0:
             raise Exception("Input dataset appears to have no files relevant for k gain/nonlin calibration.")
@@ -293,7 +282,7 @@ def sort_pupilimg_frames(
     mean_frame_time_list = []
     for frame in split_exptime[0][idx_mean_frame]:
         mean_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
-    # Choose the frames with consecutive time stamp values 
+    # Choose the frames with consecutive time stamp values
     mean_frame_time_sort = np.array(mean_frame_time_list)
     mean_frame_time_sort.sort()
     count_cons = [1]
@@ -320,8 +309,8 @@ def sort_pupilimg_frames(
             frame.pri_hdr['OBSNAME'] = 'MNFRAME'
             mean_frame_list += [frame]
             n_mean_frame += 1
-            
-    sorting_summary = (f'Mean frame has {n_mean_frame} unity frames with' + 
+
+    sorting_summary = (f'Mean frame has {n_mean_frame} unity frames with' +
         f' exposure time {exptime_mean_frame} seconds. ')
 
     # K-gain and non-linearity
@@ -344,10 +333,7 @@ def sort_pupilimg_frames(
         if len(subs_lengths) == 0:
             unity_gain_exptimes_auxs.append(dataset)  # no AUXFILE value, so use the dataset as is
         else:
-            # if nl_gain1_aux in vals:
-            #     dominant_ind = vals.index(nl_gain1_aux)
-            # else: XXX
-            dominant_ind = np.argmax(subs_lengths) # works if no EM gain cal files included in input dataset, but in general, they will be 
+            dominant_ind = np.argmax(subs_lengths) # works if no EM gain cal files included in input dataset, but in general, they will be
             unity_gain_exptimes_auxs.append(subs[dominant_ind])
     inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, unity_gain_filepath_list = sort_remove_frames(unity_gain_exptimes_auxs, cal_type=cal_type, actual_visit=actual_visit)
     if actual_visit and (inds_leave_out is None or del_rep_inds_tot is None):
@@ -356,7 +342,7 @@ def sort_pupilimg_frames(
         # then keep them all
         inds_leave_out = []
         del_rep_inds_tot = []
-    
+
     # Sort unity gain filenames
     # Update OBSNAME and take profit to check files are in the list
     n_kgain = 0
@@ -383,7 +369,7 @@ def sort_pupilimg_frames(
         # Non-unity gain frames
         split_cmdgain[0].remove(split_cmdgain[0][idx_unity])
         split_cmdgain[1].remove(split_cmdgain[1][idx_unity])
-        
+
         n_nonlin = 0
         nonlin_emgain = []
         for idx_gain_set, gain_set in enumerate(split_cmdgain[0]):
@@ -418,7 +404,7 @@ def sort_pupilimg_frames(
 
             sorting_summary += (f'Non-linearity has {n_nonlin} frames with gains ' +
                 f'{nonlin_emgain}')
-        
+
     history = (f'Dataset to calibrate {cal_type.upper()}. A sorting algorithm ' +
         'based on the constraints that NFRAMES, EXPTIME and CMDGAIN have when collecting ' +
         'calibration data for K-gain, Non-linearity and EM-gain vs DAC '
