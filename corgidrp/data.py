@@ -2994,7 +2994,7 @@ class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
 
-    # TODO: Add more bandpasses, modes to self.wave_hlc
+    # TODO: Add more bandpasses, modes to self.filter_wavs
     #       Add wcs header info!
 
     Attrs:
@@ -3039,8 +3039,8 @@ class PyKLIPDataset(pyKLIP_Data):
         super(PyKLIPDataset, self).__init__()
 
         # Set filter wavelengths
-        self.wave_hlc = {'1F': 575e-9} # meters
-            
+    
+        self.filter_wavs = {'1F': 575e-9, '4F': 825e-9} # meters
         # Read science and reference files.
         self.readdata(dataset, psflib_dataset, highpass)
         
@@ -3206,10 +3206,9 @@ class PyKLIPDataset(pyKLIP_Data):
 
             # Get center wavelengths
             try:
-                CWAVEL = self.wave_hlc[CFAMNAME]
+                CWAVEL = self.filter_wavs[CFAMNAME]
             except:
-                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
-            
+                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')           
             # Rounding error introduced here?
             wvs_all += [CWAVEL] * NINTS
 
