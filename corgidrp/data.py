@@ -476,6 +476,10 @@ class Image():
         if not 'IS_BAD' in self.ext_hdr:
             self.ext_hdr.set('IS_BAD', False, "Was this frame deemed bad?")
 
+        # PHTCNT can come in as an int from L1 data but the DRP expects it as a string
+        if 'PHTCNT' in self.pri_hdr and not isinstance(self.pri_hdr['PHTCNT'], str):
+            self.pri_hdr['PHTCNT'] = str(self.pri_hdr['PHTCNT'])
+
         # the DRP has touched this file so it's origin is now this DRP
         self.pri_hdr['ORIGIN'] = 'DRP'
 
