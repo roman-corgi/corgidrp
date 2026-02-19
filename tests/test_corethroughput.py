@@ -454,13 +454,17 @@ def test_cal_file():
     psf_cube_in = np.array(psf_cube_in)
 
     # Compare the PSF cube from the calibration file, which may have a smaller
-    # extension, with the input ones
+    # extension, with the input ones. Compute crop offsets directly from PSF
+    # locations rather than searching by pixel value (which doesn't work consistently
+    # with different float precisions being compared)
     cal_file_side_0 = ct_cal_file.data.shape[1]
     cal_file_side_1 = ct_cal_file.data.shape[2]
+    n_pix_psf = (cal_file_side_0 - 1) // 2
     for i_psf, psf in enumerate(psf_cube_in):
-        loc_00 = np.argwhere(psf == ct_cal_file.data[i_psf][0][0])[0]
-        assert np.all(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
-            loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal_file.data[i_psf])
+        row_start = max(int(np.round(psf_loc_input[i_psf][1])) - n_pix_psf, 0)
+        col_start = max(int(np.round(psf_loc_input[i_psf][0])) - n_pix_psf, 0)
+        assert np.allclose(psf[row_start:row_start+cal_file_side_0,
+            col_start:col_start+cal_file_side_1], ct_cal_file.data[i_psf], rtol=1e-6)
 
     # Verify that the PSF images are best centered at each set of coordinates.
     test_result_psf_max_row = []  # intialize
