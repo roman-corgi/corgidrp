@@ -17,7 +17,7 @@ import corgidrp
 import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
-                           get_latest_cal_file)
+                           get_latest_cal_file, compare_to_mocks_hdrs)
 
 
 
@@ -172,6 +172,8 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     cal_file = get_latest_cal_file(e2eoutput_path, '*_lsf_cal.fits', logger)
     check_filename_convention(os.path.basename(cal_file), 'cgi_*_lsf_cal.fits', "LineSpread calibration product", logger)
 
+    compare_to_mocks_hdrs(cal_file, create_default_L2b_headers)
+    
     with fits.open(cal_file) as hdul:
         verify_hdu_count(hdul, 3, "linespread calibration product", logger)
         

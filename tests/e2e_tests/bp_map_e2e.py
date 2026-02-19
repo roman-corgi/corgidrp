@@ -147,6 +147,8 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Load the generated bad pixel map image and master dark reference data
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
 
+    check.compare_to_mocks_hdrs(generated_bp_map_file, mocks.create_default_L2a_headers)
+
     with fits.open(master_dark_ref) as hdulist:
         dark_ref_dat = hdulist[1].data
 
@@ -325,7 +327,9 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         raise FileNotFoundError(f"No bad pixel map file found in {bp_map_outputdir}")
     generated_bp_map_file = generated_bp_map_files[0]
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
-
+    
+    check.compare_to_mocks_hdrs(generated_bp_map_file, mocks.create_default_L2a_headers)
+    
     with fits.open(master_dark_ref) as hdulist:
         dark_ref_dat = hdulist[1].data
         diff = generated_bp_map_img.data - dark_ref_dat.data
@@ -369,7 +373,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
     # e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#
     outputdir = thisfile_dir
 
     # Argument parser setup
@@ -385,6 +389,6 @@ if __name__ == "__main__":
     outputdir = args.outputdir
 
     # Run the main functions with parsed arguments
-    test_bp_map_master_dark_e2e(e2edata_dir, outputdir)
     test_bp_map_simulated_dark_e2e(e2edata_dir, outputdir)
+    test_bp_map_master_dark_e2e(e2edata_dir, outputdir)
     

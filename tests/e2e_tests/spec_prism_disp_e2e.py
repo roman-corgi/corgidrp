@@ -18,7 +18,7 @@ from corgidrp.mocks import create_default_L2b_headers, rename_files_to_cgi_forma
 from corgidrp.walker import walk_corgidrp
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
-                           validate_binary_table_fields, get_latest_cal_file)
+                           validate_binary_table_fields, get_latest_cal_file, compare_to_mocks_hdrs)
 import corgidrp
 import corgidrp.caldb as caldb
 
@@ -169,6 +169,8 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     # Validate output calibration product
     cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits', logger)
     check_filename_convention(os.path.basename(cal_file), 'cgi_*_dpm_cal.fits', "DPM calibration product", logger)
+
+    compare_to_mocks_hdrs(cal_file, create_default_L2b_headers)
 
     with fits.open(cal_file) as hdul:
         verify_hdu_count(hdul, 2, "DPM calibration product", logger)

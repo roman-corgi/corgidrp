@@ -15,6 +15,7 @@ import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
 import corgidrp.caldb as caldb
+import corgidrp.check as check
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -153,6 +154,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     assert np.all(ct_map_walker[2].data == ct_map_mock.err)
     # DQ
     assert np.all(ct_map_walker[3].data == ct_map_mock.dq)
+
+    check.compare_to_mocks_hdrs(ct_map_filepath, mocks.create_default_L2a_headers)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

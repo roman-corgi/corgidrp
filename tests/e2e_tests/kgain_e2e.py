@@ -192,6 +192,8 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     assert np.abs(diff_kgain) == 0
     assert np.abs(diff_readnoise) == 0 
 
+    check.compare_to_mocks_hdrs(kgain_file, mocks.create_default_L2a_headers)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 

@@ -203,6 +203,8 @@ def test_nonlin_cal_e2e(
     # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
 
+    check.compare_to_mocks_hdrs(nonlin_drp_filepath, mocks.create_default_L2a_headers)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
     # Print success message

@@ -552,6 +552,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     assert(trad_dark.filename == test_filename)
     print('e2e test for trad_dark_im calibration passed')
 
+    check.compare_to_mocks_hdrs(generated_trad_dark_file, mocks.create_default_L2a_headers)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 

@@ -274,7 +274,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
             output_files.append(file)
 
     expected_platescale = 21.8
-    expected_northangle = 45
+    expected_northangle = 45.
     target = (80.553428801, -69.514096821)
 
     # Look for astrometric calibration file in the main directory (it's not L2a or L2b data)
@@ -299,13 +299,15 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
+
+    check.compare_to_mocks_hdrs(astrom_cal_files[0], mocks.create_default_L2b_headers)
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

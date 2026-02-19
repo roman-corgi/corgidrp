@@ -643,8 +643,8 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CRPIX2'] = 0
     exthdr['CTYPE1'] = 'RA---TAN'
     exthdr['CTYPE2'] = 'DEC--TAN'
-    exthdr['CDELT1'] = 0
-    exthdr['CDELT2'] = 0
+    exthdr['CDELT1'] = 0.
+    exthdr['CDELT2'] = 0.
     exthdr['CRVAL1'] = 0
     exthdr['CRVAL2'] = 0
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
@@ -1557,8 +1557,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
 
-    new_hdr['CDELT1'] = (platescale * 0.001) / 3600
-    new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+    new_hdr['CDELT1'] = (platescale * 0.001) / 3600.
+    new_hdr['CDELT2'] = (platescale * 0.001) / 3600.
 
     new_hdr['CRVAL1'] = target[0] + offset[0]
     new_hdr['CRVAL2'] = target[1] + offset[1]
@@ -1618,8 +1618,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         new_hdr['CTYPE1'] = 'RA---TAN'
         new_hdr['CTYPE2'] = 'DEC--TAN'
         
-        new_hdr['CDELT1'] = (platescale * 0.001) / 3600
-        new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+        new_hdr['CDELT1'] = (platescale * 0.001) / 3600.
+        new_hdr['CDELT2'] = (platescale * 0.001) / 3600.
         
         new_hdr['CRVAL1'] = dither_target_ras[i] + offset[0]
         new_hdr['CRVAL2'] = dither_target_decs[i] + offset[1]
@@ -3005,8 +3005,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
     exthdr['CTYPE2']   = 'DEC--TAN'
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600.  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
     exthdr['BUNIT'] = 'photoelectron'
@@ -3172,8 +3172,8 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
     exthdr['CTYPE2']   = 'DEC--TAN'
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600.  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)

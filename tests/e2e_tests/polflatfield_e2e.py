@@ -17,7 +17,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
-from corgidrp.check import (check_filename_convention, check_dimensions, verify_header_keywords)
+from corgidrp.check import (check_filename_convention, check_dimensions, verify_header_keywords, compare_to_mocks_hdrs)
 
 #Get path to this file
 current_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -524,6 +524,11 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
         walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
     
+    # Find the latest file that ends with _flt_cal in flat_outputdir
+    flt_cal_files = glob.glob(os.path.join(flat_outputdir, "*_flt_cal.fits"))
+    if flt_cal_files:
+        cal_file = max(flt_cal_files, key=os.path.getctime)
+    compare_to_mocks_hdrs(cal_file, mocks.create_default_L2a_headers)
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
@@ -543,7 +548,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     
     outputdir = thisfile_dir
-    e2edata_dir =  "/Users/jmilton/Documents/CGI/E2E_Test_Data2"
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'"/Users/jmilton/Documents/CGI/E2E_Test_Data2"
 
     ap = argparse.ArgumentParser(description="run the l2b-> PolFlatfield end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

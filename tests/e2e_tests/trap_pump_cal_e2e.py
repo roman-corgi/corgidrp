@@ -11,6 +11,7 @@ import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import corgidrp.check as check
 import shutil
 try:
     from corgidrp.pump_trap_calibration import rebuild_dict
@@ -350,6 +351,8 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     pass
     # trap densities should all match if the above passes; that was tested in II&T tests mainly
     # b/c all the outputs of the trap-pump function were tested
+
+    check.compare_to_mocks_hdrs(generated_trapcal_file, mocks.create_default_L2a_headers)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
