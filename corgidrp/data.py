@@ -1918,7 +1918,7 @@ class AstrometricCalibration(Image):
     def save(self, filedir=None, filename=None):
         """
         Save to disk, keeping data as float64 since astrometric coordinates
-        (RA/DEC in degrees) require more than float32's 7-digit precision.
+        require more than float32 precision.
         """
         # Temporarily override image_dtype to preserve float64 for this class
         original_dtype = corgidrp.image_dtype

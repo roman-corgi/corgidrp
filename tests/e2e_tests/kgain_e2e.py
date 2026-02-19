@@ -34,11 +34,6 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
 def test_l1_to_kgain(e2edata_path, e2eoutput_path):
-    if not _has_cal_kgain:
-        pytest.skip(
-            'CGI cal package (kgain) required. Install with: '
-            'pip install -r requirements_e2etests.txt'
-        )
 
     # sort and prepare raw files to run through both II&T and DRP
     default_config_file = os.path.join(cal.lib_dir, 'kgain', 'config_files', 'kgain_parms.yaml')

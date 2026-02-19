@@ -153,8 +153,7 @@ def test_add_error_term():
     assert image_test.err_hdr["Layer_3"] == "error_nuts"
 
     # Use err_3d.copy() so that add_error_term modifying self.err in-place
-    # doesn't also modify the original err_3d array (they no longer share memory
-    # because Image.__init__ upcasts float arrays to float64, creating a copy)
+    # doesn't also modify the original err_3d array 
     image_3d = Image(data_3d,prhd,exthd,err_3d.copy(),dq_3d,errhd,dqhd)
     image_3d.add_error_term(err1_3d, "error_noid")
     # Combined error should be sqrt(original^2 + added^2)

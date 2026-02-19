@@ -132,7 +132,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     ####### Run the CorGI DRP walker script
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
-    # Clean up the calibration database entries (best-effort; entry may be missing if path changed or caldb was overwritten)
+    # Clean up the calibration database entries (entry may be missing)
     for entry in (noise_maps, flat, master_dark, bp_map):
         try:
             this_caldb.remove_entry(entry)
