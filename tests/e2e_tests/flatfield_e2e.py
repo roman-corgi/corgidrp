@@ -529,14 +529,9 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     logger.info('Processing flat field complete')
 
 if __name__ == "__main__":
-    # Use arguments to run the test. Users can then write their own scripts
-    # that call this script with the correct arguments and they do not need
-    # to edit the file. The arguments use the variables in this file as their
-    # defaults allowing the use to edit the file if that is their preferred
-    # workflow.
-    # e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    
     outputdir = thisfile_dir
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the l2b-> Flatfield end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
