@@ -630,8 +630,20 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
                                     # Prefer longer descriptions (keep the most complete one)
                                     if keyword not in keyword_descriptions or len(description) > len(keyword_descriptions[keyword]):
                                         keyword_descriptions[keyword] = description
+        
+        # Try to get descriptions from l1.csv if not found in docs_dir
+        l1_csv_path = os.path.join(current_dir, '..', 'data_formats', 'l1.csv')
+        if os.path.exists(l1_csv_path):
+            csv_data = pd.read_csv(l1_csv_path)
+            if 'Keyword' in csv_data.columns and 'Description' in csv_data.columns:
+                for _, row in csv_data.iterrows():
+                    keyword = row['Keyword'].strip() if isinstance(row['Keyword'], str) else str(row['Keyword'])
+                    description = row['Description'].strip() if isinstance(row['Description'], str) else ''
+                    # Only add if we don't already have it and description is not empty
+                    if keyword not in keyword_descriptions and description:
+                        keyword_descriptions[keyword] = description
     except Exception as e:
-        # If we can't load RST files, just continue without reference descriptions
+        # If we can't load RST files or l1.csv, just continue without reference descriptions
         pass
     
     # Open the FITS file
