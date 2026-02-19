@@ -2946,7 +2946,37 @@ class CoreThroughputMap(Image):
             data_or_filepath.shape[0] == 3
             if data_or_filepath[2,:].max() > 1 or data_or_filepath[2,:].min() < 0:
                 raise ValueError('Corethroughput map values should be within 0 and 1')
+        
+        if input_dataset is not None:
+            # Filter to off-axis PSF frames only (exclude pupil images) to check
+            # that PAM keywords are consistent across all images
+            offaxis_frames = [f for f in input_dataset
+                              if f.ext_hdr.get('DPAMNAME') != 'PUPIL']
+            offaxis_dataset = Dataset(offaxis_frames)
 
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                offaxis_dataset, averaged_keywords = [
+                    'RA', 'DEC', 'RAPM', 'DECPM', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3'
+                    'ROLL', 'PITCH', 'YAW', 'EXCAMT', 'NOVEREXP', 'PROXET',
+                    'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    ],
+                    invalid_keywords = [
+                        'FTIMEUTC', 'PROXET', 'DATETIME', 'FSMSG1',
+                        'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                        ]
+                )
+        
+            # Apply merged headers from PSF part of the dataset back to the output 
+            self.pri_hdr = pri_hdr
+            ext_hdr['BUNIT'] = 'photoelectron/pix/s'
+            self.ext_hdr = ext_hdr
+            self.err_hdr = err_hdr
+            self.dq_hdr = dq_hdr
+            
         # Additional bookkeeping for a calibration file:
         # If this is a new calibration file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if
@@ -2994,7 +3024,7 @@ class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
 
-    # TODO: Add more bandpasses, modes to self.wave_hlc
+    # TODO: Add more bandpasses, modes to self.filter_wavs
     #       Add wcs header info!
 
     Attrs:
@@ -3039,8 +3069,8 @@ class PyKLIPDataset(pyKLIP_Data):
         super(PyKLIPDataset, self).__init__()
 
         # Set filter wavelengths
-        self.wave_hlc = {'1F': 575e-9} # meters
-            
+    
+        self.filter_wavs = {'1F': 575e-9, '4F': 825e-9} # meters
         # Read science and reference files.
         self.readdata(dataset, psflib_dataset, highpass)
         
@@ -3206,10 +3236,9 @@ class PyKLIPDataset(pyKLIP_Data):
 
             # Get center wavelengths
             try:
-                CWAVEL = self.wave_hlc[CFAMNAME]
+                CWAVEL = self.filter_wavs[CFAMNAME]
             except:
-                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
-            
+                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')           
             # Rounding error introduced here?
             wvs_all += [CWAVEL] * NINTS
 
