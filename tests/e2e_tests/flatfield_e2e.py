@@ -272,17 +272,18 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
         walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
 
-    logger.info('Processing flat field complete')
-
+    
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
-    #flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_flt_cal")
-    #flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
-    #good_region = np.where(flat.data != 1)
-    #diff = flat.data - input_flat # compute residual from true
-    #smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
-    #print(np.std(smoothed_diff[good_region]))
-    #assert np.std(smoothed_diff[good_region]) < 0.0071
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_flt_cal")
+    flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
+    good_region = np.where(flat.data != 1)
+    diff = flat.data - input_flat # compute residual from true
+    smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
+    print(np.std(smoothed_diff[good_region]))
+    assert np.std(smoothed_diff[good_region]) < 0.0071
+
+    logger.info('Processing flat field complete')
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -513,6 +514,16 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     with warnings.catch_warnings():  
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
         walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
+
+    ####### Test the flat field result
+    # the requirement: <=0.71% error per resolution element
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_flt_cal")
+    flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
+    good_region = np.where(flat.data != 1)
+    diff = flat.data - input_flat # compute residual from true
+    smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
+    print(np.std(smoothed_diff[good_region]))
+    assert np.std(smoothed_diff[good_region]) < 0.0071
 
     logger.info('Processing flat field complete')
 
