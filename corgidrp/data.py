@@ -1919,6 +1919,10 @@ class AstrometricCalibration(Image):
         """
         Save to disk, keeping data as float64 since astrometric coordinates
         require more than float32 precision.
+
+        Args:
+            filedir (str): filedir to save to
+            filename (str): filepath to save to
         """
         # Temporarily override image_dtype to preserve float64 for this class
         original_dtype = corgidrp.image_dtype
@@ -2354,6 +2358,14 @@ class SlitTransmission(Image):
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
+        # recast data to the appropriate bit depth as set by the pipeline settings
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+        if self.x_offset is not None:
+            self.x_offset = self.x_offset.astype(corgidrp.image_dtype, copy=False)
+        if self.y_offset is not None:
+            self.y_offset = self.y_offset.astype(corgidrp.image_dtype, copy=False)
+
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
@@ -2367,7 +2379,7 @@ class SlitTransmission(Image):
             warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
             hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
-        
+
 class FpamFsamCal(Image):
     """
     Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
