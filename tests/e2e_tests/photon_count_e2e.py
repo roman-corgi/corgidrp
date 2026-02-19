@@ -17,76 +17,6 @@ import corgidrp.check as check
 import shutil
 import warnings
 
-def fix_str_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Makes type for each header to what it should be.
-
-    Gets around EMGAIN_A being set to 1 in TVAC data.
-
-    Adds proper values to VISTYPE for the NoiseMap calibration: CGIVST_CAL_DRK
-    (data used to calibrate the dark noise sources).
-
-    This function is unnecessary with future data because data will have
-    the proper values in VISTYPE. 
-
-    Args:
-    list_of_fits (list): list of FITS files that need to be updated.
-
-    """
-    for file in list_of_fits:
-        with fits.open(file, mode='update') as fits_file:
-        #fits_file = fits.open(file)
-            exthdr = fits_file[1].header
-            prihdr = fits_file[0].header
-            errhdr = fits_file[2].header if len(fits_file) > 2 else None
-            dqhdr = fits_file[3].header if len(fits_file) > 3 else None
-            ref_errhdr = None
-            ref_dqhdr = None
-            #prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-            if exthdr['DATALVL'].lower() == 'l1':
-                ref_prihdr, ref_exthdr = mocks.create_default_L1_headers(exthdr['ARRTYPE'], prihdr['VISTYPE'])
-            elif exthdr['DATALVL'].lower() == 'l2a':
-                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr, ref_biashdr = mocks.create_default_L2a_headers(exthdr['ARRTYPE'])
-            elif exthdr['DATALVL'].lower() == 'l2b':
-                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr, ref_biashdr = mocks.create_default_L2b_headers(exthdr['ARRTYPE'])
-            elif exthdr['DATALVL'].lower() == 'cal':
-                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr = mocks.create_default_calibration_product_headers()
-            ##could add in more
-            else:
-                raise ValueError(f"Unrecognized DATALVL {exthdr['DATALVL']} in file {file}")
-            for el in [(ref_prihdr, prihdr), (ref_exthdr, exthdr), (ref_errhdr, errhdr), (ref_dqhdr, dqhdr)]:
-                if el[0] is None or el[1] is None:
-                    continue
-                for key in el[0].keys():
-                    if 'NAXIS' in key or 'HISTORY' in key:
-                        continue
-                    if key not in el[1].keys():
-                        el[1][key] = el[0][key]
-                    else: 
-                        if type(el[1][key]) != type(el[0][key]):
-                            type_class = type(el[0][key])
-                            if el[1][key] == 'N/A' and type_class != str:
-                                el[1][key] = el[0][key]
-                            else:
-                                try:
-                                    el[1][key] = type_class(el[1][key])
-                                except: 
-                                    if el[1][key] == "OPEN":
-                                        el[1][key] = 0
-                                    elif el[1][key] == "CLOSED":
-                                        el[1][key] = 1
-            # don't delete any headers that do not appear in the reference headers, although there shouldn't be any
-            if float(exthdr['EMGAIN_A']) == 1. and exthdr['HVCBIAS'] <= 0:
-                exthdr['EMGAIN_A'] = -1. #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-            if type(exthdr['EMGAIN_C']) is str:
-                exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-            
-            # Update FITS file
-            #fits_file.writeto(file, overwrite=True)
-            fits_file.flush()
-
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #Checks that a photon-counted master dark works fine in the pipeline, for both cases of master dark (PC master dark or synthesized master dark)
@@ -296,6 +226,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         pc_frame_err = fits.getdata(master_ill_filepath_list[i], 'ERR')
         pc_dark_frame = fits.getdata(master_dark_filepath_list[i])
         pc_dark_frame_err = fits.getdata(master_dark_filepath_list[i], 'ERR')
+
+        check.compare_to_mocks_hdrs(pc_processed_filepath, mocks.create_default_L2b_headers)
 
         # more frames gets a better agreement; agreement to 2% for ~160 darks and illuminated
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02)

@@ -241,6 +241,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         diff = img.data - tvac_dat
         assert np.all(np.abs(diff) < 1e-5)
 
+        check.compare_to_mocks_hdrs(new_filename, mocks.create_default_L2b_headers)
+
         # plotting script for debugging
         # import matplotlib.pylab as plt
         # fig = plt.figure(figsize=(10,3.5))

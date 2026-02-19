@@ -16,6 +16,7 @@ import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 import warnings
+import corgidrp.check as check
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -124,7 +125,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
         base_image.pri_hdr['TARGET'] = "Neptune"
         base_image.ext_hdr['CFAMNAME'] = "4F"
         base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
-        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
+        base_image.ext_hdr['EXPTIME'] = 60. # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         # Generate unique timestamp by incrementing by 0.1 seconds each time
         unique_time = (base_time + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
@@ -257,6 +258,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
+    check.compare_to_mocks_hdrs(os.path.join(flat_outputdir, flat_filename), mocks.create_default_L2a_headers)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
@@ -346,7 +349,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
         base_image.pri_hdr['TARGET'] = "Uranus"
         base_image.ext_hdr['CFAMNAME'] = "1F"
         base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
-        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
+        base_image.ext_hdr['EXPTIME'] = 60. # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         # Generate unique timestamp by incrementing by 0.1 seconds each time
         unique_time = (base_time + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]

@@ -509,6 +509,10 @@ class Image():
         # the DRP has touched this file so it's origin is now this DRP
         self.pri_hdr['ORIGIN'] = 'DRP'
 
+        # correct header type while preserving the value so that headers conform to standards in mock.py
+        adjusted_pri_hdr, adjusted_img_hdr = corgidrp.check.hdr_type_conform(self.pri_hdr, self.ext_hdr)
+        self.pri_hdr = adjusted_pri_hdr
+        self.ext_hdr = adjusted_img_hdr
 
     # create this field dynamically
     @property
@@ -1222,7 +1226,7 @@ class SpecFilterOffset(Image):
 
             # fill caldb required keywords with dummy data
             pri_hdr["OBSNUM"] = 000     
-            ext_hdr["EXPTIME"] = 1
+            ext_hdr["EXPTIME"] = 1.
             ext_hdr['OPMODE'] = ""
             ext_hdr['EMGAIN_C'] = 1.0
             ext_hdr['EXCAMT'] = 40.0
@@ -1745,7 +1749,7 @@ class DetectorParams(Image):
 
             # fill caldb required keywords with dummy data
             pri_hdr["OBSNUM"] = 000     
-            ext_hdr["EXPTIME"] = 1
+            ext_hdr["EXPTIME"] = 1.
             ext_hdr['OPMODE'] = ""
             ext_hdr['EMGAIN_C'] = 1.0
             ext_hdr['EXCAMT'] = 40.0
@@ -2422,7 +2426,7 @@ class FpamFsamCal(Image):
 
             # fill caldb required keywords with dummy data
             prihdr['OBSNUM'] = 0
-            exthdr["EXPTIME"] = 0
+            exthdr["EXPTIME"] = 0.
             exthdr['OPMODE'] = ""
             exthdr['EMGAIN_C'] = 1.0
             exthdr['EXCAMT'] = 40.0
@@ -2561,7 +2565,7 @@ class CoreThroughputCalibration(Image):
             # Apply merged headers from PSF part of the dataset back to the output 
             self.pri_hdr = pri_hdr
             ext_hdr['EXTNAME'] = 'PSFCUBE'
-            ext_hdr['BUNIT'] = 'photoelectron/pix/s'
+            ext_hdr['BUNIT'] = 'photoelectron/s'
             ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
                 'observing sequence. PSFs are not normalized. They are the '
                 'images of the off-axis source. The data cube is centered '
@@ -3021,7 +3025,7 @@ class CoreThroughputMap(Image):
         
             # Apply merged headers from PSF part of the dataset back to the output 
             self.pri_hdr = pri_hdr
-            ext_hdr['BUNIT'] = 'photoelectron/pix/s'
+            ext_hdr['BUNIT'] = 'photoelectron/s'
             self.ext_hdr = ext_hdr
             self.err_hdr = err_hdr
             self.dq_hdr = dq_hdr

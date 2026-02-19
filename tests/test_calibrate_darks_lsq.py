@@ -205,7 +205,7 @@ def test_t_arr_unique():
     ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     for j in range(len(ds)):
         for d in ds[j].frames:
-            d.ext_hdr['EXPTIME'] = 4
+            d.ext_hdr['EXPTIME'] = 4.
     with pytest.raises(CalDarksLSQException):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, module='corgidrp.darks')

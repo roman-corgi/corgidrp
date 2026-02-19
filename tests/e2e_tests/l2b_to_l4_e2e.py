@@ -13,6 +13,7 @@ import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
 import corgidrp.data as corgidata
 import corgidrp.walker as walker
+import corgidrp.check as check
 from corgidrp import corethroughput
 import pytest
 import glob
@@ -253,6 +254,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #Check if the Bunit is correct
     assert l3_image.ext_hdr['BUNIT'] == 'photoelectron/s'
     
+    check.compare_to_mocks_hdrs(l3_filename, mocks.create_default_L3_headers)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
     # shutil.rmtree(e2e_data_path)
@@ -428,7 +431,8 @@ def test_l3_to_l4(e2eoutput_path):
     print("Found all the sources!")
 
     # Filename format will be checked in data format test
-    
+    check.compare_to_mocks_hdrs(l4_filename, mocks.create_default_L2b_headers) #L2b leaves out CDELT1 and CDELT2
+
     print('e2e test for l3_to_l4 calibration passed')
 
     # remove temporary caldb file

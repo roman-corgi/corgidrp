@@ -1100,8 +1100,13 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
             for key in preserve_pri_keys:
                 if key in orig_pri_hdr:
                     type_class = type(mock_pri_hdr[key])
-                    if orig_pri_hdr[key] == 'N/A' and type_class != str:
-                        continue #PSFREF meets this condition
+                    if key.upper() == 'PSFREF' and orig_pri_hdr[key] == 'N/A':
+                        orig_pri_hdr[key] = 0 #should be int type
+                    if orig_pri_hdr[key] == '' and type_class == int:
+                        orig_pri_hdr[key] = -999 
+                    elif orig_pri_hdr[key] == '' and type_class == float:
+                        orig_pri_hdr[key] = -999.0
+                        continue 
                     try:
                         mock_pri_hdr[key] = type_class(orig_pri_hdr[key])
                     except:
@@ -1127,6 +1132,7 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
                     mock_img_hdr['EMGAIN_A'] = -1.
             if 'EMGAIN_A' in mock_img_hdr:
                 mock_img_hdr['EMGAIN_A'] = float(mock_img_hdr['EMGAIN_A'])
+            # sometimes, EMGAIN_C is not float when preserving the original value, but it should be, so convert 
             if 'EMGAIN_C' in mock_img_hdr and isinstance(mock_img_hdr['EMGAIN_C'], str):
                 mock_img_hdr['EMGAIN_C'] = float(mock_img_hdr['EMGAIN_C'])
 
@@ -1144,3 +1150,104 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
             updated_files.append(output_path)
 
     return updated_files
+
+
+def compare_to_mocks_hdrs(fits_file, header_template=None):
+    """
+    Check FITS headers against those expected from mocks.py (which is sourced ultimately from l1.csv).  
+    Raises error if any mismatches found, including keywords with the wrong type.
+
+    Args:
+        fits_file (list): FITS file path to check
+        header_template (callable, optional): Function returning headers.
+            Defaults to mocks.create_default_L1_headers.
+
+    """
+
+    if header_template is None:
+        header_template = mocks.create_default_L1_headers
+
+    bad_values = []
+    with fits.open(fits_file) as hdul:
+        orig_pri_hdr = hdul[0].header.copy()
+        orig_img_hdr = hdul[1].header.copy()
+
+        header_result = header_template()
+        mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
+
+        for key in mock_pri_hdr.keys():
+            if 'NAXIS' in key:
+                continue 
+            type_class = type(mock_pri_hdr[key])
+            if key.upper() == 'PSFREF' and orig_pri_hdr[key] == 'N/A':
+                orig_pri_hdr[key] = 0 #should be int type
+            if key not in orig_pri_hdr:
+                bad_values.append([key])
+            if key in orig_pri_hdr and type(orig_pri_hdr[key]) != type_class:
+                bad_values.append([key, type(orig_pri_hdr[key]), type_class])
+        for key in mock_img_hdr.keys():
+            if 'NAXIS' in key:
+                continue 
+            type_class = type(mock_img_hdr[key])
+            if key not in orig_img_hdr:
+                bad_values.append([key])
+            if key in orig_img_hdr and type(orig_img_hdr[key]) != type_class:
+                bad_values.append([key, type(orig_img_hdr[key]), type_class])        
+
+    if len(bad_values) > 0:
+        error_message = "Header keyword mismatches found:\n"
+        for item in bad_values:
+            if len(item) == 1:
+                error_message += f"- Missing keyword: {item[0]}\n"
+            elif len(item) == 3:                
+                error_message += f"- Keyword {item[0]} has type {item[1]} but expected type {item[2]}\n"
+        print(error_message)
+        raise ValueError("Header keyword mismatches found. See details above.")
+    else:
+        print("All headers match expected keywords and types.")
+
+def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
+    """
+    Correct FITS header type against that expected from mocks.py (which is sourced ultimately from l1.csv).  
+
+    Args:
+        orig_pri_hdr (fits.Header): Original primary header to correct
+        orig_img_hdr (fits.Header): Original image header to correct
+        header_template (callable, optional): Function returning headers.
+            Defaults to mocks.create_default_L1_headers.
+            
+    Returns:
+        tuple: (adjusted_pri_hdr, adjusted_img_hdr) with types conformed to expected values 
+            from mocks.py. Note that this function does not check for missing keywords, 
+            only type mismatches, and it preserves all original values (it does not assign 
+            mock values to missing keywords).
+    """
+
+    if header_template is None:
+        header_template = mocks.create_default_L4_headers #high level, inclusive of all below
+
+    adjusted_pri_hdr = orig_pri_hdr.copy()
+    adjusted_img_hdr = orig_img_hdr.copy()
+
+    header_result = header_template()
+    mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
+
+    for key in adjusted_pri_hdr:
+        if key in mock_pri_hdr:
+        
+            type_class = type(mock_pri_hdr[key])
+            try:
+                adjusted_pri_hdr[key] = type_class(adjusted_pri_hdr[key])
+            except:
+                pass
+    for key in adjusted_img_hdr:
+        if key in mock_img_hdr:
+            type_class = type(mock_img_hdr[key])
+            try:
+                adjusted_img_hdr[key] = type_class(adjusted_img_hdr[key])
+            except:
+                pass
+    # special case:
+
+
+    return (adjusted_pri_hdr, adjusted_img_hdr)
