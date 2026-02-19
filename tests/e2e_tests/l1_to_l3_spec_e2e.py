@@ -165,13 +165,13 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         with fits.open(sample_l1_file) as hdul:
             exthdr = hdul[1].header
             if 'ISPC' in exthdr:
-                ispc_val = exthdr.get('ISPC')
-                if ispc_val in (1, True):
+                ispc_val = int(exthdr.get('ISPC'))
+                if ispc_val == 1:
                     is_pc_data = True
-                elif ispc_val in (0, False):
+                elif ispc_val == 0:
                     is_pc_data = False
                 else:
-                    raise ValueError(f"Expected True or False for ISPC value in header: {ispc_val}.")
+                    raise ValueError(f"Expected 0 or 1 for ISPC value in header: {ispc_val}.")
             else:
                 raise ValueError("Missing ISPC keyword in L1 header. Cannot determine PC vs analog.")
     

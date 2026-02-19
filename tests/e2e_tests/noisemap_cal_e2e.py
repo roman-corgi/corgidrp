@@ -81,7 +81,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
         with fits.open(file, mode='update') as fits_file:
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-            prihdr['PHTCNT'] = 0
+            prihdr['PHTCNT'] = "False"
     
     mock_cal_filelist = l1_data_filelist[-2:] # grab the last two input data to mock the calibration
 
@@ -422,7 +422,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
         with fits.open(file, mode='update') as fits_file:
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-            prihdr['PHTCNT'] = 0
+            prihdr['PHTCNT'] = "False"
 
 
     ####### Run the DRP walker
