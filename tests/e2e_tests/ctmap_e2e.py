@@ -147,7 +147,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     ct_map_walker = fits.open(ct_map_filepath)
 
     # Check whether direct ct map and the one from the walker are the same
-    # CT map values: (x, y, CT) for each location
     # Use allclose for floating point comparison to account for bit depth differences
     assert np.allclose(ct_map_walker[1].data, ct_map_mock.data, rtol=1e-5, atol=1e-5, equal_nan=True)
     # ERR

@@ -20,10 +20,11 @@ import warnings
 try:
     from cal.kgain.calibrate_kgain import calibrate_kgain
     import cal
-except:
-    # For tests to pass. Is it not necessary? See 'default_config_file' below
-    print('Install e2e dependencies with pip install -r requirements_e2etests.txt')
-    pass
+    _has_cal_kgain = getattr(cal, 'lib_dir', None) is not None
+except Exception:
+    calibrate_kgain = None
+    cal = None
+    _has_cal_kgain = False
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -33,6 +34,11 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
 def test_l1_to_kgain(e2edata_path, e2eoutput_path):
+    if not _has_cal_kgain:
+        pytest.skip(
+            'CGI cal package (kgain) required. Install with: '
+            'pip install -r requirements_e2etests.txt'
+        )
 
     # sort and prepare raw files to run through both II&T and DRP
     default_config_file = os.path.join(cal.lib_dir, 'kgain', 'config_files', 'kgain_parms.yaml')

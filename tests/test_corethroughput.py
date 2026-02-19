@@ -411,12 +411,12 @@ def test_cal_file():
     # Load the calibration file to check it has the same data contents
     ct_cal_file_load = CoreThroughputCalibration(ct_cal_filepath)
     # Use allclose for floating point comparisons to account for bit depth differences
-    assert np.allclose(ct_cal_file_load.data, ct_cal_file_in.data, rtol=1e-5, atol=1e-8)
-    assert np.allclose(ct_cal_file_load.err, ct_cal_file_in.err, rtol=1e-5, atol=1e-8)
+    assert np.allclose(ct_cal_file_load.data, ct_cal_file_in.data, rtol=1e-6, atol=1e-8)
+    assert np.allclose(ct_cal_file_load.err, ct_cal_file_in.err, rtol=1e-6, atol=1e-8)
     assert np.array_equal(ct_cal_file_load.dq, ct_cal_file_in.dq)  # DQ is integer, use exact
-    assert np.allclose(ct_cal_file_load.ct_excam, ct_cal_file_in.ct_excam, rtol=1e-5, atol=1e-8)
-    assert np.allclose(ct_cal_file_load.ct_fpam, ct_cal_file_in.ct_fpam, rtol=1e-5, atol=1e-8)
-    assert np.allclose(ct_cal_file_load.ct_fsam, ct_cal_file_in.ct_fsam, rtol=1e-5, atol=1e-8)
+    assert np.allclose(ct_cal_file_load.ct_excam, ct_cal_file_in.ct_excam, rtol=1e-6, atol=1e-8)
+    assert np.allclose(ct_cal_file_load.ct_fpam, ct_cal_file_in.ct_fpam, rtol=1e-6, atol=1e-8)
+    assert np.allclose(ct_cal_file_load.ct_fsam, ct_cal_file_in.ct_fsam, rtol=1e-6, atol=1e-8)
     
     # This test checks that the CT cal file has the right information by making
     # sure that I=O (Note: the comparison b/w analytical predictions
@@ -455,28 +455,12 @@ def test_cal_file():
 
     # Compare the PSF cube from the calibration file, which may have a smaller
     # extension, with the input ones
-    # Use known PSF locations instead of searching for pixel values to avoid
-    # float32 precision issues when data is saved/reloaded
     cal_file_side_0 = ct_cal_file.data.shape[1]
     cal_file_side_1 = ct_cal_file.data.shape[2]
-    i_psf = 0
-    for psf in psf_cube_in:
-        psf_y, psf_x = int(np.round(psf_loc_input[i_psf][1])), int(np.round(psf_loc_input[i_psf][0]))
-        start_y = max(0, psf_y - cal_file_side_0 // 2)
-        end_y = min(psf.shape[0], start_y + cal_file_side_0)
-        start_x = max(0, psf_x - cal_file_side_1 // 2)
-        end_x = min(psf.shape[1], start_x + cal_file_side_1)
-        # Adjust if we hit a boundary
-        if end_y - start_y < cal_file_side_0:
-            start_y = max(0, psf.shape[0] - cal_file_side_0)
-            end_y = start_y + cal_file_side_0
-        if end_x - start_x < cal_file_side_1:
-            start_x = max(0, psf.shape[1] - cal_file_side_1)
-            end_x = start_x + cal_file_side_1
-        
-        psf_extracted = psf[start_y:end_y, start_x:end_x]
-        assert np.allclose(psf_extracted, ct_cal_file.data[i_psf], rtol=1e-5, atol=1e-8)
-        i_psf += 1
+    for i_psf, psf in enumerate(psf_cube_in):
+        loc_00 = np.argwhere(psf == ct_cal_file.data[i_psf][0][0])[0]
+        assert np.all(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
+            loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal_file.data[i_psf])
 
     # Verify that the PSF images are best centered at each set of coordinates.
     test_result_psf_max_row = []  # intialize
@@ -499,11 +483,11 @@ def test_cal_file():
     if ct_cal_file.ct_excam_hdr['EXTNAME'] != 'CTEXCAM':
         raise ValueError('The extension name of the CT values on EXCAM is not correct')
     # x location wrt FPM (use allclose for float32 precision differences)
-    assert np.allclose(psf_loc_input[:,0], ct_cal_file.ct_excam[0], rtol=1e-5, atol=1e-8)
+    assert np.allclose(psf_loc_input[:,0], ct_cal_file.ct_excam[0], rtol=1e-6, atol=1e-8)
     # y location wrt FPM
-    assert np.allclose(psf_loc_input[:,1], ct_cal_file.ct_excam[1], rtol=1e-5, atol=1e-8)
+    assert np.allclose(psf_loc_input[:,1], ct_cal_file.ct_excam[1], rtol=1e-6, atol=1e-8)
     # CT map
-    assert np.allclose(ct_input, ct_cal_file.ct_excam[2], rtol=1e-5, atol=1e-8)
+    assert np.allclose(ct_input, ct_cal_file.ct_excam[2], rtol=1e-6, atol=1e-8)
 
     # Test 3: FPAM and FSAM positions during the CT observations are present
     # Check EXTNAME is as expected
@@ -511,11 +495,11 @@ def test_cal_file():
         raise ValueError('The extension name of the FPAM values on EXCAM is not correct')
     # Use allclose for float32 precision differences
     assert np.allclose(ct_cal_file.ct_fpam, np.array([dataset_ct[0].ext_hdr['FPAM_H'],
-        dataset_ct[0].ext_hdr['FPAM_V']]), rtol=1e-5, atol=1e-8)
+        dataset_ct[0].ext_hdr['FPAM_V']]), rtol=1e-6, atol=1e-8)
     if ct_cal_file.ct_fsam_hdr['EXTNAME'] != 'CTFSAM':
         raise ValueError('The extension name of the FSAM values on EXCAM is not correct')
     assert np.allclose(ct_cal_file.ct_fsam, np.array([dataset_ct[0].ext_hdr['FSAM_H'],
-        dataset_ct[0].ext_hdr['FSAM_V']]), rtol=1e-5, atol=1e-8)
+        dataset_ct[0].ext_hdr['FSAM_V']]), rtol=1e-6, atol=1e-8)
     
     # Remove test CT cal file
     if os.path.exists(ct_cal_file.filepath):

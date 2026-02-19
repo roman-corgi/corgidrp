@@ -1496,10 +1496,10 @@ def test_spec_flux_cal():
     spec_fluxcal.save(filedir = output_dir, filename = "spec_flux_cal_test.fits")
     specflux_load = SpecFluxCal(os.path.join(output_dir, "spec_flux_cal_test.fits"))
     # Use allclose for float32 precision differences after save/load
-    assert np.allclose(specflux_load.specflux, spec, rtol=1e-5, atol=1e-8)
-    assert np.allclose(specflux_load.wavelength, spec_wave, rtol=1e-5, atol=1e-8)
-    assert np.allclose(specflux_load.specflux_err, spec_err, rtol=1e-5, atol=1e-8)
-    assert np.allclose(specflux_load.wave_err, wave_err, rtol=1e-5, atol=1e-8)
+    assert np.allclose(specflux_load.specflux, spec, rtol=1e-6, atol=1e-8)
+    assert np.allclose(specflux_load.wavelength, spec_wave, rtol=1e-6, atol=1e-8)
+    assert np.allclose(specflux_load.specflux_err, spec_err, rtol=1e-6, atol=1e-8)
+    assert np.allclose(specflux_load.wave_err, wave_err, rtol=1e-6, atol=1e-8)
     assert np.array_equal(specflux_load.specflux_dq, spec_dq[0])  # DQ is integer, use exact
     
     #test the absolute spectral flux calibration

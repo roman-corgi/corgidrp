@@ -173,7 +173,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
         diff = img.data - tvac_dat
 
         # Use allclose for floating point comparison to account for bit depth differences
-        assert np.allclose(img.data, tvac_dat, rtol=1e-5, atol=1e-6)
+        assert np.allclose(img.data, tvac_dat, rtol=1e-6, atol=1e-6)
 
         # # plotting script for debugging
         # import matplotlib.pylab as plt

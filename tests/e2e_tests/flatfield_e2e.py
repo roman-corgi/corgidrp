@@ -52,10 +52,11 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
-    # make output directory if needed
+    # clear and recreate output directory
     flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e/flat_neptune_output")
-    if not os.path.exists(flat_outputdir):
-        os.makedirs(flat_outputdir)
+    if os.path.exists(flat_outputdir):
+        shutil.rmtree(flat_outputdir)
+    os.makedirs(flat_outputdir)
     flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
     if not os.path.exists(flat_mock_inputdir):
         os.makedirs(flat_mock_inputdir)    
@@ -274,10 +275,11 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
-    # make output directory if needed
+    # clear and recreate output directory
     flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e/flat_uranus_output")
-    if not os.path.exists(flat_outputdir):
-        os.makedirs(flat_outputdir)
+    if os.path.exists(flat_outputdir):
+        shutil.rmtree(flat_outputdir)
+    os.makedirs(flat_outputdir)
     flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
     if not os.path.exists(flat_mock_inputdir):
         os.makedirs(flat_mock_inputdir) 
@@ -484,7 +486,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     # e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

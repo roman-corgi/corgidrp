@@ -521,28 +521,10 @@ class Image():
         # recast header data to the appropriate bit depth as set by the pipeline settings
         if self.data is not None:
             self.data = self.data.astype(corgidrp.image_dtype, copy=False)
-            # Update BITPIX in header to match the data dtype (negative for floats, positive for ints)
-            dtype_obj = np.dtype(corgidrp.image_dtype)
-            bitpix = dtype_obj.itemsize * 8
-            if np.issubdtype(dtype_obj, np.floating):
-                bitpix = -bitpix  # Negative for floating point
-            self.ext_hdr['BITPIX'] = bitpix
         if self.err is not None:
             self.err = self.err.astype(corgidrp.image_dtype, copy=False)
-            # Update BITPIX in error header to match the data dtype
-            dtype_obj = np.dtype(corgidrp.image_dtype)
-            bitpix = dtype_obj.itemsize * 8
-            if np.issubdtype(dtype_obj, np.floating):
-                bitpix = -bitpix
-            self.err_hdr['BITPIX'] = bitpix
         if self.dq is not None:
             self.dq = self.dq.astype(corgidrp.dq_dtype, copy=False)
-            # Update BITPIX in DQ header to match the DQ dtype
-            dtype_obj = np.dtype(corgidrp.dq_dtype)
-            bitpix = dtype_obj.itemsize * 8
-            if np.issubdtype(dtype_obj, np.floating):
-                bitpix = -bitpix
-            self.dq_hdr['BITPIX'] = bitpix
             
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
@@ -1003,22 +985,10 @@ class LineSpread(Image):
         # Cast data to configured dtype before saving
         if self.data is not None:
             self.data = self.data.astype(corgidrp.image_dtype, copy=False)
-            # Update BITPIX in header to match the data dtype
-            dtype_obj = np.dtype(corgidrp.image_dtype)
-            bitpix = dtype_obj.itemsize * 8
-            if np.issubdtype(dtype_obj, np.floating):
-                bitpix = -bitpix  # Negative for floating point
-            self.ext_hdr['BITPIX'] = bitpix
-        
+
         # Cast gauss_par to configured dtype before saving
         if self.gauss_par is not None:
             self.gauss_par = self.gauss_par.astype(corgidrp.image_dtype, copy=False)
-            # Update BITPIX in gauss header to match the data dtype
-            dtype_obj = np.dtype(corgidrp.image_dtype)
-            bitpix = dtype_obj.itemsize * 8
-            if np.issubdtype(dtype_obj, np.floating):
-                bitpix = -bitpix
-            self.gauss_hdr['BITPIX'] = bitpix
 
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
@@ -1942,9 +1912,22 @@ class AstrometricCalibration(Image):
 
         # check that this is actually an AstrometricCalibration file that was read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
-            raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
-        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'     
-    
+            raise ValueError("File that was loaded was not an AstrometricCalibration file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
+
+    def save(self, filedir=None, filename=None):
+        """
+        Save to disk, keeping data as float64 since astrometric coordinates
+        (RA/DEC in degrees) require more than float32's 7-digit precision.
+        """
+        # Temporarily override image_dtype to preserve float64 for this class
+        original_dtype = corgidrp.image_dtype
+        corgidrp.image_dtype = np.float64
+        try:
+            super().save(filedir=filedir, filename=filename)
+        finally:
+            corgidrp.image_dtype = original_dtype
+
 class TrapCalibration(Image):
     """
 

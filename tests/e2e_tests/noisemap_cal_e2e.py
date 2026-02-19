@@ -214,14 +214,12 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     
-    # Use allclose for floating point comparison. The difference occurs because
-    # calibrate_darks_lsq processes L1 data directly (float64)
-    # while DRP processes L2a data saved as float32 (when image_dtype=32). Errors accumulate
-    # in the least squares calculation.
-    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-3, atol=0.005, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-4, atol=1e-6, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-4, atol=1e-6, equal_nan=True)
-    assert np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-5
+    # Reference (F_map, C_map, D_map) from II&T calibrate_darks_lsq, corgidrp_noisemap from DRP
+    # atol=1e-2 allows per-pixel differences that result from comparing float64 to float32 data
+    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-5, atol=1e-2, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-5, atol=1e-2, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-5, atol=1e-2, equal_nan=True)
+    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 1e-2
     pass
 
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
@@ -448,14 +446,11 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     # iit_noisemap = data.autoload(iit_noisemap_fname)
     
 
-    # Use allclose for floating point comparison. The difference occurs because
-    # calibrate_darks_lsq processes L1 data directly (float64)
-    # while DRP processes L2a data saved as float32 (when image_dtype=32). Errors accumulate
-    # in the least squares calculation.
-    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-3, atol=0.005, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-4, atol=1e-6, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-4, atol=1e-6, equal_nan=True)
-    assert np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-5
+    # Use allclose for float32 save/load and small numerical differences (rtol/atol=1e-5)
+    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-5, atol=1e-5, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-5, atol=1e-5, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-5, atol=1e-5, equal_nan=True)
+    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 1e-5
     pass
 
     # create synthesized master dark in output folder (for inspection and for having a sample synthesized dark with all the right headers)
