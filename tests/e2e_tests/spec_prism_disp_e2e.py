@@ -1,6 +1,7 @@
 import os
 import sys
 import glob
+import shutil
 import numpy as np
 import astropy.io.fits as fits
 from datetime import datetime, timedelta
@@ -252,7 +253,9 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     
     # Create input_l2b subfolder for input data
     input_l2b_dir = os.path.join(spec_prism_outputdir, 'input_l2b')
-    os.makedirs(input_l2b_dir, exist_ok=True)
+    if os.path.exists(input_l2b_dir):
+        shutil.rmtree(input_l2b_dir)
+    os.makedirs(input_l2b_dir)
     
     # Use proper paths for input generation and output
     input_data_dir = input_l2b_dir

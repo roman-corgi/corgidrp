@@ -215,11 +215,12 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     
     # Reference (F_map, C_map, D_map) from II&T calibrate_darks_lsq, corgidrp_noisemap from DRP
-    # atol=1e-2 allows per-pixel differences that result from comparing float64 to float32 data
-    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-5, atol=1e-2, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-5, atol=1e-2, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-5, atol=1e-2, equal_nan=True)
-    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 1e-2
+    # atol=1e-4: intermediate L2a files are saved as float32, introducing quantization error
+    # at (0,1052) this causes a ~1.9e-5 diff that exceeds the rtol-only tolerance
+    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 1e-5
     pass
 
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:

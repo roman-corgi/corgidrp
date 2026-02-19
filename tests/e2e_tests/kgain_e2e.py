@@ -20,11 +20,10 @@ import warnings
 try:
     from cal.kgain.calibrate_kgain import calibrate_kgain
     import cal
-    _has_cal_kgain = getattr(cal, 'lib_dir', None) is not None
-except Exception:
-    calibrate_kgain = None
-    cal = None
-    _has_cal_kgain = False
+except:
+    # For tests to pass. Is it not necessary? See 'default_config_file' below
+    print('Install e2e dependencies with pip install -r requirements_e2etests.txt')
+    pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 

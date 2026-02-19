@@ -110,6 +110,11 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         for f in mock_cal_filelist
     ]
     mock_cal_filelist = check.fix_hdrs_for_tvac(mock_cal_filelist, mock_cal_dir)
+    # fix ISPC to int 
+    for file in mock_cal_filelist:
+        with fits.open(file, mode='update') as fits_file:
+            if 'ISPC' in fits_file[1].header:
+                fits_file[1].header['ISPC'] = int(fits_file[1].header['ISPC'])
 
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
@@ -263,6 +268,9 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
     for file in input_data_filelist:
         with fits.open(file, mode='update') as fits_file:
+            # Fix data types 
+            if 'ISPC' in fits_file[1].header:
+                fits_file[1].header['ISPC'] = int(fits_file[1].header['ISPC'])
             print(fits_file[1].header['EXPTIME'])
             if fits_file[1].header['EXPTIME'] >= 100:
                 fits_file[1].data = fits_file[1].data/10.

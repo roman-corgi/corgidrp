@@ -91,37 +91,37 @@ Primary Header (HDU 0)
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | PSFREF     | int        | 0                              | Whether this is a PSF reference observation or not                                                                       |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| OPGAIN     | str        | 1000                           | Planned EXCAM EM gain or "AUTO"                                                                                          |
+| OPGAIN     | str        | -999                           | Planned EXCAM EM gain or "AUTO"                                                                                          |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| PHTCNT     | str        | False                          | Whether photon counting is planned ("True", "False", or "Auto").                                                          |
+| PHTCNT     | str        | -999                           | Whether photon counting is planned ("True", "False", or "Auto").                                                          |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FRAMET     | float      | 30.0                           | Planned exposure time per frame or if set to "AUTO". Taken from the observation plan                                     |
+| FRAMET     | float      | -999.0                         | Planned exposure time per frame or if set to "AUTO". Taken from the observation plan                                     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| PA_V3      | float      | 0.0                            | Observatory position angle                                                                                               |
+| PA_V3      | float      | -999.0                         | Observatory position angle                                                                                               |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| PA_APER    | float      | 0.0                            | Position angle in the CGI aperture                                                                                       |
+| PA_APER    | float      | -999.0                         | Position angle in the CGI aperture                                                                                       |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SVB_1      | float      | 0.0                            | Sun unit vector in the body frame axis 1                                                                                 |
+| SVB_1      | float      | -999.0                         | Sun unit vector in the body frame axis 1                                                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SVB_2      | float      | 0.0                            | Sun unit vector in the body frame axis 2                                                                                 |
+| SVB_2      | float      | -999.0                         | Sun unit vector in the body frame axis 2                                                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SVB_3      | float      | 0.0                            | Sun unit vector in the body frame axis 3                                                                                 |
+| SVB_3      | float      | -999.0                         | Sun unit vector in the body frame axis 3                                                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| ROLL       | float      | 0.0                            | S/C roll angle wrt the reference frame                                                                                   |
+| ROLL       | float      | -999.0                         | S/C roll angle wrt the reference frame                                                                                   |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| PITCH      | float      | 0.0                            | S/C pitch angle wrt the reference frame                                                                                  |
+| PITCH      | float      | -999.0                         | S/C pitch angle wrt the reference frame                                                                                  |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| YAW        | float      | 0.0                            | S/C yaw angle wrt the reference frame                                                                                    |
+| YAW        | float      | -999.0                         | S/C yaw angle wrt the reference frame                                                                                    |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | FILENAME   | str        | cgi_0200001001001001001_202... | The name of the file                                                                                                     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | OBSNAME    | str        | SCI                            | User-defined label for the associated observation plan                                                                   |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| WBJ_1      | float      | 0.0                            |                                                                                                                          |
+| WBJ_1      | float      | -999.0                         | S/C angular momentum axis 1                                                                                              |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| WBJ_2      | float      | 0.0                            |                                                                                                                          |
+| WBJ_2      | float      | -999.0                         | S/C angular momentum axis 2                                                                                              |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| WBJ_3      | float      | 0.0                            |                                                                                                                          |
+| WBJ_3      | float      | -999.0                         | S/C angular momentum axis 3                                                                                              |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 
 
@@ -148,27 +148,27 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | ARRTYPE    | str        | SCI                            | Whether it is the smaller SCI frame or full ENG frame                                                                    |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FRMTYPE    | str        | NUM                            | Specifies which frame collection routine was used based on instrument EVRs                                               |
+| FRMTYPE    | str        | -999                           | Specifies which frame collection routine was used based on instrument EVRs                                               |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| ISHOWFSC   | int        | False                          | Denotes whether the frames are collected as a part of the HOWFSC loop.                                                   |
+| ISHOWFSC   | int        | -999                           | Denotes whether the frames are collected as a part of the HOWFSC loop.                                                   |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| ISACQ      | int        | False                          | Denotes whether this frame was taken during acquisition                                                                  |
+| ISACQ      | int        | -999                           | Denotes whether this frame was taken during acquisition                                                                  |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SPBAL      | int        | False                          | Denotes whether this frame was taken during speckle balance                                                              |
+| SPBAL      | int        | -999                           | Denotes whether this frame was taken during speckle balance                                                              |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| ISFLAT     | int        | False                          | Denotes whether this frame was taken during the AAC flat activity                                                        |
+| ISFLAT     | int        | -999                           | Denotes whether this frame was taken during the AAC flat activity                                                        |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SATSPOTS   | int        | False                          | Denotes whether the frame contains satellite spots based on a combination of visit type and EXCAM collection command     |
+| SATSPOTS   | int        | -999                           | Denotes whether the frame contains satellite spots based on a combination of visit type and EXCAM collection command     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| STATUS     | int        | 0                              | Housekeeping packet health check status                                                                                  |
+| STATUS     | int        | -999                           | Housekeeping packet health check status                                                                                  |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| HVCBIAS    | int        | 0                              | HV clock bias value. DAC value controlling EM-gain                                                                       |
+| HVCBIAS    | int        | -999                           | HV clock bias value. DAC value controlling EM-gain                                                                       |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| OPMODE     | str        | NONE_DETON_0                   | EXCAM readout operational mode                                                                                           |
+| OPMODE     | str        | -999                           | EXCAM readout operational mode                                                                                           |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | EXPTIME    | float      | 1.0                            | Commanded exposure time. Taken from telemetry on CGI                                                                     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| EMGAIN_C   | float      | 1.0                            | Commanded gain                                                                                                           |
+| EMGAIN_C   | float      | -999.0                         | Commanded gain                                                                                                           |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | UNITYG     | int        | 0                              | DAC value corresponding to unity gain                                                                                    |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
@@ -190,109 +190,109 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | KGAINPAR   | int        | 0                              | Calculated K-gain parameter (DN to electrons)                                                                            |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| BLNKTIME   | int        | 0                              | EXCAM commanded blanking time                                                                                            |
+| BLNKTIME   | int        | -999                           | EXCAM commanded blanking time                                                                                            |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| BLNKCYC    | int        | 0                              | Commanded blanking cycles                                                                                                |
+| BLNKCYC    | int        | -999                           | Commanded blanking cycles                                                                                                |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| EXPCYC     | int        | 0                              | Exposing stage duration (cycles)                                                                                         |
+| EXPCYC     | int        | -999                           | Exposing stage duration (cycles)                                                                                         |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| OVEREXP    | int        | 0                              | EXCAM over-illumination flag                                                                                             |
+| OVEREXP    | int        | -999                           | EXCAM over-illumination flag                                                                                             |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| NOVEREXP   | float      | 0.0                            | Number of pixels overexposed /100                                                                                        |
+| NOVEREXP   | float      | -999.0                         | Number of pixels overexposed /100                                                                                        |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | ISPC       | int        | 0                              | Photon counting mode 0 or 1 (telemetered)                                                                                |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| PROXET     | float      | 0.0                            | Thermal strap interface, EXCAM ProxE heater                                                                              |
+| PROXET     | float      | -999.0                         | Thermal strap interface, EXCAM ProxE heater                                                                              |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FCMLOOP    | int        | 0                              | Control state of the FCM loop                                                                                            |
+| FCMLOOP    | int        | -999                           | Control state of the FCM loop                                                                                            |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FCMPOS     | float      | 0.0                            | Coarse FCM position                                                                                                      |
+| FCMPOS     | float      | -999.0                         | Coarse FCM position                                                                                                      |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMINNER   | int        | 0                              | Control state of the FSM inner loop                                                                                      |
+| FSMINNER   | int        | -999                           | Control state of the FSM inner loop                                                                                      |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMLOS     | int        | 1                              | Control state of the FSM LOS loop                                                                                        |
+| FSMLOS     | int        | -999                           | Control state of the FSM LOS loop                                                                                        |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMPRFL    | str        | FSM_PROFILE_UNKNOWN            | FSM profile that has been loaded                                                                                         |
+| FSMPRFL    | str        | -999                           | FSM profile that has been loaded                                                                                         |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMRSTR    | int        | 0                              | Whether FSM raster is executing                                                                                          |
+| FSMRSTR    | int        | -999                           | Whether FSM raster is executing                                                                                          |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMSG1     | float      | 0.0                            | Average measurement in volts for strain gauge 1 over the last 1000 samples                                               |
+| FSMSG1     | float      | -999.0                         | Average measurement in volts for strain gauge 1 over the last 1000 samples                                               |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMSG2     | float      | 0.0                            | Average measurement in volts for strain gauge 2 over the last 1000 samples                                               |
+| FSMSG2     | float      | -999.0                         | Average measurement in volts for strain gauge 2 over the last 1000 samples                                               |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMSG3     | float      | 0.0                            | Average measurement in volts for strain gauge 3 over the last 1000 samples                                               |
+| FSMSG3     | float      | -999.0                         | Average measurement in volts for strain gauge 3 over the last 1000 samples                                               |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMX       | float      | 0.0                            | Derived FSM X position relative to home from strain gauge voltages and FSM transformation matrix                         |
+| FSMX       | float      | -999.0                         | Derived FSM X position relative to home from strain gauge voltages and FSM transformation matrix                         |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMY       | float      | 0.0                            | Derived FSM Y position relative to home from strain gauge voltages and FSM transformation matrix                         |
+| FSMY       | float      | -999.0                         | Derived FSM Y position relative to home from strain gauge voltages and FSM transformation matrix                         |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| EACQ_ROW   | float      | 0.0                            | Desired pixel row for most recent star acquisition via EXCAM acquisition method                                          |
+| EACQ_ROW   | float      | -999.0                         | Desired pixel row for most recent star acquisition via EXCAM acquisition method                                          |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| EACQ_COL   | float      | 0.0                            | Desired pixel col for most recent star acquisition via EXCAM acquisition method                                          |
+| EACQ_COL   | float      | -999.0                         | Desired pixel col for most recent star acquisition via EXCAM acquisition method                                          |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SB_FP_DX   | float      | 0.0                            | X pixels offset (from EXCAM center), from FPAM speckle balance alignment                                                 |
+| SB_FP_DX   | float      | -999.0                         | X pixels offset (from EXCAM center), from FPAM speckle balance alignment                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SB_FP_DY   | float      | 0.0                            | Y pixels offset (from EXCAM center), from FPAM speckle balance alignment                                                 |
+| SB_FP_DY   | float      | -999.0                         | Y pixels offset (from EXCAM center), from FPAM speckle balance alignment                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SB_FS_DX   | float      | 0.0                            | X pixels offset (from EXCAM center), from FSAM speckle balance alignment                                                 |
+| SB_FS_DX   | float      | -999.0                         | X pixels offset (from EXCAM center), from FSAM speckle balance alignment                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SB_FS_DY   | float      | 0.0                            | Y pixels offset (from EXCAM center), from FSAM speckle balance alignment                                                 |
+| SB_FS_DY   | float      | -999.0                         | Y pixels offset (from EXCAM center), from FSAM speckle balance alignment                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| DMZLOOP    | int        | 0                              | Control state of the DM Zernike loop                                                                                     |
+| DMZLOOP    | int        | -999                           | Control state of the DM Zernike loop                                                                                     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | 1SVALID    | int        | 1                              | Is LOWFSC 1s stats valid                                                                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z2AVG      | float      | 0.0                            | Avg Z2 value (tip) coefficient from previous second                                                                      |
+| Z2AVG      | float      | -999.0                         | Avg Z2 value (tip) coefficient from previous second                                                                      |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z2RES      | float      | 0.0                            | Res Z2 value (tip) coefficient from previous second                                                                      |
+| Z2RES      | float      | -999.0                         | Res Z2 value (tip) coefficient from previous second                                                                      |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z2VAR      | float      | 0.0                            | Var Z2 value (tip) coefficient from previous second                                                                      |
+| Z2VAR      | float      | -999.0                         | Var Z2 value (tip) coefficient from previous second                                                                      |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z3AVG      | float      | 0.0                            | Avg Z3 value (tilt) coefficient from previous second                                                                     |
+| Z3AVG      | float      | -999.0                         | Avg Z3 value (tilt) coefficient from previous second                                                                     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z3RES      | float      | 0.0                            | Res Z3 value (tilt) coefficient from previous second                                                                     |
+| Z3RES      | float      | -999.0                         | Res Z3 value (tilt) coefficient from previous second                                                                     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z3VAR      | float      | 0.0                            | Var Z3 value (tilt) coefficient from previous second                                                                     |
+| Z3VAR      | float      | -999.0                         | Var Z3 value (tilt) coefficient from previous second                                                                     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | 10SVALID   | int        | 1                              | Is LOWFSC 10s stats valid                                                                                                |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z4AVG      | float      | 0.0                            | Avg Z4 value (focus) coefficient for 10000 samples                                                                       |
+| Z4AVG      | float      | -999.0                         | Avg Z4 value (focus) coefficient for 10000 samples                                                                       |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z4RES      | float      | 0.0                            | Res Z4 value (focus) coefficient for 10000 samples                                                                       |
+| Z4RES      | float      | -999.0                         | Res Z4 value (focus) coefficient for 10000 samples                                                                       |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z5AVG      | float      | 0.0                            | Avg Z5 value (astigmatism) coefficient for 10000 samples                                                                 |
+| Z5AVG      | float      | -999.0                         | Avg Z5 value (astigmatism) coefficient for 10000 samples                                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z5RES      | float      | 0.0                            | Res Z5 value (astigmatism) coefficient for 10000 samples                                                                 |
+| Z5RES      | float      | -999.0                         | Res Z5 value (astigmatism) coefficient for 10000 samples                                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z6AVG      | float      | 0.0                            | Avg Z6 value (astigmatism) coefficient for 10000 samples                                                                 |
+| Z6AVG      | float      | -999.0                         | Avg Z6 value (astigmatism) coefficient for 10000 samples                                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z6RES      | float      | 0.0                            | Res Z6 value (astigmatism) coefficient for 10000 samples                                                                 |
+| Z6RES      | float      | -999.0                         | Res Z6 value (astigmatism) coefficient for 10000 samples                                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z7AVG      | float      | 0.0                            | Avg Z7 value (coma) coefficient for 10000 samples                                                                        |
+| Z7AVG      | float      | -999.0                         | Avg Z7 value (coma) coefficient for 10000 samples                                                                        |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z7RES      | float      | 0.0                            | Res Z7 value (coma) coefficient for 10000 samples                                                                        |
+| Z7RES      | float      | -999.0                         | Res Z7 value (coma) coefficient for 10000 samples                                                                        |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z8AVG      | float      | 0.0                            | Avg Z8 value (coma) coefficient for 10000 samples                                                                        |
+| Z8AVG      | float      | -999.0                         | Avg Z8 value (coma) coefficient for 10000 samples                                                                        |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z8RES      | float      | 0.0                            | Res Z8 value (coma) coefficient for 10000 samples                                                                        |
+| Z8RES      | float      | -999.0                         | Res Z8 value (coma) coefficient for 10000 samples                                                                        |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z9AVG      | float      | 0.0                            | Avg Z9 value (trefoil) coefficient for 10000 samples                                                                     |
+| Z9AVG      | float      | -999.0                         | Avg Z9 value (trefoil) coefficient for 10000 samples                                                                     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z9RES      | float      | 0.0                            | Res Z9 value (trefoil) coefficient for 10000 samples                                                                     |
+| Z9RES      | float      | -999.0                         | Res Z9 value (trefoil) coefficient for 10000 samples                                                                     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z10AVG     | float      | 0.0                            | Avg Z10 value (trefoil) coefficient for 10000 samples                                                                    |
+| Z10AVG     | float      | -999.0                         | Avg Z10 value (trefoil) coefficient for 10000 samples                                                                    |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z10RES     | float      | 0.0                            | Res Z10 value (trefoil) coefficient for 10000 samples                                                                    |
+| Z10RES     | float      | -999.0                         | Res Z10 value (trefoil) coefficient for 10000 samples                                                                    |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z11AVG     | float      | 0.0                            | Avg Z11 value (spherical) coefficient for 10000 samples                                                                  |
+| Z11AVG     | float      | -999.0                         | Avg Z11 value (spherical) coefficient for 10000 samples                                                                  |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z11RES     | float      | 0.0                            | Res Z11 value (spherical) coefficient for 10000 samples                                                                  |
+| Z11RES     | float      | -999.0                         | Res Z11 value (spherical) coefficient for 10000 samples                                                                  |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z12AVG     | float      | 0.0                            | Avg Z12 value (flux ref) coefficient for 10000 samples                                                                   |
+| Z12AVG     | float      | -999.0                         | Avg Z12 value (flux ref) coefficient for 10000 samples                                                                   |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z13AVG     | float      | 0.0                            | Avg Z13 value (shear X) coefficient for 10000 samples                                                                    |
+| Z13AVG     | float      | -999.0                         | Avg Z13 value (shear X) coefficient for 10000 samples                                                                    |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| Z14AVG     | float      | 0.0                            | Avg Z14 value (shear Y) coefficient for 10000 samples                                                                    |
+| Z14AVG     | float      | -999.0                         | Avg Z14 value (shear Y) coefficient for 10000 samples                                                                    |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | SPAM_H     | float      | 0.0                            | SPAM absolute position of the H-axis in microns                                                                          |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
@@ -374,11 +374,11 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | IS_BAD     | bool       | False                          | Frame deemed bad (0/1)                                                                                                   |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FWC_PP_E   | float      | 0.0                            | Full well capacity, EM gain register (e-)                                                                                |
+| FWC_PP_E   | float      | -999.0                         | Full well capacity, EM gain register (e-)                                                                                |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FWC_EM_E   | int        | 0                              | Full well capacity, image area pixel (e-)                                                                                |
+| FWC_EM_E   | int        | -999                           | Full well capacity, image area pixel (e-)                                                                                |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SAT_DN     | float      | 0.0                            | DN saturation                                                                                                            |
+| SAT_DN     | float      | -999.0                         | DN saturation                                                                                                            |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | RECIPE     | str        | {"name": "l2b_to_fluxcal_fa... | DRP recipe and steps; paths to noise maps, calib                                                                         |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
