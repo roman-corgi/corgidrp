@@ -119,6 +119,8 @@ class Dataset():
                 filenames.append(frame.filename)
 
         for filename, frame in zip(filenames, self.frames):
+            ##redoing the change to the FILENAME keyword to cover our bases
+            frame.pri_hdr['FILENAME'] = frame.filename
             frame.save(filename=filename, filedir=filedir)
 
         # relink frames with all_data
@@ -162,6 +164,7 @@ class Dataset():
         # update history and header entries
         for img in self.frames:
             img.ext_hdr['HISTORY'] = history_entry
+            img.err_hdr['HISTORY'] = history_entry
             if header_entries:
                 for key, value in header_entries.items():
                     img.ext_hdr[key] = value
@@ -473,6 +476,10 @@ class Image():
         if not 'IS_BAD' in self.ext_hdr:
             self.ext_hdr.set('IS_BAD', False, "Was this frame deemed bad?")
 
+        # PHTCNT can come in as an int from L1 data but the DRP expects it as a string
+        if 'PHTCNT' in self.pri_hdr and not isinstance(self.pri_hdr['PHTCNT'], str):
+            self.pri_hdr['PHTCNT'] = str(self.pri_hdr['PHTCNT'])
+
         # the DRP has touched this file so it's origin is now this DRP
         self.pri_hdr['ORIGIN'] = 'DRP'
 
@@ -762,9 +769,36 @@ class FlatField(Image):
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this flat file (required only if raw 2D data is passed in)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+    #def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        #super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+    
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        if input_dataset is not None:
+            pri_hdr,ext_hdr,err_hdr,dq_hdr=corgidrp.check.merge_headers(
+                input_dataset, first_frame_keywords= ['MJDSRT','PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT','OBSNUM','VISNUM','CPGSFILE','AUXFILE','VISTYPE',
+                                                      'TARGET', 'RA','DEC', 'EQUINOX', 'RAPM','DECPM', 'PSFREF', 'OPGAIN','PHTCNT','OPMODE','EXPTIME','EMGAIN_C',
+                                                      'UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5','EMGAIN_A','KGAINPAR','ISPC','SPAM_H','SPAM_V',
+                                                      'SPAMNAME','SPAMSP_H','SPAMSP_V','FPAM_H','FPAM_V','FPAMNAME','FPAMSP_H','FPAMSP_V','LSAM_H','LSAM_V',
+                                                      'LSAMNAME','LSAMSP_H','LSAMSP_V','FSAM_H','FSAM_V','FSAMNAME','FSAMSP_H','FSAMSP_V','CFAM_H','CFAM_V',
+                                                      'CFAMNAME','CFAMSP_H','CFAMSP_V','DPAM_H','DPAM_V','DPAMNAME','DPAMSP_H','DPAMSP_V','PA_V3','WBJ_1','WBJ_2','WBJ_3','GAINTCAL',
+                                                      'STATUS','BLNKTIME','BLNKCYC','EXPCYC','OVEREXP','NOVEREXP'],
+                last_frame_keywords = ['VISITID', 'MJDEND',  'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4','EACQ_ROW', 'EACQ_COL','DATATYPE'],
+
+                invalid_keywords=['PA_APER','FRAMET','SVB_1','SVB_2','SVB_3','ROLL','PITCH','YAW','ISHOWFSC', 'ISACQ', 'SPBAL', 'SATSPOTS',  'HCVBIAS','EXCAMT','LOCAMT','CYCLES',
+                    'LASTEXP','PROXET','FCMLOOP', 'FCMPOS','FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY','SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY','DMZLOOP','1SVALID',
+                    'Z2AVG','Z2RES','Z2VAR','Z3AVG','Z3RES','Z3VAR','10SVALID','Z4AVG','Z4RES','Z5AVG','Z5RES','Z6AVG','Z6RES',
+                    'Z7AVG','Z7RES','Z8AVG','Z8RES','Z9AVG','Z9RES','Z10AVG','Z10RES','Z11AVG','Z11RES','Z12AVG','Z13AVG', 'Z14AVG'],
+                    calculated_value_keywords = ['DATETIME','FTIMEUTC','FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']+ 
+                    [f'FILE{i}' for i in range(100)]
+                    )
+            
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            # run the image class contructor
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
 
         # if this is a new master flat, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new masterflat
@@ -826,8 +860,9 @@ class SpectroscopyCentroidPSF(Image):
             self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
 
             # Generate default output filename
-            base = input_dataset[0].filename.split(".fits")[0]
-            self.filename = re.sub('_l[0-9].', '_scp_cal', input_dataset[-1].filename)
+            base = input_dataset[-1].filename.split(".fits")[0]
+            filename = f"{base}_scp_cal.fits"
+            self.filename = re.sub('_l[0-9].', '', filename)
             self.pri_hdr['FILENAME'] = self.filename
             if err is None:
                 self.err = np.zeros(self.data.shape)
@@ -866,8 +901,31 @@ class LineSpread(Image):
         fwhm_err (float): fit error of the Gaussian fwhm
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, gauss_par=None, input_dataset=None):
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
-
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                any_true_keywords=['DESMEAR', 'CTI_CORR'],
+                invalid_keywords=[
+                    #pri header
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 
+                    'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    #ext header
+                    'FRMTYPE', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS', 'STATUS',
+                    'HVCBIAS', 'OPMODE', 'EMGAIN_C', 'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
+                    'PROXET', 'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP', 'ISVALID', 
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN'
+                ]
+            )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new LineSpread, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new LineSpread 
@@ -883,7 +941,7 @@ class LineSpread(Image):
 
             # Generate default output filename
             # Strip level suffix (e.g., _l2b) before adding calibration suffix
-            base = input_dataset[0].filename.split(".fits")[0]
+            base = input_dataset[-1].filename.split(".fits")[0]
             self.filename = f"{base}_lsf_cal.fits"
             self.filename = re.sub('_l[0-9].', '', self.filename)
             if gauss_par is not None:
@@ -917,7 +975,7 @@ class LineSpread(Image):
         self.amp_err = self.gauss_par[3]
         self.wave_err = self.gauss_par[4]
         self.fwhm_err = self.gauss_par[5]
-   
+        
     def save(self, filedir=None, filename=None):
         """
         Save file to disk with user specified filepath
@@ -981,7 +1039,7 @@ class DispersionModel(Image):
     params_key = ['clocking_angle', 'clocking_angle_uncertainty', 'pos_vs_wavlen_polycoeff', 'pos_vs_wavlen_cov', 'wavlen_vs_pos_polycoeff', 'wavlen_vs_pos_cov']
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
         if isinstance(data_or_filepath, str):
-            # run the image class contructor
+            # run the image class constructor
             super().__init__(data_or_filepath)
             # double check that this is actually a DispersionModel file that got read in
             # since if only a filepath was passed in, any file could have been read in
@@ -1012,9 +1070,9 @@ class DispersionModel(Image):
             data_list = Table(rows = [data_or_filepath])
             self.data = data_list
             self.filedir = "."
-            # Use the last input file's name if available, else timestamp
-            filetime = format_ftimeutc(pri_hdr['FILETIME'])
-            self.filename = f"cgi_{pri_hdr['VISITID']}_{filetime}_dpm_cal.fits"
+            # Use the file name of SpectroscopyCentroid
+            scp_filename = pri_hdr["FILENAME"]
+            self.filename = re.sub('scp', 'dpm', scp_filename)
             self.pri_hdr['FILENAME'] = self.filename
 
         # initialization data passed in
@@ -1028,8 +1086,7 @@ class DispersionModel(Image):
         # Add err and dq attributes for walker compatibility (set to None since DispersionModel doesn't have these)
         self.err = None
         self.dq = None
-
-
+    
     def save(self, filedir=None, filename=None):
         """
         Save file to disk with user specified filepath
@@ -1306,7 +1363,7 @@ class KGain(Image):
         # these values to run smoothly; if these values are actually required for 
         # a particular process, the user would be alerted since these values below would result in an error as they aren't numerical
         if 'RN' not in self.ext_hdr:
-            self.ext_hdr['RN'] = ''
+            self.ext_hdr['RN'] = 0.0
         if 'RN_ERR' not in self.ext_hdr:
             self.ext_hdr['RN_ERR'] = ''
         # File format checks
@@ -1426,43 +1483,32 @@ class BadPixelMap(Image):
                 input_dataset,
                 any_true_keywords=['DESMEAR', 'CTI_CORR'],
                 invalid_keywords=[
-                    'FTIMEUTC', 'PROXET', 'DATETIME', 'BUNIT', 'EXPTIME', 'EMGAIN_C', 'DATATYPE',
-                    'VISTYPE', 'TARGET', 'KGAINPAR', 'SPBAL', 'DMZLOOP', 'OBSNUM',
-                    'VISITID', 'PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM','CPGSFILE', 'AUXFILE',
-                    'FILETIME', 'RA', 'DEC', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
-                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 
-                    'WBJ_3', 'ISHOWFSC', 'ISACQ', 'ISFLAT', 'SATSPOTS', '1SVALID', '10SVALID',
+                    # Primary header keywords
+                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    # Extension header keywords
+                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
+                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
                     'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
                     'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
                     'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-                    'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR',
+                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
                     'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
                     'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
                     'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
                     'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
                     'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
                     'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
-                    'ISHOWFSC', 'ISACQ', 'ISFLAT', 'SATSPOTS', '1SVALID', '10SVALID',
-                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
-                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
-                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-                    'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR',
-                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
-                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
-                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
-                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
-                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
-                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
                 ]
             )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
@@ -1779,8 +1825,49 @@ class AstrometricCalibration(Image):
 
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
-        # run the image class constructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
+        if input_dataset is not None:
+            # Primary header keywords
+            pri_hdr, _, _, _ = corgidrp.check.merge_headers(
+                input_dataset,
+                invalid_keywords=['VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    'STAR1','STAR2','STAR3','STAR4','STAR5'] + ['STAR{0}'.format(i) for i in range(6, 1000)],
+                deleted_keywords=['SATSPOTS','ISHOWFSC','HOWFSLNK'])
+
+            _, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                any_true_keywords=['DESMEAR', 'CTI_CORR'],
+                invalid_keywords=[
+                    # Extension header keywords
+                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
+                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
+                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
+                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME',
+                    'STAR1','STAR2','STAR3','STAR4','STAR5'] + ['STAR{0}'.format(i) for i in range(6, 1000)],
+                averaged_keywords=['EXCAMT']
+            )        
+            # run the image class constructor
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
 
         # File format checks
         if type(self.data) != np.ndarray:
@@ -1895,8 +1982,32 @@ class FluxcalFactor(Image):
         fluxcal_err (float): the error of the flux cal factor for the corresponding filter
     """
     def __init__(self, data_or_filepath, err = None, pri_hdr=None, ext_hdr=None, err_hdr = None, input_dataset = None):
-       # run the image class contructor
-        super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                any_true_keywords=['DESMEAR', 'CTI_CORR'],
+                invalid_keywords=[
+                    #pri header
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 
+                    'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    #ext header
+                    'FRMTYPE', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS', 'STATUS',
+                    'HVCBIAS', 'OPMODE', 'EMGAIN_C', 'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
+                    'PROXET', 'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP', 'ISVALID', 
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN'
+                ]
+            )
+            # run the image class constructor
+            super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
         # if filepath passed in, just load in from disk as usual
         # File format checks
         if self.data.shape != (1,):
@@ -2071,6 +2182,167 @@ class SpecFluxCal(Image):
             self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
+class SlitTransmission(Image):
+    """
+    Contains the slit transmission map of a defined slit. This consists of an
+    2D array with:
+        1/ Slit transmission map derived at different locations by interpolation.
+        2/ Corresponding locations along EXCAM +X direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+        3/ Corresponding locations along EXCAM +Y direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+  
+    Args:
+        data_or_filepath (str or np.array): either a filepath string corresponding to an
+                                        existing SlitTransmission file saved to disk or an
+                                        2D array with the slit transmission map
+        x_offset (np.array): 1D array of x positions in slit
+        y_offset (np.array): 1D array of y positions in slit
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this SlitTransmission file 
+        (required only if raw 2D data is passed in)
+    
+    Attributes:
+        x_offset (np.array): 1D array, locations along EXCAM +X direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+        y_offset (np.array): 1D array, locations along EXCAM +Y direction with respect to the
+          zero-point in (fractional) EXCAM pixels where the slit transmission has
+          been derived.
+        slitname (str): name of slit with measured transmission
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, x_offset = None, y_offset = None, input_dataset=None):
+        
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # if this is a new SlitTransmission, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new SlitTransmission 
+        if isinstance(data_or_filepath, np.ndarray):
+            if input_dataset is None:
+                raise ValueError("Must pass `input_dataset` to create new SlitTransmission calibration.")
+
+            self.ext_hdr['DATATYPE'] = 'SlitTransmission'
+            self.ext_hdr['DATALVL'] = 'CAL'
+            self._record_parent_filenames(input_dataset)
+            self.ext_hdr['HISTORY'] = "Stored Slit Transmission map."
+
+            # Generate default output filename
+            # Strip level suffix (e.g., _l2b) before adding calibration suffix
+            base = input_dataset[0].filename.split(".fits")[0]
+            self.filename = f"{base}_slt_cal.fits"
+            self.filename = re.sub('_l[0-9].', '', self.filename)
+            # File format checks
+            if self.data.ndim != 2:
+                raise ValueError('The slit transmission array must have 2 dimensions') 
+
+            if x_offset is not None and y_offset is not None:
+                if len (x_offset) != len(y_offset):
+                    raise ValueError('x and y positions must have same array size')
+                elif len(x_offset) != self.data.shape[0]:
+                    raise ValueError('x and y positions do not fit to slit map size')
+                else:
+                    self.x_offset = x_offset
+                    self.y_offset = y_offset
+            else:
+                raise ValueError('The SlitTransmission calibration must have also the x- and y offset parameters')
+            self.xoff_hdr = fits.Header()
+            self.xoff_hdr["EXTNAME"] = "XOFF"
+            self.yoff_hdr = fits.Header()
+            self.yoff_hdr["EXTNAME"] = "YOFF"
+        else:
+            # a filepath is passed in
+            with fits.open(data_or_filepath) as hdulist:
+                #x/y offset is in FITS extension
+                self.x_offset = hdulist["XOFF"].data
+                self.xoff_hdr = hdulist["XOFF"].header    
+                self.y_offset = hdulist["YOFF"].data
+                self.yoff_hdr = hdulist["YOFF"].header    
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SlitTransmission':
+            raise ValueError("This file is not a valid SlitTransmission calibration.")
+        self.slitname = self.ext_hdr['FSAMNAME']
+
+    def select_slit_transmission_curve(self, frame):
+        """
+        Select the slit-transmission curve for the frame from SlitTransmission cal product
+    
+        Args:
+            frame (corgidrp.data.Image): L4 spectroscopy frame whose WV0_X/WV0_Y
+                coordinates identify where the slit correction should be evaluated.
+
+        Returns:
+            numpy.ndarray: 1-D slit throughput curve sampled on the frame's SPEC
+            wavelength grid.
+        """
+        slit_map, slit_x, slit_y = self.data, self.x_offset, self.y_offset
+        slit_map = np.asarray(slit_map, dtype=float)
+        slit_x = np.asarray(slit_x, dtype=float)
+        slit_y = np.asarray(slit_y, dtype=float)
+        try:
+            wv0_x = float(frame.ext_hdr['WV0_X'])
+            wv0_y = float(frame.ext_hdr['WV0_Y'])
+        except KeyError as exc:
+            raise ValueError("Frame must contain WV0_X and WV0_Y for slit correction.") from exc
+
+        # Slit map should be (N_positions, N_wave) or already 1-D in wavelength
+        if slit_map.ndim == 1:
+            slit_curve = slit_map
+        elif slit_map.ndim == 2:
+            if slit_map.shape[0] != slit_x.size or slit_x.size != slit_y.size:
+                raise ValueError("slit_map first dimension must match slit_x and slit_y length.")
+            # Find the closest sampled slit position to the spectrum's WV0 location (not interpolating,
+            # just doing nearest neighbor lookup)
+            idx = np.argmin(np.hypot(slit_x - wv0_x, slit_y - wv0_y))
+            slit_curve = slit_map[idx]
+        else:
+            raise ValueError("slit_transmission map must be 1-D or 2-D.")
+
+        slit_curve = np.asarray(slit_curve, dtype=float).ravel()
+
+        # Require that the slit transmission is defined on the same size wavelength grid as SPEC
+        # note: should spec.slit_transmission() also return a wavelength array to make sure it's
+        # the same wavelength grid?
+        spec_wave = frame.hdu_list['SPEC_WAVE'].data
+        if slit_curve.size != spec_wave.size:
+            raise ValueError(
+                f"slit_transmission wavelength axis (len={slit_curve.size}) must match "
+                f"SPEC_WAVE length (len={spec_wave.size})."
+            )
+
+        return slit_curve
+
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+
+        xoff_hdu = fits.ImageHDU(data=self.x_offset, header = self.xoff_hdr)
+        hdulist.append(xoff_hdu)
+        yoff_hdu = fits.ImageHDU(data=self.y_offset, header = self.yoff_hdr)
+        hdulist.append(yoff_hdu)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
+        
 class FpamFsamCal(Image):
     """
     Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
@@ -2244,6 +2516,42 @@ class CoreThroughputCalibration(Image):
         if self.ct_excam.shape[1] != self.data.shape[0]:
             raise ValueError('The core throughput map must have one PSF location '
                 'and CT value for each PSF.')
+        
+        if input_dataset is not None:
+            # Filter to off-axis PSF frames only (exclude pupil images) to check
+            # that PAM keywords are consistent across all images
+            offaxis_frames = [f for f in input_dataset
+                              if f.ext_hdr.get('DPAMNAME') != 'PUPIL']
+            offaxis_dataset = Dataset(offaxis_frames)
+
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                offaxis_dataset, averaged_keywords = [
+                    'RA', 'DEC', 'RAPM', 'DECPM', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3'
+                    'ROLL', 'PITCH', 'YAW', 'EXCAMT', 'NOVEREXP', 'PROXET',
+                    'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    ],
+                    invalid_keywords = [
+                        'FTIMEUTC', 'PROXET', 'DATETIME', 'FSMSG1',
+                        'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                        ]
+                )
+        
+            # Apply merged headers from PSF part of the dataset back to the output 
+            self.pri_hdr = pri_hdr
+            ext_hdr['EXTNAME'] = 'PSFCUBE'
+            ext_hdr['BUNIT'] = 'photoelectron/pix/s'
+            ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
+                'observing sequence. PSFs are not normalized. They are the '
+                'images of the off-axis source. The data cube is centered '
+                'around each PSF location')
+            self.ext_hdr = ext_hdr
+            self.err_hdr = err_hdr
+            self.dq_hdr = dq_hdr
+
 
         # Additional bookkeeping for a calibration file:
         # If this is a new calibration file, we need to bookkeep it in the header
@@ -2669,7 +2977,37 @@ class CoreThroughputMap(Image):
             data_or_filepath.shape[0] == 3
             if data_or_filepath[2,:].max() > 1 or data_or_filepath[2,:].min() < 0:
                 raise ValueError('Corethroughput map values should be within 0 and 1')
+        
+        if input_dataset is not None:
+            # Filter to off-axis PSF frames only (exclude pupil images) to check
+            # that PAM keywords are consistent across all images
+            offaxis_frames = [f for f in input_dataset
+                              if f.ext_hdr.get('DPAMNAME') != 'PUPIL']
+            offaxis_dataset = Dataset(offaxis_frames)
 
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                offaxis_dataset, averaged_keywords = [
+                    'RA', 'DEC', 'RAPM', 'DECPM', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3'
+                    'ROLL', 'PITCH', 'YAW', 'EXCAMT', 'NOVEREXP', 'PROXET',
+                    'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    ],
+                    invalid_keywords = [
+                        'FTIMEUTC', 'PROXET', 'DATETIME', 'FSMSG1',
+                        'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                        ]
+                )
+        
+            # Apply merged headers from PSF part of the dataset back to the output 
+            self.pri_hdr = pri_hdr
+            ext_hdr['BUNIT'] = 'photoelectron/pix/s'
+            self.ext_hdr = ext_hdr
+            self.err_hdr = err_hdr
+            self.dq_hdr = dq_hdr
+            
         # Additional bookkeeping for a calibration file:
         # If this is a new calibration file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if
@@ -2717,7 +3055,7 @@ class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
 
-    # TODO: Add more bandpasses, modes to self.wave_hlc
+    # TODO: Add more bandpasses, modes to self.filter_wavs
     #       Add wcs header info!
 
     Attrs:
@@ -2762,8 +3100,8 @@ class PyKLIPDataset(pyKLIP_Data):
         super(PyKLIPDataset, self).__init__()
 
         # Set filter wavelengths
-        self.wave_hlc = {'1F': 575e-9} # meters
-            
+    
+        self.filter_wavs = {'1F': 575e-9, '4F': 825e-9} # meters
         # Read science and reference files.
         self.readdata(dataset, psflib_dataset, highpass)
         
@@ -2929,10 +3267,9 @@ class PyKLIPDataset(pyKLIP_Data):
 
             # Get center wavelengths
             try:
-                CWAVEL = self.wave_hlc[CFAMNAME]
+                CWAVEL = self.filter_wavs[CFAMNAME]
             except:
-                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
-            
+                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')           
             # Rounding error introduced here?
             wvs_all += [CWAVEL] * NINTS
 
@@ -3129,7 +3466,8 @@ class PyKLIPDataset(pyKLIP_Data):
         hdul.close()
         
         pass
-    
+
+
 class NDFilterSweetSpotDataset(Image):
     """
     Class for an ND filter sweet spot dataset product.
@@ -3164,14 +3502,48 @@ class NDFilterSweetSpotDataset(Image):
         dq=None,
         err_hdr=None
     ):
-        # Run the standard Image constructor.
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                invalid_keywords=[
+                    # Primary header keywords
+                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    # Extension header keywords
+                    'BITPIX', 'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'STATUS', 'HVCBIAS', 'OPMODE',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR',
+                    'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
+                    'PROXET',
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP',
+                    '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'DATETIME', 'FTIMEUTC', 'DATATYPE',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                ],
+            )
+        else:
+            dq_hdr = None
         super().__init__(
             data_or_filepath,
             pri_hdr=pri_hdr,
             ext_hdr=ext_hdr,
             err=err,
             dq=dq,
-            err_hdr=err_hdr
+            err_hdr=err_hdr,
+            dq_hdr=dq_hdr
         )
 
         # 1. Check data shape: expect N×3 array for the sweet-spot dataset.
@@ -3195,6 +3567,7 @@ class NDFilterSweetSpotDataset(Image):
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?
 
+            self.pri_hdr['FILENAME'] = self.filename
             self.ext_hdr['DATATYPE'] = 'NDFilterSweetSpotDataset'
             self.ext_hdr['HISTORY'] = (
                 f"NDFilterSweetSpotDataset created from {self.ext_hdr.get('DRPNFILE','?')} frames"
@@ -3436,7 +3809,8 @@ datatypes = { "Image" : Image,
               "SpecFilterOffset": SpecFilterOffset,
               "MuellerMatrix": MuellerMatrix,
               "NDMuellerMatrix": NDMuellerMatrix,
-              "SpecFluxCal": SpecFluxCal }
+              "SpecFluxCal": SpecFluxCal,
+              "SlitTransmission": SlitTransmission }
 
 
 def autoload(filepath):

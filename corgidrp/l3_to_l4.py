@@ -10,6 +10,7 @@ from astropy.wcs import WCS
 
 import corgidrp
 from corgidrp import data
+from corgidrp import check
 from corgidrp.combine import derotate_arr, prop_err_dq, combine_subexposures
 from corgidrp import star_center
 from corgidrp.klip_fm import meas_klip_thrupt
@@ -570,7 +571,9 @@ def do_psf_subtraction(input_dataset,
 
             # Add relevant info from the pyklip headers:
             pri_hdr = sci_dataset[rr].pri_hdr.copy()
-            ext_hdr = sci_dataset[rr].ext_hdr.copy()    
+            ext_hdr = sci_dataset[rr].ext_hdr.copy() 
+            err_hdr = sci_dataset[rr].err_hdr.copy()   
+            dq_hdr = sci_dataset[rr].dq_hdr.copy()
 
             result_fpath = os.path.join(outdir_mode,f'{fileprefix}-KLmodes-all.fits')   
             pyklip_hdr = fits.getheader(result_fpath)
@@ -592,6 +595,7 @@ def do_psf_subtraction(input_dataset,
             
             frame = data.Image(psfsub_frame_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                        err_hdr=err_hdr, dq_hdr=dq_hdr
                         )
             frames.append(frame)
 
@@ -624,6 +628,7 @@ def do_psf_subtraction(input_dataset,
     
         collapsed_frame = data.Image(collapsed_psfsub_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                        err_hdr=err_hdr, dq_hdr=dq_hdr,
                         err=err_out_collapsed,
                         dq=dq_out_collapsed
                         )
@@ -644,10 +649,38 @@ def do_psf_subtraction(input_dataset,
     for dq_key in list(sci_dataset[0].dq_hdr): 
         if 'NAXIS' in dq_key: 
             del sci_dataset[0].dq_hdr[dq_key]
+    
+    # average/delete header keywords as L4 involves combination of multiple frames
+    pri_hdr, ext_hdr, _, _ = check.merge_headers(
+        collapsed_dataset,
+        last_frame_keywords = ['VISITID', 'MJDEND'],
+        # the first frame in collapsed dataset seems to contain the correct WCS, so
+        # propagate that one
+        first_frame_keywords = ['MJDSRT', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                                'CRPIX1', 'CRPIX2'],
+        invalid_keywords=[
+            # Primary header keywords
+            'FILETIME', 'PA_V3', 'PA_APER',
+            'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+            'WBJ_1', 'WBJ_2', 'WBJ_3',
+            # Extension header keywords
+            'DATETIME', 'FTIMEUTC', 'DATATYPE'
+        ],
+        averaged_keywords=[
+            'EXCAMT', 'NOVEREXP', 'PROXET',
+            'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+            'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+            'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+            'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+            'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+            'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+            'Z12AVG', 'Z13AVG', 'Z14AVG'
+        ]
+    )
 
     frame = data.Image(
             collapsed_dataset.all_data,
-            pri_hdr=pri_hdr, ext_hdr=collapsed_dataset[0].ext_hdr, 
+            pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
             err=collapsed_dataset.all_err[np.newaxis,:,0,:,:],
             dq=collapsed_dataset.all_dq,
             err_hdr=sci_dataset[0].err_hdr,
@@ -1602,14 +1635,26 @@ def combine_polarization_states(input_dataset,
 
     #TODO: propagate DQ extension through matrix inversion, add DQ extension and header to output frame
 
+    # Delete additional headers from stokes data cube (after combined headers have been done in 
+    # do_psf_subtraction)
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(
+        psf_subtracted_dataset,
+        invalid_keywords=[
+            'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+        ],
+    )
+    ext_hdr['CTYPE3'] = 'STOKES'
+
+
     # construct output
     output_frame = data.Image(stokes_datacube,
-                              pri_hdr=psf_subtracted_intensity.pri_hdr.copy(),
-                              ext_hdr=psf_subtracted_intensity.ext_hdr.copy(),
+                              pri_hdr=pri_hdr,
+                              ext_hdr=ext_hdr,
                               err=output_err,
-                              err_hdr=psf_subtracted_intensity.err_hdr.copy())
+                              err_hdr=err_hdr)
     
     output_frame.filename = dataset.frames[-1].filename
+    output_frame.pri_hdr['FILENAME'] = output_frame.filename
 
     updated_dataset = data.Dataset([output_frame])
 
@@ -1726,7 +1771,40 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     
     '''
     dataset = input_dataset.copy()
+
+    # Here we change header keywords for both spec mode datasets (coron/non-coron)
+    # average/delete header keywords as L4 involves combination of multiple frames
+    pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
+    last_frame_keywords=['VISITID', 'MJDEND'],
+    first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
+    deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
+    invalid_keywords=[
+                    #Primary header keywords
+                    'FILETIME', 'PA_V3', 'PA_APER','SVB_1', 'SVB_2', 'SVB_3', 
+                    'ROLL', 'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    #Extension header keywords
+                    'DATETIME', 'FTIMEUTC','DATATYPE'],
+    averaged_keywords=['EXCAMT','NOVEREXP','PROXET',
+                    'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR']) 
+    #combine frames                       
     dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling, combine_other_hdus=True)
+    #certain headers are added in combine_subexposures, we manually add them in
+    drpnfile = dataset[0].ext_hdr['DRPNFILE']
+    num_fr = dataset[0].ext_hdr['NUM_FR']
+    # incorporate modified headers in L4 dataset
+    for frame in dataset:
+        frame.pri_hdr = pri_hdr_comb
+        frame.ext_hdr = ext_hdr_comb
+        frame.ext_hdr['DRPNFILE'] = drpnfile
+        frame.ext_hdr['NUM_FR'] = num_fr
+        frame._record_parent_filenames(input_dataset)
+    
     history_msg = f"Combined psf subtracted spectroscopy frames by applying {collapse}, result is a dataset with one frame"
     dataset.update_after_processing_step(history_msg)
     return dataset
@@ -1766,6 +1844,8 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         # update filename convention. The file convention should be
         # "CGI_[datalevel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
+        #updating filename in the primary header
+        frame.pri_hdr['FILENAME'] = frame.filename
 
     history_msg = "Updated Data Level to L4"
     updated_dataset.update_after_processing_step(history_msg)

@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import corgidrp.data as data
 from pyklip.klip import rotate
+import corgidrp
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling, other_hdus=None):
     """
@@ -150,7 +151,38 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
 
         new_image._record_parent_filenames(input_dataset[num_frames_per_group*i:num_frames_per_group*(i+1)])   
         new_dataset.append(new_image)
+
     new_dataset = data.Dataset(new_dataset)
+    drpnfile = new_dataset[0].ext_hdr['DRPNFILE']
+    # Here we change header keywords only for the combined non-coronagraphic imaging datasets
+    if (input_dataset[0].ext_hdr['DPAMNAME'] == 'IMAGING' and input_dataset[0].ext_hdr['LSAMNAME'] == 'OPEN') and input_dataset[0].ext_hdr['DATALVL'] == 'L3':
+        # average/delete header keywords as L4 involves combination of multiple frames
+        pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
+        last_frame_keywords=['VISITID', 'MJDEND'],
+        first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
+        deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
+        invalid_keywords=[
+                        #Primary header keywords
+                        'FILETIME', 'PA_V3', 'PA_APER','SVB_1', 'SVB_2', 'SVB_3', 
+                        'ROLL', 'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                        #Extension header keywords
+                        'DATETIME', 'FTIMEUTC','DATATYPE'],
+        averaged_keywords=['EXCAMT','NOVEREXP','PROXET',
+                        'FCMPOS','FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                        'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                        'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                        'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                        'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                        'Z10RES', 'Z11RES',
+                        'Z2VAR', 'Z3VAR'])
+        # incorporate modified headers in L4 dataset
+        for img in new_dataset:
+            img.pri_hdr = pri_hdr_comb
+            img.ext_hdr = ext_hdr_comb
+            img.ext_hdr['NUM_FR'] = num_frames_per_group
+            img.ext_hdr['DRPNFILE'] = drpnfile 
+            img._record_parent_filenames(input_dataset)
+
     new_dataset.update_after_processing_step("Combine_subexposures: combined every {0} frames by {1}".format(num_frames_per_group, collapse))
 
     return new_dataset

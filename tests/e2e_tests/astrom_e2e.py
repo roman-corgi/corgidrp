@@ -40,9 +40,9 @@ def fix_str_for_tvac(
             prihdr["OBSNAME"] = prihdr['OBSTYPE']
         else:
             prihdr["OBSNAME"] = "BORESITE"  # Default value
-        prihdr["PHTCNT"] = False
-        
-        exthdr["ISPC"] = False
+        prihdr["PHTCNT"] = "False"
+
+        exthdr["ISPC"] = 0
         
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
