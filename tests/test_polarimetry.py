@@ -759,8 +759,8 @@ def test_combine_polarization_states():
         pol0_img = data.Image(pol0_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         pol0_img.pri_hdr['PA_APER'] = rotation_angle
         pol0_img.ext_hdr['DPAMNAME'] = 'POL0'
-        pol0_img.ext_hdr['STARLOCX'] = 24
-        pol0_img.ext_hdr['STARLOCY'] = 24
+        pol0_img.ext_hdr['STARLOCX'] = 24.
+        pol0_img.ext_hdr['STARLOCY'] = 24.
         input_pol_frames.append(pol0_img)
 
         # construct POL45 image
@@ -768,8 +768,8 @@ def test_combine_polarization_states():
         pol45_img = data.Image(pol45_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         pol45_img.pri_hdr['PA_APER'] = rotation_angle
         pol45_img.ext_hdr['DPAMNAME'] = 'POL45'
-        pol45_img.ext_hdr['STARLOCX'] = 24
-        pol45_img.ext_hdr['STARLOCY'] = 24
+        pol45_img.ext_hdr['STARLOCX'] = 24.
+        pol45_img.ext_hdr['STARLOCY'] = 24.
         input_pol_frames.append(pol45_img)
 
         # construct total intensity image for psf sub
@@ -777,10 +777,10 @@ def test_combine_polarization_states():
         psfsub_img_2 = data.Image( (intensity_45 + intensity_135) * target_rotated, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         psfsub_img_1.pri_hdr['PA_APER'] = rotation_angle
         psfsub_img_2.pri_hdr['PA_APER'] = rotation_angle
-        psfsub_img_1.ext_hdr['STARLOCX'] = 24
-        psfsub_img_2.ext_hdr['STARLOCX'] = 24
-        psfsub_img_1.ext_hdr['STARLOCY'] = 24
-        psfsub_img_2.ext_hdr['STARLOCY'] = 24
+        psfsub_img_1.ext_hdr['STARLOCX'] = 24.
+        psfsub_img_2.ext_hdr['STARLOCX'] = 24.
+        psfsub_img_1.ext_hdr['STARLOCY'] = 24.
+        psfsub_img_2.ext_hdr['STARLOCY'] = 24.
         input_psfsub_frames.append(psfsub_img_1)
         input_psfsub_frames.append(psfsub_img_2)
         
