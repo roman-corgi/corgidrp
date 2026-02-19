@@ -17,7 +17,7 @@ def test_kgain():
     dat = np.ones([1024,1024]) * 2
     err = np.ones([1,1024,1024]) * 0.5
     ptc = np.ones([2,1024])
-    exthd["RN"] = 100
+    exthd["RN"] = 100.0
     exthd["RN_ERR"] = 2
     ptc_hdr = fits.Header()
     image1 = data.Image(dat,pri_hdr = prhd, ext_hdr = exthd, err = err)

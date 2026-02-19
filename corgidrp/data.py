@@ -476,6 +476,10 @@ class Image():
         if not 'IS_BAD' in self.ext_hdr:
             self.ext_hdr.set('IS_BAD', False, "Was this frame deemed bad?")
 
+        # PHTCNT can come in as an int from L1 data but the DRP expects it as a string
+        if 'PHTCNT' in self.pri_hdr and not isinstance(self.pri_hdr['PHTCNT'], str):
+            self.pri_hdr['PHTCNT'] = str(self.pri_hdr['PHTCNT'])
+
         # the DRP has touched this file so it's origin is now this DRP
         self.pri_hdr['ORIGIN'] = 'DRP'
 
@@ -1332,7 +1336,7 @@ class KGain(Image):
         # these values to run smoothly; if these values are actually required for 
         # a particular process, the user would be alerted since these values below would result in an error as they aren't numerical
         if 'RN' not in self.ext_hdr:
-            self.ext_hdr['RN'] = ''
+            self.ext_hdr['RN'] = 0.0
         if 'RN_ERR' not in self.ext_hdr:
             self.ext_hdr['RN_ERR'] = ''
         # File format checks

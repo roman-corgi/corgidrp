@@ -324,7 +324,7 @@ def guess_template(dataset):
                 recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC'] in (True, 1):
+            if image.ext_hdr['ISPC'] == 1:
                 recipe_filename = ["l1_to_l2b_pc_dark_1.json", "l1_to_l2b_pc_dark_2.json"]# "l1_to_l2b_pc_dark.json"
                 chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
@@ -352,7 +352,7 @@ def guess_template(dataset):
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC'] in (True, 1):
+            if image.ext_hdr['ISPC'] == 1:
                 recipe_filename = ["l2a_to_l2b_pc_dark_1.json", "l2a_to_l2b_pc_dark_2.json"]#"l2a_to_l2b_pc_dark.json"
                 chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
@@ -366,12 +366,12 @@ def guess_template(dataset):
             is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
             
             if is_spectroscopy:
-                if image.ext_hdr['ISPC'] in (True, 1):
+                if image.ext_hdr['ISPC'] == 1:
                     recipe_filename = ["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"] #"l2a_to_l2b_pc_spec.json"
                 else:
                     recipe_filename = "l2a_to_l2b_spec.json"
             else:
-                if image.ext_hdr['ISPC'] in (True, 1):
+                if image.ext_hdr['ISPC'] == 1:
                     recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
                     chained = True
                 else:
