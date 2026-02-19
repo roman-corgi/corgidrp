@@ -543,7 +543,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     
     outputdir = thisfile_dir
-    e2edata_dir =  "/Users/jmilton/Documents/CGI/E2E_Test_Data2"
+    e2edata_dir =  "/Users/polaris/Roman_CGI_flatfielding/pol_flatfielding/corgi/E2E_Test_Data"
 
     ap = argparse.ArgumentParser(description="run the l2b-> PolFlatfield end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
