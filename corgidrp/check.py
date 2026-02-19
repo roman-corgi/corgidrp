@@ -1248,9 +1248,9 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
     # special case:
     if 'PHTCNT' in adjusted_pri_hdr:
         value = adjusted_pri_hdr['PHTCNT']
-        if value == '0':
+        if value == '0' or value == 0:
             adjusted_pri_hdr['PHTCNT'] = 'False'
-        elif value == '1':
+        elif value == '1' or value == 1:
             adjusted_pri_hdr['PHTCNT'] = 'True'
         # otherwise, could have been '-999', which is fine (still str)
 
