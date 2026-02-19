@@ -639,8 +639,8 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CD1_2'] = 0
     exthdr['CD2_1'] = 0
     exthdr['CD2_2'] = 0
-    exthdr['CRPIX1'] = 0
-    exthdr['CRPIX2'] = 0
+    exthdr['CRPIX1'] = 0. #could be fractional pixel value
+    exthdr['CRPIX2'] = 0. #could be fractional pixel value
     exthdr['CTYPE1'] = 'RA---TAN'
     exthdr['CTYPE2'] = 'DEC--TAN'
     exthdr['CDELT1'] = 0.
@@ -1482,9 +1482,9 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     # TO DO: Determine what level this image should be
     prhd, exthd, errhdr, dqhdr, biashdr= create_default_L2b_headers()
     # Record actual commanded EM
-    exthd['EMGAIN_C'] = emgain
+    exthd['EMGAIN_C'] = float(emgain)
     # Record actual exposure time
-    exthd['EXPTIME'] = time
+    exthd['EXPTIME'] = float(time)
     # Mock error maps
     err = np.ones([1200,2200]) * 0.5
     dq = np.zeros([1200,2200], dtype = np.uint16)
@@ -3000,7 +3000,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['FPAM_V']   = 6124.9
     exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
     exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
-    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['EXPTIME']  = float(exptime)            # Ensure exptime is defined       # Ensure color_cor is defined
     exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
@@ -3167,7 +3167,7 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
     exthdr['FPAM_V']   = 6124.9
     exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
     exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
-    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['EXPTIME']  = float(exptime)            # Ensure exptime is defined       # Ensure color_cor is defined
     exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
@@ -5574,7 +5574,7 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, pa_aper_deg=None, exp_t
     ext_hdr["STARLOCX"] = 0.0
     ext_hdr["STARLOCY"] = 0.0
     pri_hdr['PA_APER'] = pa_aper_deg
-    pri_hdr['EXPTIME'] = exp_time
+    pri_hdr['EXPTIME'] = float(exp_time)
     if col_cor is not None:
         ext_hdr['COL_COR'] = col_cor
     img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
