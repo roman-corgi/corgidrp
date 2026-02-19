@@ -546,13 +546,13 @@ def test_mueller_matrix_cal():
     assert isinstance(mueller_matrix, pol.MuellerMatrix)
 
     #Put in the ND filter and make sure the type is correct. 
-    for framm in mock_dataset.frames:
+    for framm in stokes_dataset.frames:
         framm.ext_hdr["FPAMNAME"] = "ND225"
     mueller_matrix_nd = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
     assert isinstance(mueller_matrix_nd, pol.NDMuellerMatrix)
 
     #Make sure that if the dataset is mixed ND and non-ND an error is raised
-    mock_dataset.frames[0].ext_hdr["FPAMNAME"] = "CLEAR"
+    stokes_dataset.frames[0].ext_hdr["FPAMNAME"] = "CLEAR"
     with pytest.raises(ValueError):
         mueller_matrix_mixed = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
