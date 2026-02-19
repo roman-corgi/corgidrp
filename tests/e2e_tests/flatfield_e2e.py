@@ -44,7 +44,6 @@ def fix_str_for_tvac(
 
 
 @pytest.mark.e2e
-
 def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     """
     Tests e2e flat field using Neptune in Band 4, full FOV
@@ -289,7 +288,6 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     os.remove(tmp_caldb_csv)
 
 @pytest.mark.e2e
-
 def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     """
     Tests e2e flat field using Uranus in Band 1, only HLC FOV
@@ -298,11 +296,12 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
         e2edata_path (str): path to L1 data files
         e2eoutput_path (str): output directory
     """
-    # create output dir first (delete existing to start fresh)
+    # create output dir first, don't delete since Neptune e2e test should have just run.
     output_dir = os.path.join(e2eoutput_path, "flatfield_cal_e2e")
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
+    # if os.path.exists(output_dir):
+    #     shutil.rmtree(output_dir)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     # set up logging
     global logger
