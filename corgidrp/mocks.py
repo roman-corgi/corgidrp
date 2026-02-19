@@ -329,7 +329,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     # Add trap pumping specific keywords that aren't in the RST
     exthdr['TPINJCYC'] = 0               # Number of cycles for TPUMP injection
     exthdr['TPOSCCYC'] = 0               # Number of cycles for charge oscillation (TPUMP)
-    exthdr['TPTAU'] = 0                  # Length of one step in a trap pumping scheme (microseconds)
+    exthdr['TPTAU'] = 0.                 # Length of one step in a trap pumping scheme (microseconds)
     exthdr['TPSCHEM1'] = 0               # Number of cycles for TPUMP pumping SCHEME_1
     exthdr['TPSCHEM2'] = 0               # Number of cycles for TPUMP pumping SCHEME_2
     exthdr['TPSCHEM3'] = 0               # Number of cycles for TPUMP pumping SCHEME_3

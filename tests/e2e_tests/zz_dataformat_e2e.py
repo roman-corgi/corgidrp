@@ -1370,7 +1370,17 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
     # Structure: {hdu_name: {keyword: {product_name: True/False}}}
     all_headers = {}
     hdu_names_by_product = {}  # Track HDU names for each product
-    
+
+    import corgidrp.check as check
+    for product_name, filepath in data_files.items():
+        with fits.open(filepath) as hdulist:
+            orig_pri_hdr = hdulist[0].header.copy()
+            orig_ext_hdr = hdulist[1].header.copy()
+            adj_pri, adj_ext = check.hdr_type_conform(orig_pri_hdr, orig_ext_hdr)
+            hdulist[0].header = adj_pri
+            hdulist[1].header = adj_ext
+            hdulist.writeto(filepath, overwrite=True)
+            
     for product_name, filepath in data_files.items():
         with fits.open(filepath) as hdulist:
             hdu_names_by_product[product_name] = []

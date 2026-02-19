@@ -156,7 +156,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image = Image(big_array, mock_pri_header, mock_ext_header, input_hdulist=[bias_hdu])
         # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
         # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
-        new_image.pri_hdr.set('FRAMET', frame_exptime_sec[ibatch])
+        new_image.pri_hdr.set('FRAMET', str(frame_exptime_sec[ibatch]))
         new_image.ext_hdr.set('EXPTIME', frame_exptime_sec[ibatch])
         new_image.pri_hdr.set('PA_APER',-rotation[ibatch])
         new_image.ext_hdr.set('FSMPRFL','NFOV')

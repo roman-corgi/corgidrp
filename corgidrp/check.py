@@ -1106,7 +1106,6 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
                         orig_pri_hdr[key] = -999 
                     elif orig_pri_hdr[key] == '' and type_class == float:
                         orig_pri_hdr[key] = -999.0
-                        continue 
                     try:
                         mock_pri_hdr[key] = type_class(orig_pri_hdr[key])
                     except:
@@ -1234,7 +1233,6 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
 
     for key in adjusted_pri_hdr:
         if key in mock_pri_hdr:
-        
             type_class = type(mock_pri_hdr[key])
             try:
                 adjusted_pri_hdr[key] = type_class(adjusted_pri_hdr[key])
@@ -1248,6 +1246,12 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
             except:
                 pass
     # special case:
-
+    if 'PHTCNT' in adjusted_pri_hdr:
+        value = adjusted_pri_hdr['PHTCNT']
+        if value == '0':
+            adjusted_pri_hdr['PHTCNT'] = 'False'
+        elif value == '1':
+            adjusted_pri_hdr['PHTCNT'] = 'True'
+        # otherwise, could have been '-999', which is fine (still str)
 
     return (adjusted_pri_hdr, adjusted_img_hdr)

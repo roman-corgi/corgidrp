@@ -140,7 +140,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         #print(f"Image err_hdr has LAYER_1: {new_image.err_hdr.get('LAYER_1','NOT FOUND')}")
         #print("="*60+"\n")
 
-        new_image.pri_hdr.set('FRAMET', 1)
+        new_image.pri_hdr.set('FRAMET', '1')
         new_image.ext_hdr.set('EXPTIME', 1)
         new_image.pri_hdr.set('PA_APER', 0)
         new_image.ext_hdr.set('CFAMNAME','1F')
