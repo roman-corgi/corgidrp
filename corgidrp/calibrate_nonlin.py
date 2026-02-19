@@ -894,11 +894,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
 
     """
     # Split Dataset
-    dataset_cp = dataset#XXX .copy()
-    for fr in dataset_cp[:30]: #XXX
-        fr.pri_hdr['OBSNAME'] = 'MNFRAME'
-    for fr in dataset_cp[30:]:
-        fr.pri_hdr['OBSNAME'] = 'NONLIN'#XXX
+    dataset_cp = dataset.copy()
     split = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
     
     # Calibration data

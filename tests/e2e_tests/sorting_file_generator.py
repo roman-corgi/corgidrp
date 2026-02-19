@@ -246,9 +246,9 @@ def setup_module():
     #XXX datadir = os.path.join(os.path.dirname(__file__), 'simdata')
     datadir = r'E:\E2E_Test_Data3\E2E_Test_Data3\simdata'
     os.makedirs(datadir, exist_ok=True)
-    for f in os.listdir(datadir):
-        if f.endswith('.fits'):
-            os.remove(os.path.join(datadir, f))
+    # for f in os.listdir(datadir):
+    #     if f.endswith('.fits'):
+    #         os.remove(os.path.join(datadir, f)) XXX
 
     def read_csv_columns(filepath):
         """
