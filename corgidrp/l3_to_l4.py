@@ -480,12 +480,12 @@ def do_psf_subtraction(input_dataset,
         split_datasets, unique_vals = sci_dataset.split_dataset(prihdr_keywords=["PSFREF"])
         unique_vals = np.array(unique_vals)
 
-        if 0. in unique_vals:
+        if 0 in unique_vals:
             sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0].item())]
         else:
             raise UserWarning('No science files found in input dataset.')
 
-        if 1. in unique_vals:
+        if 1 in unique_vals:
             ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0].item())]
         else:
             ref_dataset = None

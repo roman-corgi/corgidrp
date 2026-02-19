@@ -390,7 +390,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if val[0] != "CGIVST_CAL_DRK":  
             invalid_pc_keywords = data.typical_cal_invalid_keywords
             # keep these since the frames should be from a single visit
-            for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE']:
+            for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE', 'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN', 'RN_ERR', 'KGAIN_ER']:
                 if key in invalid_pc_keywords:
                     invalid_pc_keywords.remove(key)
             pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(sub_dataset, any_true_keywords=data.typical_bool_keywords, invalid_keywords=invalid_pc_keywords)
@@ -428,7 +428,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         # use headers from the merging of one of those binned sets to apply for all frames in the output master Dark
         invalid_pc_drk_keywords = data.typical_cal_invalid_keywords 
         # Remove specific keywords
-        for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE']:
+        for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE',  'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN', 'RN_ERR', 'KGAIN_ER']:
             if key in invalid_pc_drk_keywords:
                 invalid_pc_drk_keywords.remove(key)
         pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(sub_dataset, any_true_keywords=data.typical_bool_keywords, invalid_keywords=invalid_pc_drk_keywords)

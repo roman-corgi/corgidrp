@@ -322,7 +322,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
 
     invalid_trad_drk_keywords = typical_cal_invalid_keywords 
     # Remove specific keywords
-    for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE']:
+    for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE', 'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN', 'RN_ERR', 'KGAIN_ER', 'HVCBIAS']:
         if key in invalid_trad_drk_keywords:
             invalid_trad_drk_keywords.remove(key)
     prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset, any_true_keywords=typical_bool_keywords, invalid_keywords=invalid_trad_drk_keywords)
