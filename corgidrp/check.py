@@ -1215,6 +1215,7 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
         orig_img_hdr (fits.Header): Original image header to correct
         header_template (callable, optional): Function returning headers.
             Defaults to mocks.create_default_L1_headers.
+            
     Returns:
         tuple: (adjusted_pri_hdr, adjusted_img_hdr) with types conformed to expected values 
             from mocks.py. Note that this function does not check for missing keywords, 
