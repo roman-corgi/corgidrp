@@ -120,6 +120,7 @@ def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
         key_col (str): Column name holding the keyword (default: "Keyword").
         value_col (str): Column name holding the example/value (default: "Example Value").
         datatype_col (str): Column name holding the datatype (default: "Datatype").
+        desc_col (str): Column name holding the header comment field (default: "Description").
 
     Returns:
         dict: values are coerced using the datatype column. If the section is not a header 
