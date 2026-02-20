@@ -301,7 +301,7 @@ def test_polcal_stokes_vap(e2edata_path, e2eoutput_path,
     
     mock_dataset.save(filedir=output_dir, filenames=new_filenames)
 
-    saved_files = sorted(glob.glob(os.path.join(output_dir, f'cgi_*{visit_id}*_l2b.fits')))
+    saved_files = sorted(glob.glob(os.path.join(output_dir, f'cgi_*_l2b.fits')))
     assert len(saved_files) > 0, f'No saved L2b files found in {output_dir}!'
     l2b_dataset_with_filenames = Dataset(saved_files)
     logger.info(f"Generated and saved {len(saved_files)} new input files")
@@ -392,8 +392,8 @@ def test_polcal_stokes_vap(e2edata_path, e2eoutput_path,
 if __name__ == "__main__":
     
     thisfile_dir = os.path.dirname(__file__)
-    outputdir = thisfile_dir
-    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'"/Users/maxmb/Data/corgi/E2E_Test_Data/"
+    outputdir = "/Users/maxwellmb/data/corgi/corgidrp/e2e_test_output/"
+    e2edata_dir =  "/Users/maxwellmb/data/corgi/corgidrp/e2e_test_data/"#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'"/Users/maxmb/Data/corgi/E2E_Test_Data/"
 
     ap = argparse.ArgumentParser(description="run the l2b-> Polcal end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
