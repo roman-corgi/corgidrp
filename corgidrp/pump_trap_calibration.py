@@ -3297,12 +3297,12 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
     for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE', 'VISITID']:
         if key in invalid_tpu_keywords:
             invalid_tpu_keywords.remove(key)
-    prhdr, exthdr, errhdr, dqhdr = check.merge_headers(input_dataset, any_true_keywords=typical_bool_keywords, invalid_keywords=invalid_tpu_keywords)
+    prhdr, exthdr, errhdr, dqhdr = check.merge_headers(input_dataset, invalid_keywords=invalid_tpu_keywords)
     exthdr['BUNIT'] = ""
 
     trapcal = TrapCalibration(trap_cal_array, pri_hdr = prhdr, 
                     ext_hdr = exthdr, 
-                    input_dataset=input_dataset, err_hdr=errhdr, dq_hdr=dqhdr)
+                    input_dataset=input_dataset)
     
     return trapcal
 

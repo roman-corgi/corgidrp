@@ -863,11 +863,11 @@ def calibrate_nonlin(dataset_nl,
     for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'OBSNUM']:
         if key in invalid_nln_keywords:
             invalid_nln_keywords.remove(key)
-    prhdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset_nl, any_true_keywords=data.typical_bool_keywords, invalid_keywords=invalid_nln_keywords)
+    prhdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset_nl, invalid_keywords=invalid_nln_keywords)
     exthdr['HISTORY'] = f"Non-linearity calibration derived from a set of frames on {exthdr['DATETIME']}"
     # Just for the purpose of getting the instance created
     nonlin = data.NonLinearityCalibration(nonlin_data,
-        prhdr, exthdr, dataset_nl, errhdr, dqhdr)
+        prhdr, exthdr, dataset_nl)
     
     return nonlin
 

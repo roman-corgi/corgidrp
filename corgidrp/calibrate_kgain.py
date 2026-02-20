@@ -798,7 +798,7 @@ def calibrate_kgain(dataset_kgain,
     for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'OBSNUM']:
         if key in invalid_krn_keywords:
             invalid_krn_keywords.remove(key)
-    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset_kgain, any_true_keywords=data.typical_bool_keywords, invalid_keywords=invalid_krn_keywords)
+    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset_kgain, invalid_keywords=invalid_krn_keywords)
     # Read noise and error
     exthdr['RN'] = mean_rn_gauss_e
     
@@ -813,7 +813,7 @@ def calibrate_kgain(dataset_kgain,
     # Update history
     exthdr['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthdr['DATETIME']}"
 
-    k_gain = data.KGain(kgain, err = kgain_err, ptc = ptc, pri_hdr = prihdr, ext_hdr = exthdr, input_dataset=dataset_kgain, err_hdr=errhdr, dq_hdr=dqhdr)
+    k_gain = data.KGain(kgain, err = kgain_err, ptc = ptc, pri_hdr = prihdr, ext_hdr = exthdr, input_dataset=dataset_kgain)
     
     return k_gain
 

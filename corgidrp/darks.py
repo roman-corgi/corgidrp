@@ -325,7 +325,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE', 'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN', 'RN_ERR', 'KGAIN_ER', 'HVCBIAS']:
         if key in invalid_trad_drk_keywords:
             invalid_trad_drk_keywords.remove(key)
-    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset, any_true_keywords=typical_bool_keywords, invalid_keywords=invalid_trad_drk_keywords)
+    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset, invalid_keywords=invalid_trad_drk_keywords)
     
     exthdr['NAXIS1'] = data.shape[1]
     exthdr['NAXIS2'] = data.shape[0]
