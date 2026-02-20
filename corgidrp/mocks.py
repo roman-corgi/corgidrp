@@ -3000,7 +3000,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['FPAM_V']   = 6124.9
     exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
     exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
-    exthdr['EXPTIME']  = float(exptime)            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
     exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
@@ -5574,7 +5574,9 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, pa_aper_deg=None, exp_t
     ext_hdr["STARLOCX"] = 0.0
     ext_hdr["STARLOCY"] = 0.0
     pri_hdr['PA_APER'] = pa_aper_deg
-    pri_hdr['EXPTIME'] = float(exp_time)
+    if exp_time is None:
+        exp_time = -999.
+    pri_hdr['EXPTIME'] = exp_time
     if col_cor is not None:
         ext_hdr['COL_COR'] = col_cor
     img = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq,
