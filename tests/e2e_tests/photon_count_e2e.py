@@ -72,6 +72,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         l1_data_ill_filelist.append(os.path.join(output_ill_dir, f))
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
+    # fix_str_for_tvac(l1_data_ill_filelist)
+    # fix_str_for_tvac(l1_data_dark_filelist)
 
     # Update headers for TVAC files
     l1_data_ill_filelist = check.fix_hdrs_for_tvac(l1_data_ill_filelist, output_ill_dir)
@@ -94,9 +96,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
-    kgain.ext_hdr['RN'] = 100.0
-    kgain.ext_hdr['RN_ERR'] = 0
+    kgain.ext_hdr['RN'] = 100.
+    kgain.ext_hdr['RN_ERR'] = 0.
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
+    #fix_str_for_tvac([kgain.filepath])
     this_caldb.create_entry(kgain)
 
     # NoiseMap (meaningless data; won't be used in dark subtraction for this first test which instead uses PC master dark)
@@ -105,12 +108,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
+    #fix_str_for_tvac([noise_map.filepath])
     this_caldb.create_entry(noise_map)
 
     here = os.path.abspath(os.path.dirname(__file__))
@@ -138,6 +142,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
+    #fix_str_for_tvac([flat.filepath])
     this_caldb.create_entry(flat)
 
     # bad pixel map
@@ -145,6 +150,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
+    #fix_str_for_tvac([bp_map.filepath])
     this_caldb.create_entry(bp_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not
@@ -221,16 +227,18 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         pc_dark_frame = fits.getdata(master_dark_filepath_list[i])
         pc_dark_frame_err = fits.getdata(master_dark_filepath_list[i], 'ERR')
 
+        check.compare_to_mocks_hdrs(pc_processed_filepath)
+
         # more frames gets a better agreement; agreement to 2% for ~160 darks and illuminated
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02)
         assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01)
         assert pc_frame_err.min() >= 0
         assert pc_dark_frame_err.min() >= 0
 
-    # remove PC master dark
-    for f in os.listdir(output_dir):
-        if f.endswith('_drk_cal.fits'):
-            os.remove(os.path.join(output_dir, f))
+    # don't remove PC master dark b/c needed for zz_dataformat_e2e.py test
+    # for f in os.listdir(output_dir):
+    #     if f.endswith('_drk_cal.fits'):
+    #         os.remove(os.path.join(output_dir, f))
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -261,8 +269,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
@@ -300,7 +308,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
         # slightly bigger rtol here for synthesized dark vs pc dark above
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.05)
-        assert pc_frame_err.min() >= 0
+        assert pc_frame_err.min() >= 0 
     
     # remove synthesized master dark
     for f in os.listdir(output_dir):
@@ -373,7 +381,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
         # using trad dark 
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02)
-        assert pc_frame_err.min() >= 0
+        assert pc_frame_err.min() >= 0 
 
     # Print success message
     print('e2e test for photon counting calibration passed')
@@ -387,7 +395,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
