@@ -225,7 +225,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     out_file = out_files[0]
     check_filename_convention(os.path.basename(out_file), 'cgi_*_l4_.fits', "spec l4 output product", logger, data_level = "l4_")
     
-    compare_to_mocks_hdrs(out_file, create_default_L2b_headers)
+    compare_to_mocks_hdrs(out_file)
     
     with fits.open(out_file) as hdul:        
         verify_hdu_count(hdul, 12, "spec l4 output product", logger)

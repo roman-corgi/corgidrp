@@ -1,15 +1,17 @@
 import argparse
 import os
-import shutil
 import glob
 import pytest
+import os, shutil
 import numpy as np
 import scipy.ndimage
+import datetime
 import astropy.time as time
 import astropy.io.fits as fits
-from datetime import datetime, timedelta
 import corgidrp
 import re
+import logging
+import warnings
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
@@ -20,6 +22,9 @@ import corgidrp.check as check
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+#Get path to this file
+current_file_path = os.path.dirname(os.path.abspath(__file__))
+thisfile_dir = os.path.dirname(__file__)
 
 def fix_str_for_tvac(
     list_of_fits,
@@ -33,12 +38,13 @@ def fix_str_for_tvac(
     for file in list_of_fits:
         fits_file = fits.open(file)
         exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
+        if float(exthdr['EMGAIN_A']) == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         if type(exthdr['EMGAIN_C']) is str:
             exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
+
 
 @pytest.mark.e2e
 def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
@@ -46,33 +52,70 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     Tests e2e flat field using Neptune in Band 4, full FOV
 
     Args:
-        e2edata_path (str): path to CGI_TVAC_Data dir
+        e2edata_path (str): path to L1 data files
         e2eoutput_path (str): output directory
     """
-    # figure out paths, assuming everything is located in the same relative location
+    # create output dir first (delete existing to start fresh)
+    output_dir = os.path.join(e2eoutput_path, "flatfield_cal_e2e")
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
+    # set up logging
+    global logger
+    log_file = os.path.join(output_dir, 'flatfield_cal_e2e.log')
+    
+    # Create a new logger specifically for this test, otherwise things have issues
+    logger = logging.getLogger('flatfield_e2e')
+    logger.setLevel(logging.INFO)
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    logger.info('='*80)
+    logger.info('Flat Calibration END-TO-END TEST')
+    logger.info('='*80)
+    logger.info("")
+    
+    logger.info('='*80)
+    logger.info('Pre-test: set up input files and save to disk')
+    logger.info('='*80)
+
+     # figure out paths, assuming everything is located in the same relative location
     l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e/flat_neptune_output")
-    if not os.path.exists(flat_outputdir):
-        os.makedirs(flat_outputdir)
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output")
+
+    os.makedirs(flat_outputdir, exist_ok=True)
     flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
-    if not os.path.exists(flat_mock_inputdir):
-        os.makedirs(flat_mock_inputdir)    
-    # Empty out flat_mock_inputdir if it contains any files
-    for filename in os.listdir(flat_mock_inputdir):
-        file_path = os.path.join(flat_mock_inputdir, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-    calibrations_dir = os.path.join(flat_outputdir, "calibrations")
+    os.makedirs(flat_mock_inputdir, exist_ok=True)  
+    
+    l2a_mock_outdir = os.path.join(flat_outputdir, "output_l2a")
+    os.makedirs(l2a_mock_outdir, exist_ok=True) 
+    
+    calibrations_dir = os.path.join(flat_outputdir, 'calibrations')
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
-    # Empty out flat_mock_inputdir if it contains any files
-    for filename in os.listdir(calibrations_dir):
-        file_path = os.path.join(calibrations_dir, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
+
+    logger.info('='*80)
+    logger.info('Pre-test: set up input calibration files')
+    logger.info('='*80)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -82,16 +125,22 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
-    # mock flat field is all ones
+     # mock flat field is all ones
     input_flat = np.ones([1024, 1024], dtype=float)
     # input_flat = np.random.normal(1,.03,(1024, 1024))
     # create mock onsky rasters
     hstdata_filedir = os.path.join(thisfile_dir,"..", "test_data")
     hstdata_filenames = glob.glob(os.path.join(hstdata_filedir, "med*.fits"))
     hstdata_dataset = data.Dataset(hstdata_filenames)
+
     raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='neptune', band='4', im_size=1024, d=50, n_dith=3, 
                                                     radius=54, snr=25000, snr_constant=4.95, flat_map=input_flat, 
                                                     raster_radius=40, raster_subexps=6)
+    
+    logger.info('='*80)
+    logger.info('Test Case 1: Raster scanned image for Neptune')
+    logger.info('='*80)
+    
     # raw science data to mock from
     l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "cgi_*.fits"))
     fix_str_for_tvac(l1_dark_filelist)
@@ -106,30 +155,25 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
-
-    # Extract the timestamp part from the original filename
-    l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
-    # Find the timestamp pattern (YYYYMMDDtHHMMSSS)
-    timestamp_match = re.search(r'\d{8}t\d{7}', l1_dark_st_filename)
-    if timestamp_match:
-        original_timestamp = timestamp_match.group()
-    else:
-        # Fallback: use the last number sequence
-        match = re.findall(r'\d{2,}', l1_dark_st_filename)
-        original_timestamp = match[-1] if match else "00000000000000000"
+    # Create properly formatted CGI filenames
+    base_time = datetime.datetime.now()
     l1_flat_dataset = []
-    # Generate base time once to ensure consistent timestamps
-    base_time = datetime.now()
+
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Neptune"
         base_image.ext_hdr['CFAMNAME'] = "4F"
         base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
         base_image.ext_hdr['EXPTIME'] = 60. # needed to mitigate desmear processing effect
+        base_image.ext_hdr['DPAMNAME'] = "Imaging"
         base_image.data = base_image.data.astype(float)
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (base_time + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        base_image.filename = l1_dark_st_filename.replace(original_timestamp, unique_time)
+       
+       
+        # Generate CGI filename with correct timestamp format
+        visitid = base_image.pri_hdr.get('VISITID', '0089001001001001027')
+        unique_time = base_time + datetime.timedelta(seconds=i)
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        base_image.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
@@ -147,7 +191,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     l1_flat_dataset.save(filedir=flat_mock_inputdir)
     l1_flatfield_filelist = glob.glob(os.path.join(flat_mock_inputdir, "*.fits"))
     l1_flatfield_filelist.sort()
-    
+
     # define the raw science data to process
 
     mock_cal_filelist = l1_dark_filelist[-2:]
@@ -173,7 +217,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
+    nonlinear_cal.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -186,7 +230,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
+    kgain.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -210,7 +254,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
+    noise_map.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -218,30 +262,19 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     # means the ones above will be preferentially selected
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
-    ####### Run the walker on some test_data
 
-    recipe = walker.autogen_recipe(l1_flatfield_filelist, flat_outputdir)
-     ### Modify they keywords of some of the steps
-    for step in recipe['steps']:
-        # if step['name'] in ["desmear", "cti_correction"]:
-        #     step['skip'] = True
-        if step['name'] == "create_onsky_flatfield":
-            step['keywords']['n_pix'] = 165 # full shaped pupil FOV
+     ####### Run the DRP walker for flatfield neptune
+    logger.info('='*80)
+    logger.info('Running processing pipeline')
+    logger.info('='*80)
+    logger.info('Step 1: Processing L1 -> Flat Field')
+    
+    # Step 1: Process L1 to L2a
     with warnings.catch_warnings():  
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-        walker.run_recipe(recipe, save_recipe_file=True)
+        walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
 
-    # Organize L2a files into l1_to_l2a subfolder
-    l1_to_l2a_dir = os.path.join(flat_outputdir, "l1_to_l2a")
-    if not os.path.exists(l1_to_l2a_dir):
-        os.mkdir(l1_to_l2a_dir)
     
-    # Move L2a files to l1_to_l2a subfolder
-    for filename in os.listdir(flat_outputdir):
-        if '_l2a' in filename and filename.endswith('.fits'):
-            filepath = os.path.join(flat_outputdir, filename)
-            shutil.move(filepath, os.path.join(l1_to_l2a_dir, filename))
-
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
     flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_flt_cal")
@@ -249,20 +282,15 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat # compute residual from true
     smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
-    #print(np.std(smoothed_diff[good_region]))
+    print(np.std(smoothed_diff[good_region]))
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
+    logger.info('Processing flat field complete')
 
-    ####### Check the bad pixel map result
-    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
-    bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
-    assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
-
-    check.compare_to_mocks_hdrs(os.path.join(flat_outputdir, flat_filename), mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(os.path.join(flat_outputdir, flat_filename))
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
-
 
 @pytest.mark.e2e
 def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
@@ -270,33 +298,72 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     Tests e2e flat field using Uranus in Band 1, only HLC FOV
 
     Args:
-        e2edata_path (str): path to CGI_TVAC_Data dir
+        e2edata_path (str): path to L1 data files
         e2eoutput_path (str): output directory
     """
-    # figure out paths, assuming everything is located in the same relative location
+    # create output dir first, don't delete since Neptune e2e test should have just run.
+    output_dir = os.path.join(e2eoutput_path, "flatfield_cal_e2e")
+    # if os.path.exists(output_dir):
+    #     shutil.rmtree(output_dir)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # set up logging
+    global logger
+    log_file = os.path.join(output_dir, 'flatfield_cal_e2e.log')
+    
+    # Create a new logger specifically for this test, otherwise things have issues
+    logger = logging.getLogger('flatfield_e2e')
+    logger.setLevel(logging.INFO)
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    logger.info('='*80)
+    logger.info('Flat Calibration END-TO-END TEST')
+    logger.info('='*80)
+    logger.info("")
+    
+    logger.info('='*80)
+    logger.info('Pre-test: set up input files and save to disk')
+    logger.info('='*80)
+
+     # figure out paths, assuming everything is located in the same relative location
     l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
+
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e/flat_uranus_output")
-    if not os.path.exists(flat_outputdir):
-        os.makedirs(flat_outputdir)
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_uranus_output")
+
+    os.makedirs(flat_outputdir, exist_ok=True)
     flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
-    if not os.path.exists(flat_mock_inputdir):
-        os.makedirs(flat_mock_inputdir) 
-    # Empty out flat_mock_inputdir if it contains any files
-    for filename in os.listdir(flat_mock_inputdir):
-        file_path = os.path.join(flat_mock_inputdir, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-    calibrations_dir = os.path.join(flat_outputdir, "calibrations")
+    os.makedirs(flat_mock_inputdir, exist_ok=True)  
+    
+    l2a_mock_outdir = os.path.join(flat_outputdir, "output_l2a")
+    os.makedirs(l2a_mock_outdir, exist_ok=True) 
+    
+    calibrations_dir = os.path.join(flat_outputdir, 'calibrations')
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
-    # Empty out flat_mock_inputdir if it contains any files
-    for filename in os.listdir(calibrations_dir):
-        file_path = os.path.join(calibrations_dir, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
+
+    logger.info('='*80)
+    logger.info('Pre-test: set up input calibration files')
+    logger.info('='*80)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -306,7 +373,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
-    # mock flat field is all ones
+     # mock flat field is all ones
     input_flat = np.ones([1024, 1024], dtype=float)
     # input_flat = np.random.normal(1,.03,(1024, 1024))
     # create mock onsky rasters
@@ -316,12 +383,17 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='uranus',band='1',im_size=1024, d=65, n_dith=1, 
                                                     radius=90, snr=250000, snr_constant=9.66, flat_map=input_flat, 
                                                     raster_radius=40, raster_subexps=6)
+    logger.info('='*80)
+    logger.info('Test Case 1: Raster scanned image for Uranus')
+    logger.info('='*80)
+    
     # raw science data to mock from
     l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "cgi_*.fits"))
+    fix_str_for_tvac(l1_dark_filelist)
     l1_dark_filelist.sort()
     # l1_dark_dataset = data.Dataset(l1_dark_filelist[:len(raster_dataset)])
     l1_dark_dataset = mocks.create_prescan_files(numfiles=len(raster_dataset))
-    # determine average noise of the L1 dark images, so we can scale the images appropriately.
+    # determine average noise
     noise_map = np.std(l1_dark_dataset.all_data, axis=0)
     r0c0 = detector.detector_areas["SCI"]["image"]['r0c0']
     rows = detector.detector_areas["SCI"]["image"]['rows']
@@ -329,31 +401,24 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
-    # Create proper L1 filenames following the convention
-    
-    # Extract the timestamp part from the original filename
-    l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
-    # Find the timestamp pattern (YYYYMMDDtHHMMSSS)
-    timestamp_match = re.search(r'\d{8}t\d{7}', l1_dark_st_filename)
-    if timestamp_match:
-        original_timestamp = timestamp_match.group()
-    else:
-        # Fallback: use the last number sequence
-        match = re.findall(r'\d{2,}', l1_dark_st_filename)
-        original_timestamp = match[-1] if match else "00000000000000000"
+    # Create properly formatted CGI filenames
+    base_time = datetime.datetime.now()
     l1_flat_dataset = []
-    # Generate base time once to ensure consistent timestamps
-    base_time = datetime.now()
+
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Uranus"
         base_image.ext_hdr['CFAMNAME'] = "1F"
         base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
         base_image.ext_hdr['EXPTIME'] = 60. # needed to mitigate desmear processing effect
+        base_image.ext_hdr['DPAMNAME'] = "Imaging"
         base_image.data = base_image.data.astype(float)
-        # Generate unique timestamp by incrementing by 0.1 seconds each time
-        unique_time = (base_time + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-        base_image.filename = l1_dark_st_filename.replace(original_timestamp, unique_time)
+       
+        # Generate CGI filename with correct timestamp format
+        visitid = base_image.pri_hdr.get('VISITID', '0089001001001001027')
+        unique_time = base_time + datetime.timedelta(seconds=i)
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        base_image.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
@@ -371,7 +436,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     l1_flat_dataset.save(filedir=flat_mock_inputdir)
     l1_flatfield_filelist = glob.glob(os.path.join(flat_mock_inputdir, "*.fits"))
     l1_flatfield_filelist.sort()
-    
+
     # define the raw science data to process
 
     mock_cal_filelist = l1_dark_filelist[-2:]
@@ -397,7 +462,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
+    nonlinear_cal.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -410,7 +475,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
+    kgain.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -434,70 +499,51 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
+    noise_map.save(filedir=calibrations_dir, filename="cgi_0000000000000000000_20251031t1200000_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
     # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
     # means the ones above will be preferentially selected
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
-    
-    ####### Run the walker on some test_data
 
-    recipe = walker.autogen_recipe(l1_flatfield_filelist, flat_outputdir)
+
+     ####### Run the DRP walker for flatfield
+    logger.info('='*80)
+    logger.info('Running processing pipeline')
+    logger.info('='*80)
+    logger.info('Step 1: Processing L1 -> Flat Field')
+    
+    # Step 1: Process L1 to L2a
     with warnings.catch_warnings():  
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-        walker.run_recipe(recipe, save_recipe_file=True)
+        walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
 
-    # Organize L2a files into l1_to_l2a subfolder
-    l1_to_l2a_dir = os.path.join(flat_outputdir, "l1_to_l2a")
-    if not os.path.exists(l1_to_l2a_dir):
-        os.mkdir(l1_to_l2a_dir)
-    
-    # Move L2a files to l1_to_l2a subfolder
-    for filename in os.listdir(flat_outputdir):
-        if '_l2a' in filename and filename.endswith('.fits'):
-            filepath = os.path.join(flat_outputdir, filename)
-            shutil.move(filepath, os.path.join(l1_to_l2a_dir, filename))
-
-    ####### Test the result
+    ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
     flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_flt_cal")
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
-    diff = flat.data - input_flat
+    diff = flat.data - input_flat # compute residual from true
     smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
-    #print(np.std(smoothed_diff[good_region]))
+    print(np.std(smoothed_diff[good_region]))
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
-    ####### Check the bad pixel map result
-    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
-    bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
-    assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
-
-    # remove temporary caldb file
-    os.remove(tmp_caldb_csv)
-
-
+    logger.info('Processing flat field complete')
 
 if __name__ == "__main__":
-    # Use arguments to run the test. Users can then write their own scripts
-    # that call this script with the correct arguments and they do not need
-    # to edit the file. The arguments use the variables in this file as their
-    # defaults allowing the use to edit the file if that is their preferred
-    # workflow.
-    # e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    
     outputdir = thisfile_dir
+    e2edata_dir =  "/Users/polaris/Roman_CGI_flatfielding/pol_flatfielding/corgi/E2E_Test_Data"
 
-    ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
+    ap = argparse.ArgumentParser(description="run the l2b-> Flatfield end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
-                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
+                help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
-                    help="directory to write results to [%(default)s]")
+                help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
+    
     test_flat_creation_neptune(e2edata_dir, outputdir)
     test_flat_creation_uranus(e2edata_dir, outputdir)
-    

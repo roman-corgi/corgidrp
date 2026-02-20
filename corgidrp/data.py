@@ -506,6 +506,10 @@ class Image():
         if not 'IS_BAD' in self.ext_hdr:
             self.ext_hdr.set('IS_BAD', False, "Was this frame deemed bad?")
 
+        # PHTCNT can come in as an int from L1 data but the DRP expects it as a string
+        if 'PHTCNT' in self.pri_hdr and not isinstance(self.pri_hdr['PHTCNT'], str):
+            self.pri_hdr['PHTCNT'] = str(self.pri_hdr['PHTCNT'])
+
         # the DRP has touched this file so it's origin is now this DRP
         self.pri_hdr['ORIGIN'] = 'DRP'
 
@@ -559,6 +563,9 @@ class Image():
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            # in case some FITS-formatted headers like NAXIS1, NAXIS2, etc cards were put in the wrong place, 
+            # this will position them in the right order and throw an error is something is unfixable 
+            hdulist.verify('silentfix') 
             hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
@@ -846,9 +853,36 @@ class FlatField(Image):
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this flat file (required only if raw 2D data is passed in)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+    #def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        #super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+    
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        if input_dataset is not None:
+            pri_hdr,ext_hdr,err_hdr,dq_hdr=corgidrp.check.merge_headers(
+                input_dataset, first_frame_keywords= ['MJDSRT','PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT','OBSNUM','VISNUM','CPGSFILE','AUXFILE','VISTYPE',
+                                                      'TARGET', 'RA','DEC', 'EQUINOX', 'RAPM','DECPM', 'PSFREF', 'OPGAIN','PHTCNT','OPMODE','EXPTIME','EMGAIN_C',
+                                                      'UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5','EMGAIN_A','KGAINPAR','ISPC','SPAM_H','SPAM_V',
+                                                      'SPAMNAME','SPAMSP_H','SPAMSP_V','FPAM_H','FPAM_V','FPAMNAME','FPAMSP_H','FPAMSP_V','LSAM_H','LSAM_V',
+                                                      'LSAMNAME','LSAMSP_H','LSAMSP_V','FSAM_H','FSAM_V','FSAMNAME','FSAMSP_H','FSAMSP_V','CFAM_H','CFAM_V',
+                                                      'CFAMNAME','CFAMSP_H','CFAMSP_V','DPAM_H','DPAM_V','DPAMNAME','DPAMSP_H','DPAMSP_V','PA_V3','WBJ_1','WBJ_2','WBJ_3','GAINTCAL',
+                                                      'STATUS','BLNKTIME','BLNKCYC','EXPCYC','OVEREXP','NOVEREXP'],
+                last_frame_keywords = ['VISITID', 'MJDEND',  'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4','EACQ_ROW', 'EACQ_COL','DATATYPE'],
+
+                invalid_keywords=['PA_APER','FRAMET','SVB_1','SVB_2','SVB_3','ROLL','PITCH','YAW','ISHOWFSC', 'ISACQ', 'SPBAL', 'SATSPOTS',  'HCVBIAS','EXCAMT','LOCAMT','CYCLES',
+                    'LASTEXP','PROXET','FCMLOOP', 'FCMPOS','FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY','SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY','DMZLOOP','1SVALID',
+                    'Z2AVG','Z2RES','Z2VAR','Z3AVG','Z3RES','Z3VAR','10SVALID','Z4AVG','Z4RES','Z5AVG','Z5RES','Z6AVG','Z6RES',
+                    'Z7AVG','Z7RES','Z8AVG','Z8RES','Z9AVG','Z9RES','Z10AVG','Z10RES','Z11AVG','Z11RES','Z12AVG','Z13AVG', 'Z14AVG'],
+                    calculated_value_keywords = ['DATETIME','FTIMEUTC','FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']+ 
+                    [f'FILE{i}' for i in range(100)]
+                    )
+            
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            # run the image class contructor
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
 
         # if this is a new master flat, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new masterflat

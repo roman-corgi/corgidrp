@@ -635,18 +635,18 @@ def create_default_L3_headers(arrtype="SCI"):
     prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l3_.fits"
     
     exthdr['BUNIT'] = 'photoelectron/s'   # Physical unit of the array (brightness unit)
-    exthdr['CD1_1'] = 0
-    exthdr['CD1_2'] = 0
-    exthdr['CD2_1'] = 0
-    exthdr['CD2_2'] = 0
-    exthdr['CRPIX1'] = 0.
-    exthdr['CRPIX2'] = 0.
+    exthdr['CD1_1'] = 0.
+    exthdr['CD1_2'] = 0.
+    exthdr['CD2_1'] = 0.
+    exthdr['CD2_2'] = 0.
+    exthdr['CRPIX1'] = 0. #could be fractional pixel value
+    exthdr['CRPIX2'] = 0. #could be fractional pixel value
     exthdr['CTYPE1'] = 'RA---TAN'
     exthdr['CTYPE2'] = 'DEC--TAN'
     exthdr['CDELT1'] = 0.
     exthdr['CDELT2'] = 0.
-    exthdr['CRVAL1'] = 0
-    exthdr['CRVAL2'] = 0
+    exthdr['CRVAL1'] = 0.
+    exthdr['CRVAL2'] = 0.
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
@@ -688,10 +688,10 @@ def create_default_L4_headers(arrtype="SCI"):
     exthdr['PSFSUB']        = ''            # PSF subtraction algorithm used (coronagraphic only)
     exthdr['PYKLIPV']       = ''            # pyKLIP version used (coronagraphic only)
     exthdr['KLMODE0']       = ''            # Number of KL modes used in the Nth slice (coronagraphic only)
-    exthdr['STARLOCX']      = 512.           # X location of the of the target star (coronagraphic only)
-    exthdr['STARLOCY']      = 512.           # Y location of the of the target star (coronagraphic only)
-    exthdr['DETPIX0X']      = 0            #  Position of the 0th column of the data array on the 1024x1024 EXCAM detector
-    exthdr['DETPIX0Y']      = 0            # Position of the 0th row of the data array on the 1024x1024 EXCAM detector 
+    exthdr['STARLOCX']      = 512.          # X location of the of the target star (coronagraphic only)
+    exthdr['STARLOCY']      = 512.          # Y location of the of the target star (coronagraphic only)
+    exthdr['DETPIX0X']      = 0             #  Position of the 0th column of the data array on the 1024x1024 EXCAM detector
+    exthdr['DETPIX0Y']      = 0             # Position of the 0th row of the data array on the 1024x1024 EXCAM detector 
     exthdr['CTCALFN']       = ''            # Core throughput linked file for calibration
     exthdr['FLXCALFN']      = ''            # Abs flux file linked for calibration
     exthdr['DATALVL']       = 'L4'          # Data level (e.g., 'L1', 'L2a', 'L2b')
@@ -1482,9 +1482,9 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     # TO DO: Determine what level this image should be
     prhd, exthd, errhdr, dqhdr, biashdr= create_default_L2b_headers()
     # Record actual commanded EM
-    exthd['EMGAIN_C'] = emgain
+    exthd['EMGAIN_C'] = float(emgain)
     # Record actual exposure time
-    exthd['EXPTIME'] = time
+    exthd['EXPTIME'] = float(time)
     # Mock error maps
     err = np.ones([1200,2200]) * 0.5
     dq = np.zeros([1200,2200], dtype = np.uint16)
@@ -2806,7 +2806,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7
         frame.ext_hdr['EXPTIME'] = exptime
         frame.ext_hdr['RN'] = read_noise
         frame.ext_hdr['KGAINPAR'] = kgain
-        frame.pri_hdr['PHTCNT'] = 1
+        frame.pri_hdr['PHTCNT'] = "True"
         frame.ext_hdr['ISPC'] = 1
         frame.pri_hdr["VISTYPE"] = "CGIVST_TDD_OBS"
         # Generate CGI filename with incrementing datetime
@@ -2829,7 +2829,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7
         frame_dark.ext_hdr['EXPTIME'] = exptime
         frame_dark.ext_hdr['RN'] = read_noise
         frame_dark.ext_hdr['KGAINPAR'] = kgain
-        frame_dark.pri_hdr['PHTCNT'] = 1
+        frame_dark.pri_hdr['PHTCNT'] = "True"
         frame_dark.ext_hdr['ISPC'] = 1
         frame_dark.pri_hdr["VISTYPE"] = "CGIVST_CAL_DRK"
         # Generate CGI filename with incrementing datetime for dark frames
@@ -3167,7 +3167,7 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
     exthdr['FPAM_V']   = 6124.9
     exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
     exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
-    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['EXPTIME']  = float(exptime)            # Ensure exptime is defined       # Ensure color_cor is defined
     exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
@@ -5574,6 +5574,8 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, pa_aper_deg=None, exp_t
     ext_hdr["STARLOCX"] = 0.0
     ext_hdr["STARLOCY"] = 0.0
     pri_hdr['PA_APER'] = pa_aper_deg
+    if exp_time is None:
+        exp_time = -999.
     pri_hdr['EXPTIME'] = exp_time
     if col_cor is not None:
         ext_hdr['COL_COR'] = col_cor

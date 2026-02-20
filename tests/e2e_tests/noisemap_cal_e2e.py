@@ -81,7 +81,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
         with fits.open(file, mode='update') as fits_file:
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-            prihdr['PHTCNT'] = 0
+            prihdr['PHTCNT'] = "False"
     
     mock_cal_filelist = l1_data_filelist[-2:] # grab the last two input data to mock the calibration
 
@@ -219,7 +219,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-9)
     pass
 
-    check.compare_to_mocks_hdrs(corgidrp_noisemap_fname, mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(corgidrp_noisemap_fname)
 
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
         # corgi_dat = detector.imaging_slice('SCI', corgidrp_noisemap.__dict__[noise_ext])
@@ -422,7 +422,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
         with fits.open(file, mode='update') as fits_file:
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
-            prihdr['PHTCNT'] = 0
+            prihdr['PHTCNT'] = "False"
 
 
     ####### Run the DRP walker
@@ -459,7 +459,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-9)
     pass
 
-    check.compare_to_mocks_hdrs(corgidrp_noisemap_fname, mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(corgidrp_noisemap_fname)
 
     # create synthesized master dark in output folder (for inspection and for having a sample synthesized dark with all the right headers)
     mock_dataset = mocks.create_prescan_files() # dummy dataset with an EM gain and exposure time for creating synthesized dark

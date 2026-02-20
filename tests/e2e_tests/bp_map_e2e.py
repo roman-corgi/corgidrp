@@ -147,7 +147,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Load the generated bad pixel map image and master dark reference data
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
 
-    check.compare_to_mocks_hdrs(generated_bp_map_file, mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(generated_bp_map_file)
 
     with fits.open(master_dark_ref) as hdulist:
         dark_ref_dat = hdulist[1].data
@@ -328,7 +328,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     generated_bp_map_file = generated_bp_map_files[0]
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
     
-    check.compare_to_mocks_hdrs(generated_bp_map_file, mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(generated_bp_map_file)
     
     with fits.open(master_dark_ref) as hdulist:
         dark_ref_dat = hdulist[1].data
@@ -389,6 +389,6 @@ if __name__ == "__main__":
     outputdir = args.outputdir
 
     # Run the main functions with parsed arguments
-    test_bp_map_simulated_dark_e2e(e2edata_dir, outputdir)
     test_bp_map_master_dark_e2e(e2edata_dir, outputdir)
+    test_bp_map_simulated_dark_e2e(e2edata_dir, outputdir)
     

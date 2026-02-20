@@ -165,13 +165,13 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         with fits.open(sample_l1_file) as hdul:
             exthdr = hdul[1].header
             if 'ISPC' in exthdr:
-                ispc_val = exthdr.get('ISPC')
-                if ispc_val in (1, True):
+                ispc_val = int(exthdr.get('ISPC'))
+                if ispc_val == 1:
                     is_pc_data = True
-                elif ispc_val in (0, False):
+                elif ispc_val == 0:
                     is_pc_data = False
                 else:
-                    raise ValueError(f"Expected True or False for ISPC value in header: {ispc_val}.")
+                    raise ValueError(f"Expected 0 or 1 for ISPC value in header: {ispc_val}.")
             else:
                 raise ValueError("Missing ISPC keyword in L1 header. Cannot determine PC vs analog.")
     
@@ -553,7 +553,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_l3_filenames = run_l1_to_l3_e2e_test(analog_datadir, analog_outputdir, processed_cal_path, logger)
         
         for new_filename in new_l3_filenames:
-            check.compare_to_mocks_hdrs(new_filename, mocks.create_default_L2b_headers) #L2b leaves out CDELT1 and CDELT2
+            check.compare_to_mocks_hdrs(new_filename)
 
         logger.info('='*80)
         logger.info('PC SPECTROSCOPY DATA TEST')
@@ -561,7 +561,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_l3_filenames = run_l1_to_l3_e2e_test(pc_datadir, pc_outputdir, processed_cal_path, logger)
         
         for new_filename in new_l3_filenames:
-            check.compare_to_mocks_hdrs(new_filename, mocks.create_default_L2b_headers) #L2b leaves out CDELT1 and CDELT2
+            check.compare_to_mocks_hdrs(new_filename)
 
         logger.info('='*80)
         logger.info('END-TO-END TEST COMPLETE')
@@ -590,8 +590,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
-    outputdir = '/Users/jmilton/Github/corgidrp/tests/e2e_tests'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
+    outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

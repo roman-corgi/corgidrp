@@ -179,7 +179,7 @@ def run_polcal_test(output_dir, do_ND=False,
     assert mueller_matrix.data[1,2] == pytest.approx(uq_cross_talk, abs=tolerance)
     assert mueller_matrix.data[2,1] == pytest.approx(qu_cross_talk, abs=tolerance)
 
-    checks.compare_to_mocks_hdrs(cal_file, mocks.create_default_L2b_headers)
+    checks.compare_to_mocks_hdrs(cal_file)
 
     logger.info(f"Recovered Mueller Matrix parameters match input values within {tolerance} tolerance. PASS.")
     logger.info("")

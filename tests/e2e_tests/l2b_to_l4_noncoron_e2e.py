@@ -140,7 +140,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         #print(f"Image err_hdr has LAYER_1: {new_image.err_hdr.get('LAYER_1','NOT FOUND')}")
         #print("="*60+"\n")
 
-        new_image.pri_hdr.set('FRAMET', 1)
+        new_image.pri_hdr.set('FRAMET', '1')
         new_image.ext_hdr.set('EXPTIME', 1)
         new_image.pri_hdr.set('PA_APER', 0)
         new_image.ext_hdr.set('CFAMNAME','1F')
@@ -187,7 +187,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #Check if the Bunit is correct
     assert l3_image.ext_hdr['BUNIT'] == 'photoelectron/s'
     
-    check.compare_to_mocks_hdrs(l3_filename, mocks.create_default_L2b_headers) #L2b leaves out CDELT1 and CDELT2
+    check.compare_to_mocks_hdrs(l3_filename)
 
     #Clean up
     # remove temporary caldb file
@@ -304,7 +304,7 @@ def test_l3_to_l4(e2eoutput_path):
     assert combined_image.ext_hdr['FILE3'] in input_filenames
     assert combined_image.ext_hdr['FILE4'] in input_filenames
 
-    check.compare_to_mocks_hdrs(l4_filename, mocks.create_default_L2b_headers)
+    check.compare_to_mocks_hdrs(l4_filename)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

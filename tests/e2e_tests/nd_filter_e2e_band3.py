@@ -88,7 +88,7 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     print("Input OD:", od_truth)
     assert recovered_od == pytest.approx(od_truth, abs=1e-1)
 
-    check.compare_to_mocks_hdrs(nd_file[0], mocks.create_default_L2b_headers)
+    check.compare_to_mocks_hdrs(nd_file[0])
 
     # Clean up CAL‑DB entry
     caldb.CalDB().remove_entry(nd_cal)

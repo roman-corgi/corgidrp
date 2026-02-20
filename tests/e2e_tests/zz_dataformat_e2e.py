@@ -6,8 +6,9 @@ import pytest
 import numpy as np
 import astropy.io.fits as fits
 from datetime import datetime, timedelta
-from corgidrp.check import generate_fits_excel_documentation
+from corgidrp.check import generate_fits_excel_documentation, compare_to_mocks_hdrs
 import pandas as pd
+import csv
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -165,6 +166,20 @@ def generate_header_table(hdu):
             example_value = example_value[:27] + "..."
 
         description = hdr.comments[key]
+        if description == '' or description is None:
+            # Try to get description from l1.csv if available
+            try:
+                csv_path = os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'data', 'header_formats', 'l1.csv')
+                if os.path.exists(csv_path):
+                    with open(csv_path, 'r') as csv_file:
+                        reader = csv.DictReader(csv_file)
+                        for row in reader:
+                            if row.get('Keyword', '').strip() == key:
+                                description = row.get('Description', '').strip()
+                                break
+            except Exception:
+                pass
+        
         if len(description) > desc_w:
             description = description[:desc_w]
 
@@ -480,7 +495,8 @@ def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l2b_pc_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L2b Photon Counting ===")
     l2b_data_dir = os.path.join(e2eoutput_path, "photon_count_e2e", "l2a_to_l2b")
-    l2b_data_file = glob.glob(os.path.join(l2b_data_dir, "*_l2b.fits"))[0]
+    l2b_data_files = glob.glob(os.path.join(l2b_data_dir, "*_l2b.fits"))
+    l2b_data_file = max(l2b_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(l2b_data_file, 'l2b')
     
@@ -511,7 +527,8 @@ def test_l2b_pc_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L3 ===")
     l3_data_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e", "l2b_to_l3")
-    l3_data_file = glob.glob(os.path.join(l3_data_dir, "*_l3_.fits"))[0]
+    l3_data_files = glob.glob(os.path.join(l3_data_dir, "*_l3_.fits"))
+    l3_data_file = max(l3_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(l3_data_file, 'l3_')
     
@@ -541,7 +558,8 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l3_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L3 Spectroscopy ===")
     l3_spec_data_dir = os.path.join(e2eoutput_path, "l1_to_l3_spec_e2e", "analog")
-    l3_spec_data_file = glob.glob(os.path.join(l3_spec_data_dir, "*_l3_.fits"))[0]
+    l3_spec_data_files = glob.glob(os.path.join(l3_spec_data_dir, "*_l3_.fits"))
+    l3_spec_data_file = max(l3_spec_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(l3_spec_data_file, 'l3_')
     
@@ -570,7 +588,8 @@ def test_l3_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l3_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L3 Polarimetry ===")
     l3_pol_data_dir = os.path.join(e2eoutput_path, "l1_to_l3_pol_e2e", "analog")
-    l3_pol_data_file = glob.glob(os.path.join(l3_pol_data_dir, "*_l3_.fits"))[0]
+    l3_pol_data_files = glob.glob(os.path.join(l3_pol_data_dir, "*_l3_.fits"))
+    l3_pol_data_file = max(l3_pol_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(l3_pol_data_file, 'l3_')
     
@@ -599,7 +618,8 @@ def test_l3_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Coronagraphic ===")
     l4_data_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e")
-    l4_data_file = glob.glob(os.path.join(l4_data_dir, "*_l4_.fits"))[0]
+    l4_data_files = glob.glob(os.path.join(l4_data_dir, "*_l4_.fits"))
+    l4_data_file = max(l4_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(l4_data_file, 'l4_')
     
@@ -628,7 +648,8 @@ def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Noncoronagraphic ===")
-    kgain_data_file = glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e", "*_l4_.fits"))[0]
+    kgain_data_files = glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e", "*_l4_.fits"))
+    kgain_data_file = max(kgain_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(kgain_data_file, 'l4_')
     
@@ -658,7 +679,8 @@ def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Polarimetry ===")
     l4_pol_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_pol_e2e")
-    l4_pol_data_file = glob.glob(os.path.join(l4_pol_data_dir, "*_l4_.fits"))[0]
+    l4_pol_data_files = glob.glob(os.path.join(l4_pol_data_dir, "*_l4_.fits"))
+    l4_pol_data_file = max(l4_pol_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(l4_pol_data_file, 'l4_')
     
@@ -687,7 +709,8 @@ def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l4_spec_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Spectroscopy Coronagraphic ===")
     l4_spec_coron_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_spec_psfsub_e2e")
-    l4_spec_coron_data_file = glob.glob(os.path.join(l4_spec_coron_data_dir, "*_l4_.fits"))[0]
+    l4_spec_coron_data_files = glob.glob(os.path.join(l4_spec_coron_data_dir, "*_l4_.fits"))
+    l4_spec_coron_data_file = max(l4_spec_coron_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(l4_spec_coron_data_file, 'l4_')
     
@@ -716,7 +739,8 @@ def test_l4_spec_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Spectroscopy Noncoronagraphic ===")
     l4_spec_noncoron_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_spec_noncoron_e2e")
-    l4_spec_noncoron_data_file = glob.glob(os.path.join(l4_spec_noncoron_data_dir, "*_l4_.fits"))[0]
+    l4_spec_noncoron_data_files = glob.glob(os.path.join(l4_spec_noncoron_data_dir, "*_l4_.fits"))
+    l4_spec_noncoron_data_file = max(l4_spec_noncoron_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(l4_spec_noncoron_data_file, 'l4_')
     
@@ -744,7 +768,8 @@ def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Astrometry Calibration ===")
-    astrom_data_file = glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits"))[0]
+    astrom_data_files = glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits"))
+    astrom_data_file = max(astrom_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(astrom_data_file, 'ast_cal')
     
@@ -773,7 +798,8 @@ def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Bad Pixel Map ===")
-    bpmap_data_file = glob.glob(os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits"))[0]
+    bpmap_data_files = glob.glob(os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits"))
+    bpmap_data_file = max(bpmap_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(bpmap_data_file, 'bpm_cal')
     
@@ -803,7 +829,8 @@ def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Flat Field ===")
-    flat_data_file = glob.glob(os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits"))[0]
+    flat_data_files = glob.glob(os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits"))
+    flat_data_file = max(flat_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(flat_data_file, 'flt_cal')
     
@@ -832,7 +859,8 @@ def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_polflat_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Polarimetry Flat Field ===")
-    polflat_data_file = glob.glob(os.path.join(e2eoutput_path, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "*_flt_cal.fits"))[0]
+    polflat_data_files = glob.glob(os.path.join(e2eoutput_path, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "*_flt_cal.fits"))
+    polflat_data_file = max(polflat_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(polflat_data_file, 'flt_cal')
     
@@ -861,7 +889,8 @@ def test_polflat_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Core Throughput ===")
-    ct_data_file = glob.glob(os.path.join(e2eoutput_path, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits"))[0]
+    ct_data_files = glob.glob(os.path.join(e2eoutput_path, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits"))
+    ct_data_file = max(ct_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(ct_data_file, 'ctp_cal')
     
@@ -890,7 +919,8 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Core Throughput Map ===")
-    ctmap_data_file = glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits"))[0]
+    ctmap_data_files = glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits"))
+    ctmap_data_file = max(ctmap_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(ctmap_data_file, 'ctm_cal')
     
@@ -919,7 +949,8 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Flux Calibration ===")
-    fluxcal_data_file = glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits"))[0]
+    fluxcal_data_files = glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits"))
+    fluxcal_data_file = max(fluxcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(fluxcal_data_file, 'abf_cal')
     
@@ -948,7 +979,8 @@ def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing K Gain ===")
-    kgain_data_file = glob.glob(os.path.join(e2eoutput_path, "kgain_cal_e2e", "*_krn_cal.fits"))[0]
+    kgain_data_files = glob.glob(os.path.join(e2eoutput_path, "kgain_cal_e2e", "*_krn_cal.fits"))
+    kgain_data_file = max(kgain_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(kgain_data_file, 'krn_cal')
     
@@ -978,7 +1010,8 @@ def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Nonlinearity ===")
-    nonlin_data_file = glob.glob(os.path.join(e2eoutput_path, "nonlin_cal_e2e", "*_nln_cal.fits"))[0]
+    nonlin_data_files = glob.glob(os.path.join(e2eoutput_path, "nonlin_cal_e2e", "*_nln_cal.fits"))
+    nonlin_data_file = max(nonlin_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(nonlin_data_file, 'nln_cal')
     
@@ -1007,7 +1040,8 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing ND Filter ===")
-    nonlin_data_file = glob.glob(os.path.join(e2eoutput_path, "nd_filter_cal_e2e", "*_ndf_cal.fits"))[0]
+    nonlin_data_files = glob.glob(os.path.join(e2eoutput_path, "nd_filter_cal_e2e", "*_ndf_cal.fits"))
+    nonlin_data_file = max(nonlin_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(nonlin_data_file, 'ndf_cal')
     
@@ -1036,8 +1070,9 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Noise Maps ===")
-    noisemaps_data_file = glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits"))[0]
-    
+    noisemaps_data_files = glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits"))    
+    noisemaps_data_file = max(noisemaps_data_files, key=os.path.getmtime)
+
     validate_cgi_filename(noisemaps_data_file, 'dnm_cal')
     
     generate_fits_excel_documentation(noisemaps_data_file, os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "dnm_cal_documentation.xlsx"))
@@ -1066,7 +1101,8 @@ def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Dark ===")
-    dark_data_file = glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits"))[0]
+    dark_data_files = glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits"))
+    dark_data_file = max(dark_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(dark_data_file, 'drk_cal')
     
@@ -1095,11 +1131,13 @@ def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_darks_comparison_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Darks Comparison ===")
-    trad_data_file = glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits"))[0]
+    trad_data_files = glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits"))
+    trad_data_file = max(trad_data_files, key=os.path.getmtime)
     pc_data_files = glob.glob(os.path.join(e2eoutput_path, "photon_count_e2e", "*_drk_cal.fits"))
     pc_data_file = sorted(pc_data_files, key=os.path.getmtime)[0]
-    synth_data_file = glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l2a_to_dnm", "calibrations", "*_drk_cal.fits"))[0]
-    
+    synth_data_files = glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l2a_to_dnm", "calibrations", "*_drk_cal.fits"))
+    synth_data_file = max(synth_data_files, key=os.path.getmtime)
+
     validate_cgi_filename(trad_data_file, 'drk_cal')
     validate_cgi_filename(pc_data_file, 'drk_cal')
     validate_cgi_filename(synth_data_file, 'drk_cal')
@@ -1128,8 +1166,9 @@ def test_darks_comparison_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Trap Pump ===")
-    tpump_data_file = glob.glob(os.path.join(e2eoutput_path, "trap_pump_cal_e2e", "*_tpu_cal.fits"))[0]
-    
+    tpump_data_files = glob.glob(os.path.join(e2eoutput_path, "trap_pump_cal_e2e", "*_tpu_cal.fits"))
+    tpump_data_file = max(tpump_data_files, key=os.path.getmtime)
+
     validate_cgi_filename(tpump_data_file, 'tpu_cal')
     
     generate_fits_excel_documentation(tpump_data_file, os.path.join(e2eoutput_path, "trap_pump_cal_e2e", "tpu_cal_documentation.xlsx"))
@@ -1157,7 +1196,8 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Flux Calibration Polarimetry ===")
-    fluxcal_pol_data_file = glob.glob(os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1", "*_abf_cal.fits"))[0]
+    fluxcal_pol_data_files = glob.glob(os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1", "*_abf_cal.fits"))
+    fluxcal_pol_data_file = max(fluxcal_pol_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(fluxcal_pol_data_file, 'abf_cal')
     
@@ -1183,7 +1223,8 @@ def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Mueller Matrix ===")
-    polcal_data_file = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_mmx_cal.fits"))[0]
+    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_mmx_cal.fits"))
+    polcal_data_file = max(polcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(polcal_data_file, 'mmx_cal')
     
@@ -1211,7 +1252,8 @@ def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing ND Mueller Matrix ===")
-    polcal_data_file = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_ndm_cal.fits"))[0]
+    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_ndm_cal.fits"))
+    polcal_data_file = max(polcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(polcal_data_file, 'ndm_cal')
     
@@ -1240,7 +1282,8 @@ def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Spectroscopy Line Spread Function ===")
-    spec_linespread_data_file = glob.glob(os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "*_lsf_cal.fits"))[0]
+    spec_linespread_data_files = glob.glob(os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "*_lsf_cal.fits"))
+    spec_linespread_data_file = max(spec_linespread_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(spec_linespread_data_file, 'lsf_cal')
     
@@ -1268,7 +1311,8 @@ def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_spec_prism_disp_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Spectroscopy Prism Dispersion ===")
-    spec_prism_disp_data_file = glob.glob(os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "*_dpm_cal.fits"))[0]
+    spec_prism_disp_data_files = glob.glob(os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "*_dpm_cal.fits"))
+    spec_prism_disp_data_file = max(spec_prism_disp_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(spec_prism_disp_data_file, 'dpm_cal')
     
@@ -1369,9 +1413,11 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
     # Collect all headers from all data products, organized by HDU
     # Structure: {hdu_name: {keyword: {product_name: True/False}}}
     all_headers = {}
-    hdu_names_by_product = {}  # Track HDU names for each product
-    
+    hdu_names_by_product = {}  # Track HDU names for each product            
+
     for product_name, filepath in data_files.items():
+        # check that each one conforms to expected headers from mocks.py; raises ValueError if not
+        compare_to_mocks_hdrs(filepath)
         with fits.open(filepath) as hdulist:
             hdu_names_by_product[product_name] = []
             
@@ -1526,33 +1572,214 @@ if __name__ == "__main__":
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
     test_header_crossreference_e2e(e2edata_dir, outputdir)
-    test_astrom_dataformat_e2e(e2edata_dir, outputdir)
-    test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
-    test_ct_dataformat_e2e(e2edata_dir, outputdir)
-    test_ctmap_dataformat_e2e(e2edata_dir, outputdir)
-    test_flat_dataformat_e2e(e2edata_dir, outputdir)
-    test_polflat_dataformat_e2e(e2edata_dir, outputdir)
-    test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
-    test_fluxcal_pol_dataformat_e2e(e2edata_dir, outputdir)
-    test_kgain_dataformat_e2e(e2edata_dir, outputdir)
-    test_l2a_dataformat_e2e(e2edata_dir, outputdir)
-    test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
-    test_l2b_pc_dataformat_e2e(e2edata_dir, outputdir)
-    test_l3_dataformat_e2e(e2edata_dir, outputdir)
-    test_l3_spec_dataformat_e2e(e2edata_dir, outputdir)
-    test_l3_pol_dataformat_e2e(e2edata_dir, outputdir)
-    test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
-    test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
-    test_l4_pol_dataformat_e2e(e2edata_dir, outputdir)
-    test_l4_spec_coron_dataformat_e2e(e2edata_dir, outputdir)
-    test_l4_spec_noncoron_dataformat_e2e(e2edata_dir, outputdir)
-    test_mueller_matrix_dataformat_e2e(e2edata_dir, outputdir)
-    test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
-    test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
-    test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
-    test_nd_mueller_dataformat_e2e(e2edata_dir, outputdir)
-    test_spec_linespread_dataformat_e2e(e2edata_dir, outputdir)
-    test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
-    test_dark_dataformat_e2e(e2edata_dir, outputdir)
-    test_darks_comparison_e2e(e2edata_dir, outputdir)
-    test_tpump_dataformat_e2e(e2edata_dir, outputdir)
+    debug = False
+    try:
+        test_l3_pol_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_nd_mueller_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_astrom_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_ct_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_ctmap_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_flat_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_polflat_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_fluxcal_pol_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_kgain_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l2a_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l2b_pc_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l3_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l3_spec_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l4_pol_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l4_spec_coron_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_l4_spec_noncoron_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_mueller_matrix_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_spec_linespread_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_dark_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_darks_comparison_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception
+    try:
+        test_tpump_dataformat_e2e(e2edata_dir, outputdir)
+    except:
+        if debug:
+            pass
+        else:
+            raise Exception

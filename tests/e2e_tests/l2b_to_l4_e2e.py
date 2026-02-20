@@ -156,7 +156,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image = Image(big_array, mock_pri_header, mock_ext_header, input_hdulist=[bias_hdu])
         # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
         # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
-        new_image.pri_hdr.set('FRAMET', frame_exptime_sec[ibatch])
+        new_image.pri_hdr.set('FRAMET', str(frame_exptime_sec[ibatch]))
         new_image.ext_hdr.set('EXPTIME', frame_exptime_sec[ibatch])
         new_image.pri_hdr.set('PA_APER',-rotation[ibatch])
         new_image.ext_hdr.set('FSMPRFL','NFOV')
@@ -254,7 +254,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #Check if the Bunit is correct
     assert l3_image.ext_hdr['BUNIT'] == 'photoelectron/s'
     
-    check.compare_to_mocks_hdrs(l3_filename, mocks.create_default_L3_headers)
+    check.compare_to_mocks_hdrs(l3_filename)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -431,7 +431,7 @@ def test_l3_to_l4(e2eoutput_path):
     print("Found all the sources!")
 
     # Filename format will be checked in data format test
-    check.compare_to_mocks_hdrs(l4_filename, mocks.create_default_L2b_headers) #L2b leaves out CDELT1 and CDELT2
+    check.compare_to_mocks_hdrs(l4_filename)
 
     print('e2e test for l3_to_l4 calibration passed')
 
@@ -451,9 +451,9 @@ if __name__ == "__main__":
     # workflow.
 
 
-    outputdir = "/Users/jmilton/Documents/CGI/E2E_Test_Data2"
+    outputdir = thisfile_dir #"/Users/jmilton/Documents/CGI/E2E_Test_Data2"
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data' #'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 

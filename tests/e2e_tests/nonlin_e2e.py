@@ -107,7 +107,7 @@ def test_nonlin_cal_e2e(
         with fits.open(file, mode='update') as fits_file:
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
-            prihdr['PHTCNT'] = 0
+            prihdr['PHTCNT'] = "False"
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
@@ -203,7 +203,7 @@ def test_nonlin_cal_e2e(
     # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
 
-    check.compare_to_mocks_hdrs(nonlin_drp_filepath, mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(nonlin_drp_filepath)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

@@ -241,7 +241,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         diff = img.data - tvac_dat
         assert np.all(np.abs(diff) < 1e-5)
 
-        check.compare_to_mocks_hdrs(new_filename, mocks.create_default_L2b_headers)
+        check.compare_to_mocks_hdrs(new_filename)
 
         # plotting script for debugging
         # import matplotlib.pylab as plt
@@ -275,7 +275,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

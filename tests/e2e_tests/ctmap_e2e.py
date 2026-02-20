@@ -155,7 +155,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # DQ
     assert np.all(ct_map_walker[3].data == ct_map_mock.dq)
 
-    check.compare_to_mocks_hdrs(ct_map_filepath, mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(ct_map_filepath)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

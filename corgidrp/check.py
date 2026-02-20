@@ -630,8 +630,20 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
                                     # Prefer longer descriptions (keep the most complete one)
                                     if keyword not in keyword_descriptions or len(description) > len(keyword_descriptions[keyword]):
                                         keyword_descriptions[keyword] = description
+        
+        # Try to get descriptions from l1.csv if not found in docs_dir
+        l1_csv_path = os.path.join(current_dir, '..', 'data_formats', 'l1.csv')
+        if os.path.exists(l1_csv_path):
+            csv_data = pd.read_csv(l1_csv_path)
+            if 'Keyword' in csv_data.columns and 'Description' in csv_data.columns:
+                for _, row in csv_data.iterrows():
+                    keyword = row['Keyword'].strip() if isinstance(row['Keyword'], str) else str(row['Keyword'])
+                    description = row['Description'].strip() if isinstance(row['Description'], str) else ''
+                    # Only add if we don't already have it and description is not empty
+                    if keyword not in keyword_descriptions and description:
+                        keyword_descriptions[keyword] = description
     except Exception as e:
-        # If we can't load RST files, just continue without reference descriptions
+        # If we can't load RST files or l1.csv, just continue without reference descriptions
         pass
     
     # Open the FITS file
@@ -979,9 +991,11 @@ def merge_headers(
                 break
         if sample is None:
             inv_val = "-999"
-        elif isinstance(sample, (int, np.integer)) or isinstance(sample, bool):
-            # TODO: what to do about bool?
+        elif isinstance(sample, (int, np.integer)):
             inv_val = -999
+        # TODO: what to do about bool?
+        elif isinstance(sample, bool):
+            inv_val = False
         elif isinstance(sample, (float, np.floating)):
             inv_val = -999.0
         else:
@@ -1106,7 +1120,6 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
                         orig_pri_hdr[key] = -999 
                     elif orig_pri_hdr[key] == '' and type_class == float:
                         orig_pri_hdr[key] = -999.0
-                        continue 
                     try:
                         mock_pri_hdr[key] = type_class(orig_pri_hdr[key])
                     except:
@@ -1165,23 +1178,30 @@ def compare_to_mocks_hdrs(fits_file, header_template=None):
     """
 
     if header_template is None:
-        header_template = mocks.create_default_L1_headers
+        header_template = mocks.create_default_L4_headers # high level, inclusive of all below
 
+    header_result = header_template()
+    mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
+   
+    # needs to have at least the L1 headers, except for leave_out_ext below
+    l1_headers = mocks.create_default_L1_headers()
+    l1_pri_hdr, l1_img_hdr = l1_headers[0], l1_headers[1]
+    leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    for key in leave_out_ext:
+        if key in l1_img_hdr:
+            del l1_img_hdr[key]
+   
     bad_values = []
     with fits.open(fits_file) as hdul:
         orig_pri_hdr = hdul[0].header.copy()
         orig_img_hdr = hdul[1].header.copy()
-
-        header_result = header_template()
-        mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
-
         for key in mock_pri_hdr.keys():
             if 'NAXIS' in key:
                 continue 
             type_class = type(mock_pri_hdr[key])
             if key.upper() == 'PSFREF' and orig_pri_hdr[key] == 'N/A':
                 orig_pri_hdr[key] = 0 #should be int type
-            if key not in orig_pri_hdr:
+            if key not in orig_pri_hdr and key in l1_pri_hdr:
                 bad_values.append([key])
             if key in orig_pri_hdr and type(orig_pri_hdr[key]) != type_class:
                 bad_values.append([key, type(orig_pri_hdr[key]), type_class])
@@ -1189,7 +1209,7 @@ def compare_to_mocks_hdrs(fits_file, header_template=None):
             if 'NAXIS' in key:
                 continue 
             type_class = type(mock_img_hdr[key])
-            if key not in orig_img_hdr:
+            if key not in orig_img_hdr and key in l1_img_hdr:
                 bad_values.append([key])
             if key in orig_img_hdr and type(orig_img_hdr[key]) != type_class:
                 bad_values.append([key, type(orig_img_hdr[key]), type_class])        
@@ -1234,7 +1254,8 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
 
     for key in adjusted_pri_hdr:
         if key in mock_pri_hdr:
-        
+            if 'NAXIS' in key:
+                continue
             type_class = type(mock_pri_hdr[key])
             try:
                 adjusted_pri_hdr[key] = type_class(adjusted_pri_hdr[key])
@@ -1242,12 +1263,51 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
                 pass
     for key in adjusted_img_hdr:
         if key in mock_img_hdr:
+            if 'NAXIS' in key:
+                continue 
             type_class = type(mock_img_hdr[key])
             try:
                 adjusted_img_hdr[key] = type_class(adjusted_img_hdr[key])
             except:
                 pass
-    # special case:
 
+    # if any L1 headers missing, fill them in with mock values
+    headers = mocks.create_default_L1_headers()
+    l1_pri_hdr, l1_img_hdr = headers[0], headers[1]
+    leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    for key in leave_out_ext:
+        if key in l1_img_hdr:
+            del l1_img_hdr[key]
+
+    for key in l1_pri_hdr.keys():
+        if 'NAXIS' in key:
+            continue
+        if key not in adjusted_pri_hdr: # obviously not relevant, so make it invalidated value
+            type_class = type(l1_pri_hdr[key])
+            if type_class == bool:
+                adjusted_pri_hdr[key] = l1_pri_hdr[key]
+            else:
+                adjusted_pri_hdr[key] = type_class(-999)
+    for key in l1_img_hdr.keys():
+        if 'NAXIS' in key:
+                continue 
+        if key not in adjusted_img_hdr: # obviously not relevant, so make it invalidated value
+            type_class = type(l1_img_hdr[key])
+            if type_class == bool:
+                adjusted_img_hdr[key] = l1_img_hdr[key]
+            else:
+                adjusted_img_hdr[key] = type_class(-999)
+    if adjusted_img_hdr['DATALVL'].lower() != 'l1':
+        for key in leave_out_ext:
+            if key in adjusted_img_hdr:
+                del adjusted_img_hdr[key]
+    # special case:
+    if 'PHTCNT' in adjusted_pri_hdr:
+        value = adjusted_pri_hdr['PHTCNT']
+        if value == '0' or value == 0:
+            adjusted_pri_hdr['PHTCNT'] = 'False'
+        elif value == '1' or value == 1:
+            adjusted_pri_hdr['PHTCNT'] = 'True'
+        # otherwise, could have been '-999', which is fine (still str)
 
     return (adjusted_pri_hdr, adjusted_img_hdr)

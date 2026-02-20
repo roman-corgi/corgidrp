@@ -170,7 +170,7 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits', logger)
     check_filename_convention(os.path.basename(cal_file), 'cgi_*_dpm_cal.fits', "DPM calibration product", logger)
 
-    compare_to_mocks_hdrs(cal_file, create_default_L2b_headers)
+    compare_to_mocks_hdrs(cal_file)
 
     with fits.open(cal_file) as hdul:
         verify_hdu_count(hdul, 2, "DPM calibration product", logger)

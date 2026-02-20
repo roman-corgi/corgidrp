@@ -58,8 +58,8 @@ def fix_headers_for_tvac(
         # exthdr['KGAINPAR'] = exthdr['KGAIN']
         if 'OBSNAME' not in prihdr:
             prihdr["OBSNAME"] = prihdr['OBSTYPE']
-        prihdr['PHTCNT'] = False
-        exthdr['ISPC'] = False
+        prihdr['PHTCNT'] = "False"
+        exthdr['ISPC'] = 0
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -352,7 +352,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     # trap densities should all match if the above passes; that was tested in II&T tests mainly
     # b/c all the outputs of the trap-pump function were tested
 
-    check.compare_to_mocks_hdrs(generated_trapcal_file, mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(generated_trapcal_file)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
