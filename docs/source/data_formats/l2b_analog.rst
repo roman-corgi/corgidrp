@@ -154,15 +154,15 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | FRMTYPE    | str        | NUM                            | Specifies which frame collection routine was used based on instrument EVRs                                               |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| ISHOWFSC   | bool       | False                          | Denotes whether the frames are collected as a part of the HOWFSC loop.                                                   |
+| ISHOWFSC   | int        | 0                              | Denotes whether the frames are collected as a part of the HOWFSC loop.                                                   |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| ISACQ      | bool       | False                          | Denotes whether this frame was taken during acquisition                                                                  |
+| ISACQ      | int        | 0                              | Denotes whether this frame was taken during acquisition                                                                  |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SPBAL      | bool       | False                          | Denotes whether this frame was taken during speckle balance                                                              |
+| SPBAL      | int        | 0                              | Denotes whether this frame was taken during speckle balance                                                              |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| ISFLAT     | bool       | False                          | Denotes whether this frame was taken during the AAC flat activity                                                        |
+| ISFLAT     | int        | 0                              | Denotes whether this frame was taken during the AAC flat activity                                                        |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| SATSPOTS   | bool       | False                          | Denotes whether the frame contains satellite spots based on a combination of visit type and EXCAM collection command     |
+| SATSPOTS   | int        | 0                              | Denotes whether the frame contains satellite spots based on a combination of visit type and EXCAM collection command     |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | STATUS     | int        | 0                              | Housekeeping packet health check status                                                                                  |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
