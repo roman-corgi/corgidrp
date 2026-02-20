@@ -107,7 +107,8 @@ detector_areas_test= {
 }
 
 def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
-                    value_col="Example Value", datatype_col="Datatype"):
+                    value_col="Example Value", datatype_col="Datatype", 
+                    desc_col="Description"):
     """
     Parse a combined CSV (with a Section column) and extract keywords and values
     from a specified section.
@@ -169,7 +170,7 @@ def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
             if not key or key.lower() in {"keyword", "datatype", "example value", "description"}:
                 continue
             val = coerce(row.get(value_col), row.get(datatype_col))
-            out[key] = val
+            out[key] = (val, row.get(desc_col))
 
     return out
 
