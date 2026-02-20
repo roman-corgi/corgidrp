@@ -6,7 +6,7 @@ import pytest
 import numpy as np
 import astropy.io.fits as fits
 from datetime import datetime, timedelta
-from corgidrp.check import generate_fits_excel_documentation
+from corgidrp.check import generate_fits_excel_documentation, compare_to_mocks_hdrs
 import pandas as pd
 import csv
 
@@ -1137,7 +1137,7 @@ def test_darks_comparison_e2e(e2edata_path, e2eoutput_path):
     pc_data_file = sorted(pc_data_files, key=os.path.getmtime)[0]
     synth_data_files = glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l2a_to_dnm", "calibrations", "*_drk_cal.fits"))
     synth_data_file = max(synth_data_files, key=os.path.getmtime)
-    
+
     validate_cgi_filename(trad_data_file, 'drk_cal')
     validate_cgi_filename(pc_data_file, 'drk_cal')
     validate_cgi_filename(synth_data_file, 'drk_cal')
@@ -1413,9 +1413,11 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
     # Collect all headers from all data products, organized by HDU
     # Structure: {hdu_name: {keyword: {product_name: True/False}}}
     all_headers = {}
-    hdu_names_by_product = {}  # Track HDU names for each product
+    hdu_names_by_product = {}  # Track HDU names for each product            
 
     for product_name, filepath in data_files.items():
+        # check that each one conforms to expected headers from mocks.py; raises ValueError if not
+        compare_to_mocks_hdrs(filepath)
         with fits.open(filepath) as hdulist:
             hdu_names_by_product[product_name] = []
             
@@ -1570,7 +1572,7 @@ if __name__ == "__main__":
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
     test_header_crossreference_e2e(e2edata_dir, outputdir)
-    debug = True
+    debug = False
     try:
         test_l3_pol_dataformat_e2e(e2edata_dir, outputdir)
     except:

@@ -298,7 +298,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  "/home/ericshen/corgi/E2E_Test_Data/"
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#"/home/ericshen/corgi/E2E_Test_Data/"
 
     ap = argparse.ArgumentParser(description="run the l2b-> PolFluxcalFactor end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

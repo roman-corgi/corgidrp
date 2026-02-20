@@ -1254,6 +1254,8 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
 
     for key in adjusted_pri_hdr:
         if key in mock_pri_hdr:
+            if 'NAXIS' in key:
+                continue
             type_class = type(mock_pri_hdr[key])
             try:
                 adjusted_pri_hdr[key] = type_class(adjusted_pri_hdr[key])
@@ -1261,6 +1263,8 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
                 pass
     for key in adjusted_img_hdr:
         if key in mock_img_hdr:
+            if 'NAXIS' in key:
+                continue 
             type_class = type(mock_img_hdr[key])
             try:
                 adjusted_img_hdr[key] = type_class(adjusted_img_hdr[key])
@@ -1269,20 +1273,34 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
 
     # if any L1 headers missing, fill them in with mock values
     headers = mocks.create_default_L1_headers()
-    for key in headers[0].keys():
+    l1_pri_hdr, l1_img_hdr = headers[0], headers[1]
+    leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    for key in leave_out_ext:
+        if key in l1_img_hdr:
+            del l1_img_hdr[key]
+
+    for key in l1_pri_hdr.keys():
+        if 'NAXIS' in key:
+            continue
         if key not in adjusted_pri_hdr: # obviously not relevant, so make it invalidated value
-            type_class = type(headers[0][key])
+            type_class = type(l1_pri_hdr[key])
             if type_class == bool:
-                adjusted_pri_hdr[key] = headers[0][key]
+                adjusted_pri_hdr[key] = l1_pri_hdr[key]
             else:
                 adjusted_pri_hdr[key] = type_class(-999)
-    for key in headers[1].keys():
+    for key in l1_img_hdr.keys():
+        if 'NAXIS' in key:
+                continue 
         if key not in adjusted_img_hdr: # obviously not relevant, so make it invalidated value
-            type_class = type(headers[1][key])
+            type_class = type(l1_img_hdr[key])
             if type_class == bool:
-                adjusted_img_hdr[key] = headers[1][key]
+                adjusted_img_hdr[key] = l1_img_hdr[key]
             else:
                 adjusted_img_hdr[key] = type_class(-999)
+    if adjusted_img_hdr['DATALVL'].lower() != 'l1':
+        for key in leave_out_ext:
+            if key in adjusted_img_hdr:
+                del adjusted_img_hdr[key]
     # special case:
     if 'PHTCNT' in adjusted_pri_hdr:
         value = adjusted_pri_hdr['PHTCNT']
