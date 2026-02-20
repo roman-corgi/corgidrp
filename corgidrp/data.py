@@ -431,7 +431,7 @@ class Image():
                 self.data = data_or_filepath
                 if err is not None:
                     if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
-                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
+                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(np.shape(err)[-self.data.ndim:], self.data.shape))
                     #we want to have a 3 dim error array
                     if err.ndim == self.data.ndim + 1:
                         self.err = err
@@ -1366,10 +1366,10 @@ class NonLinearityCalibration(Image):
         raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, 
-                 input_dataset=None, err=None, dq=None, err_hdr=None, dq_hdr=None):
+                 input_dataset=None):
 
         # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # File format checks - Ported from II&T
         nonlin_raw = self.data
@@ -1444,9 +1444,9 @@ class KGain(Image):
         error: the getter of the kgain error value
         _kgain_error (float): the value of kgain error
     """
-    def __init__(self, data_or_filepath, err = None, ptc = None, pri_hdr=None, ext_hdr=None, err_hdr = None, ptc_hdr = None, input_dataset = None, dq_hdr = None):
+    def __init__(self, data_or_filepath, err = None, ptc = None, pri_hdr=None, ext_hdr=None, err_hdr = None, ptc_hdr = None, input_dataset = None):
        # run the image class contructor
-        super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
 
         # initialize these headers that have been recently added so that older calib files still contain this keyword when initialized and allow for tests that don't require 
         # these values to run smoothly
@@ -1990,9 +1990,9 @@ class TrapCalibration(Image):
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make the trap calibration
     """
-    def __init__(self,data_or_filepath, pri_hdr=None,ext_hdr=None, input_dataset=None, err_hdr=None, dq_hdr=None):
+    def __init__(self,data_or_filepath, pri_hdr=None,ext_hdr=None, input_dataset=None):
         # run the image class constructor
-        super().__init__(data_or_filepath,pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        super().__init__(data_or_filepath,pri_hdr=pri_hdr, ext_hdr=ext_hdr)
         
         # if this is a new calibration, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new cal

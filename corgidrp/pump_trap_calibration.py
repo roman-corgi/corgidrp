@@ -3302,7 +3302,7 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
 
     trapcal = TrapCalibration(trap_cal_array, pri_hdr = prhdr, 
                     ext_hdr = exthdr, 
-                    input_dataset=input_dataset, err_hdr=errhdr, dq_hdr=dqhdr)
+                    input_dataset=input_dataset)
     
     return trapcal
 

@@ -867,7 +867,7 @@ def calibrate_nonlin(dataset_nl,
     exthdr['HISTORY'] = f"Non-linearity calibration derived from a set of frames on {exthdr['DATETIME']}"
     # Just for the purpose of getting the instance created
     nonlin = data.NonLinearityCalibration(nonlin_data,
-        prhdr, exthdr, dataset_nl, errhdr, dqhdr)
+        prhdr, exthdr, dataset_nl)
     
     return nonlin
 
