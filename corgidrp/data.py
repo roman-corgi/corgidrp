@@ -832,6 +832,14 @@ class Dark(Image):
         
         if 'PC_STAT' not in self.ext_hdr:
             self.ext_hdr['PC_STAT'] = 'analog master dark'
+        if 'IS_SYNTH' not in self.ext_hdr:
+            if self.ext_hdr['PC_STAT'] == 'photon-counted master dark':
+                self.ext_hdr['IS_SYNTH'] = 0 # not relevant in this case
+            else:
+                # defaults to analog synthetic, which will standard choice over analog traditional 
+                # int flag for whether this dark is synthesized or not. 0 = no (analog traditional), 1 = yes (analog synthesized).
+                self.ext_hdr['IS_SYNTH'] = 1  
+
 
         if err_hdr is not None:
             self.err_hdr['BUNIT'] = 'detected electron'
