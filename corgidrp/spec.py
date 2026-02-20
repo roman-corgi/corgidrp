@@ -1261,7 +1261,7 @@ def slit_transmission(
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES',
                     'Z2VAR', 'Z3VAR',
-                    'FWC_PP_E', 'FWC_EM_E'
+                    'FWC_PP_E', 'FWC_EM_E', 'WV0_X', 'WV0_Y'
                 ]
         )
     input_dataset = Dataset([frame for frame in dataset_slit] + [frame for frame in dataset_open])

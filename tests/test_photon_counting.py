@@ -63,11 +63,11 @@ def test_pc():
     dark_dataset_err.all_dq[80:,3,3] = 1
     dataset_err.all_dq[:, 2, 2] = 1 #masked all the way through for (2,2)
     for f in dataset_err.frames: 
-        f.ext_hdr['RN'] = 100.0
-        f.ext_hdr['KGAINPAR'] = 7
+        f.ext_hdr['RN'] = 100.
+        f.ext_hdr['KGAINPAR'] = 7.
     for f in dark_dataset_err.frames: 
-        f.ext_hdr['RN'] = 100.0
-        f.ext_hdr['KGAINPAR'] = 7
+        f.ext_hdr['RN'] = 100.
+        f.ext_hdr['KGAINPAR'] = 7.
     # process the frames to make PC dark
     dark_dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dark = get_pc_mean(dark_dataset_err, inputmode='darks')

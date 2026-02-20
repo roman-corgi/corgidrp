@@ -179,6 +179,8 @@ def run_polcal_test(output_dir, do_ND=False,
     assert mueller_matrix.data[1,2] == pytest.approx(uq_cross_talk, abs=tolerance)
     assert mueller_matrix.data[2,1] == pytest.approx(qu_cross_talk, abs=tolerance)
 
+    checks.compare_to_mocks_hdrs(cal_file)
+
     logger.info(f"Recovered Mueller Matrix parameters match input values within {tolerance} tolerance. PASS.")
     logger.info("")
 
@@ -391,7 +393,7 @@ if __name__ == "__main__":
     
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  "/Users/maxmb/Data/corgi/E2E_Test_Data/"
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'"/Users/maxmb/Data/corgi/E2E_Test_Data/"
 
     ap = argparse.ArgumentParser(description="run the l2b-> Polcal end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

@@ -19,7 +19,7 @@ from corgidrp.mocks import create_default_L2b_headers, rename_files_to_cgi_forma
 from corgidrp.walker import walk_corgidrp
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
-                           validate_binary_table_fields, get_latest_cal_file)
+                           validate_binary_table_fields, get_latest_cal_file, compare_to_mocks_hdrs)
 import corgidrp
 import corgidrp.caldb as caldb
 
@@ -171,6 +171,8 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits', logger)
     check_filename_convention(os.path.basename(cal_file), 'cgi_*_dpm_cal.fits', "DPM calibration product", logger)
 
+    compare_to_mocks_hdrs(cal_file)
+
     with fits.open(cal_file) as hdul:
         verify_hdu_count(hdul, 2, "DPM calibration product", logger)
         
@@ -312,7 +314,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Default output directory name
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'  # Default input data path
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'  # Default input data path
 
     ap = argparse.ArgumentParser(description="run the spectroscopy prism dispersion end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

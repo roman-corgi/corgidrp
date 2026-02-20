@@ -15,6 +15,7 @@ import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
 import corgidrp.caldb as caldb
+import corgidrp.check as check
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -154,6 +155,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # DQ (integer comparison, but cast to same dtype for consistency)
     assert np.all(ct_map_walker[3].data.astype(ct_map_mock.dq.dtype) == ct_map_mock.dq)
 
+    check.compare_to_mocks_hdrs(ct_map_filepath)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
@@ -167,7 +170,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     outputdir = thisfile_dir
-    e2edata_path = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_path = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'# '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,

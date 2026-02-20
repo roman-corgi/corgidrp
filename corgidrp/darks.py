@@ -320,15 +320,13 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         err = total_err
         data = mean_frame
 
-    # get from one of the noise maps and modify as needed
-    prihdr = dataset.frames[0].pri_hdr
-    exthdr = dataset.frames[0].ext_hdr
-    errhdr = dataset.frames[0].err_hdr
+    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset)
+    
     exthdr['NAXIS1'] = data.shape[1]
     exthdr['NAXIS2'] = data.shape[0]
     exthdr['DATATYPE'] = 'Dark'
 
-    master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
+    master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr, dqhdr)
     master_dark.ext_hdr['DRPNFILE'] = int(np.round(np.nanmean(unmasked_num)))
     master_dark.ext_hdr['BUNIT'] = 'detected electron'
     master_dark.err_hdr['BUNIT'] = 'detected electron'
@@ -868,17 +866,11 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     CIC_image_map[CIC_image_map < 0] = 0
     DC_image_map[DC_image_map < 0] = 0
 
-    # assume headers from a dataset frame for headers of calibrated noise map
-    prihdr = datasets[0].frames[0].pri_hdr
-    exthdr = datasets[0].frames[0].ext_hdr
-    exthdr['EXPTIME'] = None
+    prihdr, exthdr, err_hdr, dq_hdr = check.merge_headers(dataset, invalid_keywords=['FTIMEUTC', 'PROXET', 'DATETIME', 'EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR'])
     if 'EMGAIN_M' in exthdr.keys():
-        exthdr['EMGAIN_M'] = None
-    exthdr['EMGAIN_C'] = None
-    exthdr['KGAINPAR'] = None
+        exthdr['EMGAIN_M'] = -999.
     exthdr['BUNIT'] = 'detected electron'
 
-    err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
 
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
@@ -894,17 +886,17 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     input_err = np.stack([[FPN_std_map, CIC_std_map, DC_std_map]])
     input_dq = np.stack([output_dq, output_dq, output_dq])
 
-    noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
-                           input_err, input_dq, err_hdr=err_hdr)
+    noise_maps = DetectorNoiseMaps(input_stack, prihdr, exthdr, dataset,
+                           input_err, input_dq, err_hdr=err_hdr, dq_hdr=dq_hdr)
     
     noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))
     l2a_data_filename = dataset[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
     noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
-    noise_maps.ext_hdr['FPN_IMM'] = FPN_image_mean
-    noise_maps.ext_hdr['CIC_IMM'] = CIC_image_mean
-    noise_maps.ext_hdr['DC_IMM'] = DC_image_mean
-    noise_maps.ext_hdr['FPN_IMME'] = FPN_image_median
+    noise_maps.ext_hdr.set('FPN_IMM', FPN_image_mean, 'mean of the image-area fixed-pattern noise (e-). -999. if no value supplied.')
+    noise_maps.ext_hdr.set('CIC_IMM', CIC_image_mean, 'mean of the image-area clock-induced charge (e-). -999. if no value supplied.')
+    noise_maps.ext_hdr.set('DC_IMM', DC_image_mean, 'mean of the image-area dark current (e-/s). -999. if no value supplied.')
+    noise_maps.ext_hdr.set('FPN_IMME', FPN_image_median, 'median of the image-area fixed-pattern noise (e-). -999. if no value supplied.')
     vals_list=[]
     for w1,w2,w3 in zip(exptime_arr, EMgain_arr, mean_num_good_fr):
         vals_list.append([float(w1),float(w2),float(w3)])

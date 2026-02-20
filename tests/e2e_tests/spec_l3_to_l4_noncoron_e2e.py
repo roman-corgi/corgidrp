@@ -12,14 +12,14 @@ from astropy.io.fits.verify import VerifyWarning
 from corgidrp.data import Dataset
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L3_headers,\
-    create_default_calibration_product_headers
+    create_default_calibration_product_headers, create_default_L2b_headers
 from corgidrp.mocks import rename_files_to_cgi_format
 from corgidrp.walker import walk_corgidrp
 import corgidrp
 import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
-                           get_latest_cal_file, fix_hdrs_for_tvac)
+                           get_latest_cal_file, fix_hdrs_for_tvac, compare_to_mocks_hdrs)
 
 
 
@@ -83,7 +83,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
         pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
-        ext_hdr["FSMLOS"] = False
+        ext_hdr["FSMLOS"] = 0
         # add a fake satellite spot image from a small band simulation
         image_spot = Image(psf_array_spot, pri_hdr = pri_hdr.copy(), ext_hdr = ext_hdr.copy(),
                            err =np.zeros_like(psf_array_spot), err_hdr = errhdr.copy(),
@@ -350,6 +350,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
 
     logger.info("")
     
+    compare_to_mocks_hdrs(out_file)
     # ================================================================================
     # (5) Baseline Performance Checks
     # ================================================================================
@@ -431,7 +432,7 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     
     # Run the complete end-to-end test
     spec_out = run_spec_l3_to_l4_e2e_test(e2edata_path, output_top_level)
-    
+
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
@@ -443,7 +444,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'# '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

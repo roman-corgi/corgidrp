@@ -21,6 +21,81 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+def fix_str_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Makes type for each header to what it should be.
+
+    Gets around EMGAIN_A being set to 1 in TVAC data.
+
+    Adds proper values to VISTYPE for the NoiseMap calibration: CGIVST_CAL_DRK
+    (data used to calibrate the dark noise sources).
+
+    This function is unnecessary with future data because data will have
+    the proper values in VISTYPE. 
+
+    Args:
+    list_of_fits (list): list of FITS files that need to be updated.
+
+    """
+    for file in list_of_fits:
+        with fits.open(file, mode='update') as fits_file:
+        #fits_file = fits.open(file)
+            exthdr = fits_file[1].header
+            prihdr = fits_file[0].header
+            errhdr = fits_file[2].header if len(fits_file) > 2 else None
+            dqhdr = fits_file[3].header if len(fits_file) > 3 else None
+            ref_errhdr = None
+            ref_dqhdr = None
+            prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
+            if exthdr['DATALVL'].lower() == 'l1':
+                ref_prihdr, ref_exthdr = mocks.create_default_L1_headers(exthdr['ARRTYPE'], prihdr['VISTYPE'])
+            elif exthdr['DATALVL'].lower() == 'l2a':
+                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr, ref_biashdr = mocks.create_default_L2a_headers(exthdr['ARRTYPE'])
+            elif exthdr['DATALVL'].lower() == 'l2b':
+                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr, ref_biashdr = mocks.create_default_L2b_headers(exthdr['ARRTYPE'])
+            elif exthdr['DATALVL'].lower() == 'cal':
+                ref_prihdr, ref_exthdr, ref_errhdr, ref_dqhdr = mocks.create_default_calibration_product_headers()
+            ##could add in more
+            else:
+                raise ValueError(f"Unrecognized DATALVL {exthdr['DATALVL']} in file {file}")
+            comparison_list = [(ref_prihdr, prihdr), (ref_exthdr, exthdr), (ref_errhdr, errhdr), (ref_dqhdr, dqhdr)]
+            for el in comparison_list:
+                if el[0] is None or el[1] is None:
+                    continue
+                for key in el[0].keys():
+                    if 'NAXIS' in key or 'HISTORY' in key:
+                        continue
+                    if key not in el[1].keys():
+                        el[1][key] = el[0][key]
+                    else: 
+                        if type(el[1][key]) != type(el[0][key]):
+                            type_class = type(el[0][key])
+                            if el[1][key] == 'N/A' and type_class != str:
+                                el[1][key] = el[0][key]
+                            else:
+                                try:
+                                    el[1][key] = type_class(el[1][key])
+                                except: 
+                                    if el[1][key] == "OPEN":
+                                        el[1][key] = 0
+                                    elif el[1][key] == "CLOSED":
+                                        el[1][key] = 1
+            for key in ['HOWFSLNK', 'ISHOWFSC', 'SATSPOTS']:
+                if key in prihdr.keys():
+                    prihdr.pop(key)
+            # don't delete any headers that do not appear in the reference headers, although there shouldn't be any
+            if float(exthdr['EMGAIN_A']) == 1. and exthdr['HVCBIAS'] <= 0:
+                exthdr['EMGAIN_A'] = -1. #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+            if type(exthdr['EMGAIN_C']) is str:
+                exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+            
+            # Update FITS file
+            #fits_file.writeto(file, overwrite=True)
+            fits_file.flush()
+
+
 @pytest.mark.e2e
 def test_trad_dark(e2edata_path, e2eoutput_path):
     '''There is no official II&T code for creating a "traditional" master dark (i.e., a dark made from taking the 
@@ -88,6 +163,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
         input_data_dir,
         header_template=mocks.create_default_L1_headers,
     )
+    #fix_str_for_tvac(trad_dark_data_filelist)
     # Set correct vistype for darks
     for filepath in trad_dark_data_filelist:
         with fits.open(filepath, mode='update') as hdul:
@@ -102,9 +178,10 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # our unit test version of the NonLinearityCalibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
-    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    #l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     #mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] # use first two files in L1 directory
+    #mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] # use first two files in L1 directory
+    mock_cal_filelist = trad_dark_data_filelist[:2]
     pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -117,6 +194,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     base_time = datetime.now()
     nonlinear_cal.ext_hdr['FILETIME'] = base_time.isoformat()
     mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
+    #fix_str_for_tvac([nonlinear_cal.filepath])
 
 
     # Load and combine noise maps from various calibration files into a single array
@@ -140,8 +218,8 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
-    ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
-    ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
+    ext_hdr['B_O'] = 0. # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
+    ext_hdr['B_O_ERR'] = 0. # was not estimated with the II&T code
 
     # Create a DetectorNoiseMaps object and save it
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -150,6 +228,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
     noise_maps.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=1)).isoformat()
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_maps], output_dir=calibrations_dir, level_suffix="dnm_cal")
+    #fix_str_for_tvac([noise_maps.filepath])
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -161,6 +240,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
     kgain.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=2)).isoformat()
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
+    #fix_str_for_tvac([kgain.filepath])
 
     # add calibration files to caldb
     this_caldb.create_entry(nonlinear_cal)
@@ -318,6 +398,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
         input_data_dir,
         header_template=mocks.create_default_L1_headers,
     )
+    fix_str_for_tvac(trad_dark_data_filelist)
     # Set correct vistype for darks
     for filepath in trad_dark_data_filelist:
         with fits.open(filepath, mode='update') as hdul:
@@ -346,6 +427,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     base_time = datetime.now()
     nonlinear_cal.ext_hdr['FILETIME'] = base_time.isoformat()
     mocks.rename_files_to_cgi_format(list_of_fits=[nonlinear_cal], output_dir=calibrations_dir, level_suffix="nln_cal")
+    fix_str_for_tvac([nonlinear_cal.filepath])
 
 
     # Load and combine noise maps from various calibration files into a single array
@@ -369,8 +451,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
-    ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
-    ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
+    ext_hdr['B_O'] = 0. # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
+    ext_hdr['B_O_ERR'] = 0. # was not estimated with the II&T code
 
     # Create a DetectorNoiseMaps object and save it
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -379,6 +461,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
     noise_maps.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=1)).isoformat()
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_maps], output_dir=calibrations_dir, level_suffix="dnm_cal")
+    fix_str_for_tvac([noise_maps.filepath])
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -390,6 +473,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # Set unique timestamp and use rename_files_to_cgi_format for proper CGI filename
     kgain.ext_hdr['FILETIME'] = (base_time + timedelta(seconds=2)).isoformat()
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
+    fix_str_for_tvac([kgain.filepath])
 
     # add calibration files to caldb
     this_caldb.create_entry(nonlinear_cal)
@@ -474,6 +558,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     assert(trad_dark.filename == test_filename)
     print('e2e test for trad_dark_im calibration passed')
 
+    check.compare_to_mocks_hdrs(generated_trad_dark_file)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
@@ -485,7 +571,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir =  '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data' #'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     outputdir = thisfile_dir
 

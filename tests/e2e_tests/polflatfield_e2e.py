@@ -17,7 +17,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
-from corgidrp.check import (check_filename_convention, check_dimensions, verify_header_keywords)
+from corgidrp.check import (check_filename_convention, check_dimensions, verify_header_keywords, compare_to_mocks_hdrs)
 
 #Get path to this file
 current_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -226,8 +226,8 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     # KGain
     kgain_val = 8.7
     # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
-    ext_hdr['RN'] = 100.0
-    ext_hdr['RN_ERR'] = 0
+    ext_hdr['RN'] = 100.
+    ext_hdr['RN_ERR'] = 0.
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
     ptc = np.column_stack([signal_array, noise_array])
@@ -252,8 +252,8 @@ def test_flat_creation_neptune_POL0(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
@@ -500,8 +500,8 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
@@ -526,6 +526,11 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
         walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
     
+    # Find the latest file that ends with _flt_cal in flat_outputdir
+    flt_cal_files = glob.glob(os.path.join(flat_outputdir, "*_flt_cal.fits"))
+    if flt_cal_files:
+        cal_file = max(flt_cal_files, key=os.path.getctime)
+    compare_to_mocks_hdrs(cal_file)
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
