@@ -991,9 +991,11 @@ def merge_headers(
                 break
         if sample is None:
             inv_val = "-999"
-        elif isinstance(sample, (int, np.integer)) or isinstance(sample, bool):
-            # TODO: what to do about bool?
+        elif isinstance(sample, (int, np.integer)):
             inv_val = -999
+        # TODO: what to do about bool?
+        elif isinstance(sample, bool):
+            inv_val = False
         elif isinstance(sample, (float, np.floating)):
             inv_val = -999.0
         else:

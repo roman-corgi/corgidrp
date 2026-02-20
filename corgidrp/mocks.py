@@ -635,18 +635,18 @@ def create_default_L3_headers(arrtype="SCI"):
     prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l3_.fits"
     
     exthdr['BUNIT'] = 'photoelectron/s'   # Physical unit of the array (brightness unit)
-    exthdr['CD1_1'] = 0
-    exthdr['CD1_2'] = 0
-    exthdr['CD2_1'] = 0
-    exthdr['CD2_2'] = 0
+    exthdr['CD1_1'] = 0.
+    exthdr['CD1_2'] = 0.
+    exthdr['CD2_1'] = 0.
+    exthdr['CD2_2'] = 0.
     exthdr['CRPIX1'] = 0. #could be fractional pixel value
     exthdr['CRPIX2'] = 0. #could be fractional pixel value
     exthdr['CTYPE1'] = 'RA---TAN'
     exthdr['CTYPE2'] = 'DEC--TAN'
     exthdr['CDELT1'] = 0.
     exthdr['CDELT2'] = 0.
-    exthdr['CRVAL1'] = 0
-    exthdr['CRVAL2'] = 0
+    exthdr['CRVAL1'] = 0.
+    exthdr['CRVAL2'] = 0.
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 

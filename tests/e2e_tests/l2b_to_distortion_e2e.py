@@ -120,7 +120,7 @@ if __name__ == "__main__":
     # workflow.
 
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
 
     ap = argparse.ArgumentParser(description="run the l2b->distortion end-to-end test")
 

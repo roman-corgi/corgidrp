@@ -533,6 +533,9 @@ class Image():
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            # in case some FITS-formatted headers like NAXIS1, NAXIS2, etc cards were put in the wrong place, 
+            # this will position them in the right order and throw an error is something is unfixable 
+            hdulist.verify('silentfix') 
             hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 

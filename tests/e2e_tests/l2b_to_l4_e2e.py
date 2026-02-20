@@ -451,9 +451,9 @@ if __name__ == "__main__":
     # workflow.
 
 
-    outputdir = "/Users/jmilton/Documents/CGI/E2E_Test_Data2"
+    outputdir = thisfile_dir #"/Users/jmilton/Documents/CGI/E2E_Test_Data2"
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data' #'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
