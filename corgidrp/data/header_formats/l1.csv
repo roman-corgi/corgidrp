@@ -1,3 +1,175 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:c4185f19c847a0983bf1e52ef327ea4935c270455f3d46f506ecf3ecc64192b8
-size 16473
+Section,Index,Name,Datatype,Array Size,Keyword,Example Value,Description
+FITS HDU Structure,0,Primary,None,0,,,
+FITS HDU Structure,1,Image,float64,"(2200, 1200)",,,
+Primary Header (HDU 0),,,bool,,SIMPLE,TRUE,Conforms to FITS Standard
+Primary Header (HDU 0),,,int,,BITPIX,8,Array data type (no array in this hdu)
+Primary Header (HDU 0),,,int,,NAXIS,0,Number of array dimensions
+Primary Header (HDU 0),,,bool,,EXTEND,TRUE,Denotes FITS extensions
+Primary Header (HDU 0),,,str,,VISITID,0200001001001001001,The full visit ID assigned to this pointing
+Primary Header (HDU 0),,,str,,CDMSVERS,2.1.0,SSC CDMS pipeline build version used to generate L1
+Primary Header (HDU 0),,,str,,FSWDVERS,1.1.5.1,Record of the CGI FSW dictionary used to parse the telemetry
+Primary Header (HDU 0),,,bool,,MOCK,1,Only used for simulated data examples
+Primary Header (HDU 0),,,str,,TELESCOP,ROMAN,Telescope name
+Primary Header (HDU 0),,,str,,INSTRUME,CGI,Instrument designation
+Primary Header (HDU 0),,,str,,DETECTOR,EXCAM,Name of the detector
+Primary Header (HDU 0),,,str,,ORIGIN,SSC,Who is responsible for the data
+Primary Header (HDU 0),,,str,,FILETIME,2024-04-03T10:54:01.932,When file was created
+Primary Header (HDU 0),,,int,,DATAVERS,1,Version of data (increments for reprocessing)
+Primary Header (HDU 0),,,str,,PROGNUM,02000,The Program ID in visit hierarchy (first 5 digits)
+Primary Header (HDU 0),,,str,,EXECNUM,01,The Execution Number in visit hierarchy (digits 6-7)
+Primary Header (HDU 0),,,str,,CAMPAIGN,001,The Pass/Campaign in visit hierarchy (digits 8-10)
+Primary Header (HDU 0),,,str,,SEGMENT,001,The Segment Number in visit hierarchy (digits 11-13)
+Primary Header (HDU 0),,,str,,OBSNUM,001,The Observation Number in visit hierarchy (digits 14-16)
+Primary Header (HDU 0),,,str,,VISNUM,001,The Visit number in visit hierarchy (digits 17-19)
+Primary Header (HDU 0),,,str,,CPGSFILE,campaign_0200001001001001001.xml,Campaign-level XML containing the current visit
+Primary Header (HDU 0),,,str,,AUXFILE,aux_0200001001001001001.txt,An AUX file associated with this observation
+Primary Header (HDU 0),,,str,,VISTYPE,CGIVST_TDD_OBS,The visit file template used for this observation
+Primary Header (HDU 0),,,str,,TARGET,HD 209458,Name of pointing target
+Primary Header (HDU 0),,,float,,RA,0,Planned RA
+Primary Header (HDU 0),,,float,,DEC,0,Planned DEC
+Primary Header (HDU 0),,,str,,EQUINOX,2000,J2000
+Primary Header (HDU 0),,,float,,RAPM,0,RA proper motion
+Primary Header (HDU 0),,,float,,DECPM,0,DEC proper motion
+Primary Header (HDU 0),,,int,,PSFREF,0,Whether this is a PSF reference observation or not
+Primary Header (HDU 0),,,str,,OPGAIN,1000,"Planned EXCAM EM gain or ""AUTO"""
+Primary Header (HDU 0),,,str,,PHTCNT,AUTO,"Whether photon counting mode is planned, or if set to ""AUTO"". ""FALSE"" = Photon-counting mode not planned. ""TRUE""=Photon-counting mode is planned."
+Primary Header (HDU 0),,,str,,FRAMET,30,"Planned exposure time per frame or if set to ""AUTO"". Taken from the observation plan"
+Primary Header (HDU 0),,,float,,PA_V3,0,Observatory position angle
+Primary Header (HDU 0),,,float,,PA_APER,0,Position angle in the CGI aperture
+Primary Header (HDU 0),,,float,,SVB_1,0,Sun unit vector in the body frame axis 1
+Primary Header (HDU 0),,,float,,SVB_2,0,Sun unit vector in the body frame axis 2
+Primary Header (HDU 0),,,float,,SVB_3,0,Sun unit vector in the body frame axis 3
+Primary Header (HDU 0),,,float,,ROLL,0,S/C roll angle wrt the reference frame
+Primary Header (HDU 0),,,float,,PITCH,0,S/C pitch angle wrt the reference frame
+Primary Header (HDU 0),,,float,,YAW,0,S/C yaw angle wrt the reference frame
+Primary Header (HDU 0),,,str,,FILENAME,cgi_0200001001001001001_20240403t105401_l1_.fits,The name of the file
+Primary Header (HDU 0),,,str,,OBSNAME,SCI,User-defined label for the associated observation plan
+Primary Header (HDU 0),,,float,,WBJ_1,S/C angular momentum axis 1,
+Primary Header (HDU 0),,,float,,WBJ_2,S/C angular momentum axis 2,
+Primary Header (HDU 0),,,float,,WBJ_3,S/C angular momentum axis 3,
+Image Header (HDU 1),,,str,,XTENSION,IMAGE,Image Extension (FITS format keyword)
+Image Header (HDU 1),,,int,,BITPIX,16,"Array data type only true at L1, data coming from the instrument is unsigned 16-bit"
+Image Header (HDU 1),,,int,,NAXIS,2,Number of array dimensions
+Image Header (HDU 1),,,int,,NAXIS1,2200,Raw data axis 1 size
+Image Header (HDU 1),,,int,,NAXIS2,1200,Raw data axis 2 size for SCI frames (1200) or ENG frames (2200)
+Image Header (HDU 1),,,int,,PCOUNT,0,"Number of parameters (FITS format keyword), not to be confused with photon counting"
+Image Header (HDU 1),,,int,,GCOUNT,1,Number of groups (FITS format keyword)
+Image Header (HDU 1),,,int,,BSCALE,1,Linear factor in scaling equation. Needed for non-standard FITS data types
+Image Header (HDU 1),,,int,,BZERO,32768,Offset for 16-bit unsigned data type (FITS format determined)
+Image Header (HDU 1),,,str,,BUNIT,DN,Physical unit of the array (brightness unit)
+Image Header (HDU 1),,,str,,ARRTYPE,SCI,Whether it is the smaller SCI frame or full ENG frame
+Image Header (HDU 1),,,str,,SCTSRT,2025-02-16T00:00:00,Spacecraft timestamp of first packet for this image frame in UTC
+Image Header (HDU 1),,,str,,SCTEND,2025-02-16T00:00:00,Spacecraft timestamp of last packet for this image frame in UTC
+Image Header (HDU 1),,,str,,FRMTYPE,NUM,Specifies which frame collection routine was used based on instrument EVRs
+Image Header (HDU 1),,,bool,,ISHOWFSC,FALSE,Denotes whether the frames are collected as a part of the HOWFSC loop.
+Image Header (HDU 1),,,bool,,ISACQ,FALSE,Denotes whether this frame was taken during acquisition
+Image Header (HDU 1),,,bool,,SPBAL,FALSE,Denotes whether this frame was taken during speckle balance
+Image Header (HDU 1),,,bool,,ISFLAT,FALSE,Denotes whether this frame was taken during the AAC flat activity
+Image Header (HDU 1),,,bool,,SATSPOTS,FALSE,Denotes whether the frame contains satellite spots based on a combination of visit type and EXCAM collection command
+Image Header (HDU 1),,,int,,STATUS,0,Housekeeping packet health check status
+Image Header (HDU 1),,,int,,HVCBIAS,0,HV clock bias value. DAC value controlling EM-gain
+Image Header (HDU 1),,,str,,OPMODE,NONE_DETON_0,EXCAM readout operational mode
+Image Header (HDU 1),,,float,,EXPTIME,60,Commanded exposure time. Taken from telemetry on CGI
+Image Header (HDU 1),,,float,,EMGAIN_C,1,Commanded gain
+Image Header (HDU 1),,,int,,UNITYG,0,DAC value corresponding to unity gain
+Image Header (HDU 1),,,float,,EMGAINA1,0,"""Actual"" gain calculation a1 coefficient"
+Image Header (HDU 1),,,float,,EMGAINA2,0,"""Actual"" gain calculation a2 coefficient"
+Image Header (HDU 1),,,float,,EMGAINA3,0,"""Actual"" gain calculation a3 coefficient"
+Image Header (HDU 1),,,float,,EMGAINA4,0,"""Actual"" gain calculation a4 coefficient"
+Image Header (HDU 1),,,float,,EMGAINA5,0,"""Actual"" gain calculation a5 coefficient"
+Image Header (HDU 1),,,float,,GAINTCAL,0,Calibration reference temperature for gain calculation
+Image Header (HDU 1),,,float,,EXCAMT,0,EXCAM temperature from telemetry
+Image Header (HDU 1),,,float,,LOCAMT,0,LOCAM temperature from telemetry
+Image Header (HDU 1),,,float,,EMGAIN_A,0,"""Actual"" gain computed from a1-a5 and calibration temperature"
+Image Header (HDU 1),,,float,,KGAINPAR,0,Calculated K-gain parameter (DN to electrons)
+Image Header (HDU 1),,,int,,CYCLES,0,EXCAM clock cycles since boot
+Image Header (HDU 1),,,int,,LASTEXP,0,EXCAM clock cycles in the last exposing stage of readout sequence
+Image Header (HDU 1),,,float,,BLNKTIME,0,EXCAM commanded blanking time
+Image Header (HDU 1),,,float,,BLNKCYC,0,Commanded blanking cycles
+Image Header (HDU 1),,,int,,EXPCYC,0,Exposing stage duration (cycles)
+Image Header (HDU 1),,,int,,OVEREXP,0,EXCAM over-illumination flag
+Image Header (HDU 1),,,float,,NOVEREXP,0,Number of pixels overexposed /100
+Image Header (HDU 1),,,int,,ISPC,0,Designated photon counting (telemetered value)
+Image Header (HDU 1),,,float,,PROXET,0,"Thermal strap interface, EXCAM ProxE heater"
+Image Header (HDU 1),,,int,,FCMLOOP,0,Control state of the FCM loop
+Image Header (HDU 1),,,float,,FCMPOS,0,Coarse FCM position
+Image Header (HDU 1),,,int,,FSMINNER,0,Control state of the FSM inner loop
+Image Header (HDU 1),,,int,,FSMLOS,1,Control state of the FSM LOS loop
+Image Header (HDU 1),,,str,,FSMPRFL,FSM_PROFILE_UNKNOWN,FSM profile that has been loaded
+Image Header (HDU 1),,,int,,FSMRSTR,0,Whether FSM raster is executing
+Image Header (HDU 1),,,float,,FSMSG1,0,Average measurement in volts for strain gauge 1 over the last 1000 samples
+Image Header (HDU 1),,,float,,FSMSG2,0,Average measurement in volts for strain gauge 2 over the last 1000 samples
+Image Header (HDU 1),,,float,,FSMSG3,0,Average measurement in volts for strain gauge 3 over the last 1000 samples
+Image Header (HDU 1),,,float,,FSMX,50,Derived FSM X position relative to home from strain gauge voltages and FSM transformation matrix
+Image Header (HDU 1),,,float,,FSMY,50,Derived FSM Y position relative to home from strain gauge voltages and FSM transformation matrix
+Image Header (HDU 1),,,float,,EACQ_ROW,0,Desired pixel row for most recent star acquisition via EXCAM acquisition method
+Image Header (HDU 1),,,float,,EACQ_COL,0,Desired pixel col for most recent star acquisition via EXCAM acquisition method
+Image Header (HDU 1),,,float,,SB_FP_DX,0,"X pixels offset (from EXCAM center), from FPAM speckle balance alignment"
+Image Header (HDU 1),,,float,,SB_FP_DY,0,"Y pixels offset (from EXCAM center), from FPAM speckle balance alignment"
+Image Header (HDU 1),,,float,,SB_FS_DX,0,"X pixels offset (from EXCAM center), from FSAM speckle balance alignment"
+Image Header (HDU 1),,,float,,SB_FS_DY,0,"Y pixels offset (from EXCAM center), from FSAM speckle balance alignment"
+Image Header (HDU 1),,,int,,DMZLOOP,0,Control state of the DM Zernike loop
+Image Header (HDU 1),,,int,,1SVALID,1,Is LOWFSC 1s stats valid
+Image Header (HDU 1),,,float,,Z2AVG,0,Avg Z2 value (tip) coefficient from previous second
+Image Header (HDU 1),,,float,,Z2RES,0,Res Z2 value (tip) coefficient from previous second
+Image Header (HDU 1),,,float,,Z2VAR,0,Var Z2 value (tip) coefficient from previous second
+Image Header (HDU 1),,,float,,Z3AVG,0,Avg Z3 value (tilt) coefficient from previous second
+Image Header (HDU 1),,,float,,Z3RES,0,Res Z3 value (tilt) coefficient from previous second
+Image Header (HDU 1),,,float,,Z3VAR,0,Var Z3 value (tilt) coefficient from previous second
+Image Header (HDU 1),,,int,,10SVALID,1,Is LOWFSC 10s stats valid
+Image Header (HDU 1),,,float,,Z4AVG,0,Avg Z4 value (focus) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z4RES,0,Res Z4 value (focus) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z5AVG,0,Avg Z5 value (astigmatism) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z5RES,0,Res Z5 value (astigmatism) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z6AVG,0,Avg Z6 value (astigmatism) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z6RES,0,Res Z6 value (astigmatism) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z7AVG,0,Avg Z7 value (coma) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z7RES,0,Res Z7 value (coma) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z8AVG,0,Avg Z8 value (coma) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z8RES,0,Res Z8 value (coma) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z9AVG,0,Avg Z9 value (trefoil) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z9RES,0,Res Z9 value (trefoil) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z10AVG,0,Avg Z10 value (trefoil) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z10RES,0,Res Z10 value (trefoil) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z11AVG,0,Avg Z11 value (spherical) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z11RES,0,Res Z11 value (spherical) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z12AVG,0,Avg Z12 value (flux ref) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z13AVG,0,Avg Z13 value (shear X) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,Z14AVG,0,Avg Z14 value (shear Y) coefficient for 10000 samples
+Image Header (HDU 1),,,float,,SPAM_H,0,SPAM absolute position of the H-axis in microns
+Image Header (HDU 1),,,float,,SPAM_V,0,SPAM absolute position of the V-axis in microns
+Image Header (HDU 1),,,str,,SPAMNAME,OPEN,"Closest named SPAM position, calculated from SPAM_H/V keywords"
+Image Header (HDU 1),,,float,,SPAMSP_H,0,SPAM set point H. The default H position corresponding to the closest SPAM named position
+Image Header (HDU 1),,,float,,SPAMSP_V,0,SPAM set point V. The default V position corresponding to the closest SPAM named position
+Image Header (HDU 1),,,float,,FPAM_H,0,FPAM absolute position of the H-axis in microns
+Image Header (HDU 1),,,float,,FPAM_V,0,FPAM absolute position of the V-axis in microns
+Image Header (HDU 1),,,str,,FPAMNAME,HLC12_C2R1,"Closest named FPAM position, calculated from FPAM_H/V and FPAM lookup table"
+Image Header (HDU 1),,,float,,FPAMSP_H,0,FPAM set point H. The default H position corresponding to the closest FPAM named position
+Image Header (HDU 1),,,float,,FPAMSP_V,0,FPAM set point V. The default V position corresponding to the closest FPAM named position
+Image Header (HDU 1),,,float,,LSAM_H,0,LSAM absolute position of the H-axis in microns
+Image Header (HDU 1),,,float,,LSAM_V,0,LSAM absolute position of the V-axis in microns
+Image Header (HDU 1),,,str,,LSAMNAME,NFOV,"Closest named LSAM position, calculated from LSAM_H/V and LSAM lookup table"
+Image Header (HDU 1),,,float,,LSAMSP_H,0,LSAM set point H. The default H position corresponding to the closest LSAM named position
+Image Header (HDU 1),,,float,,LSAMSP_V,0,LSAM set point V. The default V position corresponding to the closest LSAM named position
+Image Header (HDU 1),,,float,,FSAM_H,0,FSAM absolute position of the H-axis in microns
+Image Header (HDU 1),,,float,,FSAM_V,0,FSAM absolute position of the V-axis in microns
+Image Header (HDU 1),,,str,,FSAMNAME,R1C1,"Closest named FSAM position, calculated from FSAM_H/V and FSAM lookup table"
+Image Header (HDU 1),,,float,,FSAMSP_H,0,FSAM set point H. The default H position corresponding to the closest FSAM named position
+Image Header (HDU 1),,,float,,FSAMSP_V,0,FSAM set point V. The default V position corresponding to the closest FSAM named position
+Image Header (HDU 1),,,float,,CFAM_H,0,CFAM absolute position of the H-axis in microns
+Image Header (HDU 1),,,float,,CFAM_V,0,CFAM absolute position of the V-axis in microns
+Image Header (HDU 1),,,str,,CFAMNAME,1F,"Closest named CFAM position, calculated from CFAM_H/V and CFAM lookup table"
+Image Header (HDU 1),,,float,,CFAMSP_H,0,CFAM set point H. The default H position corresponding to the closest CFAM named position
+Image Header (HDU 1),,,float,,CFAMSP_V,0,CFAM set point V. The default V position corresponding to the closest CFAM named position
+Image Header (HDU 1),,,float,,DPAM_H,0,DPAM absolute position of the H-axis in microns
+Image Header (HDU 1),,,float,,DPAM_V,0,DPAM absolute position of the V-axis in microns
+Image Header (HDU 1),,,str,,DPAMNAME,IMAGING,Closest named DPAM calculated from DPAM_H/V and DPAM lookup table
+Image Header (HDU 1),,,float,,DPAMSP_H,0,DPAM set point H. The default H position corresponding to the closest DPAM named position
+Image Header (HDU 1),,,float,,DPAMSP_V,0,DPAM set point V. The default V position corresponding to the closest DPAM named position
+Image Header (HDU 1),,,str,,DATETIME,2025-02-16T00:00:00,Time of preceding 1Hz HK packet in UTC
+Image Header (HDU 1),,,str,,FTIMEUTC,2025-02-16T00:00:00,Frame time (correlated injected metadata with S/C timestamp) - UTC
+Image Header (HDU 1),,,float,,MJDSRT,60722,Exposure start time (MJD)
+Image Header (HDU 1),,,float,,MJDEND,60722.00069,Exposure end time (MJD)
+Image Header (HDU 1),,,str,,FILE0,"""l0_file_name.fits""",source files (Level 0) for the excam frame data. We expect this will usually just be one keyword FILE0 and sometimes there would be a FILE1. 
+Image Header (HDU 1),,,str,,DATALVL,L1,"Data level: 'L1', 'L2a', L2b', 'L3', 'L4', 'TDA', 'CAL'"
+Image Header (HDU 1),,,int,,MISSING,0,Flagged if header keywords are missing
