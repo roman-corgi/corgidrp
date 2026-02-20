@@ -17,6 +17,36 @@ import copy
 import corgidrp
 from datetime import datetime, timedelta, timezone
 
+typical_bool_keywords = ['DESMEAR', 'CTI_CORR']
+typical_cal_invalid_keywords = [
+                    # Primary header keywords
+                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    # Extension header keywords
+                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
+                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
+                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
+                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
+                ]
+
 class Dataset():
     """
     A sequence of data of the same kind. Can be indexed and looped over
@@ -401,7 +431,7 @@ class Image():
                 self.data = data_or_filepath
                 if err is not None:
                     if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
-                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
+                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(np.shape(err)[-self.data.ndim:], self.data.shape))
                     #we want to have a 3 dim error array
                     if err.ndim == self.data.ndim + 1:
                         self.err = err
@@ -1544,35 +1574,8 @@ class BadPixelMap(Image):
         if input_dataset is not None:
             pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
                 input_dataset,
-                any_true_keywords=['DESMEAR', 'CTI_CORR'],
-                invalid_keywords=[
-                    # Primary header keywords
-                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
-                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
-                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
-                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
-                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
-                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
-                    # Extension header keywords
-                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
-                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
-                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
-                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
-                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
-                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
-                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
-                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
-                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
-                    'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
-                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
-                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
-                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
-                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
-                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
-                ]
+                any_true_keywords=typical_bool_keywords,
+                invalid_keywords=typical_cal_invalid_keywords
             )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
         else:
