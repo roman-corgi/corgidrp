@@ -388,7 +388,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         hdulist = dataset[-1].hdu_list.copy()
 
         if val[0] != "CGIVST_CAL_DRK":  
-            pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(sub_dataset, any_true_keywords=data.typical_bool_keywords)
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(sub_dataset)
             new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 
                                 dq_hdr=dq_hdr, input_hdulist=hdulist) 
             new_image.filename = dataset[-1].filename.replace("L2a", "L2b")
@@ -426,7 +426,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE',  'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN', 'RN_ERR', 'KGAIN_ER']:
             if key in invalid_pc_drk_keywords:
                 invalid_pc_drk_keywords.remove(key)
-        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(sub_dataset, any_true_keywords=data.typical_bool_keywords, invalid_keywords=invalid_pc_drk_keywords)
+        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(sub_dataset, invalid_keywords=invalid_pc_drk_keywords)
         ext_hdr['PC_STAT'] = 'photon-counted master dark'
         ext_hdr['NAXIS1'] = combined_pc_mean.shape[0]
         ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]

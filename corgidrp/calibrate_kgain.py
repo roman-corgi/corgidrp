@@ -798,7 +798,7 @@ def calibrate_kgain(dataset_kgain,
     for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'OBSNUM']:
         if key in invalid_krn_keywords:
             invalid_krn_keywords.remove(key)
-    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset_kgain, any_true_keywords=data.typical_bool_keywords, invalid_keywords=invalid_krn_keywords)
+    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset_kgain, invalid_keywords=invalid_krn_keywords)
     # Read noise and error
     exthdr['RN'] = mean_rn_gauss_e
     
