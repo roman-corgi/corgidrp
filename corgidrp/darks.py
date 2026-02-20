@@ -5,7 +5,7 @@ from astropy.io import fits
 
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
-from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset
+from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords, typical_bool_keywords
 
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
@@ -320,7 +320,12 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         err = total_err
         data = mean_frame
 
-    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset)
+    invalid_trad_drk_keywords = typical_cal_invalid_keywords 
+    # Remove specific keywords
+    for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE', 'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN', 'RN_ERR', 'KGAIN_ER', 'HVCBIAS']:
+        if key in invalid_trad_drk_keywords:
+            invalid_trad_drk_keywords.remove(key)
+    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset, invalid_keywords=invalid_trad_drk_keywords)
     
     exthdr['NAXIS1'] = data.shape[1]
     exthdr['NAXIS2'] = data.shape[0]
@@ -866,7 +871,12 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     CIC_image_map[CIC_image_map < 0] = 0
     DC_image_map[DC_image_map < 0] = 0
 
-    prihdr, exthdr, err_hdr, dq_hdr = check.merge_headers(dataset, invalid_keywords=['FTIMEUTC', 'PROXET', 'DATETIME', 'EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR'])
+    invalid_dnm_keywords = typical_cal_invalid_keywords + ['EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR', 'KGAIN_ER', 'HVCBIAS']
+    # Remove specific keywords
+    for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE']:
+        if key in invalid_dnm_keywords:
+            invalid_dnm_keywords.remove(key)
+    prihdr, exthdr, err_hdr, dq_hdr = check.merge_headers(dataset, invalid_keywords=invalid_dnm_keywords)
     if 'EMGAIN_M' in exthdr.keys():
         exthdr['EMGAIN_M'] = -999.
     exthdr['BUNIT'] = 'detected electron'
