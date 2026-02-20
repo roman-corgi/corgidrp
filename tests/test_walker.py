@@ -168,8 +168,8 @@ def test_auto_template_identification():
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)

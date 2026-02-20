@@ -123,8 +123,8 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                        input_dataset=mock_input_dataset, err=noise_map_noise,
                                        dq=noise_map_dq, err_hdr=err_hdr)
@@ -413,6 +413,11 @@ def test_l1_to_l3(e2edata_path, e2eoutput_path):
         logger.info('END-TO-END TEST COMPLETE')
         logger.info('='*80)
         
+        for new_filename in new_l3_analog_filenames:
+            check.compare_to_mocks_hdrs(new_filename) 
+        for new_filename in new_l3_pc_filenames:
+            check.compare_to_mocks_hdrs(new_filename)
+
         print('e2e test for L1 to L3 polarimetry passed')
     except Exception as e:
         logger.error('='*80)
@@ -434,7 +439,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l3 polarimetry end-to-end test with recipe chaining")

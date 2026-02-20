@@ -17,7 +17,10 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
-from corgidrp.check import (check_filename_convention, check_dimensions, verify_header_keywords)
+import warnings
+import corgidrp.check as check
+
+thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 #Get path to this file
 current_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -161,8 +164,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
         base_image.pri_hdr['TARGET'] = "Neptune"
         base_image.ext_hdr['CFAMNAME'] = "4F"
         base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
+        base_image.ext_hdr['EXPTIME'] = 60. # needed to mitigate desmear processing effect
         base_image.ext_hdr['DPAMNAME'] = "Imaging"
-        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
        
        
@@ -220,8 +223,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     # KGain
     kgain_val = 8.7
     # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
-    ext_hdr['RN'] = 100.0
-    ext_hdr['RN_ERR'] = 0
+    ext_hdr['RN'] = 100.
+    ext_hdr['RN_ERR'] = 0.
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
     ptc = np.column_stack([signal_array, noise_array])
@@ -246,8 +249,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
@@ -283,6 +286,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
     logger.info('Processing flat field complete')
+
+    check.compare_to_mocks_hdrs(os.path.join(flat_outputdir, flat_filename))
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -405,8 +410,8 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
         base_image.pri_hdr['TARGET'] = "Uranus"
         base_image.ext_hdr['CFAMNAME'] = "1F"
         base_image.pri_hdr['VISTYPE'] = "CGIVST_CAL_FLAT"
+        base_image.ext_hdr['EXPTIME'] = 60. # needed to mitigate desmear processing effect
         base_image.ext_hdr['DPAMNAME'] = "Imaging"
-        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
        
         # Generate CGI filename with correct timestamp format
@@ -463,8 +468,8 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     # KGain
     kgain_val = 8.7
     # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
-    ext_hdr['RN'] = 100.0
-    ext_hdr['RN_ERR'] = 0
+    ext_hdr['RN'] = 100.
+    ext_hdr['RN_ERR'] = 0.
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
     ptc = np.column_stack([signal_array, noise_array])
@@ -489,8 +494,8 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
