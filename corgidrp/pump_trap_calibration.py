@@ -3292,7 +3292,7 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
         #Release time constant at desired Temperature
         trap_cal_array[i,9] = dict_entry['tau at input T']
 
-    invalid_tpu_keywords = typical_cal_invalid_keywords + ['EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR', 'HVCBIAS', 'KGAIN_ER', 'TPSCHEM1', 'TPSCHEM2', 'TPSCHEM3', 'TPSCHEM4']
+    invalid_tpu_keywords = typical_cal_invalid_keywords + ['EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR', 'HVCBIAS', 'KGAIN_ER', 'TPTAU', 'TPSCHEM1', 'TPSCHEM2', 'TPSCHEM3', 'TPSCHEM4']
     # Remove specific keywords
     for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE', 'VISITID']:
         if key in invalid_tpu_keywords:
