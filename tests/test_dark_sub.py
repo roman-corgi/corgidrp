@@ -94,7 +94,7 @@ def test_dark_sub():
     # load in the dark
     dark_filepath = os.path.join(calibdir, dark_filename)
     new_dark = data.Dark(dark_filepath)
-    assert new_dark.ext_hdr['DRKTYPE'] == 'analog synthesized master dark'
+    assert new_dark.ext_hdr['DRKTYPE'] == 'analog traditional master dark'
 
     # check the dark can be pickled (for CTC operations)
     pickled = pickle.dumps(new_dark)
