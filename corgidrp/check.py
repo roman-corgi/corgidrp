@@ -1266,14 +1266,6 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
                 adjusted_img_hdr[key] = type_class(adjusted_img_hdr[key])
             except:
                 pass
-    # special case:
-    if 'PHTCNT' in adjusted_pri_hdr:
-        value = adjusted_pri_hdr['PHTCNT']
-        if value == '0' or value == 0:
-            adjusted_pri_hdr['PHTCNT'] = 'False'
-        elif value == '1' or value == 1:
-            adjusted_pri_hdr['PHTCNT'] = 'True'
-        # otherwise, could have been '-999', which is fine (still str)
 
     # if any L1 headers missing, fill them in with mock values
     headers = mocks.create_default_L1_headers()
@@ -1291,5 +1283,13 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
                 adjusted_img_hdr[key] = headers[1][key]
             else:
                 adjusted_img_hdr[key] = type_class(-999)
+    # special case:
+    if 'PHTCNT' in adjusted_pri_hdr:
+        value = adjusted_pri_hdr['PHTCNT']
+        if value == '0' or value == 0:
+            adjusted_pri_hdr['PHTCNT'] = 'False'
+        elif value == '1' or value == 1:
+            adjusted_pri_hdr['PHTCNT'] = 'True'
+        # otherwise, could have been '-999', which is fine (still str)
 
     return (adjusted_pri_hdr, adjusted_img_hdr)
