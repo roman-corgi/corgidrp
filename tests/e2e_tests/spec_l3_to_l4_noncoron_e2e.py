@@ -345,7 +345,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
 
     logger.info("")
     
-    compare_to_mocks_hdrs(out_file, create_default_L2b_headers)
+    compare_to_mocks_hdrs(out_file)
     # ================================================================================
     # (5) Baseline Performance Checks
     # ================================================================================

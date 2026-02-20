@@ -460,7 +460,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
         else:
             logger.info(f"{frame_info}: Mueller Matrix calibration used not found in RECIPE. FAIL")
 
-    compare_to_mocks_hdrs(l4_filelist[0], mocks.create_default_L2b_headers) #L2b leaves out CDELT1 and CDELT2
+    compare_to_mocks_hdrs(l4_filelist[0])
 
 if __name__ == "__main__":
     #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"

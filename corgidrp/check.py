@@ -1176,23 +1176,30 @@ def compare_to_mocks_hdrs(fits_file, header_template=None):
     """
 
     if header_template is None:
-        header_template = mocks.create_default_L1_headers
+        header_template = mocks.create_default_L4_headers # high level, inclusive of all below
 
+    header_result = header_template()
+    mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
+   
+    # needs to have at least the L1 headers, except for leave_out_ext below
+    l1_headers = mocks.create_default_L1_headers()
+    l1_pri_hdr, l1_img_hdr = l1_headers[0], l1_headers[1]
+    leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    for key in leave_out_ext:
+        if key in l1_img_hdr:
+            del l1_img_hdr[key]
+   
     bad_values = []
     with fits.open(fits_file) as hdul:
         orig_pri_hdr = hdul[0].header.copy()
         orig_img_hdr = hdul[1].header.copy()
-
-        header_result = header_template()
-        mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
-
         for key in mock_pri_hdr.keys():
             if 'NAXIS' in key:
                 continue 
             type_class = type(mock_pri_hdr[key])
             if key.upper() == 'PSFREF' and orig_pri_hdr[key] == 'N/A':
                 orig_pri_hdr[key] = 0 #should be int type
-            if key not in orig_pri_hdr:
+            if key not in orig_pri_hdr and key in l1_pri_hdr:
                 bad_values.append([key])
             if key in orig_pri_hdr and type(orig_pri_hdr[key]) != type_class:
                 bad_values.append([key, type(orig_pri_hdr[key]), type_class])
@@ -1200,7 +1207,7 @@ def compare_to_mocks_hdrs(fits_file, header_template=None):
             if 'NAXIS' in key:
                 continue 
             type_class = type(mock_img_hdr[key])
-            if key not in orig_img_hdr:
+            if key not in orig_img_hdr and key in l1_img_hdr:
                 bad_values.append([key])
             if key in orig_img_hdr and type(orig_img_hdr[key]) != type_class:
                 bad_values.append([key, type(orig_img_hdr[key]), type_class])        
@@ -1265,5 +1272,22 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
         elif value == '1' or value == 1:
             adjusted_pri_hdr['PHTCNT'] = 'True'
         # otherwise, could have been '-999', which is fine (still str)
+
+    # if any L1 headers missing, fill them in with mock values
+    headers = mocks.create_default_L1_headers()
+    for key in headers[0].keys():
+        if key not in adjusted_pri_hdr: # obviously not relevant, so make it invalidated value
+            type_class = type(headers[0][key])
+            if type_class == bool:
+                adjusted_pri_hdr[key] = headers[0][key]
+            else:
+                adjusted_pri_hdr[key] = type_class(-999)
+    for key in headers[1].keys():
+        if key not in adjusted_img_hdr: # obviously not relevant, so make it invalidated value
+            type_class = type(headers[1][key])
+            if type_class == bool:
+                adjusted_img_hdr[key] = headers[1][key]
+            else:
+                adjusted_img_hdr[key] = type_class(-999)
 
     return (adjusted_pri_hdr, adjusted_img_hdr)

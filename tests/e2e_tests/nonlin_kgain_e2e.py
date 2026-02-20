@@ -151,8 +151,8 @@ def test_nonlin_and_kgain_e2e(
     kgain_filepath = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
     kgain = data.KGain(kgain_filepath)
 
-    check.compare_to_mocks_hdrs(nonlin_drp_filepath, mocks.create_default_L2a_headers)
-    check.compare_to_mocks_hdrs(kgain_filepath, mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(nonlin_drp_filepath)
+    check.compare_to_mocks_hdrs(kgain_filepath)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

@@ -187,7 +187,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #Check if the Bunit is correct
     assert l3_image.ext_hdr['BUNIT'] == 'photoelectron/s'
     
-    check.compare_to_mocks_hdrs(l3_filename, mocks.create_default_L2b_headers) #L2b leaves out CDELT1 and CDELT2
+    check.compare_to_mocks_hdrs(l3_filename)
 
     #Clean up
     # remove temporary caldb file
@@ -304,7 +304,7 @@ def test_l3_to_l4(e2eoutput_path):
     assert combined_image.ext_hdr['FILE3'] in input_filenames
     assert combined_image.ext_hdr['FILE4'] in input_filenames
 
-    check.compare_to_mocks_hdrs(l4_filename, mocks.create_default_L2b_headers)
+    check.compare_to_mocks_hdrs(l4_filename)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

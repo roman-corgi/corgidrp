@@ -300,7 +300,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
 
-    check.compare_to_mocks_hdrs(astrom_cal_files[0], mocks.create_default_L2b_headers)
+    check.compare_to_mocks_hdrs(astrom_cal_files[0])
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

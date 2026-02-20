@@ -279,7 +279,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #check the flux values are similar regardless of the wollaston used
     assert flux_fac_WP1.fluxcal_fac == pytest.approx(flux_fac_WP2.fluxcal_fac, rel=0.05)
 
-    compare_to_mocks_hdrs(fluxcal_file_WP2, mocks.create_default_L2b_headers)
+    compare_to_mocks_hdrs(fluxcal_file_WP2)
 
     # clean up
     this_caldb = caldb.CalDB()

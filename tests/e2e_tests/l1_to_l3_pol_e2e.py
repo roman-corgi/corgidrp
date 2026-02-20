@@ -414,9 +414,9 @@ def test_l1_to_l3(e2edata_path, e2eoutput_path):
         logger.info('='*80)
         
         for new_filename in new_l3_analog_filenames:
-            check.compare_to_mocks_hdrs(new_filename, mocks.create_default_L2b_headers) # L2b excludes CDELT1 and CDELT2 
+            check.compare_to_mocks_hdrs(new_filename) 
         for new_filename in new_l3_pc_filenames:
-            check.compare_to_mocks_hdrs(new_filename, mocks.create_default_L2b_headers) # L2b excludes CDELT1 and CDELT2 
+            check.compare_to_mocks_hdrs(new_filename)
 
         print('e2e test for L1 to L3 polarimetry passed')
     except Exception as e:

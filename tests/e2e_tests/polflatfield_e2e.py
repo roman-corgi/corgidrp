@@ -528,7 +528,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
     flt_cal_files = glob.glob(os.path.join(flat_outputdir, "*_flt_cal.fits"))
     if flt_cal_files:
         cal_file = max(flt_cal_files, key=os.path.getctime)
-    compare_to_mocks_hdrs(cal_file, mocks.create_default_L2a_headers)
+    compare_to_mocks_hdrs(cal_file)
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element

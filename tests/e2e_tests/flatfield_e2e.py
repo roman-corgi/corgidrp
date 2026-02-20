@@ -287,7 +287,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
 
     logger.info('Processing flat field complete')
 
-    check.compare_to_mocks_hdrs(os.path.join(flat_outputdir, flat_filename), mocks.create_default_L2a_headers)
+    check.compare_to_mocks_hdrs(os.path.join(flat_outputdir, flat_filename))
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

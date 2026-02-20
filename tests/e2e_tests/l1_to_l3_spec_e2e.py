@@ -553,7 +553,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_l3_filenames = run_l1_to_l3_e2e_test(analog_datadir, analog_outputdir, processed_cal_path, logger)
         
         for new_filename in new_l3_filenames:
-            check.compare_to_mocks_hdrs(new_filename, mocks.create_default_L2b_headers) #L2b leaves out CDELT1 and CDELT2
+            check.compare_to_mocks_hdrs(new_filename)
 
         logger.info('='*80)
         logger.info('PC SPECTROSCOPY DATA TEST')
@@ -561,7 +561,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_l3_filenames = run_l1_to_l3_e2e_test(pc_datadir, pc_outputdir, processed_cal_path, logger)
         
         for new_filename in new_l3_filenames:
-            check.compare_to_mocks_hdrs(new_filename, mocks.create_default_L2b_headers) #L2b leaves out CDELT1 and CDELT2
+            check.compare_to_mocks_hdrs(new_filename)
 
         logger.info('='*80)
         logger.info('END-TO-END TEST COMPLETE')

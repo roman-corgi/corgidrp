@@ -125,7 +125,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     assert np.all(ct_cal_drp.ct_fpam == ct_cal_mock.ct_fpam)
     assert np.all(ct_cal_drp.ct_fsam == ct_cal_mock.ct_fsam)
 
-    compare_to_mocks_hdrs(corethroughput_drp_file, mocks.create_default_L2b_headers)
+    compare_to_mocks_hdrs(corethroughput_drp_file)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -217,7 +217,7 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     assert np.min(ct_cal_drp.ct_excam[2]) > 0, "CoreThroughput measurements have non-positive values"
     assert np.max(ct_cal_drp.ct_excam[2]) <= 1, "CoreThroughput measurements exceed 1"
 
-    compare_to_mocks_hdrs(corethroughput_drp_file, mocks.create_default_L2b_headers)
+    compare_to_mocks_hdrs(corethroughput_drp_file)
 
     # Print success message
     print('e2e test for corethroughput calibration with simulated band 3 shaped pupil data passed')

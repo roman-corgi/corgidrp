@@ -227,7 +227,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         pc_dark_frame = fits.getdata(master_dark_filepath_list[i])
         pc_dark_frame_err = fits.getdata(master_dark_filepath_list[i], 'ERR')
 
-        check.compare_to_mocks_hdrs(pc_processed_filepath, mocks.create_default_L2b_headers)
+        check.compare_to_mocks_hdrs(pc_processed_filepath)
 
         # more frames gets a better agreement; agreement to 2% for ~160 darks and illuminated
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02)

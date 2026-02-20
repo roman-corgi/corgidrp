@@ -174,7 +174,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
 
         assert np.all(np.abs(diff) < 1e-5)
         
-        check.compare_to_mocks_hdrs(new_filename, mocks.create_default_L2a_headers)
+        check.compare_to_mocks_hdrs(new_filename)
         
         # # plotting script for debugging
         # import matplotlib.pylab as plt

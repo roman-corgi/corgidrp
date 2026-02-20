@@ -105,7 +105,7 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     assert np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < 0.1835)
     assert np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < 0.1835)
 
-    check.compare_to_mocks_hdrs(ast_cal_filename, mocks.create_default_L2b_headers)
+    check.compare_to_mocks_hdrs(ast_cal_filename)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

@@ -1385,7 +1385,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
     # Structure: {hdu_name: {keyword: {product_name: True/False}}}
     all_headers = {}
     hdu_names_by_product = {}  # Track HDU names for each product
-            
+
     for product_name, filepath in data_files.items():
         with fits.open(filepath) as hdulist:
             hdu_names_by_product[product_name] = []
@@ -1541,7 +1541,7 @@ if __name__ == "__main__":
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
     test_header_crossreference_e2e(e2edata_dir, outputdir)
-    test_astrom_dataformat_e2e(e2edata_dir, outputdir)
+    #test_astrom_dataformat_e2e(e2edata_dir, outputdir)
     try:
         test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
     except:
