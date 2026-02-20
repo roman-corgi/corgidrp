@@ -330,6 +330,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['NAXIS1'] = data.shape[1]
     exthdr['NAXIS2'] = data.shape[0]
     exthdr['DATATYPE'] = 'Dark'
+    exthdr['DRKTYPE'] = 'analog traditional master dark'
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr, dqhdr)
     master_dark.ext_hdr['DRPNFILE'] = int(np.round(np.nanmean(unmasked_num)))
@@ -1034,6 +1035,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         exthdr['DATATYPE'] = 'Dark'
         exthdr['EMGAIN_C'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
         exthdr['EXPTIME'] = t
+        exthdr['DRKTYPE'] = 'analog synthesized master dark'
         # one can check HISTORY to see that this Dark was synthesized from noise maps
         input_data = [noise_maps]
         md_data = Fd/g + t*Dd + Cd

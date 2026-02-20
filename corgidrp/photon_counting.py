@@ -357,9 +357,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                 raise Exception('Input type for pc_master_dark must be a Dataset of corgidrp.data.Dark instances.')
             if (pc_master_dark.ext_hdr['EXPTIME'], pc_master_dark.ext_hdr['EMGAIN_C']) != (float(unique_vals[0][0]), float(unique_vals[0][1])):
                 raise PhotonCountException('Dark should have the same EXPTIME and EMGAIN_C as input_dataset, which are {0} and {1} respectively.'.format((unique_vals[0][0]), unique_vals[0][1]))
-            if 'PC_STAT' not in pc_master_dark.ext_hdr:
-                raise PhotonCountException('\'PC_STAT\' must be a key in the extension header of each frame of pc_master_dark.')
-            if pc_master_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark':
+            if 'DRKTYPE' not in pc_master_dark.ext_hdr:
+                raise PhotonCountException('\'DRKTYPE\' must be a key in the extension header of each frame of pc_master_dark.')
+            if pc_master_dark.ext_hdr['DRKTYPE'] == 'photon-counted master dark':
                 if 'PCTHRESH' not in pc_master_dark.ext_hdr:
                     raise PhotonCountException('Threshold should be stored under the header \'PCTHRESH\'.')
                 if pc_master_dark.ext_hdr['PCTHRESH'] != thresh:
@@ -432,7 +432,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             if key in invalid_pc_drk_keywords:
                 invalid_pc_drk_keywords.remove(key)
         pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(sub_dataset, any_true_keywords=data.typical_bool_keywords, invalid_keywords=invalid_pc_drk_keywords)
-        ext_hdr['PC_STAT'] = 'photon-counted master dark'
+        ext_hdr['DRKTYPE'] = 'photon-counted master dark'
         ext_hdr['NAXIS1'] = combined_pc_mean.shape[0]
         ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]
         ext_hdr['PCTHRESH'] = thresh

@@ -756,9 +756,9 @@ class Dark(Image):
                 raise ValueError("This appears to be a new dark. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this dark.")
             self.ext_hdr['DATATYPE'] = 'Dark' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected electron'
-            # TO-DO: check PC_STAT and whether this will be in L2s
-            if 'PC_STAT' not in ext_hdr:
-                self.ext_hdr['PC_STAT'] = 'analog master dark'
+            # TO-DO: check DRKTYPE and whether this will be in L2s
+            if 'DRKTYPE' not in ext_hdr:
+                self.ext_hdr['DRKTYPE'] = 'analog synthesized master dark'
             # PC dark will have PCTHRESH in it, so make non-PC darks have that as well for consistency
             if 'PCTHRESH' not in self.ext_hdr:
                 self.ext_hdr['PCTHRESH'] = -999. #keeping float format for consistency
@@ -830,8 +830,8 @@ class Dark(Image):
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
         
-        if 'PC_STAT' not in self.ext_hdr:
-            self.ext_hdr['PC_STAT'] = 'analog master dark'
+        if 'DRKTYPE' not in self.ext_hdr:
+            self.ext_hdr['DRKTYPE'] = 'analog synthesized master dark'
 
         if err_hdr is not None:
             self.err_hdr['BUNIT'] = 'detected electron'

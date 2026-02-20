@@ -112,8 +112,8 @@ def dark_subtraction(input_dataset, noisemaps=None, dark=None, detector_regions=
             outputdir = '.' #current directory
         dark.save(filedir=outputdir)
     elif type(dark) is data.Dark: # dark is used whether noisemaps is provided or not 
-        if 'PC_STAT' in dark.ext_hdr:
-            if dark.ext_hdr['PC_STAT'] == 'photon-counted master dark':
+        if 'DRKTYPE' in dark.ext_hdr:
+            if dark.ext_hdr['DRKTYPE'] == 'photon-counted master dark':
                 if input_dataset[0].ext_hdr['ISPC'] == 0: #i.e., analog
                     raise Exception('The input \'dark\' is a photon-counted master dark and cannot be used in the dark_subtraction step function with analog frames.')
                 else: #i.e., photon-counted

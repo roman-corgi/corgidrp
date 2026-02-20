@@ -36,7 +36,7 @@ def test_pc():
 
     Checks various inputs: threshold<0 gives exception, thresh>=em_gain gives exception, providing dataset of VISTYPE='CGIVST_CAL_DRK' while also inputting a photon-counted master dark raises exception, exception raised when 'EMGAIN_C' not the same for all frames.
 
-    Checks various metadata changes: the expected filename and history edit for the output is done (for case of dark subtraction and the case of no dark subtraction), the master dark is indicated as such via a header keyword 'PC_STAT'.
+    Checks various metadata changes: the expected filename and history edit for the output is done (for case of dark subtraction and the case of no dark subtraction), the master dark is indicated as such via a header keyword 'DRKTYPE'.
 
     Tests that output average value of the photon-counted frames agrees with what was simulated (for the case of dark subtraction and no dark subtraction).
 
@@ -71,7 +71,7 @@ def test_pc():
     # process the frames to make PC dark
     dark_dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dark = get_pc_mean(dark_dataset_err, inputmode='darks')
-    assert pc_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark'
+    assert pc_dark.ext_hdr['DRKTYPE'] == 'photon-counted master dark'
     # now process illuminated frames and subtract the PC dark
     dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dataset_err = get_pc_mean(dataset_err, pc_master_dark=pc_dark)

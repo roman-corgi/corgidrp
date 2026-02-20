@@ -351,7 +351,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
                 from corgidrp.photon_counting import get_pc_mean
                 dark_l2a_dataset = data.Dataset(dark_l2a_filelist)
                 pc_dark = get_pc_mean(dark_l2a_dataset, inputmode='darks')
-                if pc_dark.ext_hdr.get('PC_STAT') != 'photon-counted master dark':
+                if pc_dark.ext_hdr.get('DRKTYPE') != 'photon-counted master dark':
                     raise Exception('Failed to create valid photon-counted master dark')
                 calibrations_dir = os.path.join(l3_outputdir, 'calibrations')
                 if not os.path.exists(calibrations_dir):

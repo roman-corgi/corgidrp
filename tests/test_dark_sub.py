@@ -94,7 +94,7 @@ def test_dark_sub():
     # load in the dark
     dark_filepath = os.path.join(calibdir, dark_filename)
     new_dark = data.Dark(dark_filepath)
-    assert new_dark.ext_hdr['PC_STAT'] == 'analog master dark'
+    assert new_dark.ext_hdr['DRKTYPE'] == 'analog synthesized master dark'
 
     # check the dark can be pickled (for CTC operations)
     pickled = pickle.dumps(new_dark)
@@ -106,7 +106,7 @@ def test_dark_sub():
     assert(dark_filename in str(darkest_dataset[0].ext_hdr["HISTORY"]))
 
     # PC dark cannot be used for this step function
-    new_dark.ext_hdr['PC_STAT'] = 'photon-counted master dark'
+    new_dark.ext_hdr['DRKTYPE'] = 'photon-counted master dark'
     with pytest.raises(Exception):
         l2a_to_l2b.dark_subtraction(dark_dataset,dark=new_dark, outputdir=calibdir)
 
@@ -179,7 +179,7 @@ def test_dark_sub():
     assert np.mean(ignore_nm_dark.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
     # if PC dark provided, no subtraction occurs at this step
     dark_dataset[0].ext_hdr['ISPC'] = 1 # set to PC frame for test below
-    dark_frame_full.ext_hdr['PC_STAT'] = 'photon-counted master dark' # set to PC dark for test below
+    dark_frame_full.ext_hdr['DRKTYPE'] = 'photon-counted master dark' # set to PC dark for test below
     pc_no_sub = l2a_to_l2b.dark_subtraction(dark_dataset, noisemaps=noise_maps, dark=dark_frame_full)
     assert np.array_equal(pc_no_sub.all_data, dark_dataset.all_data)
 
