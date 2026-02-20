@@ -240,7 +240,7 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | FSMSG3     | float      | 0.0                            | Average measurement in volts for strain gauge 3 over the last 1000 samples                                               |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSMX       | float      | 0.0                              | Derived FSM X position relative to home from strain gauge voltages and FSM transformation matrix                       |
+| FSMX       | float      | 0.0                            | Derived FSM X position relative to home from strain gauge voltages and FSM transformation matrix                         |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | FSMY       | float      | 310.0                          | Derived FSM Y position relative to home from strain gauge voltages and FSM transformation matrix                         |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
