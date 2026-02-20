@@ -630,8 +630,20 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
                                     # Prefer longer descriptions (keep the most complete one)
                                     if keyword not in keyword_descriptions or len(description) > len(keyword_descriptions[keyword]):
                                         keyword_descriptions[keyword] = description
+        
+        # Try to get descriptions from l1.csv if not found in docs_dir
+        l1_csv_path = os.path.join(current_dir, '..', 'data_formats', 'l1.csv')
+        if os.path.exists(l1_csv_path):
+            csv_data = pd.read_csv(l1_csv_path)
+            if 'Keyword' in csv_data.columns and 'Description' in csv_data.columns:
+                for _, row in csv_data.iterrows():
+                    keyword = row['Keyword'].strip() if isinstance(row['Keyword'], str) else str(row['Keyword'])
+                    description = row['Description'].strip() if isinstance(row['Description'], str) else ''
+                    # Only add if we don't already have it and description is not empty
+                    if keyword not in keyword_descriptions and description:
+                        keyword_descriptions[keyword] = description
     except Exception as e:
-        # If we can't load RST files, just continue without reference descriptions
+        # If we can't load RST files or l1.csv, just continue without reference descriptions
         pass
     
     # Open the FITS file
@@ -979,9 +991,11 @@ def merge_headers(
                 break
         if sample is None:
             inv_val = "-999"
-        elif isinstance(sample, (int, np.integer)) or isinstance(sample, bool):
-            # TODO: what to do about bool?
+        elif isinstance(sample, (int, np.integer)):
             inv_val = -999
+        # TODO: what to do about bool?
+        elif isinstance(sample, bool):
+            inv_val = False
         elif isinstance(sample, (float, np.floating)):
             inv_val = -999.0
         else:
@@ -1066,7 +1080,7 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
         'EMGAINA2', 'EMGAINA3', 'EMGAINA4', 'EMGAINA5', 'GAINTCAL',
         'EXCAMT', 'LOCAMT', 'EMGAIN_A', 'KGAINPAR', 'CYCLES',
         'LASTEXP', 'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP',
-        'NOVEREXP', 'ISPC', 'PROXET', 'FCMLOOP', 'FCMPOS',
+        'NOVEREXP', 'ISPC', 'PROXET', 'FCMPOS', 'FCMLOOP',
         'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR', 'FSMSG1',
         'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY', 'EACQ_ROW',
         'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
@@ -1099,17 +1113,46 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
 
             for key in preserve_pri_keys:
                 if key in orig_pri_hdr:
-                    mock_pri_hdr[key] = orig_pri_hdr[key]
+                    type_class = type(mock_pri_hdr[key])
+                    if key.upper() == 'PSFREF' and orig_pri_hdr[key] == 'N/A':
+                        orig_pri_hdr[key] = 0 #should be int type
+                    if orig_pri_hdr[key] == '' and type_class == int:
+                        orig_pri_hdr[key] = -999 
+                    elif orig_pri_hdr[key] == '' and type_class == float:
+                        orig_pri_hdr[key] = -999.0
+                    try:
+                        mock_pri_hdr[key] = type_class(orig_pri_hdr[key])
+                    except:
+                        mock_pri_hdr[key] = orig_pri_hdr[key]
             for key in preserve_img_keys:
                 if key in orig_img_hdr:
-                    mock_img_hdr[key] = orig_img_hdr[key]
+                    try:
+                        type_class = type(mock_img_hdr[key])
+                        mock_img_hdr[key] = type_class(orig_img_hdr[key])
+                    except:
+                        mock_img_hdr[key] = orig_img_hdr[key]
+
+            # These 3 are exceptions: these strings in the TVAC files but should be int
+            for key in ['FCMLOOP', 'FSMINNER', 'FSMLOS']:
+                if orig_img_hdr[key] == 'OPEN':
+                    mock_img_hdr[key] = 0
+                elif orig_img_hdr[key] == 'CLOSED':
+                    mock_img_hdr[key] = 1
 
             if 'EMGAIN_A' in mock_img_hdr and 'HVCBIAS' in mock_img_hdr:
-                if float(mock_img_hdr['EMGAIN_A']) == 1 and mock_img_hdr['HVCBIAS'] <= 0:
+                if float(mock_img_hdr['EMGAIN_A']) == 1. and mock_img_hdr['HVCBIAS'] <= 0:
                     # SSC TVAC files default EMGAIN_A=1 regardless of commanded gain
-                    mock_img_hdr['EMGAIN_A'] = -1
+                    mock_img_hdr['EMGAIN_A'] = -1.
+            if 'EMGAIN_A' in mock_img_hdr:
+                mock_img_hdr['EMGAIN_A'] = float(mock_img_hdr['EMGAIN_A'])
+            # sometimes, EMGAIN_C is not float when preserving the original value, but it should be, so convert 
             if 'EMGAIN_C' in mock_img_hdr and isinstance(mock_img_hdr['EMGAIN_C'], str):
                 mock_img_hdr['EMGAIN_C'] = float(mock_img_hdr['EMGAIN_C'])
+
+            # these keys were removed completely
+            for key in ['SATSPOTS', 'ISHOWFSC', 'HOWFSLNK']:
+                if key in mock_pri_hdr:
+                    del mock_pri_hdr[key]
 
             hdul_copy = fits.HDUList([hdu.copy() for hdu in hdul])
             hdul_copy[0].header = mock_pri_hdr
@@ -1120,3 +1163,121 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
             updated_files.append(output_path)
 
     return updated_files
+
+
+def compare_to_mocks_hdrs(fits_file, header_template=None):
+    """
+    Check FITS headers against those expected from mocks.py (which is sourced ultimately from l1.csv).  
+    Raises error if any mismatches found, including keywords with the wrong type.
+
+    Args:
+        fits_file (list): FITS file path to check
+        header_template (callable, optional): Function returning headers.
+            Defaults to mocks.create_default_L1_headers.
+
+    """
+
+    if header_template is None:
+        header_template = mocks.create_default_L4_headers # high level, inclusive of all below
+
+    header_result = header_template()
+    mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
+   
+    # needs to have at least the L1 headers, except for leave_out_ext below
+    l1_headers = mocks.create_default_L1_headers()
+    l1_pri_hdr, l1_img_hdr = l1_headers[0], l1_headers[1]
+    leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    for key in leave_out_ext:
+        if key in l1_img_hdr:
+            del l1_img_hdr[key]
+   
+    bad_values = []
+    with fits.open(fits_file) as hdul:
+        orig_pri_hdr = hdul[0].header.copy()
+        orig_img_hdr = hdul[1].header.copy()
+        for key in mock_pri_hdr.keys():
+            if 'NAXIS' in key:
+                continue 
+            type_class = type(mock_pri_hdr[key])
+            if key.upper() == 'PSFREF' and orig_pri_hdr[key] == 'N/A':
+                orig_pri_hdr[key] = 0 #should be int type
+            if key not in orig_pri_hdr and key in l1_pri_hdr:
+                bad_values.append([key])
+            if key in orig_pri_hdr and type(orig_pri_hdr[key]) != type_class:
+                bad_values.append([key, type(orig_pri_hdr[key]), type_class])
+        for key in mock_img_hdr.keys():
+            if 'NAXIS' in key:
+                continue 
+            type_class = type(mock_img_hdr[key])
+            if key not in orig_img_hdr and key in l1_img_hdr:
+                bad_values.append([key])
+            if key in orig_img_hdr and type(orig_img_hdr[key]) != type_class:
+                bad_values.append([key, type(orig_img_hdr[key]), type_class])        
+
+    if len(bad_values) > 0:
+        error_message = "Header keyword mismatches found:\n"
+        for item in bad_values:
+            if len(item) == 1:
+                error_message += f"- Missing keyword: {item[0]}\n"
+            elif len(item) == 3:                
+                error_message += f"- Keyword {item[0]} has type {item[1]} but expected type {item[2]}\n"
+        print(error_message)
+        raise ValueError("Header keyword mismatches found. See details above.")
+    else:
+        print("All headers match expected keywords and types.")
+
+def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
+    """
+    Correct FITS header type against that expected from mocks.py (which is sourced ultimately from l1.csv).  
+
+    Args:
+        orig_pri_hdr (fits.Header): Original primary header to correct
+        orig_img_hdr (fits.Header): Original image header to correct
+        header_template (callable, optional): Function returning headers.
+            Defaults to mocks.create_default_L1_headers.
+            
+    Returns:
+        tuple: (adjusted_pri_hdr, adjusted_img_hdr) with types conformed to expected values 
+            from mocks.py. Note that this function does not check for missing keywords, 
+            only type mismatches, and it preserves all original values (it does not assign 
+            mock values to missing keywords).
+    """
+
+    if header_template is None:
+        header_template = mocks.create_default_L4_headers #high level, inclusive of all below
+
+    adjusted_pri_hdr = orig_pri_hdr.copy()
+    adjusted_img_hdr = orig_img_hdr.copy()
+
+    header_result = header_template()
+    mock_pri_hdr, mock_img_hdr = header_result[0], header_result[1]
+
+    for key in adjusted_pri_hdr:
+        if key in mock_pri_hdr:
+            if 'NAXIS' in key:
+                continue
+            type_class = type(mock_pri_hdr[key])
+            try:
+                adjusted_pri_hdr[key] = type_class(adjusted_pri_hdr[key])
+            except:
+                pass
+    for key in adjusted_img_hdr:
+        if key in mock_img_hdr:
+            if 'NAXIS' in key:
+                continue 
+            type_class = type(mock_img_hdr[key])
+            try:
+                adjusted_img_hdr[key] = type_class(adjusted_img_hdr[key])
+            except:
+                pass
+
+    # special case:
+    if 'PHTCNT' in adjusted_pri_hdr:
+        value = adjusted_pri_hdr['PHTCNT']
+        if value == '0' or value == 0:
+            adjusted_pri_hdr['PHTCNT'] = 'False'
+        elif value == '1' or value == 1:
+            adjusted_pri_hdr['PHTCNT'] = 'True'
+        # otherwise, could have been '-999', which is fine (still str)
+
+    return (adjusted_pri_hdr, adjusted_img_hdr)

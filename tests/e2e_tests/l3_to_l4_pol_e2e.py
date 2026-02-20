@@ -19,7 +19,8 @@ import json
 
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
-                           validate_binary_table_fields, get_latest_cal_file)
+                           validate_binary_table_fields, get_latest_cal_file,
+                           compare_to_mocks_hdrs)
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -326,7 +327,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                     split_frame.pri_hdr['TARGET'] = targetname
                     split_frame.ext_hdr['DPAMNAME'] = wollaston
                     split_frame.pri_hdr['PA_APER'] = rotation_angle
-                    split_frame.ext_hdr['SATSPOTS'] = 1
+                    split_frame.ext_hdr['SATSPOTS'] = True
 
                     input_image_list.append(split_frame)
 
@@ -459,10 +460,11 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
         else:
             logger.info(f"{frame_info}: Mueller Matrix calibration used not found in RECIPE. FAIL")
 
+    compare_to_mocks_hdrs(l4_filelist[0])
 
 if __name__ == "__main__":
     #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")
