@@ -1319,7 +1319,7 @@ def star_pos_spec(
         
         fsmlos = img.ext_hdr['FSMLOS']
         # shift of star location only for coronagraphic observations
-        if fsmlos == 1:
+        if fsmlos == "1":
             # Conversion from EXCAM pixels to milliarsec
             plate_scale_mas = img.ext_hdr['PLTSCALE']
             # Conversion from radians to milliarsec (mas/rad)
