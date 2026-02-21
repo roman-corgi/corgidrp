@@ -546,6 +546,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     trad_dark = data.Dark(generated_trad_dark_file)
     assert trad_dark.ext_hdr['BUNIT'] == 'detected electron'
     assert trad_dark.err_hdr['BUNIT'] == 'detected electron'
+    assert trad_dark.ext_hdr['IS_SYNTH'] == 0
     test_filepath = trad_dark_data_filelist[-1].split('.fits')[0] + '_drk_cal.fits'
     test_filename = os.path.basename(test_filepath)
     test_filename = re.sub('_l[0-9].', '', test_filename)
