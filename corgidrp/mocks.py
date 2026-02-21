@@ -5263,7 +5263,7 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
     base_img.ext_hdr.setdefault('FPAM_V', 0.0)
     base_img.ext_hdr.setdefault('FSAM_H', 0.0)
     base_img.ext_hdr.setdefault('FSAM_V', 0.0)
-    base_img.ext_hdr['FSMLOS'] = 1 if is_coronagraphic else 0
+    base_img.ext_hdr['FSMLOS'] = "1" if is_coronagraphic else 0
     if col_cor is not None:
         base_img.ext_hdr['COL_COR'] = col_cor
     return base_img

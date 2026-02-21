@@ -11,9 +11,9 @@ import sys
 sys.path.insert(0, os.path.abspath('..'))
 
 project = 'corgidrp'
-copyright = '2025, corgidrp Developers'
+copyright = '2026, corgidrp Developers'
 author = 'corgidrp Developers'
-release = '3.1'
+release = '3.2'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
