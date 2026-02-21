@@ -4,15 +4,15 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d, LinearNDInterpolator
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal
-from corgidrp.combine import combine_subexposures
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal, SpecFilterOffset, SlitTransmission
 import os
 from astropy.io import ascii, fits
 from astropy.table import Table
 import astropy.modeling.models as models
 import astropy.modeling.fitting as fitting
+import corgidrp
 from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve, get_calspec_file
-
+import corgidrp
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     """
@@ -37,19 +37,19 @@ def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
 
     Args:
         frame: the data - Array of size (y,x)
-        xguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
-        yguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
+        xguess: location to fit the 2d gaussian to (should be within +/-1 pixel of true peak)
+        yguess: location to fit the 2d gaussian to (should be within +/-1 pixel of true peak)
         xfwhm_guess: approximate x-axis fwhm to fit to
         yfwhm_guess: approximate y-axis fwhm to fit to    
         halfwidth: 1/2 the width of the box used for the fit
         halfheight: 1/2 the height of the box used for the fit
         guesspeak: approximate flux in peak pixel
-        oversample: odd integer >= 3; to represent detector pixels, overample and then bin the model by this factor 
+        oversample: odd integer >= 3; to represent detector pixels, oversample and then bin the model by this factor 
         refinefit: whether to refine the fit of the position of the guess
 
     Returns:
-        xfit: x position (only chagned if refinefit is True)
-        yfit: y position (only chagned if refinefit is True)
+        xfit: x position (only changed if refinefit is True)
+        yfit: y position (only changed if refinefit is True)
         xfwhm: x-axis fwhm of the PSF in pixels
         yfwhm: y-axis fwhm of the PSF in pixels
         peakflux: the peak value of the gaussian
@@ -336,7 +336,28 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     """
     if not isinstance(dataset, Dataset):
         raise TypeError("Input must be a corgidrp.data.Dataset object.")
-
+    pri_hdr_centroid, ext_hdr_centroid, _ , _ = corgidrp.check.merge_headers(
+                dataset,
+                any_true_keywords=['DESMEAR', 'CTI_CORR'],
+                invalid_keywords=[
+                    #pri header
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 
+                    'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3', 'VISITID', 
+                    #ext header
+                    'FRMTYPE', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS', 'STATUS',
+                    'HVCBIAS', 'OPMODE', 'EMGAIN_C', 'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
+                    'PROXET', 'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP', 'ISVALID', 
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V'
+                ]
+        )
     if initial_cent is None:
         xcent, ycent = None, None
     else:
@@ -365,9 +386,6 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     ycent_temp = np.asarray(ycent_temp)
     centroids = np.zeros((len(dataset), 2))
     centroids_err = np.zeros((len(dataset), 2))
-
-    pri_hdr_centroid = dataset[0].pri_hdr.copy()
-    ext_hdr_centroid = dataset[0].ext_hdr.copy()
 
     filters = []
     for idx, frame in enumerate(dataset):
@@ -425,10 +443,12 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
         ext_hdr_centroid['FILTERS'] = ",".join(filters)
     else:
         ext_hdr_centroid['FILTERS'] = filters[0]
+    # set CFAMNAME to the PRISM band
+    ext_hdr_centroid['CFAMNAME'] = cfam[0]
     calibration = SpectroscopyCentroidPSF(
         centroids,
-        pri_hdr=pri_hdr_centroid,
-        ext_hdr=ext_hdr_centroid,
+        pri_hdr=pri_hdr_centroid.copy(),
+        ext_hdr=ext_hdr_centroid.copy(),
         err_hdr = fits.Header(),
         err = centroids_err,
         input_dataset=dataset
@@ -637,6 +657,7 @@ def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_fil
     ext_hdr["REFWAVE"] = ref_wavlen
     ext_hdr["BAND"] = ref_cfam
     ext_hdr["BANDFRAC"] = bandpass_frac
+    ext_hdr["CFAMNAME"] = ref_cfam
     corgi_dispersion_profile = DispersionModel(
         disp_dict, pri_hdr = pri_hdr, ext_hdr = ext_hdr
     )
@@ -1077,7 +1098,7 @@ def slit_transmission(
         subsets with the same FSMX, FSMY values. Options are 'mean' and 'median'.
 
     Returns:
-      3-element tuple with:
+      SlitTransmission calibration product containing:
         1/ Slit transmission map derived at different locations by interpolation.
         2/ Corresponding locations along EXCAM +X direction with respect to the
           zero-point in (fractional) EXCAM pixels where the slit transmission has
@@ -1228,10 +1249,25 @@ def slit_transmission(
     if np.all(np.isnan(slit_trans_interp)):
         raise ValueError('There are no valid target positions within the ' +
             'range of input PSF locations')
+    
+    pri_hdr, ext_hdr, _, _ = corgidrp.check.merge_headers(
+        dataset_slit,
+        any_true_keywords=['DESMEAR', 'CTI_CORR'],
+        invalid_keywords=[
+                    'FRMTYPE',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E', 'WV0_X', 'WV0_Y'
+                ]
+        )
+    input_dataset = Dataset([frame for frame in dataset_slit] + [frame for frame in dataset_open])
+    slit_trans =  SlitTransmission(slit_trans_interp, pri_hdr = pri_hdr, ext_hdr = ext_hdr, x_offset = target_pix[0], y_offset = target_pix[1], input_dataset = input_dataset) 
+    return slit_trans
 
-    return (slit_trans_interp,
-        target_pix[0],
-        target_pix[1])
 
 def star_pos_spec(
     dataset,
@@ -1405,3 +1441,31 @@ def spec_fluxcal(dataset_or_image, calspec_file = None):
     spec_fluxcal_obj.ext_hdr.add_history(history_entry)
 
     return spec_fluxcal_obj
+
+
+def generate_filter_offset(offset_file = None):
+    """
+    read the csv filter file containing at least the band names and the pixel x/y offsets 
+    between the filters and generate a new SpecFilterOffset product.
+    
+    Args:
+       offset_file (str): file name of the filter file, if none it takes data/spectroscopy/CGI_bandpass_centers.csv
+       
+    Returns:
+       corgidrp.data.SpecFilterOffset: SpecFilterOffset product
+    """
+    if offset_file is None:
+        offset_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
+    table = ascii.read(offset_file, format = 'csv')
+    
+    offset_dict = {}
+    for i, col in enumerate(table.colnames):
+        if "filter" in col:
+            filter_name = table.columns[i].value
+        if "xoffset" in col:
+            xoffset = table.columns[i].value
+        if "yoffset" in col:
+            yoffset = table.columns[i].value
+    for i, filter in enumerate(filter_name):
+        offset_dict[str(filter)] = [float(xoffset[i]), float(yoffset[i])]
+    return SpecFilterOffset(offset_dict)

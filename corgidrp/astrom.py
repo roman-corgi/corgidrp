@@ -864,8 +864,8 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     new_hdr['CRPIX2'] = np.shape(image)[0] // 2
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
-    new_hdr['CDELT1'] = (cal_properties[0] * 0.001) / 3600
-    new_hdr['CDELT2'] = (cal_properties[0] * 0.001) / 3600
+    new_hdr['CDELT1'] = (cal_properties[0] * 0.001) / 3600.
+    new_hdr['CDELT2'] = (cal_properties[0] * 0.001) / 3600.
     new_hdr['CRVAL1'] = target_coordinate[0]
     new_hdr['CRVAL2'] = target_coordinate[1]
     w = astropy.wcs.WCS(new_hdr)

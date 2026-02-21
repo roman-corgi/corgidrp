@@ -7,8 +7,10 @@ import astropy.time as time
 import astropy.io.fits as fits
 import corgidrp
 import corgidrp.data as data
+import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import corgidrp.check as check
 from corgidrp.sorting import sort_pupilimg_frames
 from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
 
@@ -25,30 +27,6 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-
-def set_vistype_for_tvac(
-    list_of_fits,
-    ):
-    """ Adds proper values to VISTYPE for non-linearity calibration.
-
-    This function is unnecessary with future data because data will have
-    the proper values in VISTYPE. Hence, the "tvac" string in its name.
-
-    Args:
-    list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Adding VISTYPE='CGIVST_CAL_PUPIL_IMAGING' to TVAC data")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        # Adjust VISTYPE
-        if prihdr['VISTYPE'] == 'N/A' or prihdr['VISTYPE'] == "PUPILIMG":
-            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
-        exthdr = fits_file[1].header
-        if exthdr['EMGAIN_A'] == 1:
-            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
 
 # tvac_kgain: 8.49404981510777 e-/DN, result from new iit code with specified file input order; used to be #8.8145 #e/DN,
 # tvac_readnoise: 121.76070832489948 e-, result from new iit code with specified file input order; used to be 130.12 e-
@@ -158,7 +136,16 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
         if f.endswith('.fits'):
             ordered_filelist.append(os.path.join(input_data_dir, f))
     
-    set_vistype_for_tvac(ordered_filelist)
+    ordered_filelist = check.fix_hdrs_for_tvac(
+        ordered_filelist,
+        input_data_dir,
+        header_template=mocks.create_default_L1_headers,
+    )
+    # Set VISTYPE for pupil imaging after header fix
+    for filepath in ordered_filelist:
+        with fits.open(filepath, mode='update') as hdul:
+            if hdul[0].header.get('VISTYPE') in (None, 'N/A', 'PUPILIMG'):
+                hdul[0].header['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -205,6 +192,8 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     assert np.abs(diff_kgain) == 0
     assert np.abs(diff_readnoise) == 0 
 
+    check.compare_to_mocks_hdrs(kgain_file)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
@@ -216,7 +205,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/''/home/jwang/Desktop/CGI_TVAC_Data/'  
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

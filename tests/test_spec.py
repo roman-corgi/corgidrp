@@ -3,14 +3,16 @@ import numpy as np
 import pytest
 import logging
 import warnings
-from astropy.io import fits
+from astropy.io import fits, ascii
 from astropy.table import Table
-from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset, SpecFluxCal
+from astropy import time
+from corgidrp.data import Dataset, Image, DispersionModel, LineSpread, SpecFilterOffset, SpecFluxCal, SlitTransmission
 import corgidrp.spec as steps
 from corgidrp.mocks import (create_default_L2b_headers,
-    create_default_L3_headers, get_formatted_filename, make_1d_spec_image)
+    create_default_L3_headers, get_formatted_filename, make_1d_spec_image, make_mock_fluxcal_factor)
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
+import corgidrp.l4_to_tda as l4_to_tda
 from datetime import datetime, timedelta
 from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve
 # VAP testing
@@ -295,6 +297,7 @@ def test_calibrate_dispersion_model():
     file_path = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
+    filename = file_path.split("/")[-1]
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
     ext_hdr["DPAMNAME"] = 'PRISM3'
     ext_hdr["FSAMNAME"] = 'OPEN'
@@ -316,6 +319,8 @@ def test_calibrate_dispersion_model():
         data_2d = np.copy(noisy_data_array[i])
         err = np.zeros_like(data_2d)
         dq = np.zeros_like(data_2d, dtype=int)
+        filen = f"{i}_"+filename
+        pri_hdr['FILENAME'] = filen
         image = Image(
             data_or_filepath=data_2d,
             pri_hdr=pri_hdr.copy(),
@@ -323,6 +328,7 @@ def test_calibrate_dispersion_model():
             err=err,
             dq=dq
         )
+        image.filename = filen
         image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i].upper()
         psf_images.append(image)
 
@@ -331,7 +337,6 @@ def test_calibrate_dispersion_model():
     psf_centroid = steps.compute_psf_centroid(
         dataset=dataset
     )
-    
     spec_filter_offset = SpecFilterOffset({})
     disp_model = steps.calibrate_dispersion_model(psf_centroid, spec_filter_offset)
     disp_model.save(output_dir, disp_model.filename)
@@ -389,6 +394,7 @@ def test_add_wavelength_map():
     image.ext_hdr['BUNIT'] = 'photoelectron/s'
     image.pri_hdr['TARGET'] = 'Vega'
     dataset = Dataset([image])
+    image.ext_hdr["MJDSRT"] = time.Time(image.ext_hdr["DRPCTIME"]).mjd
     
     global output_dataset
     output_dataset = l3_to_l4.add_wavelength_map(dataset, disp_model)
@@ -462,10 +468,10 @@ def test_determine_zeropoint():
         ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
         ext_hdr['CFAMNAME'] = '3'
         if i == 12:
-            pri_hdr["SATSPOTS"] = 1
+            ext_hdr["SATSPOTS"] = True
             ext_hdr['CFAMNAME'] = '3D'
         else:
-            pri_hdr["SATSPOTS"] = 0
+            ext_hdr["SATSPOTS"] = False
         err = np.zeros_like(data_2d)
         dq = np.zeros_like(data_2d, dtype=int)
         image = Image(
@@ -489,7 +495,7 @@ def test_determine_zeropoint():
 
     assert len(dataset_guess) < len(input_dataset)
     for frame in dataset_guess:
-        assert frame.pri_hdr["SATSPOTS"] == 0
+        assert frame.ext_hdr["SATSPOTS"] == False
         assert frame.ext_hdr["WAVLEN0"] == 753.83
         assert "WV0_X" in frame.ext_hdr
         assert "WV0_Y" in frame.ext_hdr
@@ -512,7 +518,7 @@ def test_determine_zeropoint():
         ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
         ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
         ext_hdr['CFAMNAME'] = '3D'
-        pri_hdr["SATSPOTS"] = 0
+        ext_hdr["SATSPOTS"] = False
         err = np.zeros_like(data_2d)
         dq = np.zeros_like(data_2d, dtype=int)
         image = Image(
@@ -534,7 +540,7 @@ def test_determine_zeropoint():
     dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset)
     assert len(dataset) == 1
     for frame in dataset:
-        assert frame.pri_hdr["SATSPOTS"] == 0
+        assert frame.ext_hdr["SATSPOTS"] == False
         assert frame.ext_hdr["WAVLEN0"] == 753.83
         assert "WV0_X" in frame.ext_hdr
         assert "WV0_Y" in frame.ext_hdr
@@ -1135,6 +1141,7 @@ def test_slit_trans():
                 # Each different FSM position is a new set of data
                 spec_slit_cp = spec_slit.copy()
                 # Associate different FSM positions to each distinct FSM case
+                spec_slit_cp.ext_hdr["MJDSRT"] = time.Time(spec_slit_cp.ext_hdr["DRPCTIME"]).mjd
                 spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0]
                 spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1]
                 spec_slit_cp.ext_hdr['WV0_X'] = (spec_slit.ext_hdr['WV0_X']
@@ -1306,11 +1313,23 @@ def test_slit_trans():
         logger.info("")
 
         # Estimate slit transmission
-        slit_trans_out, slit_pos_x, slit_pos_y = steps.slit_transmission(
+        slit_trans = steps.slit_transmission(
             spec_slit_ds, spec_open_ds,
             x_range=[xrange0, xrange1],
             y_range=[yrange0, yrange1],
         )
+        slit_trans_out = slit_trans.data
+        slit_pos_x = slit_trans.x_offset
+        slit_pos_y = slit_trans.y_offset
+        #test SlitTransmission class
+        assert slit_trans.slitname == fsam_expected
+        slit_trans.save(filedir = output_dir, filename = "slit_trans_test.fits")
+        slit_trans_load = SlitTransmission(os.path.join(output_dir, "slit_trans_test.fits"))
+        assert np.array_equal(slit_trans_load.data, slit_trans.data)
+        assert np.array_equal(slit_trans_load.x_offset, slit_trans.x_offset)
+        assert np.array_equal(slit_trans_load.y_offset, slit_trans.y_offset)
+        assert slit_trans.slitname == slit_trans_load.slitname
+
         # Check interpolation values are as expected or close to them
         slit_trans_design = np.ones_like(slit_trans_out)
         for idx in range(slit_trans_out.shape[0]):
@@ -1354,6 +1373,14 @@ def test_slit_trans():
         mean_trans = slit_trans_out.mean()
         logger.info(f'    Peak transmission value: {peak_trans}')
         logger.info(f'    Mean transmission value: {mean_trans}')
+
+        """test l4_to_tda.apply_slit_transmission"""
+        spec_in = spec_slit_ds[0].hdu_list['SPEC'].data
+        corrected_ds = l4_to_tda.apply_slit_transmission(spec_slit_ds, slit_trans)
+        spec_out = corrected_ds[0].hdu_list['SPEC'].data
+        assert corrected_ds[0].hdu_list['SPEC'].header['SLITCOR'] == True
+        assert corrected_ds[0].hdu_list['SPEC'].header['SLITFAC'] == np.nanmean(slit_trans.data[0])
+        assert np.allclose(spec_in/spec_out, slit_trans.data[0])
 
 def test_star_pos():
     """ Test translation of a position on EXCAM measured in polar coordinates
@@ -1402,10 +1429,10 @@ def test_star_pos():
        
 def test_filter_offset():
     """
-    test the SpecFilterOffset calibration product
+    test the SpecFilterOffset calibration product and its generation function
     """
-    dict = {"2a": [0.5, 0.2]}
-    offset = SpecFilterOffset(dict)
+    off_dict = {"2a": [0.5, 0.2]}
+    offset = SpecFilterOffset(off_dict)
     assert offset.offsets["2A"][0] == 0.5
     assert offset.offsets["2A"][1] == 0.2
     assert offset.offsets["3"] == offset.default_offsets["3"]
@@ -1419,7 +1446,22 @@ def test_filter_offset():
     assert load_offset.get_offsets("2A") == [0.5, 0.2]
     offset2 = SpecFilterOffset({})
     assert offset2.offsets == offset2.default_offsets
- 
+    
+    # test generate_filter_offset
+    spec_filter_offset = steps.generate_filter_offset()
+    assert isinstance(spec_filter_offset, SpecFilterOffset)
+    assert spec_filter_offset.offsets == spec_filter_offset.default_offsets
+    t = Table(names = ('filter', 'xoffset', 'yoffset'), dtype = (str, np.float64, np.float64))
+    
+    for k, v in off_dict.items():
+        t.add_row((k, v[0], v[1]))
+    ascii.write(t, 'test.csv', format = 'csv', overwrite = True)
+    offset_test = steps.generate_filter_offset('test.csv')
+    assert offset_test.offsets["2A"][0] == 0.5
+    assert offset_test.offsets["2A"][1] == 0.2
+    assert offset_test.offsets['3'] == offset_test.default_offsets['3']
+    os.remove('test.csv')
+    
 def test_spec_flux_cal():
     """
     test the SpecFluxCal calibration class
@@ -1479,6 +1521,54 @@ def test_spec_flux_cal():
     flux = flux_ref #* filter_trans, correct to not consider?
     assert np.mean(flux) == pytest.approx(np.mean(spec_fluxcal.specflux), rel = 0.01)
     
+    """Validate convert_spec_to_flux."""
+    image.hdu_list['SPEC'].header['CTCOR'] = True  # Core throughput correction already applied
+    dataset = Dataset([image])
+ 
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, spec_fluxcal)
+    frame = calibrated[0]
+    spec_out = frame.hdu_list['SPEC'].data
+    err_out = frame.hdu_list['SPEC_ERR'].data
+
+    expected_spec = spec_values * spec_fluxcal.specflux
+    expected_err = np.sqrt((spec_error * spec_fluxcal.specflux)**2 +
+                           (spec_values *  spec_fluxcal.specflux_err)**2)
+
+    result = np.allclose(spec_out, expected_spec) and np.allclose(err_out[0], expected_err)
+
+    assert result
+    assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
+    assert frame.hdu_list['SPEC_ERR'].header['BUNIT'] == "erg/(s*cm^2*AA)"
+    assert frame.ext_hdr['SPECUNIT'] == "erg/(s*cm^2*AA)"
+    assert 'Calibrated 1D spectrum' in str(frame.ext_hdr['HISTORY'])
+
+def test_convert_spec_to_flux_factor():
+    """Validate convert_spec_to_flux when only fluxcal_factor is supplied."""
+    spec_vals = np.array([5.0, 6.0, 7.0])
+    spec_err = np.array([[0.2, 0.3, 0.4]])
+    wave = np.linspace(600, 650, len(spec_vals))
+
+    image = make_1d_spec_image(spec_vals, spec_err, wave)
+    image.hdu_list['SPEC'].header['CTCOR'] = True  # core throughput correction already applied
+    dataset = Dataset([image])
+    fluxcal_factor = make_mock_fluxcal_factor(1.5, err=0.1)
+
+    with pytest.raises(TypeError):
+        cal = l4_to_tda.convert_spec_to_flux(dataset, spec_vals)
+
+    calibrated = l4_to_tda.convert_spec_to_flux(dataset, fluxcal_factor)
+    frame = calibrated[0]
+    expected_spec = spec_vals * fluxcal_factor.fluxcal_fac
+    expected_err = np.sqrt((spec_err[0] * fluxcal_factor.fluxcal_fac) ** 2 +
+                           (spec_vals * fluxcal_factor.fluxcal_err) ** 2)
+
+    result = np.allclose(frame.hdu_list['SPEC'].data, expected_spec) and \
+             np.allclose(frame.hdu_list['SPEC_ERR'].data[0], expected_err)
+    assert result
+    assert frame.hdu_list['SPEC'].header['BUNIT'] == "erg/(s*cm^2*AA)"
+    assert frame.ext_hdr['SPECUNIT'] == "erg/(s*cm^2*AA)"
+    assert frame.ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
+
     
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
@@ -1496,3 +1586,4 @@ if __name__ == "__main__":
     test_star_pos()
     test_filter_offset()
     test_spec_flux_cal()
+    test_convert_spec_to_flux_factor()

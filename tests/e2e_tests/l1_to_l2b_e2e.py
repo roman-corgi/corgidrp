@@ -10,6 +10,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import corgidrp.check as check
 import shutil
 from corgidrp.darks import build_synthesized_dark
 
@@ -19,26 +20,6 @@ except:
     pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
-
-def fix_str_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Gets around EMGAIN_A being set to 1 in TVAC data.
-    
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
-            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-        if type(exthdr['EMGAIN_C']) is str:
-            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
-
 
 @pytest.mark.e2e
 def test_l1_to_l2b(e2edata_path, e2eoutput_path):
@@ -88,7 +69,16 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
-    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
+    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration
+    # Copy and fix mock cal headers 
+    mock_cal_dir = os.path.join(test_outputdir, 'mock_cal_input')
+    os.makedirs(mock_cal_dir, exist_ok=True)
+    mock_cal_filelist = [
+        shutil.copy2(f, os.path.join(mock_cal_dir, os.path.basename(f)))
+        for f in mock_cal_filelist
+    ]
+    mock_cal_filelist = check.fix_hdrs_for_tvac(mock_cal_filelist, mock_cal_dir)
+
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make calibration files using
@@ -139,8 +129,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
@@ -165,11 +155,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
     l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
 
-    # Copy files to input_data directory and update file list
-    l1_data_filelist = [
-        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-        for file_path in l1_data_filelist
-    ] 
+    # Update headers for TVAC files
+    l1_data_filelist = check.fix_hdrs_for_tvac(l1_data_filelist, input_data_dir)
 
     # tvac_l2a_filelist = [os.path.join(l2a_datadir, os.listdir(l2a_datadir)[i]) for i in [0,1]] #[os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
     # tvac_l2b_filelist = [os.path.join(l2b_datadir, os.listdir(l2b_datadir)[i]) for i in [0,1]] #[os.path.join(l2b_datadir, "{0}.fits".format(i)) for i in [90529, 90531]] # just grab the first two files
@@ -213,9 +200,6 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
             hdul_copy.writeto(os.path.join(l2b_tvac_outputdir, l2b_tvac_filename), overwrite=True)
         tvac_l2b_filelist.append(os.path.join(l2b_tvac_outputdir, l2b_tvac_filename))
 
-    # modify TVAC headers for produciton
-    #fix_headers_for_tvac(l1_data_filelist)
-    fix_str_for_tvac(l1_data_filelist)
 
     ####### Run the walker on some test_data
 
@@ -257,6 +241,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         diff = img.data - tvac_dat
         assert np.all(np.abs(diff) < 1e-5)
 
+        check.compare_to_mocks_hdrs(new_filename)
+
         # plotting script for debugging
         # import matplotlib.pylab as plt
         # fig = plt.figure(figsize=(10,3.5))
@@ -289,7 +275,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

@@ -546,13 +546,13 @@ def test_mueller_matrix_cal():
     assert isinstance(mueller_matrix, pol.MuellerMatrix)
 
     #Put in the ND filter and make sure the type is correct. 
-    for framm in mock_dataset.frames:
+    for framm in stokes_dataset.frames:
         framm.ext_hdr["FPAMNAME"] = "ND225"
     mueller_matrix_nd = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
     assert isinstance(mueller_matrix_nd, pol.NDMuellerMatrix)
 
     #Make sure that if the dataset is mixed ND and non-ND an error is raised
-    mock_dataset.frames[0].ext_hdr["FPAMNAME"] = "CLEAR"
+    stokes_dataset.frames[0].ext_hdr["FPAMNAME"] = "CLEAR"
     with pytest.raises(ValueError):
         mueller_matrix_mixed = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
@@ -583,14 +583,14 @@ def test_subtract_stellar_polarization():
     # add background noise to star to prevent divide by zero
     star_1 = mocks.gaussian_array(amp=100) + 0.001
     star_2 = mocks.gaussian_array(amp=150) + 0.001
-    # give unocculted images with ND filter a roll angle of 30, images with FPM will have a roll angle of 45
-    roll_unocculted = 30
-    roll = 45
+    # give unocculted images with ND filter a PA_APER angle of 30, images with FPM will have a PA_APER angle of 45
+    pa_aper_deg_unocculted = 30
+    pa_aper_deg = 45
     # find polarized intensities
-    star_1_nd_pol = nd_mueller_matrix @ pol.rotation_mueller_matrix(roll_unocculted) @ star_1_pol
-    star_2_nd_pol = nd_mueller_matrix @ pol.rotation_mueller_matrix(roll_unocculted) @ star_2_pol
-    star_1_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(roll) @ star_1_pol
-    star_2_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(roll) @ star_2_pol
+    star_1_nd_pol = nd_mueller_matrix @ pol.rotation_mueller_matrix(pa_aper_deg_unocculted) @ star_1_pol
+    star_2_nd_pol = nd_mueller_matrix @ pol.rotation_mueller_matrix(pa_aper_deg_unocculted) @ star_2_pol
+    star_1_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(pa_aper_deg) @ star_1_pol
+    star_2_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(pa_aper_deg) @ star_2_pol
     star_1_nd_I_0 = (pol.lin_polarizer_mueller_matrix(0) @ star_1_nd_pol)[0]
     star_1_nd_I_45 = (pol.lin_polarizer_mueller_matrix(45) @ star_1_nd_pol)[0]
     star_1_nd_I_90 = (pol.lin_polarizer_mueller_matrix(90) @ star_1_nd_pol)[0]
@@ -638,12 +638,12 @@ def test_subtract_stellar_polarization():
             input_list[i].ext_hdr['DPAMNAME'] = 'POL0'
         else:
             input_list[i].ext_hdr['DPAMNAME'] = 'POL45'
-        # first four images are unocculted with roll angle of 30
+        # first four images are unocculted with PA_APER angle of 30
         if i < 4:
             input_list[i].ext_hdr['FPAMNAME'] = 'ND225'
-            input_list[i].pri_hdr['ROLL'] = roll_unocculted
+            input_list[i].pri_hdr['PA_APER'] = pa_aper_deg_unocculted
         else:
-            input_list[i].pri_hdr['ROLL'] = roll
+            input_list[i].pri_hdr['PA_APER'] = pa_aper_deg
         # distinguish between the two different target stars
         if i in [0, 1, 4, 5]:
             input_list[i].pri_hdr['TARGET'] = '1'
@@ -655,9 +655,8 @@ def test_subtract_stellar_polarization():
        
     # construct mueller matrix calibration objects
     mm_prihdr, mm_exthdr, mm_errhdr, mm_dqhdr = mocks.create_default_calibration_product_headers()
-    system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
-    nd_mm_cal = data.MuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
-
+    system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[4:])
+    nd_mm_cal = data.NDMuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[:4])
     # run step function
     output_dataset = l3_to_l4.subtract_stellar_polarization(input_dataset=input_dataset, 
                                                             system_mueller_matrix_cal=system_mm_cal,
@@ -680,7 +679,7 @@ def test_subtract_stellar_polarization():
 
 def test_combine_polarization_states():
     '''
-    Generate a sequence of L3 polarimetric images at different roll angles to pass into the
+    Generate a sequence of L3 polarimetric images at different rotation angles to pass into the
     combine_polarization_states() step function, checks that the output Stokes datacube matches
     with the known on-sky Stokes vector
     '''
@@ -729,7 +728,7 @@ def test_combine_polarization_states():
     #system_mueller_matrix = np.identity(4)
     target_stokes_vector = np.array([1, 0.4, -0.3, 0.02])
 
-    # construct input polarimetric images, taken with both wollastons at roll angles from 0 to 180 in 30 degree increments
+    # construct input polarimetric images, taken with both wollastons at rotation angles from 0 to 180 in 30 degree increments
     # also construct nonpolarimetric images to test PSF subs
     input_pol_frames = []
     input_psfsub_frames = []
@@ -739,53 +738,53 @@ def test_combine_polarization_states():
     # add spot that gets rotated to test the output image is rotated northup
     spot = mocks.gaussian_array(array_shape=[10, 10], sigma=2, amp=50)
     target_total_intensity[30:40, 20:30] += spot
-    # loops through roll angles 0, 30, 60, ... , 180
-    roll_angle  = 0
-    while roll_angle <= 180:
-        # propagate on-sky target stokes vector through roll angle rotation, system mueller matrix, and wollaston to obtain polarized intensities
-        output_stokes_vector = system_mueller_matrix @ pol.rotation_mueller_matrix(roll_angle) @ target_stokes_vector
+    # loops through rotation angles 0, 30, 60, ... , 180
+    rotation_angle  = 0
+    while rotation_angle <= 180:
+        # propagate on-sky target stokes vector through telescope angle rotation, system mueller matrix, and wollaston to obtain polarized intensities
+        output_stokes_vector = system_mueller_matrix @ pol.rotation_mueller_matrix(rotation_angle) @ target_stokes_vector
         intensity_0 = (pol.lin_polarizer_mueller_matrix(0) @ output_stokes_vector)[0]
         intensity_45 = (pol.lin_polarizer_mueller_matrix(45) @ output_stokes_vector)[0]
         intensity_90 = (pol.lin_polarizer_mueller_matrix(90) @ output_stokes_vector)[0]
         intensity_135 = (pol.lin_polarizer_mueller_matrix(135) @ output_stokes_vector)[0]
 
-        # rotate the image so it is in the right orientation with respect to the roll angle
-        target_rotated = rotate(target_total_intensity, -roll_angle, [24, 24])
+        # rotate the image so it is in the right orientation with respect to the rotation angle
+        target_rotated = rotate(target_total_intensity, -rotation_angle, [24, 24])
         # replace NaN values from rotation with 0s
         target_rotated[np.isnan(target_rotated)] = 0
 
         # construct POL0 image
         pol0_data = np.array([intensity_0 * target_rotated , intensity_90 * target_rotated])
         pol0_img = data.Image(pol0_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        pol0_img.pri_hdr['ROLL'] = roll_angle
+        pol0_img.pri_hdr['PA_APER'] = rotation_angle
         pol0_img.ext_hdr['DPAMNAME'] = 'POL0'
-        pol0_img.ext_hdr['STARLOCX'] = 24
-        pol0_img.ext_hdr['STARLOCY'] = 24
+        pol0_img.ext_hdr['STARLOCX'] = 24.
+        pol0_img.ext_hdr['STARLOCY'] = 24.
         input_pol_frames.append(pol0_img)
 
         # construct POL45 image
         pol45_data = np.array([intensity_45 * target_rotated, intensity_135 * target_rotated])
         pol45_img = data.Image(pol45_data, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        pol45_img.pri_hdr['ROLL'] = roll_angle
+        pol45_img.pri_hdr['PA_APER'] = rotation_angle
         pol45_img.ext_hdr['DPAMNAME'] = 'POL45'
-        pol45_img.ext_hdr['STARLOCX'] = 24
-        pol45_img.ext_hdr['STARLOCY'] = 24
+        pol45_img.ext_hdr['STARLOCX'] = 24.
+        pol45_img.ext_hdr['STARLOCY'] = 24.
         input_pol_frames.append(pol45_img)
 
         # construct total intensity image for psf sub
         psfsub_img_1 = data.Image( (intensity_0 + intensity_90) * target_rotated, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         psfsub_img_2 = data.Image( (intensity_45 + intensity_135) * target_rotated, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        psfsub_img_1.pri_hdr['ROLL'] = roll_angle
-        psfsub_img_2.pri_hdr['ROLL'] = roll_angle
-        psfsub_img_1.ext_hdr['STARLOCX'] = 24
-        psfsub_img_2.ext_hdr['STARLOCX'] = 24
-        psfsub_img_1.ext_hdr['STARLOCY'] = 24
-        psfsub_img_2.ext_hdr['STARLOCY'] = 24
+        psfsub_img_1.pri_hdr['PA_APER'] = rotation_angle
+        psfsub_img_2.pri_hdr['PA_APER'] = rotation_angle
+        psfsub_img_1.ext_hdr['STARLOCX'] = 24.
+        psfsub_img_2.ext_hdr['STARLOCX'] = 24.
+        psfsub_img_1.ext_hdr['STARLOCY'] = 24.
+        psfsub_img_2.ext_hdr['STARLOCY'] = 24.
         input_psfsub_frames.append(psfsub_img_1)
         input_psfsub_frames.append(psfsub_img_2)
         
 
-        roll_angle = roll_angle + 30
+        rotation_angle = rotation_angle + 30
 
     # construct datasets
     input_pol_dataset = data.Dataset(input_pol_frames)
@@ -798,7 +797,7 @@ def test_combine_polarization_states():
 
     # call combine_polarization_states to obtain stokes datacube
     with warnings.catch_warnings():
-        # catch warning raised when rotating with roll angle instead of wcs
+        # catch warning raised when rotating with PA_APER angle instead of wcs
         warnings.filterwarnings('ignore', category=UserWarning)
         output_dataset = l3_to_l4.combine_polarization_states(input_pol_dataset, 
                                                             system_mm_cal,
@@ -837,7 +836,7 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
     Test the `calc_stokes_unocculted` function using synthetic L3 polarimetric datasets.
 
     Each mock dataset contains multiple images corresponding to different Wollaston
-    prisms and roll angles. The test generates a variety of fractional polarization
+    prisms and telescope rotation angles. The test generates a variety of fractional polarization
     values and polarization angles, computes the unocculted Stokes parameters, and
     compares the recovered Q and U against the input values using their propagated
     uncertainties. The comparison is performed in units of the standard errors (chi),
@@ -867,9 +866,9 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
 
     n_repeat = 8
     
-    # prisms and rolls
+    # prisms and rotations
     prisms = np.append(np.tile('POL0', n_repeat//2), np.tile('POL45', n_repeat//2))
-    rolls = np.full(n_repeat, 0)
+    rotation_angles = np.full(n_repeat, 0)
 
     for p, theta in zip(p_input, theta_input):
         new_seed = rng.integers(0, 1e6)
@@ -878,7 +877,7 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
             I0=1e10,
             p=p,
             theta_deg=theta,
-            roll_angles=rolls,
+            pa_aper_degs=rotation_angles,
             prisms=prisms, 
             seed=new_seed
         )
@@ -925,13 +924,13 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
     p_target2 = 0.25
     theta_target2 = 40.0
     prisms = np.array(['POL0', 'POL45']*4)
-    rolls = np.array([0,0,0,0,0,0,0,0])
+    rotation_angles = np.array([0,0,0,0,0,0,0,0])
 
     dataset1_polmock_list = mocks.create_mock_polarization_l3_dataset(
         I0=1e10,
         p=p_target1,
-        theta_deg=theta_target1,
-        roll_angles=rolls,
+        theta_deg=theta_target1, 
+        pa_aper_degs=rotation_angles,
         prisms=prisms, 
         return_image_list=True,
         seed= rng.integers(0, 1e6)
@@ -947,7 +946,7 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
         I0=1e10,
         p=p_target2,
         theta_deg=theta_target2,
-        roll_angles=rolls,
+        pa_aper_degs=rotation_angles,
         prisms=prisms, 
         return_image_list=True,
         seed=rng.integers(0, 1e6)
@@ -1339,11 +1338,11 @@ def test_compute_QphiUPhi():
 
 
 if __name__ == "__main__":
-    #test_image_splitting()
+    test_image_splitting()
     test_calc_pol_p_and_pa_image()
-    #test_subtract_stellar_polarization()
-    #test_mueller_matrix_cal()
-    #test_combine_polarization_states()
-    #test_align_frames()
-    # #test_calc_stokes_unocculted()
+    test_subtract_stellar_polarization()
+    test_mueller_matrix_cal()
+    test_combine_polarization_states()
+    test_align_frames()
+    test_calc_stokes_unocculted()
     test_compute_QphiUPhi()

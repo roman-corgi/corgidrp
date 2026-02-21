@@ -1,5 +1,5 @@
 import argparse
-import os
+import os, sys
 import json
 import pytest
 import numpy as np
@@ -11,6 +11,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
+import corgidrp.check as check
 import shutil
 import logging
 import traceback
@@ -22,43 +23,26 @@ import warnings
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-def fix_headers(
-    list_of_fits,
-    ):
-    """ 
-    Gets around EMGAIN_A being set to 1 in TVAC data and fixes string header values.
-    Also adds missing EACQ_ROW/COL headers if needed.
-    
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    for file in list_of_fits:
-        with fits.open(file, mode='update') as fits_file:
-            exthdr = fits_file[1].header
-            if 'EMGAIN_A' in exthdr and float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
-                exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-            if 'EMGAIN_C' in exthdr and type(exthdr['EMGAIN_C']) is str:
-                exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-            
-            # TO DO: flag sims bug that misspells EACQ_ROW/COL as EQCQ_COL
-            if 'EQCQ_COL' in exthdr:
-                del exthdr['EQCQ_COL']
-            
-            naxis1 = exthdr.get('NAXIS1', 1024)
-            naxis2 = exthdr.get('NAXIS2', 1024)
-            
-            # Fix EACQ_ROW/COL if missing, 0, or outside frame bounds
-            if 'EACQ_ROW' not in exthdr or exthdr['EACQ_ROW'] == 0 or exthdr['EACQ_ROW'] >= naxis2:
-                exthdr['EACQ_ROW'] = naxis2 // 2
-            if 'EACQ_COL' not in exthdr or exthdr.get('EACQ_COL', 0) == 0 or exthdr.get('EACQ_COL', 0) >= naxis1:
-                exthdr['EACQ_COL'] = naxis1 // 2
 
-            # Set RN (read noise) if missing, empty, or not a number - only for L2a data (required for photon counting)
-            # TO DO: this should be automatically handled previously in the pipeline
-            datalvl = exthdr.get('DATALVL', '')
-            if datalvl == 'L2a':
-                # Set as float value with comment - ensures FITS stores it as numeric
-                exthdr['RN'] = (100.0, 'Read noise in electrons')
+def patch_l2b_eacq_to_cropped_center(filelist):
+    """Set EACQ_ROW/EACQ_COL to the center of the L2b (cropped) image.
+
+    L2b frames have already been cropped by prescan_biassub in L1->L2a, but
+    EACQ_ROW/EACQ_COL are still in full-frame coordinates. The L2b->L3 crop
+    step uses EACQ as the crop center, so this updates L2b headers to the image
+    center to avoid the crop window falling outside the data. This is only to
+    get the tests to work, the better fix is to update EACQ when cropping in
+    the pipeline.
+
+    Args:
+        filelist (list): List of L2b FITS file paths to patch.
+    """
+    for path in filelist:
+        with fits.open(path, mode='update') as hdul:
+            h = hdul[1].header
+            n1, n2 = int(h['NAXIS1']), int(h['NAXIS2'])
+            h['EACQ_ROW'] = (n2 - 1) / 2.0
+            h['EACQ_COL'] = (n1 - 1) / 2.0
 
 
 def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
@@ -118,6 +102,15 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         mock_cal_filelist = [os.path.join(l1_datadir, l1_files[i]) for i in [-2, -1]]
     else:
         mock_cal_filelist = [os.path.join(l1_datadir, f) for f in l1_files]
+    # Copy and fix mock cal headers
+    mock_cal_dir = os.path.join(l3_outputdir, 'mock_cal_input')
+    os.makedirs(mock_cal_dir, exist_ok=True)
+    mock_cal_filelist = [
+        shutil.copy2(f, os.path.join(mock_cal_dir, os.path.basename(f)))
+        for f in mock_cal_filelist
+    ]
+    mock_cal_filelist = check.fix_hdrs_for_tvac(mock_cal_filelist, mock_cal_dir)
+
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
     # Nonlinearity calibration
@@ -132,6 +125,8 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
     ptc = np.column_stack([signal_array, noise_array])
+    ext_hdr['RN'] = 100.0
+    ext_hdr['RN_ERR'] = 0.0
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                       input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
@@ -154,8 +149,8 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                        input_dataset=mock_input_dataset, err=noise_map_noise,
                                        dq=noise_map_dq, err_hdr=err_hdr)
@@ -170,13 +165,13 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         with fits.open(sample_l1_file) as hdul:
             exthdr = hdul[1].header
             if 'ISPC' in exthdr:
-                ispc_val = exthdr.get('ISPC')
-                if ispc_val in (1, True):
+                ispc_val = int(exthdr.get('ISPC'))
+                if ispc_val == 1:
                     is_pc_data = True
-                elif ispc_val in (0, False):
+                elif ispc_val == 0:
                     is_pc_data = False
                 else:
-                    raise ValueError(f"Expected True or False for ISPC value in header: {ispc_val}.")
+                    raise ValueError(f"Expected 0 or 1 for ISPC value in header: {ispc_val}.")
             else:
                 raise ValueError("Missing ISPC keyword in L1 header. Cannot determine PC vs analog.")
     
@@ -264,17 +259,21 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Copy files to input_data directory and update file list
-    input_data_filelist = [
-        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-        for file_path in input_data_filelist
-    ] 
-    # fix headers
-    fix_headers(input_data_filelist)
+    # Update L1 headers for sims files
+    input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
+
+    ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
+    for file in input_data_filelist:
+        with fits.open(file, mode='update') as fits_file:
+            print(fits_file[1].header['EXPTIME'])
+            if fits_file[1].header['EXPTIME'] >= 100:
+                fits_file[1].data = fits_file[1].data/10.
+                fits_file[1].header['EXPTIME'] = fits_file[1].header['EXPTIME']/10.
+                print('Changed exposure time',fits_file[1].header['EXPTIME'])
 
     # Validate all input images
     input_dataset = data.Dataset(input_data_filelist)
-    
+
     for i, (frame, filepath) in enumerate(zip(input_dataset, input_data_filelist)):
         frame_info = f"L1 Input Frame {i}"
         
@@ -316,8 +315,6 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
     
     if l2a_filelist:
-        # Apply other header fixes
-        fix_headers(l2a_filelist)
         
         # Dark calibration: Create PC master dark from L2a frames (for PC data only)
         # This completes the calibration setup that began in the calibration products section above
@@ -398,10 +395,10 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     l2b_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2b.fits')]
     l2b_filelist = [os.path.join(l3_outputdir, f) for f in l2b_files]
     logger.info(f'L2a to L2b complete. Generated {len(l2b_filelist)} L2b files.')
-    
-    # Fix L2b headers 
-    fix_headers(l2b_filelist)
-    
+
+    # Patch L2b EACQ to cropped-frame center. TODO: fix this elsewhere
+    patch_l2b_eacq_to_cropped_center(l2b_filelist)
+
     # Step 3: L2b -> L3 (using output from step 2)
     logger.info('Step 3: Running L2b to L3 spectroscopy recipe...')
     walker.walk_corgidrp(l2b_filelist, "", l3_outputdir)
@@ -554,16 +551,24 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         logger.info('ANALOG SPECTROSCOPY DATA TEST')
         logger.info('='*80)
         new_l3_filenames = run_l1_to_l3_e2e_test(analog_datadir, analog_outputdir, processed_cal_path, logger)
+        
+        for new_filename in new_l3_filenames:
+            check.compare_to_mocks_hdrs(new_filename)
 
         logger.info('='*80)
         logger.info('PC SPECTROSCOPY DATA TEST')
         logger.info('='*80)
         new_l3_filenames = run_l1_to_l3_e2e_test(pc_datadir, pc_outputdir, processed_cal_path, logger)
         
+        for new_filename in new_l3_filenames:
+            check.compare_to_mocks_hdrs(new_filename)
+
         logger.info('='*80)
         logger.info('END-TO-END TEST COMPLETE')
         logger.info('='*80)
         
+        
+
         print('e2e test for L1 to L3 spectroscopy passed')
     except Exception as e:
         logger.error('='*80)
@@ -585,8 +590,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/maxwellmb/Data/corgi/corgidrp/e2e_test_data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
-    outputdir = " /Users/maxwellmb/Data/corgi/corgidrp/e2e_test_output/"
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
+    outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

@@ -9,19 +9,37 @@ import argparse
 from corgidrp import corethroughput
 from corgidrp.data import Dataset
 from corgidrp.data import Image
-from corgidrp.mocks import create_default_calibration_product_headers
+from corgidrp.mocks import create_default_calibration_product_headers, create_default_L2b_headers
 from corgidrp.mocks import rename_files_to_cgi_format, create_ct_psfs
 from corgidrp.walker import walk_corgidrp
 import corgidrp
 import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
-                           get_latest_cal_file)
+                           get_latest_cal_file, compare_to_mocks_hdrs)
 from l1_to_l3_spec_e2e import run_l1_to_l3_e2e_test
 import warnings
 
-# first lift the L1 simulations to L3
 
+def patch_eacq_to_center_if_missing(filelist):
+    """Set EACQ_ROW/EACQ_COL to image center when missing or (0,0).
+
+    This should be done in the sims, but is done here for now to avoid breaking the e2e tests.
+
+    Args:
+        filelist (list): List of file paths to patch
+    """
+    for path in filelist:
+        with fits.open(path, mode='update') as hdul:
+            h = hdul[1].header
+            n1, n2 = int(h['NAXIS1']), int(h['NAXIS2'])
+            row = h.get('EACQ_ROW')
+            col = h.get('EACQ_COL')
+            missing = row is None or col is None
+            both_zero = not missing and float(row) == 0 and float(col) == 0
+            if missing or both_zero:
+                h['EACQ_ROW'] = (n2 - 1) / 2.0
+                h['EACQ_COL'] = (n1 - 1) / 2.0
 
 
 # ================================================================================
@@ -69,10 +87,13 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3", "satspot")
 
     cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "cpgs_mock.xml")
-    
+
+    # Patch EACQ_ROW/EACQ_COL on L1s. TODO: fix this in the sims
+    for flist in (psfref_satspot_files, psfref_files, target_satspot_files, target_files):
+        patch_eacq_to_center_if_missing(flist)
+
     run_l1_to_l3_e2e_test(psfref_satspot_path, ref_spot_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
-    
     run_l1_to_l3_e2e_test(target_satspot_path, target_spot_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger)
     
@@ -86,7 +107,6 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     l3_target_spot = sorted(glob.glob(os.path.join(target_spot_l3_output_dir, "cgi_*l3_.fits")))
     l3_files.extend(l3_target_spot)
     l3_dataset = Dataset(l3_files)
-        
     logger.info('')
     
     # ================================================================================
@@ -105,7 +125,8 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         check_dimensions(frame.data, (125, 125), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3', 'FSMLOS' : 1}, frame_info, logger)
-        verify_header_keywords(frame.pri_hdr, {'PSFREF', 'SATSPOTS'}, frame_info, logger)
+        verify_header_keywords(frame.pri_hdr, {'PSFREF'}, frame_info, logger)
+        verify_header_keywords(frame.ext_hdr, {'SATSPOTS'}, frame_info, logger)
         logger.info("")
     
     l3_files_dir = os.path.join(e2eoutput_path, "L3")
@@ -203,7 +224,9 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         logger.info(f"Expected: only one combined l4 file but contains {len(out_files)} files. FAIL.")
     out_file = out_files[0]
     check_filename_convention(os.path.basename(out_file), 'cgi_*_l4_.fits', "spec l4 output product", logger, data_level = "l4_")
-
+    
+    compare_to_mocks_hdrs(out_file)
+    
     with fits.open(out_file) as hdul:        
         verify_hdu_count(hdul, 12, "spec l4 output product", logger)
         
@@ -446,7 +469,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/home/schreiber/spec_sim/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

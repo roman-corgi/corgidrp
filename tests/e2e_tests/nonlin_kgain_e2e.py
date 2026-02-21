@@ -13,6 +13,7 @@ from corgidrp import data
 from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
+from corgidrp import check
 import shutil
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
@@ -102,21 +103,22 @@ def test_nonlin_and_kgain_e2e(
     kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
     kgain_l1_list.sort()
     
-    pupilimg_l1_list = nonlin_l1_list # start with the nonlin filelist
+    pupilimg_l1_list = list(nonlin_l1_list)
     for filepath in kgain_l1_list:
         if filepath.lower().endswith('.fits'):
             pupilimg_l1_list.append(filepath)
 
-    # Copy files to input_data directory and update file list
-    nonlin_l1_list = [
+    # Copy files to input_data directory
+    pupilimg_l1_list = [
         shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-        for file_path in nonlin_l1_list
+        for file_path in pupilimg_l1_list
     ]
 
+    # Fix headers for TVAC
+    pupilimg_l1_list = check.fix_hdrs_for_tvac(pupilimg_l1_list, input_data_dir)
 
     # Set TVAC data to have VISTYPE=CGIVST_CAL_PUPIL_IMAGING (flight data should have these values)
     set_vistype_for_tvac(pupilimg_l1_list)
-    #fix_headers_for_tvac(pupilimg_l1_list)
 
    # now get any default cal files that might be needed; if any reside in the folder that are not 
     # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
@@ -148,6 +150,9 @@ def test_nonlin_and_kgain_e2e(
     possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_krn_cal*.fits'))
     kgain_filepath = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
     kgain = data.KGain(kgain_filepath)
+
+    check.compare_to_mocks_hdrs(nonlin_drp_filepath)
+    check.compare_to_mocks_hdrs(kgain_filepath)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

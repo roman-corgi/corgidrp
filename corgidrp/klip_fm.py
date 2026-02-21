@@ -63,8 +63,8 @@ def inject_psf(frame_in, ct_calibration, amp,
     frame = frame_in.copy()
 
     # Get closest psf model
-    frame_roll = frame.pri_hdr['ROLL']
-    rel_pa = pa_deg - frame_roll
+    pa_aper_deg = frame.pri_hdr['PA_APER']
+    rel_pa = pa_deg - pa_aper_deg
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
     psf_model = get_closest_psf(ct_calibration,
@@ -208,6 +208,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     
     if sci_dataset_in[0].ext_hdr['CFAMNAME'] == '1F':
         lam = 573.8e-9 #m
+    elif sci_dataset_in[0].ext_hdr['CFAMNAME'] == '4F':
+        lam =825.8e-9 #m
     else:
         raise NotImplementedError("Only band 1 observations using CFAMNAME 1F are currently configured.")
 
@@ -220,13 +222,19 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     if seps is None:
         if sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'NFOV':
             owa_mas = 450. 
-            owa_pix = owa_mas / pixscale_mas   
+            owa_pix = owa_mas / pixscale_mas
+        elif sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'WFOV':
+            owa_mas = 1447. 
+            owa_pix = owa_mas / pixscale_mas          
         else:
             raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
         
         if sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'HLC12_C2R1':
             iwa_mas = 140. 
             iwa_pix = iwa_mas / pixscale_mas 
+        elif sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'SPC34_R5C1':
+            iwa_mas = 425. 
+            iwa_pix = iwa_mas / pixscale_mas     
         else:
             raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
         
@@ -240,7 +248,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         
         sci_dataset = sci_dataset_in.copy()
 
-        rolls = [frame.pri_hdr['ROLL'] for frame in sci_dataset]
+        pa_aper_degs = [frame.pri_hdr['PA_APER'] for frame in sci_dataset]
         
         # Measure noise at each separation in psf subtracted dataset (for this kl mode)
         noise_vals = measure_noise(psfsub_dataset[0],seps,fwhm_pix,k,cand_locs)
@@ -279,8 +287,10 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                     if i==0:
                         too_close = False
                         for cand_sep, cand_pa in cand_locs:
-                            # Account for telescope roll angles, skip if any are too close
-                            for roll in rolls:
+                            # Account for rotations, skip if any are too close
+                            for pa_aper_deg in pa_aper_degs:
+                                # NOTE: rotation angle is not applied here, cand_pa_adj == cand_pa.
+                                # It may not be necessary to loop over rolls here.
                                 cand_pa_adj = cand_pa
                                 dist = get_polar_dist((cand_sep,cand_pa_adj),inject_loc)
                                 if dist < res_elem:

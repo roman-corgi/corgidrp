@@ -16,6 +16,7 @@ import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
 import corgidrp.l2b_to_l3 as l2b_to_l3
 from corgidrp import caldb
+from corgidrp.check import fix_hdrs_for_tvac, compare_to_mocks_hdrs
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -88,6 +89,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         output_dir=input_l2b_dir, 
         level_suffix="l2b"
     )
+    corethroughput_data_filepath = fix_hdrs_for_tvac(
+        corethroughput_data_filepath,
+        input_l2b_dir,
+        header_template=mocks.create_default_L2b_headers,
+    )
     
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -118,6 +124,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     assert np.all(ct_cal_drp.dq == ct_cal_mock.dq)
     assert np.all(ct_cal_drp.ct_fpam == ct_cal_mock.ct_fpam)
     assert np.all(ct_cal_drp.ct_fsam == ct_cal_mock.ct_fsam)
+
+    compare_to_mocks_hdrs(corethroughput_drp_file)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -156,6 +164,7 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
         new_image.pri_hdr['VISTYPE'] = 'CGIVST_CAL_CORETHRPT'
         new_image.ext_hdr['DATALVL'] = "L2b"
         new_image.ext_hdr['BUNIT'] = "photoelectron"
+        new_image.ext_hdr['EXPTIME'] = 1.0
         ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])
         new_image.filename = f'cgi_{new_image.pri_hdr["VISITID"]}_{ftimeutc}_l2b.fits'
         images.append(new_image)
@@ -172,6 +181,11 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     dataset.save(filedir=l2b_data_dir)
     l2b_filenames = glob.glob(os.path.join(l2b_data_dir, '*.fits'))
     l2b_filenames.sort()
+    l2b_filenames = fix_hdrs_for_tvac(
+        l2b_filenames,
+        l2b_data_dir,
+        header_template=mocks.create_default_L2b_headers,
+    )
 
     walker.walk_corgidrp(l2b_filenames, '', corethroughput_outputdir)
     
@@ -179,9 +193,10 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
         '*ctp_cal.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
-    
+
     # run the recipe directly to check out it comes
-    dataset_normed = l2b_to_l3.divide_by_exptime(dataset)
+    dataset_l2b = data.Dataset(l2b_filenames)
+    dataset_normed = l2b_to_l3.divide_by_exptime(dataset_l2b)
     ct_cal_sim = corethroughput.generate_ct_cal(dataset_normed)
 
     # Asserts
@@ -202,6 +217,8 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     assert np.min(ct_cal_drp.ct_excam[2]) > 0, "CoreThroughput measurements have non-positive values"
     assert np.max(ct_cal_drp.ct_excam[2]) <= 1, "CoreThroughput measurements exceed 1"
 
+    compare_to_mocks_hdrs(corethroughput_drp_file)
+
     # Print success message
     print('e2e test for corethroughput calibration with simulated band 3 shaped pupil data passed')
     
@@ -212,7 +229,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     outputdir = thisfile_dir
-    e2edata_path = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_path = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#
 
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,
@@ -221,5 +238,5 @@ if __name__ == "__main__":
                     help='directory to write results to [%(default)s]')
     args = ap.parse_args()
     outputdir = args.outputdir
-    test_expected_results_e2e(args.e2edata_dir, args.outputdir)
     test_expected_results_spc_band3_simdata_e2e(args.e2edata_dir, args.outputdir)
+    test_expected_results_e2e(args.e2edata_dir, args.outputdir)

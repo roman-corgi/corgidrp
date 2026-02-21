@@ -329,7 +329,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     # Add trap pumping specific keywords that aren't in the RST
     exthdr['TPINJCYC'] = 0               # Number of cycles for TPUMP injection
     exthdr['TPOSCCYC'] = 0               # Number of cycles for charge oscillation (TPUMP)
-    exthdr['TPTAU'] = 0                  # Length of one step in a trap pumping scheme (microseconds)
+    exthdr['TPTAU'] = 0.                 # Length of one step in a trap pumping scheme (microseconds)
     exthdr['TPSCHEM1'] = 0               # Number of cycles for TPUMP pumping SCHEME_1
     exthdr['TPSCHEM2'] = 0               # Number of cycles for TPUMP pumping SCHEME_2
     exthdr['TPSCHEM3'] = 0               # Number of cycles for TPUMP pumping SCHEME_3
@@ -379,9 +379,9 @@ def create_default_L2a_headers(arrtype="SCI"):
     exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to the frame
     exthdr['IS_BAD']        = False         # Whether frame is bad
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
-    exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
+    exthdr['FWC_EM_E']      = 0.0           # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
-    exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
+    exthdr['RECIPE']        = 'Mock'        # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
     exthdr['HISTORY']       = ''            # History comments
@@ -416,6 +416,13 @@ def create_default_L2a_headers(arrtype="SCI"):
     biashdr['PCOUNT']      = 0               # Number of parameters (FITS keyword)
     biashdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     biashdr['EXTNAME']     = 'BIAS'           # Extension name
+
+    deleted_after_l1 = ['SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    for key in deleted_after_l1:
+        if key in prihdr:
+            del prihdr[key]
+        if key in exthdr:
+            del exthdr[key]
 
     return prihdr, exthdr, errhdr, dqhdr, biashdr
 
@@ -460,9 +467,9 @@ def create_default_L2a_TrapPump_headers(arrtype="SCI"):
     exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to the frame
     exthdr['IS_BAD']        = False         # Whether frame is bad
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
-    exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
+    exthdr['FWC_EM_E']      = 0.0           # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
-    exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
+    exthdr['RECIPE']        = 'Mock'        # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
     exthdr['HISTORY']       = ''            # History comments
@@ -530,14 +537,14 @@ def create_default_L2b_headers(arrtype="SCI"):
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
-    exthdr['RN']            = ''            # Read noise
-    exthdr['RN_ERR']        = ''            # Read noise error
-    exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
+    exthdr['RN']            = -999.0        # Read noise
+    exthdr['RN_ERR']        = -999.0        # Read noise error
+    exthdr['FRMSEL01'] = (1., "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
     exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
-    exthdr['FRMSEL03'] = (None, "tip rms (Z2VAR) threshold") # record selection criteria
-    exthdr['FRMSEL04'] = (None, "tilt rms (Z3VAR) threshold") # record selection criteria
-    exthdr['FRMSEL05'] = (None, "tip bias (Z2RES) threshold") # record selection criteria
-    exthdr['FRMSEL06'] = (None, "tilt bias (Z3RES) threshold") # record selection criteria
+    exthdr['FRMSEL03'] = (-999., "tip rms (Z2VAR) threshold") # record selection criteria
+    exthdr['FRMSEL04'] = (-999., "tilt rms (Z3VAR) threshold") # record selection criteria
+    exthdr['FRMSEL05'] = (-999., "tip bias (Z2RES) threshold") # record selection criteria
+    exthdr['FRMSEL06'] = (-999., "tilt bias (Z3RES) threshold") # record selection criteria
     exthdr.add_history("Marked 0 frames as bad: ") # history message tracking bad frames
 
     errhdr['BUNIT']         = 'photoelectron'   # Unit of error map
@@ -580,8 +587,8 @@ def create_default_L2b_TrapPump_headers(arrtype="SCI"):
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
-    exthdr['RN']            = ''            # Read noise
-    exthdr['RN_ERR']        = ''            # Read noise error
+    exthdr['RN']            = -999.         # Read noise
+    exthdr['RN_ERR']        = -999.         # Read noise error
     exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
     exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
     exthdr['FRMSEL03'] = (None, "tip rms (Z2VAR) threshold") # record selection criteria
@@ -628,18 +635,18 @@ def create_default_L3_headers(arrtype="SCI"):
     prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l3_.fits"
     
     exthdr['BUNIT'] = 'photoelectron/s'   # Physical unit of the array (brightness unit)
-    exthdr['CD1_1'] = 0
-    exthdr['CD1_2'] = 0
-    exthdr['CD2_1'] = 0
-    exthdr['CD2_2'] = 0
-    exthdr['CRPIX1'] = 0
-    exthdr['CRPIX2'] = 0
+    exthdr['CD1_1'] = 0.
+    exthdr['CD1_2'] = 0.
+    exthdr['CD2_1'] = 0.
+    exthdr['CD2_2'] = 0.
+    exthdr['CRPIX1'] = 0. #could be fractional pixel value
+    exthdr['CRPIX2'] = 0. #could be fractional pixel value
     exthdr['CTYPE1'] = 'RA---TAN'
     exthdr['CTYPE2'] = 'DEC--TAN'
-    exthdr['CDELT1'] = 0
-    exthdr['CDELT2'] = 0
-    exthdr['CRVAL1'] = 0
-    exthdr['CRVAL2'] = 0
+    exthdr['CDELT1'] = 0.
+    exthdr['CDELT2'] = 0.
+    exthdr['CRVAL1'] = 0.
+    exthdr['CRVAL2'] = 0.
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
@@ -681,10 +688,10 @@ def create_default_L4_headers(arrtype="SCI"):
     exthdr['PSFSUB']        = ''            # PSF subtraction algorithm used (coronagraphic only)
     exthdr['PYKLIPV']       = ''            # pyKLIP version used (coronagraphic only)
     exthdr['KLMODE0']       = ''            # Number of KL modes used in the Nth slice (coronagraphic only)
-    exthdr['STARLOCX']      = 512           # X location of the of the target star (coronagraphic only)
-    exthdr['STARLOCY']      = 512           # Y location of the of the target star (coronagraphic only)
-    exthdr['DETPIX0X']      = ''            #  Position of the 0th column of the data array on the 1024x1024 EXCAM detector
-    exthdr['DETPIX0Y']      = ''            # Position of the 0th row of the data array on the 1024x1024 EXCAM detector 
+    exthdr['STARLOCX']      = 512.          # X location of the of the target star (coronagraphic only)
+    exthdr['STARLOCY']      = 512.          # Y location of the of the target star (coronagraphic only)
+    exthdr['DETPIX0X']      = 0             #  Position of the 0th column of the data array on the 1024x1024 EXCAM detector
+    exthdr['DETPIX0Y']      = 0             # Position of the 0th row of the data array on the 1024x1024 EXCAM detector 
     exthdr['CTCALFN']       = ''            # Core throughput linked file for calibration
     exthdr['FLXCALFN']      = ''            # Abs flux file linked for calibration
     exthdr['DATALVL']       = 'L4'          # Data level (e.g., 'L1', 'L2a', 'L2b')
@@ -1475,9 +1482,9 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     # TO DO: Determine what level this image should be
     prhd, exthd, errhdr, dqhdr, biashdr= create_default_L2b_headers()
     # Record actual commanded EM
-    exthd['EMGAIN_C'] = emgain
+    exthd['EMGAIN_C'] = float(emgain)
     # Record actual exposure time
-    exthd['EXPTIME'] = time
+    exthd['EXPTIME'] = float(time)
     # Mock error maps
     err = np.ones([1200,2200]) * 0.5
     dq = np.zeros([1200,2200], dtype = np.uint16)
@@ -1550,8 +1557,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
 
-    new_hdr['CDELT1'] = (platescale * 0.001) / 3600
-    new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+    new_hdr['CDELT1'] = (platescale * 0.001) / 3600.
+    new_hdr['CDELT2'] = (platescale * 0.001) / 3600.
 
     new_hdr['CRVAL1'] = target[0] + offset[0]
     new_hdr['CRVAL2'] = target[1] + offset[1]
@@ -1611,8 +1618,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         new_hdr['CTYPE1'] = 'RA---TAN'
         new_hdr['CTYPE2'] = 'DEC--TAN'
         
-        new_hdr['CDELT1'] = (platescale * 0.001) / 3600
-        new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+        new_hdr['CDELT1'] = (platescale * 0.001) / 3600.
+        new_hdr['CDELT2'] = (platescale * 0.001) / 3600.
         
         new_hdr['CRVAL1'] = dither_target_ras[i] + offset[0]
         new_hdr['CRVAL2'] = dither_target_decs[i] + offset[1]
@@ -1787,7 +1794,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         prihdr['VISTYPE'] = 'CGIVST_CAL_BORESIGHT'
         prihdr['RA'] = np.array(frame_targs).T[0][i]  # assume we will know something about the dither RA/DEC pointing
         prihdr['DEC'] = np.array(frame_targs).T[1][i]
-        prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
+        # Use PA_APER (on-sky position angle east of north) for rotation angle in mocks.
+        prihdr['PA_APER'] = 0
 
         ## save as an Image object
         err_map = None if not sim_err_map else err_map
@@ -2705,7 +2713,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     # in the function above somehow affects the content of the file
     rename_files_to_cgi_format(pattern=os.path.join(output_dir, "*K*Scheme_*TPUMP*.fits"), level_suffix="l1")
 
-def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0, cic=0.01, dark_current=8.33e-4, read_noise=100., bias=20000, qe=0.9):
+def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7., exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0, cic=0.01, dark_current=8.33e-4, read_noise=100., bias=20000, qe=0.9):
     '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
     Used for unit tests for photon counting.  
     
@@ -2796,9 +2804,9 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.ext_hdr['EMGAIN_C'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
-        frame.ext_hdr['RN'] = 100
+        frame.ext_hdr['RN'] = read_noise
         frame.ext_hdr['KGAINPAR'] = kgain
-        frame.pri_hdr['PHTCNT'] = 1
+        frame.pri_hdr['PHTCNT'] = "True"
         frame.ext_hdr['ISPC'] = 1
         frame.pri_hdr["VISTYPE"] = "CGIVST_TDD_OBS"
         # Generate CGI filename with incrementing datetime
@@ -2819,9 +2827,9 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['EMGAIN_C'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
-        frame_dark.ext_hdr['RN'] = 100
+        frame_dark.ext_hdr['RN'] = read_noise
         frame_dark.ext_hdr['KGAINPAR'] = kgain
-        frame_dark.pri_hdr['PHTCNT'] = 1
+        frame_dark.pri_hdr['PHTCNT'] = "True"
         frame_dark.ext_hdr['ISPC'] = 1
         frame_dark.pri_hdr["VISTYPE"] = "CGIVST_CAL_DRK"
         # Generate CGI filename with incrementing datetime for dark frames
@@ -2845,7 +2853,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         bad_frame.filename = f'cgi_{visitid}_{time_str}_l1_.fits'
         frame_e_list.append(bad_frame)
         bad_dark_frame = frame_dark.copy()
-        bad_dark_frame.ext_hdr['OVEREXP'] = True
+        bad_dark_frame.ext_hdr['OVEREXP'] = 1
         # Generate CGI filename for bad dark frames
         time_offset = datetime.timedelta(seconds=Ndarks + i + 1000)  # Offset to avoid conflicts
         unique_time = base_time + time_offset
@@ -2997,8 +3005,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
     exthdr['CTYPE2']   = 'DEC--TAN'
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600.  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
     exthdr['BUNIT'] = 'photoelectron'
@@ -3159,13 +3167,13 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
     exthdr['FPAM_V']   = 6124.9
     exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
     exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
-    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['EXPTIME']  = float(exptime)            # Ensure exptime is defined       # Ensure color_cor is defined
     exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
     exthdr['CTYPE2']   = 'DEC--TAN'
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600.  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
@@ -3183,7 +3191,7 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
 
 def generate_reference_star_dataset_with_flux(
     n_frames=3,
-    roll_angles=None,
+    pa_aper_degs=None,
     # Following arguments match create_flux_image
     flux_erg_s_cm2=1e-13,
     fwhm=3.0,
@@ -3207,12 +3215,12 @@ def generate_reference_star_dataset_with_flux(
     """
     Generate simulated reference star dataset with flux calibration.
     This function creates multiple frames of a reference star (with no planet)
-    using create_flux_image(), and assigns unique roll angles to each frame's header.
+    using create_flux_image(), and assigns unique PA_APER angles to each frame's header.
     The generated frames can then be used for RDI or ADI+RDI processing in pyKLIP.
     
     Args:
         n_frames (int): Number of frames to generate.
-        roll_angles (list or None): Roll angles (in degrees) for each frame. If None, all frames use 0.0.
+        pa_aper_degs (list or None): PA_APER angles (in degrees) for each frame. If None, all frames use 0.0.
         flux_erg_s_cm2 (float): Stellar flux in erg s⁻¹ cm⁻².
         fwhm (float): Full Width at Half Maximum of the star's PSF.
         cal_factor (float): Calibration factor [e⁻/erg] to convert flux to electron counts.
@@ -3236,10 +3244,10 @@ def generate_reference_star_dataset_with_flux(
         Dataset (corgidrp.Data.Dataset): A Dataset object containing the generated reference star frames.
     """
 
-    if roll_angles is None:
-        roll_angles = [0.0]*n_frames
-    elif len(roll_angles) != n_frames:
-        raise ValueError("roll_angles must match n_frames or be None.")
+    if pa_aper_degs is None:
+        pa_aper_degs = [0.0]*n_frames
+    elif len(pa_aper_degs) != n_frames:
+        raise ValueError("pa_aper_degs must match n_frames or be None.")
 
     frames = []
     for i in range(n_frames):
@@ -3268,8 +3276,8 @@ def generate_reference_star_dataset_with_flux(
         # 2) Mark primary header as "PSFREF=1" so do_psf_subtraction sees it as reference
         frame.pri_hdr["PSFREF"] = 1
 
-        # 3) Set this frame's roll angle in pri_hdr
-        frame.pri_hdr["ROLL"] = roll_angles[i]
+        # 3) Set this frame's PA_APER angle in pri_hdr
+        frame.pri_hdr["PA_APER"] = pa_aper_degs[i]
 
         # 4) Set star center for reference
         #    create_flux_image puts the star around (shape[1]//2, shape[0]//2).
@@ -3587,8 +3595,8 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
         dq=dq_cube,
         dq_hdr=dq_hdr,
         input_dataset=data.Dataset([data.Image(np.array([0.]),
-                                 pri_hdr=fits.Header(),
-                                 ext_hdr=fits.Header())]))
+                                 pri_hdr=create_default_L2b_headers()[0],
+                                 ext_hdr=create_default_L2b_headers()[1])]))
 
     return ct_cal
 
@@ -3715,7 +3723,7 @@ LATPOLE =                 90.0 / [deg] Native latitude of celestial pole
 MJDREF  =                  0.0 / [d] MJD of fiducial time
 """
 
-def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhole_reffiles=None,
+def create_psfsub_dataset(n_sci,n_ref,pa_aper_degs,darkhole_scifiles=None,darkhole_reffiles=None,
                           wcs_header = None,
                           data_shape = [100,100],
                           centerxy = None,
@@ -3733,7 +3741,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
     Args:
         n_sci (int): number of science frames, must be >= 1.
         n_ref (int): nummber of reference frames, must be >= 0.
-        roll_angles (list-like): list of the roll angles of each science and reference 
+        pa_aper_degs (list-like): list of the PA_APER angles of each science and reference 
             frame, with the science frames listed first. 
         darkhole_scifiles (list of str, optional): Filepaths to the darkhole science frames. 
             If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
@@ -3763,8 +3771,8 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
     assert len(data_shape) == 2 or len(data_shape) == 3
     
-    if roll_angles is None:
-        roll_angles = [0.] * (n_sci+n_ref)
+    if pa_aper_degs is None:
+        pa_aper_degs = [0.] * (n_sci+n_ref)
 
     # mask_center = np.array(data_shape)/2
     # star_pos = mask_center
@@ -3851,7 +3859,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
             # Add fake planet to sci files
             if i<n_sci:
-                pa_deg = -roll_angles[i]
+                pa_deg = -pa_aper_degs[i]
                 xoff,yoff = pl_sep * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
                 planet_psf = gaussian_array(array_shape=data_shape[-2:],
                                             amp=pl_amp,
@@ -3870,7 +3878,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr['INSTRUME'] = 'CGI'
         prihdr['XOFFSET'] = 0.0
         prihdr['YOFFSET'] = 0.0
-        prihdr["ROLL"] = roll_angles[i]
+        prihdr["PA_APER"] = pa_aper_degs[i]
         
         exthdr['BUNIT'] = 'photoelectron/s'
         exthdr['STARLOCX'] = psfcentx
@@ -3882,7 +3890,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         
         # Add WCS header info, if provided
         if wcs_header is None:
-            wcs_header = generate_wcs(roll_angles[i], 
+            wcs_header = generate_wcs(pa_aper_degs[i], 
                                       [psfcentx,psfcenty],
                                       platescale=0.0218).to_header()
             #Add back in the CD keywords
@@ -3958,7 +3966,7 @@ def generate_coron_dataset_with_companions(
     shape=(1024, 1024),
     host_star_center=None,
     host_star_counts=1e5,
-    roll_angles=None,
+    pa_aper_degs=None,
     companion_sep_pix=None,   # Companion separation in pixels (explicit) or list of separations
     companion_pa_deg=None,    # Companion position angle in degrees (counterclockwise from north) or list
     companion_counts=100.0,   # Total flux (counts) for the companion or list
@@ -3984,7 +3992,7 @@ def generate_coron_dataset_with_companions(
       shape (tuple): (ny, nx) image shape.
       host_star_center (tuple): (x, y) pixel coordinates of the host star. If None, uses image center.
       host_star_counts (float): Total counts for the star.
-      roll_angles (list of float): One roll angle per frame (in degrees).
+      pa_aper_degs (list of float): One PA_APER angle per frame (in degrees).
       companion_sep_pix (float or list): On-sky separation(s) of the companion(s) in pixels.
       companion_pa_deg (float or list): On-sky position angle(s) of the companion(s) (counterclockwise from north).
       companion_counts (float or list): Total flux (counts) of the companion(s).
@@ -4005,10 +4013,10 @@ def generate_coron_dataset_with_companions(
     if host_star_center is None:
         host_star_center = (nx / 2, ny / 2)  # (x, y)
 
-    if roll_angles is None:
-        roll_angles = [0.0] * n_frames
-    elif len(roll_angles) != n_frames:
-        raise ValueError("roll_angles must have length n_frames or be None.")
+    if pa_aper_degs is None:
+        pa_aper_degs = [0.0] * n_frames
+    elif len(pa_aper_degs) != n_frames:
+        raise ValueError("pa_aper_degs must have length n_frames or be None.")
 
     # If only one companion is provided, wrap parameters into lists.
     if companion_sep_pix is not None and companion_pa_deg is not None:
@@ -4022,7 +4030,7 @@ def generate_coron_dataset_with_companions(
     frames = []
 
     for i in range(n_frames):
-        angle_i = roll_angles[i]
+        angle_i = pa_aper_degs[i]
 
         # Build an empty image frame.
         data_arr = np.zeros((ny, nx), dtype=np.float32)
@@ -4045,7 +4053,7 @@ def generate_coron_dataset_with_companions(
         if companion_sep_pix is not None and companion_pa_deg is not None:
             for idx, (sep, pa, counts, throughput_factor) in enumerate(zip(companion_sep_pix, companion_pa_deg, 
                                                                            companion_counts, throughput_factors)):
-                # Adjust the companion position based on the roll angle.
+                # Adjust the companion position based on the PA_APER angle.
                 rel_pa = pa - angle_i      
                 # Use the helper function to convert separation and position angle to dx, dy.
                 dx, dy = seppa2dxdy(sep, rel_pa)
@@ -4083,7 +4091,7 @@ def generate_coron_dataset_with_companions(
         time_str = data.format_ftimeutc(unique_time.isoformat())
         filename = f"cgi_{visitid}_{time_str}_l3_.fits"
         prihdr["FILENAME"] = filename
-        prihdr["ROLL"] = angle_i
+        prihdr["PA_APER"] = angle_i
         prihdr['TELESCOP'] = 'ROMAN'
         exthdr["CFAMNAME"] = filter
         exthdr["PLTSCALE"] = pltscale_as*1000 #in milliarcsec
@@ -4314,7 +4322,7 @@ def generate_reference_star_dataset(
     shape=(200, 200),
     star_center=(100,100),
     host_star_counts=1e5,
-    roll_angles=None,
+    pa_aper_degs=None,
     add_noise=False,
     noise_std=1.0e-2,
     outdir=None
@@ -4330,7 +4338,7 @@ def generate_reference_star_dataset(
         shape (tuple): Image shape (ny, nx) for each generated frame.
         star_center (tuple): Pixel coordinates (x, y) of the star center in the image.
         host_star_counts (float): Total integrated counts for the host star.
-        roll_angles (list or None): Roll angles (in degrees) for each frame. If None, all frames are assigned 0.0.
+        pa_aper_degs (list or None): PA_APER angles (in degrees) for each frame. If None, all frames are assigned 0.0.
         add_noise (bool): If True, add Gaussian noise to the images.
         noise_std (float): Standard deviation of the Gaussian noise.
         outdir (str or None): Directory to which the frames are saved if provided.
@@ -4341,8 +4349,8 @@ def generate_reference_star_dataset(
 
     # We'll adapt the same logic but no companion injection
     ny, nx = shape
-    if roll_angles is None:
-        roll_angles = [0.0]*n_frames
+    if pa_aper_degs is None:
+        pa_aper_degs = [0.0]*n_frames
 
     frames = []
     for i in range(n_frames):
@@ -4378,7 +4386,7 @@ def generate_reference_star_dataset(
         prihdr["FILENAME"] = filename
         # Mark these frames as reference
         prihdr["PSFREF"] = 1 
-        prihdr["ROLL"] = roll_angles[i]
+        prihdr["PA_APER"] = pa_aper_degs[i]
         exthdr["STARLOCX"] = star_center[0]
         exthdr["STARLOCY"] = star_center[1]
 
@@ -4703,7 +4711,7 @@ def create_satellite_spot_observing_sequence(
     prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers(arrtype="SCI")
     prihdr['NAXIS1'] = image_shape[1]
     prihdr['NAXIS2'] = image_shape[0]
-    prihdr["SATSPOTS"] = 0  # 0 if no satellite spots, 1 if satellite spots
+    exthdr["SATSPOTS"] = False  # False if no satellite spots, True if satellite spots
     exthdr['FSMPRFL'] = f'{observing_mode}'  # Needed for initial guess of satellite spot parameters
 
     # Make science images (no satellite spots)
@@ -4714,7 +4722,7 @@ def create_satellite_spot_observing_sequence(
             amplitude_multiplier=0
         )
         sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        sci_frame.pri_hdr["SATSPOTS"] = 0
+        sci_frame.ext_hdr["SATSPOTS"] = False
         
         # Generate CGI filename with incrementing datetime for science frames
         visitid = sci_frame.pri_hdr["VISITID"]
@@ -4732,7 +4740,7 @@ def create_satellite_spot_observing_sequence(
             separation, star_center, angle_offset, amplitude_multiplier
         )
         satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        satspot_frame.pri_hdr["SATSPOTS"] = 1
+        satspot_frame.ext_hdr["SATSPOTS"] = True
         
         # Generate CGI filename with incrementing datetime for satellite spot frames
         visitid = satspot_frame.pri_hdr["VISITID"]
@@ -4964,7 +4972,8 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     exthdr['LSAMNAME'] = observing_mode
     exthdr['FSMPRFL'] = observing_mode
 
-    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr,
+                       err_hdr=errhdr, dq_hdr=dqhdr)
 
     return image
 
@@ -5109,8 +5118,9 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     exthdr['DPAMNAME'] = dpamname
     exthdr['LSAMNAME'] = observing_mode
     exthdr['FSMPRFL'] = observing_mode
-    prihdr["SATSPOTS"] = 1
-    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+    exthdr["SATSPOTS"] = True
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr,
+                       err_hdr=errhdr, dq_hdr=dqhdr)
 
     return image
     
@@ -5143,7 +5153,7 @@ def create_mock_stokes_image_l4(
         Image: Stokes cube Image object with data, err, dq, and headers
     """
     if rng is None:
-    	rng = np.random.default_rng(seed)
+        rng = np.random.default_rng(seed)
 
     # Gaussian source
     y, x = np.mgrid[0:image_size, 0:image_size]
@@ -5312,7 +5322,7 @@ def create_mock_polarization_l3_dataset(
         fractional_error=None,
         p=0.1,
         theta_deg=20.0,
-        roll_angles=None,
+        pa_aper_degs=None,
         prisms=None,
         seed=None,
         return_image_list=False
@@ -5322,7 +5332,7 @@ def create_mock_polarization_l3_dataset(
     and polarization angles, including optional bad pixels and configurable intensity.
 
     Each dataset can contain multiple images corresponding to different Wollaston
-    prisms and roll angles. For each image, a dual-beam simulation is performed
+    prisms and PA_APER angles. For each image, a dual-beam simulation is performed
     to produce the two analyzer channels (e.g., 0/90 deg for POL0, 45/135 deg for POL45),
     and observational noise is applied according to the specified fractional error
     or photon noise.
@@ -5335,7 +5345,7 @@ def create_mock_polarization_l3_dataset(
         fractional_error (float or None): Fractional Gaussian noise; if None, photon noise is used.
         p (float): Fractional polarization (0-1).
         theta_deg (float): Polarization angle in degrees.
-        roll_angles (list of float, optional): Roll angles per prism. Defaults to [-15, 15, -15, 15].
+        pa_aper_degs (list of float, optional): PA_APER angles per prism. Defaults to [-15, 15, -15, 15].
         prisms (list of str, optional): Prism orientations ('POL0', 'POL45'). Defaults to ['POL0','POL0','POL45','POL45'].
         seed (int, optional): Random seed.
         return_image_list (bool): If True, return list of Image objects instead of Dataset.
@@ -5345,17 +5355,17 @@ def create_mock_polarization_l3_dataset(
                  and data quality arrays.
 
     Raises:
-        ValueError: If roll_angles and prisms lengths mismatch or prism name is invalid.
+        ValueError: If pa_aper_degs and prisms lengths mismatch or prism name is invalid.
     """
 
     # --- defaults ---
-    if roll_angles is None:
-        roll_angles = [-15, 15, -15, 15]
+    if pa_aper_degs is None:
+        pa_aper_degs = [-15, 15, -15, 15]
     if prisms is None:
         prisms = ['POL0', 'POL0', 'POL45', 'POL45']
 
-    if len(roll_angles) != len(prisms):
-        raise ValueError("roll_angles and prisms must have the same length")
+    if len(pa_aper_degs) != len(prisms):
+        raise ValueError("pa_aper_degs and prisms must have the same length")
 
     rng = np.random.default_rng(seed)
 
@@ -5377,8 +5387,8 @@ def create_mock_polarization_l3_dataset(
     cubes_out = []
     cubes_out_err = []
 
-    for roll, prism in zip(roll_angles, prisms):
-        theta_obs = np.radians(theta_deg + roll)
+    for pa_aper_deg, prism in zip(pa_aper_degs, prisms):
+        theta_obs = np.radians(theta_deg + pa_aper_deg)
         Q_map = I_map * p * np.cos(2 * theta_obs)
         U_map = I_map * p * np.sin(2 * theta_obs)
 
@@ -5417,10 +5427,10 @@ def create_mock_polarization_l3_dataset(
     dq_out = np.broadcast_to(dq, cubes_out.shape).copy()
 
     Image_out = []
-    for i, (roll, prism) in enumerate(zip(roll_angles, prisms)):
+    for i, (pa_aper_deg, prism) in enumerate(zip(pa_aper_degs, prisms)):
         prihdr_i = prihdr.copy()
         exthdr_i = exthdr.copy()
-        prihdr_i['ROLL'] = roll
+        prihdr_i['PA_APER'] = pa_aper_deg
         exthdr_i['DPAMNAME'] = prism
         Image_out.append(
             Image(
@@ -5500,13 +5510,13 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
         pol0.err = (np.ones_like(pol0.data) * 1)[None,:]
         pol45.err = (np.ones_like(pol45.data) * 1)[None,:]
 
-        #Add Random Roll - This should still work everywhere. 
-        random_roll = np.random.randint(0,360)
-        pol0.pri_hdr['ROLL'] = random_roll
-        pol45.pri_hdr['ROLL'] = random_roll
+        #Add Random rotation angle - This should still work everywhere. 
+        random_rotation_angle = np.random.randint(0,360)
+        pol0.pri_hdr['PA_APER'] = random_rotation_angle
+        pol45.pri_hdr['PA_APER'] = random_rotation_angle
 
         #get the q and u values from the reference polarization degree and angle
-        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_roll)
+        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_rotation_angle)
         q_meas = q * q_eff + u * uq_ct + q_inst/100.0
         u_meas = u * u_eff + q * qu_ct + u_inst/100.0
         # generate four gaussians scaled appropriately for the target's polarization
@@ -5539,14 +5549,14 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
 
     return mock_dataset
 
-def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=None, col_cor=None):
+def make_1d_spec_image(spec_values, spec_err, spec_wave, pa_aper_deg=None, exp_time=None, col_cor=None):
     """Create a mock L4 file with 1-D spectroscopy extensions.
 
     Args:
         spec_values (ndarray): flux values (photoelectron/s) for `SPEC`.
         spec_err (ndarray): uncertainty array matching `SPEC` shape.
         spec_wave (ndarray): wavelength grid in nm for `SPEC_WAVE`.
-        roll (str, optional): telescope roll angle
+        pa_aper_deg (float, optional): PA_APER (on-sky position angle east of north)
         exp_time (float, optional): exposure time in seconds
         col_cor (float, optional): color-correction factor to record.
 
@@ -5563,7 +5573,9 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, roll=None, exp_time=Non
     ext_hdr['WV0_Y'] = 0.0
     ext_hdr["STARLOCX"] = 0.0
     ext_hdr["STARLOCY"] = 0.0
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
+    if exp_time is None:
+        exp_time = -999.
     pri_hdr['EXPTIME'] = exp_time
     if col_cor is not None:
         ext_hdr['COL_COR'] = col_cor

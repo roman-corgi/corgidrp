@@ -13,6 +13,7 @@ import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
 import corgidrp.data as corgidata
 import corgidrp.walker as walker
+import corgidrp.check as check
 from corgidrp import corethroughput
 import pytest
 import glob
@@ -109,7 +110,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     data = np.loadtxt(os.path.join(e2edata_path,"hlc_os11_v3",'hlc_os11_batch_info.txt'), skiprows=2)
     batch = data[:,0].astype(int)
     star = data[:,2].astype(int)
-    roll = data[:,3]
+    rotation = data[:,3]
     frame_exptime_sec = data[:,4]
     nframes = data[:,6].astype(int)
 
@@ -155,9 +156,9 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image = Image(big_array, mock_pri_header, mock_ext_header, input_hdulist=[bias_hdu])
         # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
         # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
-        new_image.pri_hdr.set('FRAMET', frame_exptime_sec[ibatch])
+        new_image.pri_hdr.set('FRAMET', str(frame_exptime_sec[ibatch]))
         new_image.ext_hdr.set('EXPTIME', frame_exptime_sec[ibatch])
-        new_image.pri_hdr.set('ROLL',-roll[ibatch])
+        new_image.pri_hdr.set('PA_APER',-rotation[ibatch])
         new_image.ext_hdr.set('FSMPRFL','NFOV')
         new_image.ext_hdr.set('LSAMNAME','NFOV')
         new_image.ext_hdr.set('CFAMNAME','1F')
@@ -204,7 +205,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = satellite_spot_image
 
     mock_satspot_pri_header, mock_satspot_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    mock_satspot_pri_header['SATSPOTS'] = 1
+    mock_satspot_ext_header['SATSPOTS'] = True
     mock_satspot_ext_header['FSMPRFL']='NFOV'
 
     sat_spot_image = Image(big_array, mock_satspot_pri_header, mock_satspot_ext_header)
@@ -253,6 +254,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #Check if the Bunit is correct
     assert l3_image.ext_hdr['BUNIT'] == 'photoelectron/s'
     
+    check.compare_to_mocks_hdrs(l3_filename)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
     # shutil.rmtree(e2e_data_path)
@@ -428,7 +431,8 @@ def test_l3_to_l4(e2eoutput_path):
     print("Found all the sources!")
 
     # Filename format will be checked in data format test
-    
+    check.compare_to_mocks_hdrs(l4_filename)
+
     print('e2e test for l3_to_l4 calibration passed')
 
     # remove temporary caldb file
@@ -447,9 +451,9 @@ if __name__ == "__main__":
     # workflow.
 
 
-    outputdir = "/Users/maxmb/Data/corgi/e2e_output/"
+    outputdir = thisfile_dir #"/Users/jmilton/Documents/CGI/E2E_Test_Data2"
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = '/Users/maxmb/Data/corgi/E2E_Test_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data' #'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 

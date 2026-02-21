@@ -9,6 +9,7 @@ from astropy.io import fits
 import corgidrp
 from corgidrp import data
 from corgidrp import caldb
+from corgidrp import check
 from corgidrp import detector
 from corgidrp import darks
 from corgidrp import walker
@@ -17,25 +18,6 @@ import shutil
 
 # Get the directory of the current script file
 thisfile_dir = os.path.dirname(__file__)
-
-def fix_str_for_tvac(
-    list_of_fits,
-    ):
-    """ 
-    Gets around EMGAIN_A being set to 1 in TVAC data.
-    
-    Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-    """
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        exthdr = fits_file[1].header
-        if float(exthdr['EMGAIN_A']) == 1 and exthdr['HVCBIAS'] <= 0:
-            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-        if type(exthdr['EMGAIN_C']) is str:
-            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
 
 
 @pytest.mark.e2e
@@ -80,7 +62,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     ]
 
     # update TVAC files
-    fix_str_for_tvac(l1_data_filelist)
+    l1_data_filelist = check.fix_hdrs_for_tvac(l1_data_filelist, input_data_dir)
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
@@ -114,11 +96,12 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
 
     # Create a DetectorNoiseMaps object and save it
-    noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+    ext_hdr_dnm = ext_hdr.copy()
+    ext_hdr_dnm['B_O'] = 0.
+    ext_hdr_dnm['B_O_ERR'] = 0.
+    noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr_dnm,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_maps], output_dir=calibrations_dir, level_suffix="dnm_cal")
@@ -146,11 +129,6 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
-    # now get any default cal files that might be needed; if any reside in the folder that are not 
-    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
-    # means the ones above will be preferentially selected
-    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
-
     ####### Run the CorGI DRP walker script
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
@@ -168,6 +146,8 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
 
     # Load the generated bad pixel map image and master dark reference data
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
+
+    check.compare_to_mocks_hdrs(generated_bp_map_file)
 
     with fits.open(master_dark_ref) as hdulist:
         dark_ref_dat = hdulist[1].data
@@ -282,7 +262,8 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
         for file_path in l1_data_filelist
     ]
-    
+    l1_data_filelist = check.fix_hdrs_for_tvac(l1_data_filelist, input_data_dir)
+
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
 
@@ -332,10 +313,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
-    # now get any default cal files that might be needed; if any reside in the folder that are not 
-    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
-    # means the ones above will be preferentially selected
-    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+
     ####### Run the CorGI DRP walker script
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
@@ -349,7 +327,9 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         raise FileNotFoundError(f"No bad pixel map file found in {bp_map_outputdir}")
     generated_bp_map_file = generated_bp_map_files[0]
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
-
+    
+    check.compare_to_mocks_hdrs(generated_bp_map_file)
+    
     with fits.open(master_dark_ref) as hdulist:
         dark_ref_dat = hdulist[1].data
         diff = generated_bp_map_img.data - dark_ref_dat.data
@@ -393,7 +373,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
     # e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
-    e2edata_dir = '/Users/kevinludwick/Downloads/DRP E2E Test Files v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#
     outputdir = thisfile_dir
 
     # Argument parser setup

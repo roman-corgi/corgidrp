@@ -5,8 +5,7 @@ import pickle
 import warnings
 import numpy as np
 
-from corgidrp.darks import (calibrate_darks_lsq,
-            CalDarksLSQException)
+from corgidrp.darks import calibrate_darks_lsq, CalDarksLSQException
 from corgidrp.detector import slice_section, imaging_area_geom, imaging_slice
 from corgidrp.mocks import create_synthesized_master_dark_calib, rename_files_to_cgi_format
 from corgidrp.mocks import detector_areas_test as dat
@@ -206,7 +205,7 @@ def test_t_arr_unique():
     ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     for j in range(len(ds)):
         for d in ds[j].frames:
-            d.ext_hdr['EXPTIME'] = 4
+            d.ext_hdr['EXPTIME'] = 4.
     with pytest.raises(CalDarksLSQException):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, module='corgidrp.darks')
@@ -274,7 +273,9 @@ def test_weighting():
     s2 = 7
     for s in [s1, s2]:
         for i in range(7):
-            wrong_dataset.all_data[int(7*30*i + s*30):int(7*30*i + s*30+30)] = wrong_dataset.all_data[int(7*30*i + s*30):int(7*30*i + s*30+30)]/6  
+            #wrong_dataset.all_data[int(7*30*i + s*30):int(7*30*i + s*30+30)] = wrong_dataset.all_data[int(7*30*i + s*30):int(7*30*i + s*30+30)]/6  
+            for j in range(int(7*30*i + s*30), min(int(7*30*i + s*30+30), len(wrong_dataset))):
+                wrong_dataset[j].data = wrong_dataset[j].data/6
     wrong_noise_maps = calibrate_darks_lsq(wrong_dataset, detector_params, detector_regions=dat)
     wrong_CIC_image_map = imaging_slice('SCI', wrong_noise_maps.CIC_map, dat)
     assert(not np.isclose(np.mean(CIC_image_map),
@@ -282,7 +283,9 @@ def test_weighting():
     # make err for this sub-stack large, so weighting should make fit much better
     for s in [s1, s2]:
         for i in range(7):
-            wrong_dataset.all_err[int(7*30*i + s*30):int(7*30*i + s*30+30)] += 100000
+            #wrong_dataset.all_err[int(7*30*i + s*30):int(7*30*i + s*30+30)] += 100000
+            for j in range(int(7*30*i + s*30), min(int(7*30*i + s*30+30), len(wrong_dataset))):
+                wrong_dataset[j].err = wrong_dataset[j].err + 100000
     wrong_noise_maps_err = calibrate_darks_lsq(wrong_dataset, detector_params, detector_regions=dat)
     wrong_CIC_image_map_err = imaging_slice('SCI', wrong_noise_maps_err.CIC_map, dat)
     assert(np.isclose(np.mean(CIC_image_map),
@@ -293,8 +296,12 @@ def test_weighting():
     # (undo err adjustment I did above)
     for s in [s1, s2]:
         for i in range(7):
-            wrong_dataset.all_err[int(7*30*i + s*30):int(7*30*i + s*30+30)] -= 100000
-            wrong_dataset.all_dq[int(7*30*i + s*30):int(7*30*i + s*30+29), :, 1:] = 1 # leave one pixel unmasked so that the total masking Exception isn't raised
+            # wrong_dataset.all_err[int(7*30*i + s*30):int(7*30*i + s*30+30)] -= 100000
+            for j in range(int(7*30*i + s*30), min(int(7*30*i + s*30+30), len(wrong_dataset))):
+                wrong_dataset[j].err = wrong_dataset[j].err - 100000
+            # wrong_dataset.all_dq[int(7*30*i + s*30):int(7*30*i + s*30+29), :, 1:] = 1 # leave one pixel unmasked so that the total masking Exception isn't raised
+            for j in range(int(7*30*i + s*30), min(int(7*30*i + s*30+29), len(wrong_dataset))):
+                wrong_dataset[j].dq[:, 1:] = 1 # leave one pixel unmasked so that the total masking Exception isn't raised
     wrong_noise_maps_dq = calibrate_darks_lsq(wrong_dataset, detector_params, detector_regions=dat)
     wrong_CIC_image_map_dq = imaging_slice('SCI', wrong_noise_maps_dq.CIC_map, dat)
     # We artificially made err big above, which brought the mean CIC value much closer to the expected value.
@@ -310,7 +317,9 @@ def test_weighting():
     for s in [s1, s2]:
         for i in range(7):
             # restore original DQ values
-            wrong_dataset.all_dq[int(7*30*i + s*30):int(7*30*i + s*30+29), :, 1:] = 0
+            #wrong_dataset.all_dq[int(7*30*i + s*30):int(7*30*i + s*30+29), :, 1:] = 0
+            for j in range(int(7*30*i + s*30), min(int(7*30*i + s*30+29), len(wrong_dataset))):
+                wrong_dataset[j].dq[:, 1:] = 0
             # leave only 2 frames in the dataset for g6 and g7
             del_list.append([r for r in range(int(7*30*i + s*30), int(7*30*i + s*30+28))])
     del_list = np.array(del_list)[:-1].ravel() # [:-1] cuts off the frame numbers that went beyond the total number, which didn't matter in previous calls
