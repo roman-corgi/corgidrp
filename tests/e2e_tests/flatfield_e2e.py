@@ -251,6 +251,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     err_hdr['BUNIT'] = 'detected electron'
     ext_hdr['B_O'] = 0.
     ext_hdr['B_O_ERR'] = 0.
+    ext_hdr['MJDSRT'] -= 1. # make this earlier in time than the flat field header
+    ext_hdr['MJDEND'] -= 1.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)

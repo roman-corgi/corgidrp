@@ -1585,6 +1585,13 @@ class BadPixelMap(Image):
                 any_true_keywords=typical_bool_keywords,
                 invalid_keywords=typical_cal_invalid_keywords
             )
+
+            ## TODO: we shouldn't need to do this manually, and should be done in merge header
+            # but haven't figured out the bug, so we're hard coding it
+            if 'DESMEAR' in err_hdr:
+                if type(err_hdr['DESMEAR']) == int:
+                    err_hdr['DESMEAR'] = bool(err_hdr['DESMEAR'])
+
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
         else:
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
