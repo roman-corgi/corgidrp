@@ -798,12 +798,13 @@ def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Bad Pixel Map ===")
-    bpmap_data_files = glob.glob(os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits"))
-    bpmap_data_file = max(bpmap_data_files, key=os.path.getmtime)
+    #bpmap_data_file = glob.glob(os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits"))[0]
+    bpmap_data_file = glob.glob(os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "*_bpm_cal.fits"))[0]
+
     
     validate_cgi_filename(bpmap_data_file, 'bpm_cal')
     
-    generate_fits_excel_documentation(bpmap_data_file, os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bpm_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(bpmap_data_file, os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "bpm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):

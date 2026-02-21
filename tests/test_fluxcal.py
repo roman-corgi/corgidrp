@@ -423,8 +423,8 @@ def test_compute_spec_flux_ratio_single_rotation():
     comp_ds = make_1d_spec_image(comp_spec, spec_err, wave, pa_aper_deg='B',
                                  exp_time=10.0, col_cor=True)
 
-    host_ds.ext_hdr['FSMLOS'] = 0
-    comp_ds.ext_hdr['FSMLOS'] = 1
+    host_ds.ext_hdr['FSMLOS'] = "0"
+    comp_ds.ext_hdr['FSMLOS'] = "1"
 
     # Place the companion at a valid WV0 location 
     comp_ds.ext_hdr.setdefault('STARLOCX', 0.0)
@@ -508,8 +508,8 @@ def test_compute_spec_flux_ratio_weighted():
         comp_comb_wave,
     )
 
-    host_comb_image.ext_hdr['FSMLOS'] = 0
-    comp_comb_image.ext_hdr['FSMLOS'] = 1
+    host_comb_image.ext_hdr['FSMLOS'] = "0"
+    comp_comb_image.ext_hdr['FSMLOS'] = "1"
 
     # Apply core-throughput correction to the combined companion spectrum
     ct_cal = create_ct_cal(fwhm_mas=50)

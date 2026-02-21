@@ -17,6 +17,36 @@ import copy
 import corgidrp
 from datetime import datetime, timedelta, timezone
 
+typical_bool_keywords = ['DESMEAR', 'CTI_CORR']
+typical_cal_invalid_keywords = [
+                    # Primary header keywords
+                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    # Extension header keywords
+                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
+                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
+                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
+                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
+                ]
+
 class Dataset():
     """
     A sequence of data of the same kind. Can be indexed and looped over
@@ -821,6 +851,14 @@ class Dark(Image):
         
         if 'PC_STAT' not in self.ext_hdr:
             self.ext_hdr['PC_STAT'] = 'analog master dark'
+        if 'IS_SYNTH' not in self.ext_hdr:
+            if self.ext_hdr['PC_STAT'] == 'photon-counted master dark':
+                self.ext_hdr['IS_SYNTH'] = 0 # not relevant in this case
+            else:
+                # defaults to analog synthetic, which will standard choice over analog traditional 
+                # int flag for whether this dark is synthesized or not. 0 = no (analog traditional), 1 = yes (analog synthesized).
+                self.ext_hdr['IS_SYNTH'] = 1  
+
 
         if err_hdr is not None:
             self.err_hdr['BUNIT'] = 'detected electron'
@@ -1583,36 +1621,16 @@ class BadPixelMap(Image):
         if input_dataset is not None:
             pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
                 input_dataset,
-                any_true_keywords=['DESMEAR', 'CTI_CORR'],
-                invalid_keywords=[
-                    # Primary header keywords
-                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
-                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
-                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
-                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
-                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
-                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
-                    # Extension header keywords
-                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
-                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
-                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
-                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
-                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
-                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
-                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
-                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
-                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
-                    'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
-                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
-                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
-                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
-                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
-                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
-                ]
+                any_true_keywords=typical_bool_keywords,
+                invalid_keywords=typical_cal_invalid_keywords
             )
+
+            ## TODO: we shouldn't need to do this manually, and should be done in merge header
+            # but haven't figured out the bug, so we're hard coding it
+            if 'DESMEAR' in err_hdr:
+                if type(err_hdr['DESMEAR']) == int:
+                    err_hdr['DESMEAR'] = bool(err_hdr['DESMEAR'])
+
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
         else:
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
@@ -3739,8 +3757,30 @@ class MuellerMatrix(Image):
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this Mueller Matrix (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
-        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+            input_dataset,
+            invalid_keywords=[
+                'VISITID', 'CDMSVERS', 'FSWDVERS', 'FILETIME', 'PROGNUM', 'EXECNUM','CAMPAIGN', 'SEGMENT','OBSNUM',
+                'VISNUM', 'CPGSFILE', 'AUXFILE', 'TARGET', 'RA', 'DEC', 'EQUINOX', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 
+                'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 
+                'WBJ_1', 'WBJ_2', 'WBJ_3', 
+                'SCTSRT', 'SCTEND', 'FRMTYPE','ISHOWSFC','ISACQ','SPBAL','ISFLAT','SATSPOTS','STATUS', 'HVCBIAS',
+                'OPMODE','EXPTIME','EMGAIN_C','UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5',
+                'GAINTCAL','EXCAMT','LOCAMT','EMGAIN_A','KGAINPAR','CYCLES','LASTEXP','BLNKTIME',
+                'BLNKCYC','EXPCYC','OVEREXP','NOVEREXP','ISPC','PROXET','FCMLOOP','FCMPOS','FSMINNER','FSMLOS',
+                'FSMPRFL','FSMRSTR','FSMSG1','FSMSG2','FSMSG3','FSMX','FSMY','EACQ_ROW','EACQ_COL','SB_FP_DX',
+                'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY', 'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR','Z3AVG','Z3RES',
+                'Z3VAR', '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG','Z5RES', 'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG',
+                'Z8RES', 'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES','Z11AVG', 'Z11RES', 'Z12AVG', 'Z12RES', 'Z13AVG', 'Z13RES', 'Z14AVG',
+                'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
+                'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
+                'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ]
+        )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
@@ -3788,8 +3828,30 @@ class NDMuellerMatrix(Image):
         err_hdr (astropy.io.fits.Header): the error header (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
-        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+            input_dataset,
+            invalid_keywords=[
+                'VISITID', 'CDMSVERS', 'FSWDVERS', 'FILETIME', 'PROGNUM', 'EXECNUM','CAMPAIGN', 'SEGMENT','OBSNUM',
+                'VISNUM', 'CPGSFILE', 'AUXFILE', 'TARGET', 'RA', 'DEC', 'EQUINOX', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 
+                'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 
+                'WBJ_1', 'WBJ_2', 'WBJ_3', 
+                'SCTSRT', 'SCTEND', 'FRMTYPE','ISHOWSFC','ISACQ','SPBAL','ISFLAT','SATSPOTS','STATUS', 'HVCBIAS',
+                'OPMODE','EXPTIME','EMGAIN_C','UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5',
+                'GAINTCAL','EXCAMT','LOCAMT','EMGAIN_A','KGAINPAR','CYCLES','LASTEXP','BLNKTIME',
+                'BLNKCYC','EXPCYC','OVEREXP','NOVEREXP','ISPC','PROXET','FCMLOOP','FCMPOS','FSMINNER','FSMLOS',
+                'FSMPRFL','FSMRSTR','FSMSG1','FSMSG2','FSMSG3','FSMX','FSMY','EACQ_ROW','EACQ_COL','SB_FP_DX',
+                'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY', 'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR','Z3AVG','Z3RES',
+                'Z3VAR', '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG','Z5RES', 'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG',
+                'Z8RES', 'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES','Z11AVG', 'Z11RES', 'Z12AVG', 'Z12RES', 'Z13AVG', 'Z13RES', 'Z14AVG',
+                'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
+                'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
+                'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ]
+        )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new ND Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix

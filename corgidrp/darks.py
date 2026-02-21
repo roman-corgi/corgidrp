@@ -5,7 +5,7 @@ from astropy.io import fits
 
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
-from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset
+from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords, typical_bool_keywords
 
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
@@ -320,11 +320,18 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         err = total_err
         data = mean_frame
 
-    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset)
+    invalid_trad_drk_keywords = typical_cal_invalid_keywords 
+    # Remove specific keywords
+    for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE', 'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN', 'RN_ERR', 'KGAIN_ER', 'HVCBIAS']:
+        if key in invalid_trad_drk_keywords:
+            invalid_trad_drk_keywords.remove(key)
+    prihdr, exthdr, errhdr, dqhdr = check.merge_headers(dataset, invalid_keywords=invalid_trad_drk_keywords)
     
     exthdr['NAXIS1'] = data.shape[1]
     exthdr['NAXIS2'] = data.shape[0]
     exthdr['DATATYPE'] = 'Dark'
+    exthdr['PC_STAT'] = 'analog master dark'
+    exthdr['IS_SYNTH'] = 0 # flag for traditional master dark that is not synthesized from noise maps
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr, dqhdr)
     master_dark.ext_hdr['DRPNFILE'] = int(np.round(np.nanmean(unmasked_num)))
@@ -866,7 +873,12 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     CIC_image_map[CIC_image_map < 0] = 0
     DC_image_map[DC_image_map < 0] = 0
 
-    prihdr, exthdr, err_hdr, dq_hdr = check.merge_headers(dataset, invalid_keywords=['FTIMEUTC', 'PROXET', 'DATETIME', 'EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR'])
+    invalid_dnm_keywords = typical_cal_invalid_keywords + ['EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR', 'KGAIN_ER', 'HVCBIAS']
+    # Remove specific keywords
+    for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE']:
+        if key in invalid_dnm_keywords:
+            invalid_dnm_keywords.remove(key)
+    prihdr, exthdr, err_hdr, dq_hdr = check.merge_headers(dataset, invalid_keywords=invalid_dnm_keywords)
     if 'EMGAIN_M' in exthdr.keys():
         exthdr['EMGAIN_M'] = -999.
     exthdr['BUNIT'] = 'detected electron'
@@ -1024,6 +1036,8 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         exthdr['DATATYPE'] = 'Dark'
         exthdr['EMGAIN_C'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
         exthdr['EXPTIME'] = t
+        # synthesized master dark
+        exthdr['IS_SYNTH'] = 1 
         # one can check HISTORY to see that this Dark was synthesized from noise maps
         input_data = [noise_maps]
         md_data = Fd/g + t*Dd + Cd
