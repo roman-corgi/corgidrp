@@ -189,7 +189,8 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     mm_prihdr, mm_exthdr, _, _ = mocks.create_default_calibration_product_headers()
     system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
     nd_exthdr = mm_exthdr.copy()
-    nd_exthdr['FPAMNAME'] = 'ND225'
+    for dataset in input_dataset.frames:
+        dataset.ext_hdr['FPAMNAME'] = 'ND225'
     nd_mm_cal = data.NDMuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=nd_exthdr, input_dataset=input_dataset)
 
     mocks.rename_files_to_cgi_format(list_of_fits=[system_mm_cal], output_dir=calibrations_dir, level_suffix="mmx_cal")
