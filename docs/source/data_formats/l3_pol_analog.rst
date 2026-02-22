@@ -1,6 +1,6 @@
 .. _l3-label:
 
-L3 Data Product
+L3 Polarimetry Analog Data Product
 ========================================
 
 

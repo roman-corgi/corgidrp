@@ -1561,7 +1561,7 @@ if __name__ == "__main__":
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
     # e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2' #'/Users/kevinludwick/Documents/ssc_tvac_test/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
@@ -1572,215 +1572,34 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
+
     test_header_crossreference_e2e(e2edata_dir, outputdir)
-    debug = False
-    try:
-        test_l3_pol_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_nd_mueller_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_astrom_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_ct_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_ctmap_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_flat_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_polflat_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_fluxcal_pol_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_kgain_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l2a_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l2b_pc_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l3_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l3_spec_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l4_pol_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l4_spec_coron_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_l4_spec_noncoron_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_mueller_matrix_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_spec_linespread_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_dark_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_darks_comparison_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
-    try:
-        test_tpump_dataformat_e2e(e2edata_dir, outputdir)
-    except:
-        if debug:
-            pass
-        else:
-            raise Exception
+    test_astrom_dataformat_e2e(e2edata_dir, outputdir)
+    test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
+    test_ct_dataformat_e2e(e2edata_dir, outputdir)
+    test_ctmap_dataformat_e2e(e2edata_dir, outputdir)
+    test_flat_dataformat_e2e(e2edata_dir, outputdir)
+    test_polflat_dataformat_e2e(e2edata_dir, outputdir)
+    test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
+    test_fluxcal_pol_dataformat_e2e(e2edata_dir, outputdir)
+    test_kgain_dataformat_e2e(e2edata_dir, outputdir)
+    test_l2a_dataformat_e2e(e2edata_dir, outputdir)
+    test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
+    test_l2b_pc_dataformat_e2e(e2edata_dir, outputdir)
+    test_l3_dataformat_e2e(e2edata_dir, outputdir)
+    test_l3_spec_dataformat_e2e(e2edata_dir, outputdir)
+    test_l3_pol_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_pol_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_spec_coron_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4_spec_noncoron_dataformat_e2e(e2edata_dir, outputdir)
+    test_mueller_matrix_dataformat_e2e(e2edata_dir, outputdir)
+    test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
+    test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
+    test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
+    test_nd_mueller_dataformat_e2e(e2edata_dir, outputdir)
+    test_spec_linespread_dataformat_e2e(e2edata_dir, outputdir)
+    test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
+    test_dark_dataformat_e2e(e2edata_dir, outputdir)
+    test_tpump_dataformat_e2e(e2edata_dir, outputdir)

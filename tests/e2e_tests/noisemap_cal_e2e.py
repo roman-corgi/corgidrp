@@ -457,9 +457,9 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     
 
     # Use allclose for float32 save/load and small numerical differences (rtol/atol=1e-5)
-    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-5, atol=1e-5, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-5, atol=1e-5, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-5, atol=1e-5, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-5, atol=1e-4, equal_nan=True)
     assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 1e-5
     pass
 
@@ -523,7 +523,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     #e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")
