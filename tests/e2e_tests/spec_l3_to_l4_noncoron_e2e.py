@@ -59,6 +59,11 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
             e2edata_path,
             header_template=create_default_L3_headers,
         )
+        # Fix dtypes
+        for file in saved_files:
+            with fits.open(file, mode='update') as hdul:
+                if 'ISPC' in hdul[1].header:
+                    hdul[1].header['ISPC'] = int(hdul[1].header['ISPC'])
         l3_dataset_with_filenames = Dataset(saved_files)
     else:
         logger.info("No existing input files found. Generating new input files...")

@@ -204,8 +204,9 @@ def test_fluxcal_file():
 
     fluxcal_fac_file = FluxcalFactor(fluxcal_filepath)
     assert fluxcal_fac_file.filter == '3C'
-    assert fluxcal_fac_file.fluxcal_fac == fluxcal_factor
-    assert fluxcal_fac_file.fluxcal_err == fluxcal_factor_error
+    # use isclose to deal with comparing 64 bit to 32 bit data
+    assert np.isclose(fluxcal_fac_file.fluxcal_fac, fluxcal_factor, rtol=1e-6)
+    assert np.isclose(fluxcal_fac_file.fluxcal_err, fluxcal_factor_error, rtol=1e-6)
     # JM: I moved this out of the fluxcal class and into fluxcal.py because, depending on the method you use to 
     # make the fluxcal factor, the BUNIT will vary. Doing a mock without running fluxcal methods won't update BUNIT
     #assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'

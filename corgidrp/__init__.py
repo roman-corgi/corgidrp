@@ -41,7 +41,7 @@ def create_config_dir():
         config["DATA"] = {}
         config["DATA"]["track_individual_errors"] = "False"
         config["DATA"]["chunk_size"] = "200"
-        config["DATA"]["image_dtype"] = "64"
+        config["DATA"]["image_dtype"] = "32"
         config["DATA"]["dq_dtype"] = "16"
         config["WALKER"] = {}
         config["WALKER"]["skip_missing_cal_steps"] = "False"
@@ -77,7 +77,7 @@ def update_pipeline_settings():
     default_cal_dir = config.get("PATH", "default_calibs", fallback=None) # path to default calibrations directory
     track_individual_errors = _bool_map[config.get("DATA", "track_individual_errors", fallback='false').lower()] # save each individual error component separately?
     chunk_size = int(float(config.get("DATA", "chunk_size", fallback="200"))) # number of frames to process at a time if pocessing in chunks for RAM conservation
-    image_dtype = image_datatype_map[config.get("DATA", "image_dtype", fallback="64")] # bit size for image and error data
+    image_dtype = image_datatype_map[config.get("DATA", "image_dtype", fallback="32")] # bit size for image and error data
     dq_dtype = dq_datatype_map[config.get("DATA", "dq_dtype", fallback="16")] # bit size for DQ data
     skip_missing_cal_steps = _bool_map[config.get("WALKER", "skip_missing_cal_steps", fallback='false').lower()] # skip steps, instead of crashing, when suitable calibration file cannot be found 
     jit_calib_id = _bool_map[config.get("WALKER", "jit_calib_id", fallback='false').lower()] # AUTOMATIC calibration files identified right before the execution of a step, rather than when recipe is first generated

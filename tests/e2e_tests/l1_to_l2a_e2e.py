@@ -172,7 +172,8 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
         
         diff = img.data - tvac_dat
 
-        assert np.all(np.abs(diff) < 1e-5)
+        # Use allclose for floating point comparison to account for bit depth differences
+        assert np.allclose(img.data, tvac_dat, rtol=1e-6, atol=1e-6)
         
         check.compare_to_mocks_hdrs(new_filename)
         

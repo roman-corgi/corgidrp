@@ -358,6 +358,9 @@ class Image():
                 first_hdu = hdulist.pop(0)
                 self.ext_hdr = first_hdu.header
                 self.data = first_hdu.data
+                # Upcast float data to float64 for processing precision
+                if self.data is not None and np.issubdtype(self.data.dtype, np.floating):
+                    self.data = self.data.astype(np.float64)
 
                 #A list of extensions
                 self.hdu_names = [hdu.name for hdu in hdulist]
@@ -379,6 +382,9 @@ class Image():
                     err_hdu = hdulist.pop("ERR")
                     self.err = err_hdu.data
                     self.err_hdr = err_hdu.header
+                    # Upcast float err to float64 for processing precision
+                    if self.err is not None and np.issubdtype(self.err.dtype, np.floating):
+                        self.err = self.err.astype(np.float64)
                     if self.err.ndim != 1 and self.err.ndim == self.data.ndim:
                         self.err = self.err.reshape((1,)+self.err.shape)
                 else:
@@ -399,9 +405,13 @@ class Image():
 
                 if input_hdulist is not None:
                     this_hdu_list = [hdu.copy() for hdu in input_hdulist]
-                else: 
+                else:
                     #After the data, err and dqs are popped out, the rest of the hdulist is stored in hdu_list
                     this_hdu_list = [hdu.copy() for hdu in hdulist]
+                # Upcast float data in extra HDUs to float64 for processing precision
+                for hdu in this_hdu_list:
+                    if hdu.data is not None and np.issubdtype(hdu.data.dtype, np.floating):
+                        hdu.data = hdu.data.astype(np.float64)
                 self.hdu_list = fits.HDUList(this_hdu_list)
                 
 
@@ -429,9 +439,15 @@ class Image():
                     self.err = np.array([0.])
             elif hasattr(data_or_filepath, "__len__"):
                 self.data = data_or_filepath
+                # Upcast float data to float64 for processing precision
+                if hasattr(self.data, 'dtype') and np.issubdtype(self.data.dtype, np.floating):
+                    self.data = self.data.astype(np.float64)
                 if err is not None:
                     if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
-                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(np.shape(err)[-self.data.ndim:], self.data.shape))
+                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
+                    # Upcast float err to float64 for processing precision
+                    if hasattr(err, 'dtype') and np.issubdtype(err.dtype, np.floating):
+                        err = err.astype(np.float64)
                     #we want to have a 3 dim error array
                     if err.ndim == self.data.ndim + 1:
                         self.err = err
@@ -487,7 +503,7 @@ class Image():
         self.dq_hdr["EXTNAME"] = "DQ"
 
         # discard individual errors if we aren't tracking them but multiple error terms are passed in
-        if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
+        if self.err is not None and not corgidrp.track_individual_errors and self.err.shape[0] > 1:
             num_errs = self.err.shape[0] - 1
             # delete keywords specifying the error of each individual slice
             for i in range(num_errs):
@@ -558,7 +574,10 @@ class Image():
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
 
+        # Cast data in additional HDUs to the configured dtype before appending
         for hdu in self.hdu_list:
+            if hdu.data is not None:
+                hdu.data = hdu.data.astype(corgidrp.image_dtype, copy=False)
             hdulist.append(hdu)
 
         with warnings.catch_warnings():
@@ -1050,6 +1069,8 @@ class LineSpread(Image):
             with fits.open(data_or_filepath) as hdulist:
                 #gauss par is in FITS extension
                 self.gauss_par = hdulist[2].data
+                if self.gauss_par is not None and np.issubdtype(self.gauss_par.dtype, np.floating):
+                    self.gauss_par = self.gauss_par.astype(np.float64)
                 self.gauss_hdr = hdulist[2].header
             
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'LineSpread':
@@ -1083,6 +1104,14 @@ class LineSpread(Image):
 
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
+
+        # Cast data to configured dtype before saving
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+
+        # Cast gauss_par to configured dtype before saving
+        if self.gauss_par is not None:
+            self.gauss_par = self.gauss_par.astype(corgidrp.image_dtype, copy=False)
 
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
@@ -1475,6 +1504,8 @@ class KGain(Image):
                 self.ptc_hdr = hdulist[3].header
                 # ptc data is in FITS extension
                 self.ptc = hdulist[3].data
+                if self.ptc is not None and np.issubdtype(self.ptc.dtype, np.floating):
+                    self.ptc = self.ptc.astype(np.float64)
         
         else:
             if ptc is not None:
@@ -1549,6 +1580,14 @@ class KGain(Image):
 
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
+
+        # use the appropriate bit depth as set by the config file
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+        if self.err is not None:
+            self.err = self.err.astype(corgidrp.image_dtype, copy=False)
+        if self.ptc is not None:
+            self.ptc = self.ptc.astype(corgidrp.image_dtype, copy=False)
 
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
@@ -1985,9 +2024,26 @@ class AstrometricCalibration(Image):
 
         # check that this is actually an AstrometricCalibration file that was read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
-            raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
-        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'     
-    
+            raise ValueError("File that was loaded was not an AstrometricCalibration file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
+
+    def save(self, filedir=None, filename=None):
+        """
+        Save to disk, keeping data as float64 since astrometric coordinates
+        require more than float32 precision.
+
+        Args:
+            filedir (str): filedir to save to
+            filename (str): filepath to save to
+        """
+        # Temporarily override image_dtype to preserve float64 for this class
+        original_dtype = corgidrp.image_dtype
+        corgidrp.image_dtype = np.float64
+        try:
+            super().save(filedir=filedir, filename=filename)
+        finally:
+            corgidrp.image_dtype = original_dtype
+
 class TrapCalibration(Image):
     """
 
@@ -2338,8 +2394,12 @@ class SlitTransmission(Image):
             with fits.open(data_or_filepath) as hdulist:
                 #x/y offset is in FITS extension
                 self.x_offset = hdulist["XOFF"].data
-                self.xoff_hdr = hdulist["XOFF"].header    
+                if self.x_offset is not None and np.issubdtype(self.x_offset.dtype, np.floating):
+                    self.x_offset = self.x_offset.astype(np.float64)
+                self.xoff_hdr = hdulist["XOFF"].header
                 self.y_offset = hdulist["YOFF"].data
+                if self.y_offset is not None and np.issubdtype(self.y_offset.dtype, np.floating):
+                    self.y_offset = self.y_offset.astype(np.float64)
                 self.yoff_hdr = hdulist["YOFF"].header    
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SlitTransmission':
             raise ValueError("This file is not a valid SlitTransmission calibration.")
@@ -2410,6 +2470,14 @@ class SlitTransmission(Image):
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
+        # recast data to the appropriate bit depth as set by the pipeline settings
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+        if self.x_offset is not None:
+            self.x_offset = self.x_offset.astype(corgidrp.image_dtype, copy=False)
+        if self.y_offset is not None:
+            self.y_offset = self.y_offset.astype(corgidrp.image_dtype, copy=False)
+
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
@@ -2423,7 +2491,7 @@ class SlitTransmission(Image):
             warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
             hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
-        
+
 class FpamFsamCal(Image):
     """
     Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.

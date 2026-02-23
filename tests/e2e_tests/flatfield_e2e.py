@@ -99,10 +99,11 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
-    # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output")
-
-    os.makedirs(flat_outputdir, exist_ok=True)
+    # clear and recreate output directory
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e/flat_neptune_output")
+    if os.path.exists(flat_outputdir):
+        shutil.rmtree(flat_outputdir)
+    os.makedirs(flat_outputdir)
     flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
     os.makedirs(flat_mock_inputdir, exist_ok=True)  
     
@@ -349,10 +350,11 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
 
-    # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_uranus_output")
-
-    os.makedirs(flat_outputdir, exist_ok=True)
+    # clear and recreate output directory
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e/flat_uranus_output")
+    if os.path.exists(flat_outputdir):
+        shutil.rmtree(flat_outputdir)
+    os.makedirs(flat_outputdir)
     flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
     os.makedirs(flat_mock_inputdir, exist_ok=True)  
     
@@ -536,7 +538,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     
     outputdir = thisfile_dir
-    e2edata_dir =  "/Users/polaris/Roman_CGI_flatfielding/pol_flatfielding/corgi/E2E_Test_Data"
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the l2b-> Flatfield end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
