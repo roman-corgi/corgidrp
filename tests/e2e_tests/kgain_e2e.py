@@ -189,8 +189,9 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     print ("error of kgain:", kgain.error)
     print ("error of readnoise:", kgain.ext_hdr["RN_ERR"])
 
-    assert np.abs(diff_kgain) == 0
-    assert np.abs(diff_readnoise) == 0 
+    # Update tolerance to account for float32 precision differences
+    assert np.abs(diff_kgain) < 1e-6
+    assert np.abs(diff_readnoise) < 1e-6 
 
     check.compare_to_mocks_hdrs(kgain_file)
 

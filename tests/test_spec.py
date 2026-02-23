@@ -909,16 +909,17 @@ def test_linespread_function():
     line_spread.save(filedir = output_dir)
     
     #load the calibration fits file and check whether the content is unchanged
+    # use allclose/ isclose to deal with 64 bit vs 32 bit precision 
     line_spread_load = LineSpread(os.path.join(output_dir, line_spread.filename))
-    assert np.array_equal(line_spread_load.gauss_par, np.array([line_spread.amplitude, line_spread.mean_wave, line_spread.fwhm, line_spread.amp_err, line_spread.wave_err, line_spread.fwhm_err]))
-    assert np.array_equal(line_spread.flux_profile, line_spread_load.flux_profile)
-    assert np.array_equal(line_spread.wavlens, line_spread_load.wavlens)
-    assert line_spread_load.amplitude == line_spread.amplitude
-    assert line_spread_load.fwhm == line_spread.fwhm
-    assert line_spread_load.mean_wave == line_spread.mean_wave
-    assert line_spread_load.amp_err == line_spread.amp_err
-    assert line_spread_load.fwhm_err == line_spread.fwhm_err
-    assert line_spread_load.wave_err == line_spread.wave_err
+    assert np.allclose(line_spread_load.gauss_par, np.array([line_spread.amplitude, line_spread.mean_wave, line_spread.fwhm, line_spread.amp_err, line_spread.wave_err, line_spread.fwhm_err]), rtol=1e-6)
+    assert np.allclose(line_spread.flux_profile, line_spread_load.flux_profile, rtol=1e-6)
+    assert np.allclose(line_spread.wavlens, line_spread_load.wavlens, rtol=1e-6)
+    assert np.isclose(line_spread_load.amplitude, line_spread.amplitude, rtol=1e-6)
+    assert np.isclose(line_spread_load.fwhm, line_spread.fwhm, rtol=1e-6)
+    assert np.isclose(line_spread_load.mean_wave, line_spread.mean_wave, rtol=1e-6)
+    assert np.isclose(line_spread_load.amp_err, line_spread.amp_err, rtol=1e-6)
+    assert np.isclose(line_spread_load.fwhm_err, line_spread.fwhm_err, rtol=1e-6)
+    assert np.isclose(line_spread_load.wave_err, line_spread.wave_err, rtol=1e-6)
     
     #add a bad pixel and check the result
     bad_dataset = output_dataset.copy()
@@ -1379,7 +1380,7 @@ def test_slit_trans():
         corrected_ds = l4_to_tda.apply_slit_transmission(spec_slit_ds, slit_trans)
         spec_out = corrected_ds[0].hdu_list['SPEC'].data
         assert corrected_ds[0].hdu_list['SPEC'].header['SLITCOR'] == True
-        assert corrected_ds[0].hdu_list['SPEC'].header['SLITFAC'] == np.nanmean(slit_trans.data[0])
+        assert np.isclose(corrected_ds[0].hdu_list['SPEC'].header['SLITFAC'], np.nanmean(slit_trans.data[0]), rtol=1e-6)
         assert np.allclose(spec_in/spec_out, slit_trans.data[0])
 
 def test_star_pos():
@@ -1495,11 +1496,12 @@ def test_spec_flux_cal():
     #test the saving and loading of the cal file
     spec_fluxcal.save(filedir = output_dir, filename = "spec_flux_cal_test.fits")
     specflux_load = SpecFluxCal(os.path.join(output_dir, "spec_flux_cal_test.fits"))
-    assert np.array_equal(specflux_load.specflux, spec)
-    assert np.array_equal(specflux_load.wavelength, spec_wave)
-    assert np.array_equal(specflux_load.specflux_err, spec_err)
-    assert np.array_equal(specflux_load.wave_err, wave_err)
-    assert np.array_equal(specflux_load.specflux_dq, spec_dq[0])
+    # Use allclose for float32 precision differences after save/load
+    assert np.allclose(specflux_load.specflux, spec, rtol=1e-6, atol=1e-8)
+    assert np.allclose(specflux_load.wavelength, spec_wave, rtol=1e-6, atol=1e-8)
+    assert np.allclose(specflux_load.specflux_err, spec_err, rtol=1e-6, atol=1e-8)
+    assert np.allclose(specflux_load.wave_err, wave_err, rtol=1e-6, atol=1e-8)
+    assert np.array_equal(specflux_load.specflux_dq, spec_dq[0])  # DQ is integer, use exact
     
     #test the absolute spectral flux calibration
     calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")

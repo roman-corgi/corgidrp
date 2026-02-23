@@ -118,9 +118,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Check DRP CT cal file and mock one coincide
     # Remember that DRP divides by exposure time to go from L2b to L3 and
     # generate_ct_cal() does not, so we need to divide by EXPTIME the off-axis PSFs
-    assert ct_cal_drp.data == pytest.approx(ct_cal_mock.data/exp_time_s, abs=1e-12)
-    assert ct_cal_drp.ct_excam == pytest.approx(ct_cal_mock.ct_excam, abs=1e-12)
-    assert np.all(ct_cal_drp.err == ct_cal_mock.err)
+    # Use allclose for floating point comparison to account for bit depth differences
+    assert np.allclose(ct_cal_drp.data, ct_cal_mock.data/exp_time_s, rtol=1e-6, atol=1e-8)
+    assert np.allclose(ct_cal_drp.ct_excam, ct_cal_mock.ct_excam, rtol=1e-6, atol=1e-8)
+    assert np.allclose(ct_cal_drp.err, ct_cal_mock.err, rtol=1e-6, atol=1e-8)
     assert np.all(ct_cal_drp.dq == ct_cal_mock.dq)
     assert np.all(ct_cal_drp.ct_fpam == ct_cal_mock.ct_fpam)
     assert np.all(ct_cal_drp.ct_fsam == ct_cal_mock.ct_fsam)
@@ -200,10 +201,10 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     ct_cal_sim = corethroughput.generate_ct_cal(dataset_normed)
 
     # Asserts
-
-    assert ct_cal_drp.data == pytest.approx(ct_cal_sim.data, abs=1e-12)
-    assert ct_cal_drp.ct_excam == pytest.approx(ct_cal_sim.ct_excam, abs=1e-12)
-    assert np.all(ct_cal_drp.err == ct_cal_sim.err)
+    # Use allclose for floating point comparison to account for bit depth differences
+    assert np.allclose(ct_cal_drp.data, ct_cal_sim.data, rtol=1e-6, atol=1e-8)
+    assert np.allclose(ct_cal_drp.ct_excam, ct_cal_sim.ct_excam, rtol=1e-6, atol=1e-8)
+    assert np.allclose(ct_cal_drp.err, ct_cal_sim.err, rtol=1e-6, atol=1e-8)
     assert np.all(ct_cal_drp.dq == ct_cal_sim.dq)
     assert np.all(ct_cal_drp.ct_fpam == ct_cal_sim.ct_fpam)
     assert np.all(ct_cal_drp.ct_fsam == ct_cal_sim.ct_fsam)

@@ -132,11 +132,12 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     ####### Run the CorGI DRP walker script
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
-    # Clean up the calibration database entries
-    this_caldb.remove_entry(noise_maps)
-    this_caldb.remove_entry(flat)
-    this_caldb.remove_entry(master_dark)
-    this_caldb.remove_entry(bp_map)
+    # Clean up the calibration database entries (entry may be missing)
+    for entry in (noise_maps, flat, master_dark, bp_map):
+        try:
+            this_caldb.remove_entry(entry)
+        except ValueError:
+            pass
 
     # Load the generated bad pixel map file from the output directory
     generated_bp_map_files = glob.glob(os.path.join(bp_map_outputdir, '*_bpm_cal.fits'))
