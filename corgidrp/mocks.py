@@ -3879,6 +3879,7 @@ def create_psfsub_dataset(n_sci,n_ref,pa_aper_degs,darkhole_scifiles=None,darkho
         exthdr['EACQ_COL'] = psfcentx
         exthdr['EACQ_ROW'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
+        exthdr['NORTHANG'] = pa_aper_degs[i]
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
         
         # Add WCS header info, if provided

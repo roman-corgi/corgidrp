@@ -1832,7 +1832,7 @@ class AstrometricCalibration(Image):
                 invalid_keywords=['VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
                     'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
                     'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
-                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', #'PA_APER',
                     'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
                     'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
                     'STAR1','STAR2','STAR3','STAR4','STAR5'] + ['STAR{0}'.format(i) for i in range(6, 1000)],
@@ -3263,7 +3263,7 @@ class PyKLIPDataset(pyKLIP_Data):
             input_all += [data]
             centers_all += [centers]
             filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
-            PAs_all += [phead['PA_APER']] * NINTS
+            PAs_all += [shead['NORTHANG']] * NINTS   ##we quietly change PAs_all to use NORTHANG
 
             # Get center wavelengths
             try:

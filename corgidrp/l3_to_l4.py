@@ -657,7 +657,7 @@ def do_psf_subtraction(input_dataset,
         # the first frame in collapsed dataset seems to contain the correct WCS, so
         # propagate that one
         first_frame_keywords = ['MJDSRT', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
-                                'CRPIX1', 'CRPIX2'],
+                                'CRPIX1', 'CRPIX2','NORTHANG'],
         invalid_keywords=[
             # Primary header keywords
             'FILETIME', 'PA_V3', 'PA_APER',
@@ -844,9 +844,9 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
             rotation_angle = -np.rad2deg(np.arctan2(-sci_hd['CD1_2'], sci_hd['CD2_2'])) # Compute North Position Angle from the WCS solutions
 
         else:
-            print('WARNING: using "PA_APER" instead of WCS to estimate the north position angle')
-            # read the PA_APER angle parameter, assuming this info is recorded in the primary header as requested
-            rotation_angle = processed_data.pri_hdr['PA_APER']
+            print('WARNING: using "NORTHANG" instead of WCS to estimate the north position angle')
+            # read the NORTHANG angle parameter, assuming this info is recorded in the extended header as requested
+            rotation_angle = processed_data.ext_hdr['NORTHANG']
 
         #Make 2D WCS header for derotation. 
         sci_hd_2D = sci_hd.copy()
@@ -1776,7 +1776,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     # average/delete header keywords as L4 involves combination of multiple frames
     pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
     last_frame_keywords=['VISITID', 'MJDEND'],
-    first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
+    first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2','NORTHANG'],
     deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
     invalid_keywords=[
                     #Primary header keywords
