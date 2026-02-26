@@ -670,8 +670,8 @@ def test_psf_sub_badmode():
 
 if __name__ == '__main__':  
     test_pyklipdata_ADI()
-    # test_pyklipdata_RDI()
-    # test_pyklipdata_ADIRDI()
+    test_pyklipdata_RDI()
+    test_pyklipdata_ADIRDI()
     # test_pyklipdata_badtelescope()
     # test_pyklipdata_badinstrument()
     # test_pyklipdata_badcfamname()

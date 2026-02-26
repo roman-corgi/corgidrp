@@ -329,7 +329,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     # Add trap pumping specific keywords that aren't in the RST
     exthdr['TPINJCYC'] = 0               # Number of cycles for TPUMP injection
     exthdr['TPOSCCYC'] = 0               # Number of cycles for charge oscillation (TPUMP)
-    exthdr['TPTAU'] = 0                  # Length of one step in a trap pumping scheme (microseconds)
+    exthdr['TPTAU'] = 0.                 # Length of one step in a trap pumping scheme (microseconds)
     exthdr['TPSCHEM1'] = 0               # Number of cycles for TPUMP pumping SCHEME_1
     exthdr['TPSCHEM2'] = 0               # Number of cycles for TPUMP pumping SCHEME_2
     exthdr['TPSCHEM3'] = 0               # Number of cycles for TPUMP pumping SCHEME_3
@@ -379,7 +379,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to the frame
     exthdr['IS_BAD']        = False         # Whether frame is bad
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
-    exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
+    exthdr['FWC_EM_E']      = 0.0           # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
     exthdr['RECIPE']        = 'Mock'        # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
@@ -416,6 +416,13 @@ def create_default_L2a_headers(arrtype="SCI"):
     biashdr['PCOUNT']      = 0               # Number of parameters (FITS keyword)
     biashdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     biashdr['EXTNAME']     = 'BIAS'           # Extension name
+
+    deleted_after_l1 = ['SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    for key in deleted_after_l1:
+        if key in prihdr:
+            del prihdr[key]
+        if key in exthdr:
+            del exthdr[key]
 
     return prihdr, exthdr, errhdr, dqhdr, biashdr
 
@@ -460,7 +467,7 @@ def create_default_L2a_TrapPump_headers(arrtype="SCI"):
     exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to the frame
     exthdr['IS_BAD']        = False         # Whether frame is bad
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
-    exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
+    exthdr['FWC_EM_E']      = 0.0           # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
     exthdr['RECIPE']        = 'Mock'        # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
@@ -530,14 +537,14 @@ def create_default_L2b_headers(arrtype="SCI"):
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
-    exthdr['RN']            = 100.0            # Read noise
-    exthdr['RN_ERR']        = ''            # Read noise error
-    exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
+    exthdr['RN']            = -999.0        # Read noise
+    exthdr['RN_ERR']        = -999.0        # Read noise error
+    exthdr['FRMSEL01'] = (1., "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
     exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
-    exthdr['FRMSEL03'] = (None, "tip rms (Z2VAR) threshold") # record selection criteria
-    exthdr['FRMSEL04'] = (None, "tilt rms (Z3VAR) threshold") # record selection criteria
-    exthdr['FRMSEL05'] = (None, "tip bias (Z2RES) threshold") # record selection criteria
-    exthdr['FRMSEL06'] = (None, "tilt bias (Z3RES) threshold") # record selection criteria
+    exthdr['FRMSEL03'] = (-999., "tip rms (Z2VAR) threshold") # record selection criteria
+    exthdr['FRMSEL04'] = (-999., "tilt rms (Z3VAR) threshold") # record selection criteria
+    exthdr['FRMSEL05'] = (-999., "tip bias (Z2RES) threshold") # record selection criteria
+    exthdr['FRMSEL06'] = (-999., "tilt bias (Z3RES) threshold") # record selection criteria
     exthdr.add_history("Marked 0 frames as bad: ") # history message tracking bad frames
 
     errhdr['BUNIT']         = 'photoelectron'   # Unit of error map
@@ -580,8 +587,8 @@ def create_default_L2b_TrapPump_headers(arrtype="SCI"):
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
-    exthdr['RN']            = 0.0           # Read noise
-    exthdr['RN_ERR']        = ''            # Read noise error
+    exthdr['RN']            = -999.         # Read noise
+    exthdr['RN_ERR']        = -999.         # Read noise error
     exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
     exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
     exthdr['FRMSEL03'] = (None, "tip rms (Z2VAR) threshold") # record selection criteria
@@ -628,18 +635,18 @@ def create_default_L3_headers(arrtype="SCI"):
     prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l3_.fits"
     
     exthdr['BUNIT'] = 'photoelectron/s'   # Physical unit of the array (brightness unit)
-    exthdr['CD1_1'] = 0
-    exthdr['CD1_2'] = 0
-    exthdr['CD2_1'] = 0
-    exthdr['CD2_2'] = 0
-    exthdr['CRPIX1'] = 0
-    exthdr['CRPIX2'] = 0
+    exthdr['CD1_1'] = 0.
+    exthdr['CD1_2'] = 0.
+    exthdr['CD2_1'] = 0.
+    exthdr['CD2_2'] = 0.
+    exthdr['CRPIX1'] = 0. #could be fractional pixel value
+    exthdr['CRPIX2'] = 0. #could be fractional pixel value
     exthdr['CTYPE1'] = 'RA---TAN'
     exthdr['CTYPE2'] = 'DEC--TAN'
-    exthdr['CDELT1'] = 0
-    exthdr['CDELT2'] = 0
-    exthdr['CRVAL1'] = 0
-    exthdr['CRVAL2'] = 0
+    exthdr['CDELT1'] = 0.
+    exthdr['CDELT2'] = 0.
+    exthdr['CRVAL1'] = 0.
+    exthdr['CRVAL2'] = 0.
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
@@ -681,10 +688,10 @@ def create_default_L4_headers(arrtype="SCI"):
     exthdr['PSFSUB']        = ''            # PSF subtraction algorithm used (coronagraphic only)
     exthdr['PYKLIPV']       = ''            # pyKLIP version used (coronagraphic only)
     exthdr['KLMODE0']       = ''            # Number of KL modes used in the Nth slice (coronagraphic only)
-    exthdr['STARLOCX']      = 512           # X location of the of the target star (coronagraphic only)
-    exthdr['STARLOCY']      = 512           # Y location of the of the target star (coronagraphic only)
-    exthdr['DETPIX0X']      = ''            #  Position of the 0th column of the data array on the 1024x1024 EXCAM detector
-    exthdr['DETPIX0Y']      = ''            # Position of the 0th row of the data array on the 1024x1024 EXCAM detector 
+    exthdr['STARLOCX']      = 512.          # X location of the of the target star (coronagraphic only)
+    exthdr['STARLOCY']      = 512.          # Y location of the of the target star (coronagraphic only)
+    exthdr['DETPIX0X']      = 0             #  Position of the 0th column of the data array on the 1024x1024 EXCAM detector
+    exthdr['DETPIX0Y']      = 0             # Position of the 0th row of the data array on the 1024x1024 EXCAM detector 
     exthdr['CTCALFN']       = ''            # Core throughput linked file for calibration
     exthdr['FLXCALFN']      = ''            # Abs flux file linked for calibration
     exthdr['DATALVL']       = 'L4'          # Data level (e.g., 'L1', 'L2a', 'L2b')
@@ -1475,9 +1482,9 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     # TO DO: Determine what level this image should be
     prhd, exthd, errhdr, dqhdr, biashdr= create_default_L2b_headers()
     # Record actual commanded EM
-    exthd['EMGAIN_C'] = emgain
+    exthd['EMGAIN_C'] = float(emgain)
     # Record actual exposure time
-    exthd['EXPTIME'] = time
+    exthd['EXPTIME'] = float(time)
     # Mock error maps
     err = np.ones([1200,2200]) * 0.5
     dq = np.zeros([1200,2200], dtype = np.uint16)
@@ -1550,8 +1557,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
 
-    new_hdr['CDELT1'] = (platescale * 0.001) / 3600
-    new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+    new_hdr['CDELT1'] = (platescale * 0.001) / 3600.
+    new_hdr['CDELT2'] = (platescale * 0.001) / 3600.
 
     new_hdr['CRVAL1'] = target[0] + offset[0]
     new_hdr['CRVAL2'] = target[1] + offset[1]
@@ -1611,8 +1618,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         new_hdr['CTYPE1'] = 'RA---TAN'
         new_hdr['CTYPE2'] = 'DEC--TAN'
         
-        new_hdr['CDELT1'] = (platescale * 0.001) / 3600
-        new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+        new_hdr['CDELT1'] = (platescale * 0.001) / 3600.
+        new_hdr['CDELT2'] = (platescale * 0.001) / 3600.
         
         new_hdr['CRVAL1'] = dither_target_ras[i] + offset[0]
         new_hdr['CRVAL2'] = dither_target_decs[i] + offset[1]
@@ -2706,7 +2713,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     # in the function above somehow affects the content of the file
     rename_files_to_cgi_format(pattern=os.path.join(output_dir, "*K*Scheme_*TPUMP*.fits"), level_suffix="l1")
 
-def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0, cic=0.01, dark_current=8.33e-4, read_noise=100., bias=20000, qe=0.9):
+def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7., exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0, cic=0.01, dark_current=8.33e-4, read_noise=100., bias=20000, qe=0.9):
     '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
     Used for unit tests for photon counting.  
     
@@ -2797,7 +2804,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.ext_hdr['EMGAIN_C'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
-        frame.ext_hdr['RN'] = 100.0
+        frame.ext_hdr['RN'] = read_noise
         frame.ext_hdr['KGAINPAR'] = kgain
         frame.pri_hdr['PHTCNT'] = "True"
         frame.ext_hdr['ISPC'] = 1
@@ -2820,7 +2827,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['EMGAIN_C'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
-        frame_dark.ext_hdr['RN'] = 100.0
+        frame_dark.ext_hdr['RN'] = read_noise
         frame_dark.ext_hdr['KGAINPAR'] = kgain
         frame_dark.pri_hdr['PHTCNT'] = "True"
         frame_dark.ext_hdr['ISPC'] = 1
@@ -2846,7 +2853,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         bad_frame.filename = f'cgi_{visitid}_{time_str}_l1_.fits'
         frame_e_list.append(bad_frame)
         bad_dark_frame = frame_dark.copy()
-        bad_dark_frame.ext_hdr['OVEREXP'] = True
+        bad_dark_frame.ext_hdr['OVEREXP'] = 1
         # Generate CGI filename for bad dark frames
         time_offset = datetime.timedelta(seconds=Ndarks + i + 1000)  # Offset to avoid conflicts
         unique_time = base_time + time_offset
@@ -2998,8 +3005,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
     exthdr['CTYPE2']   = 'DEC--TAN'
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600.  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
     exthdr['BUNIT'] = 'photoelectron'
@@ -3160,13 +3167,13 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
     exthdr['FPAM_V']   = 6124.9
     exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
     exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
-    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['EXPTIME']  = float(exptime)            # Ensure exptime is defined       # Ensure color_cor is defined
     exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
     exthdr['CTYPE2']   = 'DEC--TAN'
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600.  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
@@ -4705,7 +4712,7 @@ def create_satellite_spot_observing_sequence(
     prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers(arrtype="SCI")
     prihdr['NAXIS1'] = image_shape[1]
     prihdr['NAXIS2'] = image_shape[0]
-    exthdr["SATSPOTS"] = 0  # 0 if no satellite spots, 1 if satellite spots
+    exthdr["SATSPOTS"] = False  # False if no satellite spots, True if satellite spots
     exthdr['FSMPRFL'] = f'{observing_mode}'  # Needed for initial guess of satellite spot parameters
 
     # Make science images (no satellite spots)
@@ -4716,7 +4723,7 @@ def create_satellite_spot_observing_sequence(
             amplitude_multiplier=0
         )
         sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        sci_frame.ext_hdr["SATSPOTS"] = 0
+        sci_frame.ext_hdr["SATSPOTS"] = False
         
         # Generate CGI filename with incrementing datetime for science frames
         visitid = sci_frame.pri_hdr["VISITID"]
@@ -4734,7 +4741,7 @@ def create_satellite_spot_observing_sequence(
             separation, star_center, angle_offset, amplitude_multiplier
         )
         satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        satspot_frame.ext_hdr["SATSPOTS"] = 1
+        satspot_frame.ext_hdr["SATSPOTS"] = True
         
         # Generate CGI filename with incrementing datetime for satellite spot frames
         visitid = satspot_frame.pri_hdr["VISITID"]
@@ -5112,7 +5119,7 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     exthdr['DPAMNAME'] = dpamname
     exthdr['LSAMNAME'] = observing_mode
     exthdr['FSMPRFL'] = observing_mode
-    exthdr["SATSPOTS"] = 1
+    exthdr["SATSPOTS"] = True
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr,
                        err_hdr=errhdr, dq_hdr=dqhdr)
 
@@ -5257,7 +5264,7 @@ def create_mock_stokes_i_image(total_counts, target_name, col_cor=None, seed=0, 
     base_img.ext_hdr.setdefault('FPAM_V', 0.0)
     base_img.ext_hdr.setdefault('FSAM_H', 0.0)
     base_img.ext_hdr.setdefault('FSAM_V', 0.0)
-    base_img.ext_hdr['FSMLOS'] = 1 if is_coronagraphic else 0
+    base_img.ext_hdr['FSMLOS'] = "1" if is_coronagraphic else 0
     if col_cor is not None:
         base_img.ext_hdr['COL_COR'] = col_cor
     return base_img
@@ -5568,6 +5575,8 @@ def make_1d_spec_image(spec_values, spec_err, spec_wave, pa_aper_deg=None, exp_t
     ext_hdr["STARLOCX"] = 0.0
     ext_hdr["STARLOCY"] = 0.0
     pri_hdr['PA_APER'] = pa_aper_deg
+    if exp_time is None:
+        exp_time = -999.
     pri_hdr['EXPTIME'] = exp_time
     if col_cor is not None:
         ext_hdr['COL_COR'] = col_cor

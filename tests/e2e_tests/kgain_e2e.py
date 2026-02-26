@@ -189,8 +189,11 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     print ("error of kgain:", kgain.error)
     print ("error of readnoise:", kgain.ext_hdr["RN_ERR"])
 
-    assert np.abs(diff_kgain) == 0
-    assert np.abs(diff_readnoise) == 0 
+    # Update tolerance to account for float32 precision differences
+    assert np.abs(diff_kgain) < 1e-6
+    assert np.abs(diff_readnoise) < 1e-6 
+
+    check.compare_to_mocks_hdrs(kgain_file)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -203,7 +206,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/''/home/jwang/Desktop/CGI_TVAC_Data/'  
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

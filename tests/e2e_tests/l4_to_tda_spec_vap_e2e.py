@@ -355,7 +355,7 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
         comp_comb.hdu_list['SPEC_WAVE'].data = comp_wave
 
         # Apply core throughput correction to the combined companion spectrum if coronagraphic
-        is_coron_comb = comp_comb.ext_hdr.get('FSMLOS', 0) == 1
+        is_coron_comb = comp_comb.ext_hdr.get('FSMLOS', "0") == "1"
         if is_coron_comb:
             try:
                 ct_factor_comb, _ = l4_to_tda.apply_core_throughput_correction(

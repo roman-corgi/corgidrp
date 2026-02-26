@@ -15,6 +15,7 @@ import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
 import corgidrp.caldb as caldb
+import corgidrp.check as check
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -147,12 +148,14 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     ct_map_walker = fits.open(ct_map_filepath)
 
     # Check whether direct ct map and the one from the walker are the same
-    # CT map values: (x, y, CT) for each location
-    assert np.all(ct_map_walker[1].data == ct_map_mock.data)
+    # Use allclose for floating point comparison to account for bit depth differences
+    assert np.allclose(ct_map_walker[1].data, ct_map_mock.data, rtol=1e-5, atol=1e-5, equal_nan=True)
     # ERR
-    assert np.all(ct_map_walker[2].data == ct_map_mock.err)
-    # DQ
-    assert np.all(ct_map_walker[3].data == ct_map_mock.dq)
+    assert np.allclose(ct_map_walker[2].data, ct_map_mock.err, rtol=1e-5, atol=1e-5, equal_nan=True)
+    # DQ (integer comparison, but cast to same dtype for consistency)
+    assert np.all(ct_map_walker[3].data.astype(ct_map_mock.dq.dtype) == ct_map_mock.dq)
+
+    check.compare_to_mocks_hdrs(ct_map_filepath)
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -167,7 +170,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     outputdir = thisfile_dir
-    e2edata_path = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_path = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'# '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,

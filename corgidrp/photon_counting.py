@@ -220,13 +220,13 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         # now get threshold to use for photon-counting
         read_noise = test_dataset[0].frames[0].ext_hdr['RN']
         # Ensure RN is numeric (FITS headers can sometimes preserve string values)
-        if isinstance(read_noise, str):
-            try:
-                read_noise = float(read_noise.strip()) if read_noise.strip() else 100.0
-            except (ValueError, TypeError, AttributeError):
-                read_noise = 100.0
-        else:
-            read_noise = float(read_noise)
+        # if isinstance(read_noise, str): NOTE shouldn't need this when default RN is float, like -999.0
+        #     try:
+        #         read_noise = float(read_noise.strip()) if read_noise.strip() else 100.0
+        #     except (ValueError, TypeError, AttributeError):
+        #         read_noise = 100.0
+        # else:
+        #     read_noise = float(read_noise)
         thresh = T_factor*read_noise
         if thresh < 0:
             raise PhotonCountException('thresh must be nonnegative')
@@ -385,21 +385,10 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         combined_pc_mean[combined_pc_mean<0] = 0
         combined_err = np.sqrt(errs[0]**2 + errs[1]**2)
         combined_dq = np.bitwise_or(dqs[0], dqs[1])
-        if dataset_copy:
-            pri_hdr = dataset[-1].pri_hdr.copy()
-            ext_hdr = dataset[-1].ext_hdr.copy()
-            err_hdr = dataset[-1].err_hdr.copy()
-            dq_hdr = dataset[-1].dq_hdr.copy()
-            hdulist = dataset[-1].hdu_list.copy()
-        else:
-            pri_hdr = dataset[-1].pri_hdr
-            ext_hdr = dataset[-1].ext_hdr
-            err_hdr = dataset[-1].err_hdr
-            dq_hdr = dataset[-1].dq_hdr
-            hdulist = dataset[-1].hdu_list
+        hdulist = dataset[-1].hdu_list.copy()
 
         if val[0] != "CGIVST_CAL_DRK":  
-            pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(input_dataset)
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(sub_dataset)
             new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 
                                 dq_hdr=dq_hdr, input_hdulist=hdulist) 
             new_image.filename = dataset[-1].filename.replace("L2a", "L2b")
@@ -430,13 +419,21 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         
         return pc_ill_dataset
     else:
+        # Dark here may be comprised of a set of master darks, one for each bin, but the frames should be identical, so 
+        # use headers from the merging of one of those binned sets to apply for all frames in the output master Dark
+        invalid_pc_drk_keywords = data.typical_cal_invalid_keywords 
+        # Remove specific keywords
+        for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE',  'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN', 'RN_ERR', 'KGAIN_ER']:
+            if key in invalid_pc_drk_keywords:
+                invalid_pc_drk_keywords.remove(key)
+        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(sub_dataset, invalid_keywords=invalid_pc_drk_keywords)
         ext_hdr['PC_STAT'] = 'photon-counted master dark'
         ext_hdr['NAXIS1'] = combined_pc_mean.shape[0]
         ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]
         ext_hdr['PCTHRESH'] = thresh
         ext_hdr['NUM_FR'] = len(sub_dataset) 
         ext_hdr['HISTORY'] = "Photon-counted {0} dark frames for each master dark of the output dataset.  Number of subsets: {1}.  Total number of master darks in input dataset: {2}. Using T_factor={3} and niter={4}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter)
-        pc_dark = data.Dark(np.stack(list_new_image), pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err]), dq=np.stack(list_dq), err_hdr=err_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
+        pc_dark = data.Dark(np.stack(list_new_image), pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err]), dq=np.stack(list_dq), err_hdr=err_hdr, dq_hdr=dq_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
         return pc_dark
 
 def corr_photon_count(nobs, nfr, t, g, mask_indices, niter=2):
