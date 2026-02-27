@@ -508,6 +508,99 @@ def test_expected_flux_ratio_noise_pol():
     
 
 
-if __name__ == '__main__':  
+def test_flux_ratio_noise_nsigma_and_correction():
+    """Tests nsigma passthrough and small sample correction in compute_flux_ratio_noise."""
+
+    # Set up a minimal RDI dataset (same setup as test_expected_flux_ratio_noise)
+    mode = 'RDI'
+    nsci, nref = (1, 1)
+
+    st_amp = 100.
+    noise_amp = 1e-3
+    pl_contrast = 0.
+    rolls = [0, 15., 0, 0]
+    numbasis = [1]
+    data_shape = (101, 101)
+    mock_sci_rdi, mock_ref_rdi = create_psfsub_dataset(nsci, nref, rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=st_amp,
+                                            noise_amp=noise_amp,
+                                            pl_contrast=pl_contrast,
+                                            data_shape=data_shape)
+
+    nx, ny = (21, 21)
+    cenx, ceny = (25., 30.)
+    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx=cenx, ceny=ceny,
+                  nx=nx, ny=ny)
+
+    from corgidrp.l3_to_l4 import do_psf_subtraction
+    klip_kwargs = {'numbasis': numbasis}
+    psfsub_dataset_rdi = do_psf_subtraction(mock_sci_rdi, ctcal,
+                                reference_star_dataset=mock_ref_rdi,
+                                fileprefix='test_KL_THRU',
+                                measure_klip_thrupt=True,
+                                measure_1d_core_thrupt=True,
+                                **klip_kwargs)
+
+    # Make unocculted star
+    x = np.arange(psfsub_dataset_rdi[0].data.shape[-1])
+    y = np.arange(psfsub_dataset_rdi[0].data.shape[-2])
+    X, Y = np.meshgrid(x, y)
+    XY = np.vstack([X.ravel(), Y.ravel()])
+    def gauss_spot(xy, A, x0, y0, sx, sy):
+        (x, y) = xy
+        return A * np.e**(-((x-x0)**2/(2*sx**2) + (y-y0)**2/(2*sy**2)))
+    star_amp = 100
+    x0 = 15
+    y0 = 17
+    sig_x = 4
+    sig_y = 4
+    star_PSF = np.reshape(gauss_spot(XY, star_amp, x0, y0, sig_x, sig_y), X.shape)
+    np.random.seed(987)
+    star_PSF += np.random.poisson(lam=star_PSF.mean(), size=star_PSF.shape)
+    from corgidrp.mocks import create_default_L4_headers
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
+    star_image = data.Image(star_PSF, prihdr, exthdr)
+    star_dataset = data.Dataset([star_image for i in range(len(psfsub_dataset_rdi))])
+    # Fake ND calibration
+    nd_x, nd_y = np.meshgrid(np.linspace(0, data_shape[1], 5), np.linspace(0, data_shape[0], 5))
+    nd_x = nd_x.ravel()
+    nd_y = nd_y.ravel()
+    nd_od = np.ones(nd_y.shape) * 1e-2
+    pri_hdr, ext_hdr, errhdr_nd, dqhdr_nd, biashdr = mocks.create_default_L2b_headers()
+    nd_cal = data.NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
+                                      ext_hdr=ext_hdr)
+
+    # 1. nsigma passthrough: FRN with nsigma=5 should be 5x the nsigma=1 values
+    frn_1sig = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=3, nsigma=1)
+    frn_5sig = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=3, nsigma=5)
+    for f1, f5 in zip(frn_1sig, frn_5sig):
+        vals_1 = f1.hdu_list['FRN_CRV'].data[2:]  # skip sep rows
+        vals_5 = f5.hdu_list['FRN_CRV'].data[2:]
+        assert vals_5 == pytest.approx(5 * vals_1, rel=1e-10)
+
+    # 2. Header metadata
+    for frame in frn_5sig:
+        hdr = frame.hdu_list['FRN_CRV'].header
+        assert hdr['NSIGMA'] == 5
+        assert hdr['SSCORR'] == False
+    frn_corr = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=3,
+                                        nsigma=5, small_sample_correction=True)
+    for frame in frn_corr:
+        hdr = frame.hdu_list['FRN_CRV'].header
+        assert hdr['NSIGMA'] == 5
+        assert hdr['SSCORR'] == True
+
+    # 3. Small sample correction: FRN with correction >= FRN without (especially at inner seps)
+    for fc, f5 in zip(frn_corr, frn_5sig):
+        vals_corr = fc.hdu_list['FRN_CRV'].data[2:]
+        vals_5 = f5.hdu_list['FRN_CRV'].data[2:]
+        # Correction factor should make noise >= naive scaling
+        assert np.all(vals_corr >= vals_5 - 1e-15)
+
+
+if __name__ == '__main__':
     test_expected_flux_ratio_noise()
     test_expected_flux_ratio_noise_pol()
+    test_flux_ratio_noise_nsigma_and_correction()

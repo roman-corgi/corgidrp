@@ -1109,11 +1109,94 @@ def test_psfsub_withklipandctmeas_rdi(coro_type,FOV,band):
     assert pl_counts == pytest.approx(recovered_pl_counts_ktcorrected,rel = 0.05) 
 
 
-if __name__ == '__main__':  
+def test_measure_noise_nsigma_and_correction():
+    """Tests for nsigma scaling and small sample statistics correction
+    in measure_noise().
+    """
+    from scipy.stats import t as t_dist, norm
+
+    cenx, ceny = (120., 130.)
+    frame_shape_yx = (200, 200)
+    seps = np.arange(50., 71., 5.)
+    fwhm = 2.  # pix
+
+    ext_hdr = fits.Header()
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+
+    rng = np.random.default_rng(42)
+    image = rng.normal(0., 1., (2, *frame_shape_yx))
+    frame = Image(image, pri_hdr=fits.Header(), ext_hdr=ext_hdr)
+
+    # 1. nsigma scaling: nsigma=5 should be 5x the nsigma=1 result
+    noise_1sig = measure_noise(frame, seps, fwhm, nsigma=1)
+    noise_5sig = measure_noise(frame, seps, fwhm, nsigma=5)
+    assert noise_5sig == pytest.approx(5 * noise_1sig)
+
+    # 2. Backward compatibility: explicit nsigma=1 matches default
+    noise_default = measure_noise(frame, seps, fwhm)
+    assert noise_1sig == pytest.approx(noise_default)
+
+    # 3. Small sample correction: at small separations, corrected noise > naive nsigma * std
+    noise_corr = measure_noise(frame, seps, fwhm, nsigma=5, fwhm=fwhm,
+                               small_sample_correction=True)
+    # At small separations where n is small, corrected values should exceed naive 5*std
+    for i, sep in enumerate(seps):
+        n = 2 * np.pi * sep / fwhm
+        if n > 2:
+            # Correction factor should be >= nsigma (it's always larger for finite n)
+            assert np.all(noise_corr[i] >= noise_5sig[i] - 1e-10)
+
+    # 4. Convergence at large separations: with many resolution elements, correction ≈ nsigma * std
+    large_seps = np.array([500., 600., 700.])
+    # Use a larger frame for these separations
+    large_shape = (1500, 1500)
+    large_cenx, large_ceny = (750., 750.)
+    ext_hdr_large = fits.Header()
+    ext_hdr_large['STARLOCX'] = large_cenx
+    ext_hdr_large['STARLOCY'] = large_ceny
+    large_image = rng.normal(0., 1., (1, *large_shape))
+    large_frame = Image(large_image, pri_hdr=fits.Header(), ext_hdr=ext_hdr_large)
+    noise_large_naive = measure_noise(large_frame, large_seps, fwhm, nsigma=5)
+    noise_large_corr = measure_noise(large_frame, large_seps, fwhm, nsigma=5, fwhm=fwhm,
+                                     small_sample_correction=True)
+    # At very large n, correction factor approaches nsigma, so ratio should be ~1
+    assert noise_large_corr == pytest.approx(noise_large_naive, rel=0.05)
+
+    # 5. Validation errors
+    # fwhm=None with correction should raise ValueError
+    with pytest.raises(ValueError):
+        measure_noise(frame, seps, fwhm, nsigma=5, small_sample_correction=True)
+
+    # nsigma <= 0 should raise ValueError
+    with pytest.raises(ValueError):
+        measure_noise(frame, seps, fwhm, nsigma=0)
+    with pytest.raises(ValueError):
+        measure_noise(frame, seps, fwhm, nsigma=-1)
+
+    # Wrong-length fwhm array should raise ValueError
+    with pytest.raises(ValueError):
+        measure_noise(frame, seps, fwhm, nsigma=5, fwhm=np.array([1., 2.]),
+                      small_sample_correction=True)
+
+    # Scalar fwhm should work (broadcast)
+    noise_scalar_fwhm = measure_noise(frame, seps, fwhm, nsigma=5, fwhm=2.0,
+                                      small_sample_correction=True)
+    assert noise_scalar_fwhm.shape == noise_5sig.shape
+
+    # Array fwhm matching seps length should work
+    fwhm_arr = np.full(len(seps), 2.0)
+    noise_arr_fwhm = measure_noise(frame, seps, fwhm, nsigma=5, fwhm=fwhm_arr,
+                                   small_sample_correction=True)
+    assert noise_arr_fwhm == pytest.approx(noise_scalar_fwhm)
+
+
+if __name__ == '__main__':
     # test_create_ct_cal()
     # test_get_closest_psf()
     # test_inject_psf()
     # test_measure_noise()
+    # test_measure_noise_nsigma_and_correction()
 
     # test_meas_klip_ADI()
     # test_meas_klip_RDI()

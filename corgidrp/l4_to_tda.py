@@ -598,33 +598,38 @@ def convert_to_flux(input_dataset, fluxcal_factor):
     return flux_dataset
 
 
-def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_dataset, unocculted_star_loc=None, requested_separations=None, halfwidth=None):
+def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_dataset, unocculted_star_loc=None, requested_separations=None, halfwidth=None,
+                             nsigma=1, small_sample_correction=False):
     '''
-    Uses the PSF-subtracted frame and its algorithm throughput vs separation to 
-    produce a calibrated 1-sigma flux ratio "contrast" curve (or "noise curve" since contrast curve is typically 5-sigma), also accounting for the throughput of the coronagraph.
+    Uses the PSF-subtracted frame and its algorithm throughput vs separation to
+    produce a calibrated n-sigma flux ratio noise curve, also accounting for the throughput of the coronagraph.
     It calculates flux ratio noise curve value for each radial separation from the subtracted star location, interpolating KLIP and core throughput values at these input separations.
-    It uses a dataset of unocculted stars and ND transmission to determine the integrated flux of the Gaussian-fit star (where each frame in the dataset is assumed to correspond to the frames 
-    in the input_dataset), and an estimate of planet flux per frame of input_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to 
+    It uses a dataset of unocculted stars and ND transmission to determine the integrated flux of the Gaussian-fit star (where each frame in the dataset is assumed to correspond to the frames
+    in the input_dataset), and an estimate of planet flux per frame of input_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to
     the annular noise and FWHM equal to that used for KLIP algorithm througput for each radial separation.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of PSF-subtracted Images
         NDcalibration (corgidrp.data.NDFilterSweetSpotDataset): ND filter calibration
         unocculted_star_dataset (corgidrp.data.Dataset): a dataset of unocculted star Images corresponding to the Images in input_dataset.   Should have the same number of frames as input_dataset (1-to-1 correspondence).
-        unocculted_star_loc (2-D float array, optional): array of coordinates of the unocculted stars according to the order given in the unocculted_star_dataset. 
-            The first row of the array is for row position, and the second row is for column position. 
-            If None, the peak pixel location is used for each frame.  Defaults to None. 
-        requested_separations (float array, optional): separations at which to compute the flux ratio noise curve.  If None, the separations used for 
+        unocculted_star_loc (2-D float array, optional): array of coordinates of the unocculted stars according to the order given in the unocculted_star_dataset.
+            The first row of the array is for row position, and the second row is for column position.
+            If None, the peak pixel location is used for each frame.  Defaults to None.
+        requested_separations (float array, optional): separations at which to compute the flux ratio noise curve.  If None, the separations used for
             the core throughput are used (e.g., no interpolation needed).  Defaults to None.
-        halfwidth (float, optional): halfwidth of the annulus to use for noise calculation.  If None, half 
+        halfwidth (float, optional): halfwidth of the annulus to use for noise calculation.  If None, half
             of the minimum spacing between separation distances (if it isn't uniform spacing) is used.  Defaults to None.
+        nsigma (float, optional): Sigma multiplier for the noise curve. E.g. nsigma=5 produces a 5-sigma
+            contrast curve. Defaults to 1.
+        small_sample_correction (bool, optional): If True, apply the small sample statistics correction
+            from Mawet et al. (2014) using the Student's t-distribution. Defaults to False.
 
     Returns:
-        corgidrp.data.Dataset: input dataset with an additional extension header 'FRN_CRV' for every frame, containing the 
+        corgidrp.data.Dataset: input dataset with an additional extension header 'FRN_CRV' for every frame, containing the
             calibrated flux ratio noise curve as a function of radial separation.  The data in that extension for a given frame is a (2+M)xN array,
             where:
-            --the first row contains the separation radii in pixels 
-            --the second row containts the separation radii in milli-arcseconds (mas) 
+            --the first row contains the separation radii in pixels
+            --the second row containts the separation radii in milli-arcseconds (mas)
             --and the M rows contain the corresponding flux ratio noise curve values for the M KL mode truncations (maintaining the KL index ordering).
             TODO:  Add uncertainty to flux ratio noise curve based on uncertainties in core throughput and algorithm throughput if those are implemented in the future.
     '''
@@ -656,9 +661,20 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         check.real_positive_scalar(halfwidth, 'halfwidth', ValueError)
         if halfwidth > min_spacing/2:
             warnings.warn('Halfwidth is wider than half the minimum spacing between separation values.')
-        annular_noise = measure_noise(frame, requested_separations, halfwidth) # in photoelectrons/s
+        # Interpolate FWHMs (before measure_noise so they're available for small sample correction)
+        interp_fwhms = np.zeros((len(klip_fwhms), len(requested_separations)))
+        for j in range(len(klip_fwhms)):
+            fwhms_func = interp1d(klip_seps, klip_fwhms[j], kind='linear', fill_value='extrapolate')
+            interp_fwhms[j] = fwhms_func(requested_separations)
+
+        # Mean FWHM across KL modes for small sample correction
+        mean_fwhm = np.mean(interp_fwhms, axis=0) if small_sample_correction else None
+
+        annular_noise = measure_noise(frame, requested_separations, halfwidth,
+                                      nsigma=nsigma, fwhm=mean_fwhm,
+                                      small_sample_correction=small_sample_correction) # in photoelectrons/s
         # now need to get Fp/Fs
-        # For star flux, Fs:  integrated flux of star modeled as analytic formula for volume under 2-D Gaussian defined 
+        # For star flux, Fs:  integrated flux of star modeled as analytic formula for volume under 2-D Gaussian defined
         # by amplitude and FWHM used for KLIP throughput calculation.  Amplitude found by doing Gaussian fit.
         star_fr = unocculted_star_dataset.frames[i]
         if unocculted_star_loc is None:
@@ -717,11 +733,6 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         # For planet flux, Fp:  treat the annular noise value as the amplitude of a 2-D Gaussian and use the 
         # same FWHM used for KLIP throughput calculation.  The analytic formula for volume under the Gaussian is the integrated flux.
         noise_amp = annular_noise.T
-        # interpolate FWHMs to use based on requested_separations
-        interp_fwhms = np.zeros((len(klip_fwhms), len(requested_separations)))
-        for j in range(len(klip_fwhms)):
-            fwhms_func = interp1d(klip_seps, klip_fwhms[j], kind='linear', fill_value='extrapolate')
-            interp_fwhms[j] = fwhms_func(requested_separations)
 
         Fp = np.pi*noise_amp*interp_fwhms**2/(4*np.log(2)) #integral of 2-D Gaussian
         # Interpolate/extrapolate the algorithm and core throughputs at the desired separations
@@ -735,6 +746,8 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         flux_ratio_noise_curve = np.vstack([requested_separations, requested_mas, frn_vals])
         hdr = fits.Header()
         hdr['BUNIT'] = "Fp/Fs"
+        hdr['NSIGMA'] = (nsigma, "Sigma level of noise curve")
+        hdr['SSCORR'] = (small_sample_correction, "Mawet+2014 small sample correction applied")
         hdr['COMMENT'] = "Flux ratio noise curve as a function of radial separation.  First row:  separation radii in pixels.  Second row:  separation radii in mas.  Remaining rows:  flux ratio noise curve values for KL mode truncations."
         frame.add_extension_hdu('FRN_CRV', data = flux_ratio_noise_curve, header=hdr)
         history_msg = 'Calibrated flux ratio noise curve added to extension header FRN_CRV.'
