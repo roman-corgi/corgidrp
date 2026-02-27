@@ -49,13 +49,13 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
 
         # create dictionary with wcs information
         wcs_info = {}
-        wcs_info['CD1_1'] = cdmatrix[0,0]
-        wcs_info['CD1_2'] = cdmatrix[0,1]
-        wcs_info['CD2_1'] = cdmatrix[1,0]
-        wcs_info['CD2_2'] = cdmatrix[1,1]
+        wcs_info['CD1_1'] = float(cdmatrix[0,0])
+        wcs_info['CD1_2'] = float(cdmatrix[0,1])
+        wcs_info['CD2_1'] = float(cdmatrix[1,0])
+        wcs_info['CD2_2'] = float(cdmatrix[1,1])
 
-        wcs_info['CRPIX1'] = center_pixel[0]
-        wcs_info['CRPIX2'] = center_pixel[1]
+        wcs_info['CRPIX1'] = float(center_pixel[0])
+        wcs_info['CRPIX2'] = float(center_pixel[1])
 
         wcs_info['CTYPE1'] = 'RA---TAN'
         wcs_info['CTYPE2'] = 'DEC--TAN'
@@ -63,8 +63,8 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
         #wcs_info['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
         #wcs_info['CDELT2'] = (platescale * 0.001) / 3600
 
-        wcs_info['CRVAL1'] = corrected_ra
-        wcs_info['CRVAL2'] = corrected_dec
+        wcs_info['CRVAL1'] = float(corrected_ra)
+        wcs_info['CRVAL2'] = float(corrected_dec)
 
         wcs_info['PLTSCALE'] = platescale  ## [mas] / pixel
         wcs_info['NORTHANG'] = northangle - roll_offset_deg  ## deg
@@ -127,8 +127,8 @@ def split_image_by_polarization_state(input_dataset,
                                       image_center_x=512,
                                       image_center_y=512,
                                       separation_diameter_arcsec=7.5, 
-                                      alignment_angle_WP1=0,
-                                      alignment_angle_WP2=45,
+                                      alignment_angle_WP1=0.0,
+                                      alignment_angle_WP2=45.0,
                                       image_size=None,
                                       padding=5):
     """
@@ -137,10 +137,10 @@ def split_image_by_polarization_state(input_dataset,
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level), should all be taken with the same color filter (same CFAMNAME header)
-        image_center_x (optional, int): x pixel coordinate location of the center location between the two polarized images on the detector,
-            default is the detector center at x=512
-        image_center_y (optional, int): y pixel coordinate location of the center location between the two polarized images on the detector,
-            default is the detector center at y=512
+        image_center_x (optional, float): x pixel coordinate location of the center location between the two polarized images on the detector,
+            default is the detector center at x=512.0
+        image_center_y (optional, float): y pixel coordinate location of the center location between the two polarized images on the detector,
+            default is the detector center at y=512.0
         separation_diameter_arcsec (optional, float): Distance between the centers of the two polarized images on the detector in arcsec, 
             default for Roman CGI is 7.5"
         alignment_angle_WP1 (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal
@@ -357,6 +357,8 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         elif centerxy is None:
             if ("EACQ_COL" in exthdr.keys()) and ("EACQ_ROW" in exthdr.keys()):
                 centerxy = np.array([exthdr["EACQ_COL"],exthdr["EACQ_ROW"]])
+                if float(exthdr["EACQ_COL"]) == -999.0 or float(exthdr["EACQ_ROW"]) == -999.0:
+                    raise ValueError('EACQ_ROW/COL header values are invalid (-999.0)')
             else: raise ValueError('centerxy not provided but EACQ_ROW/COL are missing from image extension header.')
         # Round to center to nearest half-pixel if size is even, nearest pixel if odd
         size_evenness = (np.array(sizexy) % 2) == 0

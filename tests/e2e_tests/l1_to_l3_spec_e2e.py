@@ -110,6 +110,11 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
         for f in mock_cal_filelist
     ]
     mock_cal_filelist = check.fix_hdrs_for_tvac(mock_cal_filelist, mock_cal_dir)
+    # fix ISPC to int 
+    for file in mock_cal_filelist:
+        with fits.open(file, mode='update') as fits_file:
+            if 'ISPC' in fits_file[1].header:
+                fits_file[1].header['ISPC'] = int(fits_file[1].header['ISPC'])
 
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
@@ -125,6 +130,8 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
     ptc = np.column_stack([signal_array, noise_array])
+    ext_hdr['RN'] = 100.0
+    ext_hdr['RN_ERR'] = 0.0
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                       input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
@@ -147,8 +154,8 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                        input_dataset=mock_input_dataset, err=noise_map_noise,
                                        dq=noise_map_dq, err_hdr=err_hdr)
@@ -263,6 +270,9 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
     for file in input_data_filelist:
         with fits.open(file, mode='update') as fits_file:
+            # Fix data types 
+            if 'ISPC' in fits_file[1].header:
+                fits_file[1].header['ISPC'] = int(fits_file[1].header['ISPC'])
             print(fits_file[1].header['EXPTIME'])
             if fits_file[1].header['EXPTIME'] >= 100:
                 fits_file[1].data = fits_file[1].data/10.
@@ -549,16 +559,24 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         logger.info('ANALOG SPECTROSCOPY DATA TEST')
         logger.info('='*80)
         new_l3_filenames = run_l1_to_l3_e2e_test(analog_datadir, analog_outputdir, processed_cal_path, logger)
+        
+        for new_filename in new_l3_filenames:
+            check.compare_to_mocks_hdrs(new_filename)
 
         logger.info('='*80)
         logger.info('PC SPECTROSCOPY DATA TEST')
         logger.info('='*80)
         new_l3_filenames = run_l1_to_l3_e2e_test(pc_datadir, pc_outputdir, processed_cal_path, logger)
         
+        for new_filename in new_l3_filenames:
+            check.compare_to_mocks_hdrs(new_filename)
+
         logger.info('='*80)
         logger.info('END-TO-END TEST COMPLETE')
         logger.info('='*80)
         
+        
+
         print('e2e test for L1 to L3 spectroscopy passed')
     except Exception as e:
         logger.error('='*80)
@@ -580,8 +598,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
-    outputdir = '/Users/jmilton/Github/corgidrp/tests/e2e_tests'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
+    outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

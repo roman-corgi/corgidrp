@@ -17,6 +17,36 @@ import copy
 import corgidrp
 from datetime import datetime, timedelta, timezone
 
+typical_bool_keywords = ['DESMEAR', 'CTI_CORR']
+typical_cal_invalid_keywords = [
+                    # Primary header keywords
+                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    # Extension header keywords
+                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
+                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
+                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
+                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
+                ]
+
 class Dataset():
     """
     A sequence of data of the same kind. Can be indexed and looped over
@@ -328,6 +358,9 @@ class Image():
                 first_hdu = hdulist.pop(0)
                 self.ext_hdr = first_hdu.header
                 self.data = first_hdu.data
+                # Upcast float data to float64 for processing precision
+                if self.data is not None and np.issubdtype(self.data.dtype, np.floating):
+                    self.data = self.data.astype(np.float64)
 
                 #A list of extensions
                 self.hdu_names = [hdu.name for hdu in hdulist]
@@ -349,6 +382,9 @@ class Image():
                     err_hdu = hdulist.pop("ERR")
                     self.err = err_hdu.data
                     self.err_hdr = err_hdu.header
+                    # Upcast float err to float64 for processing precision
+                    if self.err is not None and np.issubdtype(self.err.dtype, np.floating):
+                        self.err = self.err.astype(np.float64)
                     if self.err.ndim != 1 and self.err.ndim == self.data.ndim:
                         self.err = self.err.reshape((1,)+self.err.shape)
                 else:
@@ -369,9 +405,13 @@ class Image():
 
                 if input_hdulist is not None:
                     this_hdu_list = [hdu.copy() for hdu in input_hdulist]
-                else: 
+                else:
                     #After the data, err and dqs are popped out, the rest of the hdulist is stored in hdu_list
                     this_hdu_list = [hdu.copy() for hdu in hdulist]
+                # Upcast float data in extra HDUs to float64 for processing precision
+                for hdu in this_hdu_list:
+                    if hdu.data is not None and np.issubdtype(hdu.data.dtype, np.floating):
+                        hdu.data = hdu.data.astype(np.float64)
                 self.hdu_list = fits.HDUList(this_hdu_list)
                 
 
@@ -399,9 +439,15 @@ class Image():
                     self.err = np.array([0.])
             elif hasattr(data_or_filepath, "__len__"):
                 self.data = data_or_filepath
+                # Upcast float data to float64 for processing precision
+                if hasattr(self.data, 'dtype') and np.issubdtype(self.data.dtype, np.floating):
+                    self.data = self.data.astype(np.float64)
                 if err is not None:
                     if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                         raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
+                    # Upcast float err to float64 for processing precision
+                    if hasattr(err, 'dtype') and np.issubdtype(err.dtype, np.floating):
+                        err = err.astype(np.float64)
                     #we want to have a 3 dim error array
                     if err.ndim == self.data.ndim + 1:
                         self.err = err
@@ -457,7 +503,7 @@ class Image():
         self.dq_hdr["EXTNAME"] = "DQ"
 
         # discard individual errors if we aren't tracking them but multiple error terms are passed in
-        if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
+        if self.err is not None and not corgidrp.track_individual_errors and self.err.shape[0] > 1:
             num_errs = self.err.shape[0] - 1
             # delete keywords specifying the error of each individual slice
             for i in range(num_errs):
@@ -483,6 +529,10 @@ class Image():
         # the DRP has touched this file so it's origin is now this DRP
         self.pri_hdr['ORIGIN'] = 'DRP'
 
+        # correct header type while preserving the value so that headers conform to standards in mock.py
+        adjusted_pri_hdr, adjusted_img_hdr = corgidrp.check.hdr_type_conform(self.pri_hdr, self.ext_hdr)
+        self.pri_hdr = adjusted_pri_hdr
+        self.ext_hdr = adjusted_img_hdr
 
     # create this field dynamically
     @property
@@ -524,11 +574,17 @@ class Image():
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
 
+        # Cast data in additional HDUs to the configured dtype before appending
         for hdu in self.hdu_list:
+            if hdu.data is not None:
+                hdu.data = hdu.data.astype(corgidrp.image_dtype, copy=False)
             hdulist.append(hdu)
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            # in case some FITS-formatted headers like NAXIS1, NAXIS2, etc cards were put in the wrong place, 
+            # this will position them in the right order and throw an error is something is unfixable 
+            hdulist.verify('silentfix') 
             hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
@@ -707,9 +763,9 @@ class Dark(Image):
         err_hdr (astropy.io.fits.Header): the error header (required only if raw data is passed in)
         dq (np.array): the DQ array (required only if raw data is passed in)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None, dq_hdr = None):
        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr)
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr, dq_hdr=dq_hdr)
 
         # if this is a new dark, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new dark
@@ -722,9 +778,56 @@ class Dark(Image):
             # TO-DO: check PC_STAT and whether this will be in L2s
             if 'PC_STAT' not in ext_hdr:
                 self.ext_hdr['PC_STAT'] = 'analog master dark'
+            # PC dark will have PCTHRESH in it, so make non-PC darks have that as well for consistency
+            if 'PCTHRESH' not in self.ext_hdr:
+                self.ext_hdr['PCTHRESH'] = -999. #keeping float format for consistency
+            # PC dark will have 1 more dimension than other darks due b/c the frames can be binned to make separate PC frames from subsets
+        
             # log all the data that went into making this calibration file
             if 'DRPNFILE' not in ext_hdr.keys() and input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
+            # PC master darks have NUM_FR, which may differ from DRPNFILE b/c of binning of frames (i.e., DRPNFILE would be # of bins * NUM_FR)
+            # Add in a null NUM_FR if not present for consistency with PC master darks
+            if 'NUM_FR' not in self.ext_hdr:
+                self.ext_hdr['NUM_FR'] = -999 #keeping int format for consistency
+            if "HISTORY" not in self.err_hdr:
+                self.err_hdr['HISTORY'] = ''
+            # PC frames (or others if non-standard recipe used) may have undergone frame selection, so add in null values if necessary so that all Dark products have same headers
+            if 'FRMSEL01' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL01'] = -999. #keeping float format for consistency
+            if 'FRMSEL02' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL02'] = False 
+            if 'FRMSEL03' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL03'] = -999. #keeping float format for consistency
+            if 'FRMSEL04' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL04'] = -999. #keeping float format for consistency
+            if 'FRMSEL05' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL05'] = -999. #keeping float format for consistency
+            if 'FRMSEL06' not in self.ext_hdr:
+                self.ext_hdr['FRMSEL06'] = -999. #keeping float format for consistency
+            if 'KGAINPAR' not in self.err_hdr:
+                if 'KGAINPAR' in self.ext_hdr:
+                    self.err_hdr['KGAINPAR'] = self.ext_hdr['KGAINPAR']
+                else:
+                    self.err_hdr['KGAINPAR'] = -999. #keeping float format for consistency
+            if 'KGAIN_ER' not in self.err_hdr:
+                if 'KGAIN_ER' in self.ext_hdr:
+                    self.err_hdr['KGAIN_ER'] = self.ext_hdr['KGAIN_ER']
+                else:
+                    self.err_hdr['KGAIN_ER'] = -999. #keeping float format for consistency
+            if 'RN' not in self.err_hdr:
+                if 'RN' in self.ext_hdr:
+                    self.err_hdr['RN'] = self.ext_hdr['RN']
+                else:
+                    self.err_hdr['RN'] = -999. #keeping float format for consistency
+            if 'RN_ERR' not in self.err_hdr:
+                if 'RN_ERR' in self.ext_hdr:
+                    self.err_hdr['RN_ERR'] = self.ext_hdr['RN_ERR']
+                else:
+                    self.err_hdr['RN_ERR'] = -999. #keeping float format for consistency
+            if 'LAYER_1' not in self.err_hdr:
+                self.err_hdr['LAYER_1'] = 'combined_error' 
+            
 
             # add to history
             self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['EMGAIN_C'], self.ext_hdr['DRPNFILE'])
@@ -748,6 +851,14 @@ class Dark(Image):
         
         if 'PC_STAT' not in self.ext_hdr:
             self.ext_hdr['PC_STAT'] = 'analog master dark'
+        if 'IS_SYNTH' not in self.ext_hdr:
+            if self.ext_hdr['PC_STAT'] == 'photon-counted master dark':
+                self.ext_hdr['IS_SYNTH'] = 0 # not relevant in this case
+            else:
+                # defaults to analog synthetic, which will standard choice over analog traditional 
+                # int flag for whether this dark is synthesized or not. 0 = no (analog traditional), 1 = yes (analog synthesized).
+                self.ext_hdr['IS_SYNTH'] = 1  
+
 
         if err_hdr is not None:
             self.err_hdr['BUNIT'] = 'detected electron'
@@ -958,6 +1069,8 @@ class LineSpread(Image):
             with fits.open(data_or_filepath) as hdulist:
                 #gauss par is in FITS extension
                 self.gauss_par = hdulist[2].data
+                if self.gauss_par is not None and np.issubdtype(self.gauss_par.dtype, np.floating):
+                    self.gauss_par = self.gauss_par.astype(np.float64)
                 self.gauss_hdr = hdulist[2].header
             
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'LineSpread':
@@ -991,6 +1104,14 @@ class LineSpread(Image):
 
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
+
+        # Cast data to configured dtype before saving
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+
+        # Cast gauss_par to configured dtype before saving
+        if self.gauss_par is not None:
+            self.gauss_par = self.gauss_par.astype(corgidrp.image_dtype, copy=False)
 
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
@@ -1176,7 +1297,7 @@ class SpecFilterOffset(Image):
 
             # fill caldb required keywords with dummy data
             pri_hdr["OBSNUM"] = 000     
-            ext_hdr["EXPTIME"] = 1
+            ext_hdr["EXPTIME"] = 1.
             ext_hdr['OPMODE'] = ""
             ext_hdr['EMGAIN_C'] = 1.0
             ext_hdr['EXCAMT'] = 40.0
@@ -1334,6 +1455,11 @@ class NonLinearityCalibration(Image):
         if self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
         self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        # headers deleted from initial L1 level
+        leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+        for key in leave_out_ext:
+            if key in self.ext_hdr:
+                del self.ext_hdr[key]
         
 class KGain(Image):
     """
@@ -1360,12 +1486,11 @@ class KGain(Image):
         super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
 
         # initialize these headers that have been recently added so that older calib files still contain this keyword when initialized and allow for tests that don't require 
-        # these values to run smoothly; if these values are actually required for 
-        # a particular process, the user would be alerted since these values below would result in an error as they aren't numerical
+        # these values to run smoothly
         if 'RN' not in self.ext_hdr:
-            self.ext_hdr['RN'] = 0.0
+            self.ext_hdr['RN'] = -999.
         if 'RN_ERR' not in self.ext_hdr:
-            self.ext_hdr['RN_ERR'] = ''
+            self.ext_hdr['RN_ERR'] = -999.
         # File format checks
         if self.data.shape != (1,):
             raise ValueError('The KGain calibration data should be just one float value')
@@ -1379,6 +1504,8 @@ class KGain(Image):
                 self.ptc_hdr = hdulist[3].header
                 # ptc data is in FITS extension
                 self.ptc = hdulist[3].data
+                if self.ptc is not None and np.issubdtype(self.ptc.dtype, np.floating):
+                    self.ptc = self.ptc.astype(np.float64)
         
         else:
             if ptc is not None:
@@ -1424,6 +1551,11 @@ class KGain(Image):
             raise ValueError("File that was loaded was not a KGain Calibration file.")
         if self.ext_hdr['DATATYPE'] != 'KGain':
             raise ValueError("File that was loaded was not a KGain Calibration file.")
+        # headers deleted from initial L1 level
+        leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+        for key in leave_out_ext:
+            if key in self.ext_hdr:
+                del self.ext_hdr[key]
 
     @property
     def value(self):
@@ -1448,6 +1580,14 @@ class KGain(Image):
 
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
+
+        # use the appropriate bit depth as set by the config file
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+        if self.err is not None:
+            self.err = self.err.astype(corgidrp.image_dtype, copy=False)
+        if self.ptc is not None:
+            self.ptc = self.ptc.astype(corgidrp.image_dtype, copy=False)
 
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
@@ -1481,36 +1621,16 @@ class BadPixelMap(Image):
         if input_dataset is not None:
             pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
                 input_dataset,
-                any_true_keywords=['DESMEAR', 'CTI_CORR'],
-                invalid_keywords=[
-                    # Primary header keywords
-                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
-                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
-                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
-                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
-                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
-                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
-                    # Extension header keywords
-                    'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
-                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'BLNKTIME', 'BLNKCYC',
-                    'EXPCYC', 'OVEREXP', 'NOVEREXP', 'PROXET',  
-                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
-                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
-                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
-                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
-                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
-                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
-                    'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'SPAM_H', 'SPAM_V', 'SPAMNAME', 'SPAMSP_H', 'SPAMSP_V',
-                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
-                    'LSAM_H', 'LSAM_V', 'LSAMNAME', 'LSAMSP_H', 'LSAMSP_V',
-                    'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
-                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
-                    'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
-                ]
+                any_true_keywords=typical_bool_keywords,
+                invalid_keywords=typical_cal_invalid_keywords
             )
+
+            ## TODO: we shouldn't need to do this manually, and should be done in merge header
+            # but haven't figured out the bug, so we're hard coding it
+            if 'DESMEAR' in err_hdr:
+                if type(err_hdr['DESMEAR']) == int:
+                    err_hdr['DESMEAR'] = bool(err_hdr['DESMEAR'])
+
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
         else:
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
@@ -1569,9 +1689,9 @@ class DetectorNoiseMaps(Image):
         err_hdr (astropy.io.fits.Header): the error header (required only if data is passed in for data_or_filepath)
 
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None, dq_hdr=None):
        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr)
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr, dq_hdr=dq_hdr)
 
         # File format checks
         if self.data.ndim != 3 or self.data.shape[0] != 3:
@@ -1637,16 +1757,16 @@ class DetectorNoiseMaps(Image):
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
         if 'FPN_IMM' not in self.ext_hdr.keys():
-            fpn_imm = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            fpn_imm = -999. #can't store NaN in FITS header, so do a number that's obviously wrong
             self.ext_hdr['FPN_IMM'] = fpn_imm
         if 'CIC_IMM' not in self.ext_hdr.keys():
-            cic_imm = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            cic_imm = -999. #can't store NaN in FITS header, so do a number that's obviously wrong
             self.ext_hdr['CIC_IMM'] = cic_imm
         if 'DC_IMM' not in self.ext_hdr.keys():
-            dc_imm = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            dc_imm = -999. #can't store NaN in FITS header, so do a number that's obviously wrong
             self.ext_hdr['DC_IMM'] = dc_imm
         if 'FPN_IMME' not in self.ext_hdr.keys():
-            fpn_imme = -9999 #can't store NaN in FITS header, so do a number that's obviously wrong
+            fpn_imme = -999. #can't store NaN in FITS header, so do a number that's obviously wrong
             self.ext_hdr['FPN_IMME'] = fpn_imme
 
 class DetectorParams(Image):
@@ -1727,7 +1847,7 @@ class DetectorParams(Image):
 
             # fill caldb required keywords with dummy data
             pri_hdr["OBSNUM"] = 000     
-            ext_hdr["EXPTIME"] = 1
+            ext_hdr["EXPTIME"] = 1.
             ext_hdr['OPMODE'] = ""
             ext_hdr['EMGAIN_C'] = 1.0
             ext_hdr['EXCAMT'] = 40.0
@@ -1904,9 +2024,26 @@ class AstrometricCalibration(Image):
 
         # check that this is actually an AstrometricCalibration file that was read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
-            raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
-        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'     
-    
+            raise ValueError("File that was loaded was not an AstrometricCalibration file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
+
+    def save(self, filedir=None, filename=None):
+        """
+        Save to disk, keeping data as float64 since astrometric coordinates
+        require more than float32 precision.
+
+        Args:
+            filedir (str): filedir to save to
+            filename (str): filepath to save to
+        """
+        # Temporarily override image_dtype to preserve float64 for this class
+        original_dtype = corgidrp.image_dtype
+        corgidrp.image_dtype = np.float64
+        try:
+            super().save(filedir=filedir, filename=filename)
+        finally:
+            corgidrp.image_dtype = original_dtype
+
 class TrapCalibration(Image):
     """
 
@@ -2257,8 +2394,12 @@ class SlitTransmission(Image):
             with fits.open(data_or_filepath) as hdulist:
                 #x/y offset is in FITS extension
                 self.x_offset = hdulist["XOFF"].data
-                self.xoff_hdr = hdulist["XOFF"].header    
+                if self.x_offset is not None and np.issubdtype(self.x_offset.dtype, np.floating):
+                    self.x_offset = self.x_offset.astype(np.float64)
+                self.xoff_hdr = hdulist["XOFF"].header
                 self.y_offset = hdulist["YOFF"].data
+                if self.y_offset is not None and np.issubdtype(self.y_offset.dtype, np.floating):
+                    self.y_offset = self.y_offset.astype(np.float64)
                 self.yoff_hdr = hdulist["YOFF"].header    
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SlitTransmission':
             raise ValueError("This file is not a valid SlitTransmission calibration.")
@@ -2329,6 +2470,14 @@ class SlitTransmission(Image):
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
+        # recast data to the appropriate bit depth as set by the pipeline settings
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+        if self.x_offset is not None:
+            self.x_offset = self.x_offset.astype(corgidrp.image_dtype, copy=False)
+        if self.y_offset is not None:
+            self.y_offset = self.y_offset.astype(corgidrp.image_dtype, copy=False)
+
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
@@ -2342,7 +2491,7 @@ class SlitTransmission(Image):
             warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
             hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
-        
+
 class FpamFsamCal(Image):
     """
     Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
@@ -2404,7 +2553,7 @@ class FpamFsamCal(Image):
 
             # fill caldb required keywords with dummy data
             prihdr['OBSNUM'] = 0
-            exthdr["EXPTIME"] = 0
+            exthdr["EXPTIME"] = 0.
             exthdr['OPMODE'] = ""
             exthdr['EMGAIN_C'] = 1.0
             exthdr['EXCAMT'] = 40.0
@@ -2543,7 +2692,7 @@ class CoreThroughputCalibration(Image):
             # Apply merged headers from PSF part of the dataset back to the output 
             self.pri_hdr = pri_hdr
             ext_hdr['EXTNAME'] = 'PSFCUBE'
-            ext_hdr['BUNIT'] = 'photoelectron/pix/s'
+            ext_hdr['BUNIT'] = 'photoelectron/s'
             ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
                 'observing sequence. PSFs are not normalized. They are the '
                 'images of the off-axis source. The data cube is centered '
@@ -3003,7 +3152,7 @@ class CoreThroughputMap(Image):
         
             # Apply merged headers from PSF part of the dataset back to the output 
             self.pri_hdr = pri_hdr
-            ext_hdr['BUNIT'] = 'photoelectron/pix/s'
+            ext_hdr['BUNIT'] = 'photoelectron/s'
             self.ext_hdr = ext_hdr
             self.err_hdr = err_hdr
             self.dq_hdr = dq_hdr
@@ -3608,8 +3757,30 @@ class MuellerMatrix(Image):
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this Mueller Matrix (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
-        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+            input_dataset,
+            invalid_keywords=[
+                'VISITID', 'CDMSVERS', 'FSWDVERS', 'FILETIME', 'PROGNUM', 'EXECNUM','CAMPAIGN', 'SEGMENT','OBSNUM',
+                'VISNUM', 'CPGSFILE', 'AUXFILE', 'TARGET', 'RA', 'DEC', 'EQUINOX', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 
+                'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 
+                'WBJ_1', 'WBJ_2', 'WBJ_3', 
+                'SCTSRT', 'SCTEND', 'FRMTYPE','ISHOWSFC','ISACQ','SPBAL','ISFLAT','SATSPOTS','STATUS', 'HVCBIAS',
+                'OPMODE','EXPTIME','EMGAIN_C','UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5',
+                'GAINTCAL','EXCAMT','LOCAMT','EMGAIN_A','KGAINPAR','CYCLES','LASTEXP','BLNKTIME',
+                'BLNKCYC','EXPCYC','OVEREXP','NOVEREXP','ISPC','PROXET','FCMLOOP','FCMPOS','FSMINNER','FSMLOS',
+                'FSMPRFL','FSMRSTR','FSMSG1','FSMSG2','FSMSG3','FSMX','FSMY','EACQ_ROW','EACQ_COL','SB_FP_DX',
+                'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY', 'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR','Z3AVG','Z3RES',
+                'Z3VAR', '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG','Z5RES', 'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG',
+                'Z8RES', 'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES','Z11AVG', 'Z11RES', 'Z12AVG', 'Z12RES', 'Z13AVG', 'Z13RES', 'Z14AVG',
+                'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
+                'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
+                'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ]
+        )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
@@ -3657,8 +3828,30 @@ class NDMuellerMatrix(Image):
         err_hdr (astropy.io.fits.Header): the error header (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
-        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+            input_dataset,
+            invalid_keywords=[
+                'VISITID', 'CDMSVERS', 'FSWDVERS', 'FILETIME', 'PROGNUM', 'EXECNUM','CAMPAIGN', 'SEGMENT','OBSNUM',
+                'VISNUM', 'CPGSFILE', 'AUXFILE', 'TARGET', 'RA', 'DEC', 'EQUINOX', 'RAPM', 'DECPM', 'OPGAIN', 'PHTCNT', 
+                'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW', 'FILENAME', 'OBSNAME', 
+                'WBJ_1', 'WBJ_2', 'WBJ_3', 
+                'SCTSRT', 'SCTEND', 'FRMTYPE','ISHOWSFC','ISACQ','SPBAL','ISFLAT','SATSPOTS','STATUS', 'HVCBIAS',
+                'OPMODE','EXPTIME','EMGAIN_C','UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5',
+                'GAINTCAL','EXCAMT','LOCAMT','EMGAIN_A','KGAINPAR','CYCLES','LASTEXP','BLNKTIME',
+                'BLNKCYC','EXPCYC','OVEREXP','NOVEREXP','ISPC','PROXET','FCMLOOP','FCMPOS','FSMINNER','FSMLOS',
+                'FSMPRFL','FSMRSTR','FSMSG1','FSMSG2','FSMSG3','FSMX','FSMY','EACQ_ROW','EACQ_COL','SB_FP_DX',
+                'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY', 'DMZLOOP', '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR','Z3AVG','Z3RES',
+                'Z3VAR', '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG','Z5RES', 'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG',
+                'Z8RES', 'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES','Z11AVG', 'Z11RES', 'Z12AVG', 'Z12RES', 'Z13AVG', 'Z13RES', 'Z14AVG',
+                'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
+                'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
+                'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ]
+        )
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+        else:
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new ND Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix

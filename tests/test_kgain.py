@@ -75,9 +75,10 @@ def test_kgain():
         
     kgain_filepath = os.path.join(calibdir, kgain_filename)
     kgain_open = data.KGain(kgain_filepath)
-    assert kgain_open.value == gain_value
-    assert kgain_open.error == gain_err
-    assert kgain_open.ptc[0,0] == 1.
+    # use isclose to deal with 64 bit vs 32 bit precision 
+    assert np.isclose(kgain_open.value, gain_value, rtol=1e-6)
+    assert np.isclose(kgain_open.error, gain_err, rtol=1e-6)
+    assert np.isclose(kgain_open.ptc[0,0], 1., rtol=1e-6)
     assert kgain_open.ptc_hdr["EXTNAME"] == "PTC"
     assert kgain_open.err_hdr is not None
     

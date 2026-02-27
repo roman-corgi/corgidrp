@@ -204,8 +204,9 @@ def test_fluxcal_file():
 
     fluxcal_fac_file = FluxcalFactor(fluxcal_filepath)
     assert fluxcal_fac_file.filter == '3C'
-    assert fluxcal_fac_file.fluxcal_fac == fluxcal_factor
-    assert fluxcal_fac_file.fluxcal_err == fluxcal_factor_error
+    # use isclose to deal with comparing 64 bit to 32 bit data
+    assert np.isclose(fluxcal_fac_file.fluxcal_fac, fluxcal_factor, rtol=1e-6)
+    assert np.isclose(fluxcal_fac_file.fluxcal_err, fluxcal_factor_error, rtol=1e-6)
     # JM: I moved this out of the fluxcal class and into fluxcal.py because, depending on the method you use to 
     # make the fluxcal factor, the BUNIT will vary. Doing a mock without running fluxcal methods won't update BUNIT
     #assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
@@ -422,8 +423,8 @@ def test_compute_spec_flux_ratio_single_rotation():
     comp_ds = make_1d_spec_image(comp_spec, spec_err, wave, pa_aper_deg='B',
                                  exp_time=10.0, col_cor=True)
 
-    host_ds.ext_hdr['FSMLOS'] = 0
-    comp_ds.ext_hdr['FSMLOS'] = 1
+    host_ds.ext_hdr['FSMLOS'] = "0"
+    comp_ds.ext_hdr['FSMLOS'] = "1"
 
     # Place the companion at a valid WV0 location 
     comp_ds.ext_hdr.setdefault('STARLOCX', 0.0)
@@ -507,8 +508,8 @@ def test_compute_spec_flux_ratio_weighted():
         comp_comb_wave,
     )
 
-    host_comb_image.ext_hdr['FSMLOS'] = 0
-    comp_comb_image.ext_hdr['FSMLOS'] = 1
+    host_comb_image.ext_hdr['FSMLOS'] = "0"
+    comp_comb_image.ext_hdr['FSMLOS'] = "1"
 
     # Apply core-throughput correction to the combined companion spectrum
     ct_cal = create_ct_cal(fwhm_mas=50)

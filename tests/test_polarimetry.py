@@ -546,13 +546,13 @@ def test_mueller_matrix_cal():
     assert isinstance(mueller_matrix, pol.MuellerMatrix)
 
     #Put in the ND filter and make sure the type is correct. 
-    for framm in mock_dataset.frames:
+    for framm in stokes_dataset.frames:
         framm.ext_hdr["FPAMNAME"] = "ND225"
     mueller_matrix_nd = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
     assert isinstance(mueller_matrix_nd, pol.NDMuellerMatrix)
 
     #Make sure that if the dataset is mixed ND and non-ND an error is raised
-    mock_dataset.frames[0].ext_hdr["FPAMNAME"] = "CLEAR"
+    stokes_dataset.frames[0].ext_hdr["FPAMNAME"] = "CLEAR"
     with pytest.raises(ValueError):
         mueller_matrix_mixed = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
@@ -655,9 +655,8 @@ def test_subtract_stellar_polarization():
        
     # construct mueller matrix calibration objects
     mm_prihdr, mm_exthdr, mm_errhdr, mm_dqhdr = mocks.create_default_calibration_product_headers()
-    system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
-    nd_mm_cal = data.MuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
-
+    system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[4:])
+    nd_mm_cal = data.NDMuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[:4])
     # run step function
     output_dataset = l3_to_l4.subtract_stellar_polarization(input_dataset=input_dataset, 
                                                             system_mueller_matrix_cal=system_mm_cal,
@@ -760,8 +759,8 @@ def test_combine_polarization_states():
         pol0_img.pri_hdr['PA_APER'] = rotation_angle
         pol0_img.ext_hdr['NORTHANG'] = rotation_angle
         pol0_img.ext_hdr['DPAMNAME'] = 'POL0'
-        pol0_img.ext_hdr['STARLOCX'] = 24
-        pol0_img.ext_hdr['STARLOCY'] = 24
+        pol0_img.ext_hdr['STARLOCX'] = 24.
+        pol0_img.ext_hdr['STARLOCY'] = 24.
         input_pol_frames.append(pol0_img)
 
         # construct POL45 image
@@ -770,8 +769,8 @@ def test_combine_polarization_states():
         pol45_img.pri_hdr['PA_APER'] = rotation_angle
         pol45_img.ext_hdr['NORTHANG'] = rotation_angle
         pol45_img.ext_hdr['DPAMNAME'] = 'POL45'
-        pol45_img.ext_hdr['STARLOCX'] = 24
-        pol45_img.ext_hdr['STARLOCY'] = 24
+        pol45_img.ext_hdr['STARLOCX'] = 24.
+        pol45_img.ext_hdr['STARLOCY'] = 24.
         input_pol_frames.append(pol45_img)
 
         # construct total intensity image for psf sub
@@ -781,10 +780,10 @@ def test_combine_polarization_states():
         psfsub_img_2.pri_hdr['PA_APER'] = rotation_angle
         psfsub_img_1.ext_hdr['NORTHANG'] = rotation_angle
         psfsub_img_2.ext_hdr['NORTHANG'] = rotation_angle
-        psfsub_img_1.ext_hdr['STARLOCX'] = 24
-        psfsub_img_2.ext_hdr['STARLOCX'] = 24
-        psfsub_img_1.ext_hdr['STARLOCY'] = 24
-        psfsub_img_2.ext_hdr['STARLOCY'] = 24
+        psfsub_img_1.ext_hdr['STARLOCX'] = 24.
+        psfsub_img_2.ext_hdr['STARLOCX'] = 24.
+        psfsub_img_1.ext_hdr['STARLOCY'] = 24.
+        psfsub_img_2.ext_hdr['STARLOCY'] = 24.
         input_psfsub_frames.append(psfsub_img_1)
         input_psfsub_frames.append(psfsub_img_2)
         
@@ -1343,11 +1342,11 @@ def test_compute_QphiUPhi():
 
 
 if __name__ == "__main__":
-    #test_image_splitting()
+    test_image_splitting()
     test_calc_pol_p_and_pa_image()
-    #test_subtract_stellar_polarization()
-    #test_mueller_matrix_cal()
-    #test_combine_polarization_states()
-    #test_align_frames()
-    # #test_calc_stokes_unocculted()
+    test_subtract_stellar_polarization()
+    test_mueller_matrix_cal()
+    test_combine_polarization_states()
+    test_align_frames()
+    test_calc_stokes_unocculted()
     test_compute_QphiUPhi()

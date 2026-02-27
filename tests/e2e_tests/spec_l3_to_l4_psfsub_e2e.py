@@ -9,14 +9,14 @@ import argparse
 from corgidrp import corethroughput
 from corgidrp.data import Dataset
 from corgidrp.data import Image
-from corgidrp.mocks import create_default_calibration_product_headers
+from corgidrp.mocks import create_default_calibration_product_headers, create_default_L2b_headers
 from corgidrp.mocks import rename_files_to_cgi_format, create_ct_psfs
 from corgidrp.walker import walk_corgidrp
 import corgidrp
 import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
-                           get_latest_cal_file)
+                           get_latest_cal_file, compare_to_mocks_hdrs)
 from l1_to_l3_spec_e2e import run_l1_to_l3_e2e_test
 import warnings
 
@@ -120,11 +120,11 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     for i, frame in enumerate(l3_dataset):
         frame_info = f"L3 Frame {i}"
         #simulation seems to be done without coronagraph
-        frame.ext_hdr['FSMLOS'] = 1
+        frame.ext_hdr['FSMLOS'] = "1"
         check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l3_.fits', frame_info, logger, data_level = 'l3_')
         check_dimensions(frame.data, (125, 125), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
-        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3', 'FSMLOS' : 1}, frame_info, logger)
+        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3', 'FSMLOS' : "1"}, frame_info, logger)
         verify_header_keywords(frame.pri_hdr, {'PSFREF'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'SATSPOTS'}, frame_info, logger)
         logger.info("")
@@ -224,7 +224,9 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         logger.info(f"Expected: only one combined l4 file but contains {len(out_files)} files. FAIL.")
     out_file = out_files[0]
     check_filename_convention(os.path.basename(out_file), 'cgi_*_l4_.fits', "spec l4 output product", logger, data_level = "l4_")
-
+    
+    compare_to_mocks_hdrs(out_file)
+    
     with fits.open(out_file) as hdul:        
         verify_hdu_count(hdul, 12, "spec l4 output product", logger)
         
@@ -467,7 +469,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

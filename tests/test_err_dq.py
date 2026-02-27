@@ -152,9 +152,12 @@ def test_add_error_term():
     assert image_test.err_hdr["Layer_2"] == "error_noid"
     assert image_test.err_hdr["Layer_3"] == "error_nuts"
 
-    image_3d = Image(data_3d,prhd,exthd,err_3d,dq_3d,errhd,dqhd)
+    # Use err_3d.copy() so that add_error_term modifying self.err in-place
+    # doesn't also modify the original err_3d array 
+    image_3d = Image(data_3d,prhd,exthd,err_3d.copy(),dq_3d,errhd,dqhd)
     image_3d.add_error_term(err1_3d, "error_noid")
-    assert image_3d.err[0,0,0,0] == err_3d[0,0,0]
+    # Combined error should be sqrt(original^2 + added^2)
+    assert image_3d.err[0,0,0,0] == np.sqrt(err_3d[0,0,0]**2 + err1_3d[0,0,0]**2)
     image_3d.add_error_term(err2_3d, "error_nuts")
     assert image_3d.err.shape == (3,2,1024,1024)
     assert image_3d.err[0,0,0,0] == np.sqrt(err1_3d[0,0,0]**2 + err2_3d[0,0,0]**2)
