@@ -16,4 +16,3 @@ include corgidrp/data/header_formats/l1.csv
 include corgidrp/data/spectroscopy/templates/*.fits
 include corgidrp/data/spectroscopy/CGI_bandpass_centers.csv
 include corgidrp/data/spectroscopy/TVAC_PRISM3_dispersion_profile.npz
-include corgidrp/data/header_formats/l1.csv
