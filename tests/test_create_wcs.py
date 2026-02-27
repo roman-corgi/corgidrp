@@ -32,7 +32,7 @@ def test_create_wcs():
         center_pixel = [(image_shape[1]-1) // 2, (image_shape[0]-1) // 2]
         target_ra, target_dec = mock_frame.pri_hdr['RA'], mock_frame.pri_hdr['DEC']
         roll_offset_deg = pa_aper_deg - astrom_cal.pri_hdr['PA_APER']
-        pc = np.array([[-np.cos(np.radians(northangle + roll_offset_deg)), np.sin(np.radians(northangle + roll_offset_deg))], [np.sin(np.radians(northangle + roll_offset_deg)), np.cos(np.radians(northangle + roll_offset_deg))]])
+        pc = np.array([[-np.cos(np.radians(northangle - roll_offset_deg)), np.sin(np.radians(northangle - roll_offset_deg))], [np.sin(np.radians(northangle - roll_offset_deg)), np.cos(np.radians(northangle - roll_offset_deg))]])
         # assuming platescale is the same along both axes
         matrix = pc * (platescale * 0.001) / 3600.
         
@@ -54,7 +54,7 @@ def test_create_wcs():
 
         expected['CRVAL1'] = target_ra - ra_offset      # the corrected target pointing based on astrom_cal
         expected['CRVAL2'] = target_dec - dec_offset
-        expected['NORTHANG'] = northangle + roll_offset_deg
+        expected['NORTHANG'] = northangle - roll_offset_deg
         
         # gather the wcs values from the updated dataset
         wcs = {}

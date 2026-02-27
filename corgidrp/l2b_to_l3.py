@@ -43,7 +43,7 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
 
         #TO DO: double check this. northangle may be defined as the full rotation angle, 
         # not north offset, in which case, adding the two below would be adding two absolute rotation angles from north
-        vert_ang = np.radians(northangle + roll_offset_deg)   ##might be -roll_offset_deg
+        vert_ang = np.radians(northangle - roll_offset_deg)
         pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
         cdmatrix = pc * (platescale * 0.001) / 3600.
 
@@ -67,7 +67,7 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
         wcs_info['CRVAL2'] = corrected_dec
 
         wcs_info['PLTSCALE'] = platescale  ## [mas] / pixel
-        wcs_info['NORTHANG'] = northangle + roll_offset_deg  ## deg
+        wcs_info['NORTHANG'] = northangle - roll_offset_deg  ## deg
 
         # update the image header with wcs information
         for key, value in wcs_info.items():
