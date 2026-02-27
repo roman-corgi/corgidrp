@@ -44,7 +44,7 @@ def test_pyklipdata_ADI():
     # Check rotation angle assignments match up for sci dataset
     for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
         assert pa_aper_deg == pa_aper_degs[r]
-        assert mock_sci[r].pri_hdr['PA_APER'] == pa_aper_deg, f"Incorrect PA_APER assignment for frame {r}."
+        assert mock_sci[r].ext_hdr['NORTHANG'] == pa_aper_deg, f"Incorrect NORTHANG assignment for frame {r}."
     
     # Check ref library is None
     assert pyklip_dataset.psflib is None, "pyklip_dataset.psflib is not None, even though no reference dataset was provided."
@@ -68,7 +68,7 @@ def test_pyklipdata_RDI():
     # Check rotation angle assignments match up for sci dataset
     for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
         assert pa_aper_deg == pa_aper_degs[r]
-        assert mock_sci[r].pri_hdr['PA_APER'] == pa_aper_deg, f"Incorrect PA_APER assignment for frame {r}."
+        assert mock_sci[r].ext_hdr['NORTHANG'] == pa_aper_deg, f"Incorrect NORTHANG assignment for frame {r}."
     
     # Check ref library shape
     assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref
@@ -93,7 +93,7 @@ def test_pyklipdata_ADIRDI():
     # Check rotation angle assignments match up for sci dataset
     for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
         assert pa_aper_deg == pa_aper_degs[r]
-        assert mock_sci[r].pri_hdr['PA_APER'] == pa_aper_deg, f"Incorrect PA_APER assignment for frame {r}."
+        assert mock_sci[r].ext_hdr['NORTHANG'] == pa_aper_deg, f"Incorrect NORTHANG assignment for frame {r}."
     
     # Check ref library shape
     assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref
