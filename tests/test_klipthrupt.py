@@ -1112,45 +1112,65 @@ def test_psfsub_withklipandctmeas_rdi(coro_type,FOV,band):
 def test_measure_noise_nsigma_and_correction():
     """Tests for nsigma scaling and small sample statistics correction
     in measure_noise().
+
+    This is a unit test that directly tests measure_noise() with synthetic data.
+    It verifies:
+      - Simple nsigma scaling (noise * nsigma)
+      - Backward compatibility (default behavior unchanged)
+      - Mawet et al. (2014) small sample correction behavior
+      - Convergence of the correction at large separations
+      - Input validation (bad inputs raise errors)
+      - FWHM input flexibility (scalar vs array)
     """
     from scipy.stats import t as t_dist, norm
 
+    # --- Setup: create a synthetic frame with known Gaussian noise ---
+    # Two KL-mode slices of pure Gaussian noise (mean=0, std=1) so that
+    # the expected annular standard deviation is ~1.0 everywhere.
     cenx, ceny = (120., 130.)
     frame_shape_yx = (200, 200)
-    seps = np.arange(50., 71., 5.)
-    fwhm = 2.  # pix
+    seps = np.arange(50., 71., 5.)  # separations where we'll measure noise
+    fwhm = 2.  # PSF FWHM in pixels (used as annulus halfwidth and for small sample correction)
 
     ext_hdr = fits.Header()
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
 
     rng = np.random.default_rng(42)
-    image = rng.normal(0., 1., (2, *frame_shape_yx))
+    image = rng.normal(0., 1., (2, *frame_shape_yx))  # 2 KL mode slices
     frame = Image(image, pri_hdr=fits.Header(), ext_hdr=ext_hdr)
 
-    # 1. nsigma scaling: nsigma=5 should be 5x the nsigma=1 result
+    # --- Test 1: nsigma scaling is a pure multiplier ---
+    # Without small sample correction, nsigma=5 should produce exactly 5x the nsigma=1 result,
+    # since it's just multiplying the standard deviation by nsigma.
     noise_1sig = measure_noise(frame, seps, fwhm, nsigma=1)
     noise_5sig = measure_noise(frame, seps, fwhm, nsigma=5)
     assert noise_5sig == pytest.approx(5 * noise_1sig)
 
-    # 2. Backward compatibility: explicit nsigma=1 matches default
+    # --- Test 2: backward compatibility ---
+    # Calling without nsigma (default=1) should give the same result as nsigma=1,
+    # ensuring old code that doesn't pass nsigma still works.
     noise_default = measure_noise(frame, seps, fwhm)
     assert noise_1sig == pytest.approx(noise_default)
 
-    # 3. Small sample correction: at small separations, corrected noise > naive nsigma * std
+    # --- Test 3: small sample correction makes noise MORE conservative ---
+    # The Mawet et al. (2014) correction replaces the naive nsigma multiplier with a
+    # t-distribution threshold that's always >= nsigma for finite n (number of resolution
+    # elements). So corrected noise should be >= naive nsigma * std at every separation.
     noise_corr = measure_noise(frame, seps, fwhm, nsigma=5, fwhm=fwhm,
                                small_sample_correction=True)
-    # At small separations where n is small, corrected values should exceed naive 5*std
     for i, sep in enumerate(seps):
-        n = 2 * np.pi * sep / fwhm
+        n = 2 * np.pi * sep / fwhm  # number of independent resolution elements in annulus
         if n > 2:
-            # Correction factor should be >= nsigma (it's always larger for finite n)
+            # t-distribution threshold > Gaussian threshold for finite degrees of freedom
             assert np.all(noise_corr[i] >= noise_5sig[i] - 1e-10)
 
-    # 4. Convergence at large separations: with many resolution elements, correction ≈ nsigma * std
+    # --- Test 4: convergence at large separations ---
+    # With many resolution elements (large n), the t-distribution converges to the
+    # Gaussian, so the corrected noise should be approximately equal to the naive
+    # nsigma * std (within 5% tolerance).
     large_seps = np.array([500., 600., 700.])
-    # Use a larger frame for these separations
-    large_shape = (1500, 1500)
+    large_shape = (1500, 1500)  # need a bigger frame to fit these separations
     large_cenx, large_ceny = (750., 750.)
     ext_hdr_large = fits.Header()
     ext_hdr_large['STARLOCX'] = large_cenx
@@ -1160,31 +1180,31 @@ def test_measure_noise_nsigma_and_correction():
     noise_large_naive = measure_noise(large_frame, large_seps, fwhm, nsigma=5)
     noise_large_corr = measure_noise(large_frame, large_seps, fwhm, nsigma=5, fwhm=fwhm,
                                      small_sample_correction=True)
-    # At very large n, correction factor approaches nsigma, so ratio should be ~1
     assert noise_large_corr == pytest.approx(noise_large_naive, rel=0.05)
 
-    # 5. Validation errors
-    # fwhm=None with correction should raise ValueError
+    # --- Test 5: input validation ---
+    # Requesting small_sample_correction without providing fwhm should fail
     with pytest.raises(ValueError):
         measure_noise(frame, seps, fwhm, nsigma=5, small_sample_correction=True)
 
-    # nsigma <= 0 should raise ValueError
+    # nsigma must be positive
     with pytest.raises(ValueError):
         measure_noise(frame, seps, fwhm, nsigma=0)
     with pytest.raises(ValueError):
         measure_noise(frame, seps, fwhm, nsigma=-1)
 
-    # Wrong-length fwhm array should raise ValueError
+    # fwhm array length must match number of separations
     with pytest.raises(ValueError):
         measure_noise(frame, seps, fwhm, nsigma=5, fwhm=np.array([1., 2.]),
                       small_sample_correction=True)
 
-    # Scalar fwhm should work (broadcast)
+    # --- Test 6: fwhm input flexibility ---
+    # Scalar fwhm should be broadcast to all separations
     noise_scalar_fwhm = measure_noise(frame, seps, fwhm, nsigma=5, fwhm=2.0,
                                       small_sample_correction=True)
     assert noise_scalar_fwhm.shape == noise_5sig.shape
 
-    # Array fwhm matching seps length should work
+    # An array of identical values should give the same result as the scalar
     fwhm_arr = np.full(len(seps), 2.0)
     noise_arr_fwhm = measure_noise(frame, seps, fwhm, nsigma=5, fwhm=fwhm_arr,
                                    small_sample_correction=True)

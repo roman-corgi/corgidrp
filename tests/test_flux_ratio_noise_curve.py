@@ -509,17 +509,28 @@ def test_expected_flux_ratio_noise_pol():
 
 
 def test_flux_ratio_noise_nsigma_and_correction():
-    """Tests nsigma passthrough and small sample correction in compute_flux_ratio_noise."""
+    """Integration test for nsigma and small sample correction through the full
+    compute_flux_ratio_noise pipeline.
 
-    # Set up a minimal RDI dataset (same setup as test_expected_flux_ratio_noise)
+    Unlike test_measure_noise_nsigma_and_correction (which tests measure_noise
+    directly with synthetic noise), this test runs the full pipeline:
+      do_psf_subtraction -> compute_flux_ratio_noise
+    with mock coronagraphic data, unocculted star, and ND calibration to verify
+    that nsigma and the Mawet correction propagate correctly through the entire
+    flux ratio noise curve computation.
+    """
+
+    # --- Setup: create mock RDI coronagraphic data ---
+    # RDI (Reference Differential Imaging) uses a separate reference star observation
+    # to subtract the stellar PSF. We create 1 science frame and 1 reference frame.
     mode = 'RDI'
     nsci, nref = (1, 1)
 
-    st_amp = 100.
-    noise_amp = 1e-3
-    pl_contrast = 0.
+    st_amp = 100.       # star amplitude in the coronagraphic images
+    noise_amp = 1e-3    # background noise level
+    pl_contrast = 0.    # no planet injected — we're only measuring noise
     rolls = [0, 15., 0, 0]
-    numbasis = [1]
+    numbasis = [1]      # use 1 KL mode for KLIP subtraction
     data_shape = (101, 101)
     mock_sci_rdi, mock_ref_rdi = create_psfsub_dataset(nsci, nref, rolls,
                                             fwhm_pix=fwhm_pix,
@@ -528,12 +539,15 @@ def test_flux_ratio_noise_nsigma_and_correction():
                                             pl_contrast=pl_contrast,
                                             data_shape=data_shape)
 
+    # Core throughput calibration (how much planet flux the coronagraph transmits)
     nx, ny = (21, 21)
     cenx, ceny = (25., 30.)
     ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
                   cenx=cenx, ceny=ceny,
                   nx=nx, ny=ny)
 
+    # Run PSF subtraction with KLIP, measuring both algorithm and core throughputs
+    # so that the output frames carry KL_THRU and CT_THRU extensions.
     from corgidrp.l3_to_l4 import do_psf_subtraction
     klip_kwargs = {'numbasis': numbasis}
     psfsub_dataset_rdi = do_psf_subtraction(mock_sci_rdi, ctcal,
@@ -543,7 +557,10 @@ def test_flux_ratio_noise_nsigma_and_correction():
                                 measure_1d_core_thrupt=True,
                                 **klip_kwargs)
 
-    # Make unocculted star
+    # --- Create a synthetic unocculted star image ---
+    # This simulates an observation of the same star without the coronagraph mask,
+    # used to measure the total stellar flux (Fs). We model it as a 2D Gaussian
+    # with Poisson noise added for realism.
     x = np.arange(psfsub_dataset_rdi[0].data.shape[-1])
     y = np.arange(psfsub_dataset_rdi[0].data.shape[-2])
     X, Y = np.meshgrid(x, y)
@@ -563,7 +580,10 @@ def test_flux_ratio_noise_nsigma_and_correction():
     prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
     star_image = data.Image(star_PSF, prihdr, exthdr)
     star_dataset = data.Dataset([star_image for i in range(len(psfsub_dataset_rdi))])
-    # Fake ND calibration
+
+    # --- Create a fake ND filter calibration ---
+    # The unocculted star is observed through a neutral density filter to avoid
+    # saturation. We use a nearly transparent ND (OD=1e-2) for simplicity.
     nd_x, nd_y = np.meshgrid(np.linspace(0, data_shape[1], 5), np.linspace(0, data_shape[0], 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
@@ -572,15 +592,20 @@ def test_flux_ratio_noise_nsigma_and_correction():
     nd_cal = data.NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
                                       ext_hdr=ext_hdr)
 
-    # 1. nsigma passthrough: FRN with nsigma=5 should be 5x the nsigma=1 values
+    # --- Test 1: nsigma passthrough ---
+    # The nsigma parameter flows through compute_flux_ratio_noise -> measure_noise.
+    # Without small sample correction, the flux ratio noise curve should scale linearly
+    # with nsigma, so FRN(5σ) = 5 × FRN(1σ) exactly.
     frn_1sig = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=3, nsigma=1)
     frn_5sig = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=3, nsigma=5)
     for f1, f5 in zip(frn_1sig, frn_5sig):
-        vals_1 = f1.hdu_list['FRN_CRV'].data[2:]  # skip sep rows
+        vals_1 = f1.hdu_list['FRN_CRV'].data[2:]  # rows 0-1 are separations; row 2+ are FRN values
         vals_5 = f5.hdu_list['FRN_CRV'].data[2:]
         assert vals_5 == pytest.approx(5 * vals_1, rel=1e-10)
 
-    # 2. Header metadata
+    # --- Test 2: FITS header metadata ---
+    # The NSIGMA and SSCORR keywords should be recorded in the FRN_CRV extension header
+    # so that downstream users know how the curve was computed.
     for frame in frn_5sig:
         hdr = frame.hdu_list['FRN_CRV'].header
         assert hdr['NSIGMA'] == 5
@@ -592,11 +617,13 @@ def test_flux_ratio_noise_nsigma_and_correction():
         assert hdr['NSIGMA'] == 5
         assert hdr['SSCORR'] == True
 
-    # 3. Small sample correction: FRN with correction >= FRN without (especially at inner seps)
+    # --- Test 3: small sample correction makes the curve more conservative ---
+    # The Mawet et al. (2014) correction uses the t-distribution, which always produces
+    # a threshold >= the naive Gaussian nsigma. So the corrected FRN should be >= the
+    # uncorrected FRN at every separation.
     for fc, f5 in zip(frn_corr, frn_5sig):
         vals_corr = fc.hdu_list['FRN_CRV'].data[2:]
         vals_5 = f5.hdu_list['FRN_CRV'].data[2:]
-        # Correction factor should make noise >= naive scaling
         assert np.all(vals_corr >= vals_5 - 1e-15)
 
 
