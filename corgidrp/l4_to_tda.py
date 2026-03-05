@@ -750,7 +750,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         hdr['SSCORR'] = (small_sample_correction, "Mawet+2014 small sample correction applied")
         hdr['COMMENT'] = "Flux ratio noise curve as a function of radial separation.  First row:  separation radii in pixels.  Second row:  separation radii in mas.  Remaining rows:  flux ratio noise curve values for KL mode truncations."
         frame.add_extension_hdu('FRN_CRV', data = flux_ratio_noise_curve, header=hdr)
-        history_msg = 'Calibrated flux ratio noise curve added to extension header FRN_CRV.'
+        history_msg = 'Calibrated {0}-sigma flux ratio noise curve added to extension header FRN_CRV (small_sample_correction={1}).'.format(nsigma, small_sample_correction)
     output_dataset.update_after_processing_step(history_msg)
     return output_dataset
 
