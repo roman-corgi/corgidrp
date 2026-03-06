@@ -7,7 +7,7 @@ import numpy as np
 import os
 import astropy.io.fits as fits
 import itertools
-from specL1sims_utils import write_png_and_header
+from specL1sims_utils import write_png_from_sceneobj
 
 def create_spec_LSF_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offsets_mas, gain, exptime, ref_flag=False, 
                          output_dim=121, overfac=5, loc_x=512, loc_y=512):
@@ -50,8 +50,8 @@ def create_spec_LSF_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offs
     
     Returns
     -------
-    None
-        Saves FITS files, PNG images, and header text files to outdir
+    L1_fits_files : list of str
+        List of paths to all L1 FITS files generated
     """
     # Slit+Prism images of unocculated star according to Line Spread Function visit
     host_star_properties = {'Vmag': Vmag,
@@ -71,7 +71,9 @@ def create_spec_LSF_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offs
 
     short_exptime = 5.0
     emccd_keywords = {'cr_rate':0.0, 'em_gain':gain}
-    detector = instrument.CorgiDetector(emccd_keywords)
+    detector = instrument.CorgiDetector(emccd_keywords, photon_counting=False)
+
+    L1_fits_files = []
 
     # Slitless prism image
     fsm_source_offset_mas = slit_pos_mas
@@ -126,7 +128,9 @@ def create_spec_LSF_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offs
 
     detector.generate_detector_image(sim_cfam3F_slitless, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
     outputs.save_hdu_to_fits(sim_cfam3F_slitless.image_on_detector, outdir=outdir, write_as_L1=True)
-    png_fname, header_txt_fname = write_png_and_header(sim_cfam3F_slitless, outdir, loc_x, loc_y, output_dim)
+    L1_fitsname = os.path.join(outdir, sim_cfam3F_slitless.image_on_detector[0].header['FILENAME'])
+    L1_fits_files.append(L1_fitsname)
+    png_fname = write_png_from_sceneobj(sim_cfam3F_slitless, outdir, loc_x, loc_y, output_dim)
 
     # FSM-dithered prism images with slit
     fsm_offset_3F_optics_list = list() 
@@ -229,4 +233,8 @@ def create_spec_LSF_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offs
 
         detector.generate_detector_image(sim_cfam3F, short_exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
         outputs.save_hdu_to_fits(sim_cfam3F.image_on_detector, outdir=outdir, write_as_L1=True)
-        png_fname, header_txt_fname = write_png_and_header(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
+        L1_fitsname = os.path.join(outdir, sim_cfam3F.image_on_detector[0].header['FILENAME'])
+        L1_fits_files.append(L1_fitsname)
+        png_fname = write_png_from_sceneobj(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
+
+    return L1_fits_files

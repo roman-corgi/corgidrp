@@ -9,7 +9,7 @@ import roman_preflight_proper
 import os
 import astropy.io.fits as fits
 import time
-from specL1sims_utils import write_png_and_header
+from specL1sims_utils import write_png_from_sceneobj
 
 def create_spec_satspot_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, spot_contrast, gain=200, exptime=200, nframes=3, output_dim=121, overfac=5, loc_x=512, loc_y=512):
     """
@@ -50,8 +50,8 @@ def create_spec_satspot_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, spot_
     
     Returns
     -------
-    None
-        Saves FITS files, PNG images, and header text files to outdir
+    L1_fits_files : list of str
+        List of paths to all L1 FITS files generated
     """
     
     # --- Host Star Properties ---
@@ -100,7 +100,9 @@ def create_spec_satspot_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, spot_
     sim_satspot = optics_with_spots.get_host_star_psf(base_scene)
 
     emccd_keywords ={'em_gain':gain, 'cr_rate':0}
-    detector = instrument.CorgiDetector(emccd_keywords)
+    detector = instrument.CorgiDetector(emccd_keywords, photon_counting=False)
+
+    L1_fits_files = []
 
     ##### Diagnostic plots
     # sim_scene_without_spots = optics_without_spots.get_host_star_psf(base_scene)
@@ -126,5 +128,9 @@ def create_spec_satspot_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, spot_
     for ii in range(nframes):
         detector.generate_detector_image(sim_satspot, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
         outputs.save_hdu_to_fits(sim_satspot.image_on_detector, outdir=outdir, write_as_L1=True)
-        png_fname, header_txt_fname = write_png_and_header(sim_satspot, outdir, loc_x, loc_y, output_dim)
+        L1_fitsname = os.path.join(outdir, sim_satspot.image_on_detector[0].header['FILENAME'])
+        L1_fits_files.append(L1_fitsname)
+        png_fname = write_png_from_sceneobj(sim_satspot, outdir, loc_x, loc_y, output_dim)
         time.sleep(1) # Wait 1 sec to prevent collision between filenames
+
+    return L1_fits_files

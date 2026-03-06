@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import astropy.io.fits as fits
-from specL1sims_utils import write_png_and_header
+from specL1sims_utils import write_png_from_sceneobj
 
 def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offsets_mas, gain, exptime, ref_flag=False, nd=0, output_dim=121, overfac=5, loc_x=512, loc_y=512):
     """
@@ -49,8 +49,8 @@ def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, f
     
     Returns
     -------
-    None
-        Saves FITS files, PNG images, and header text files to outdir
+    L1_fits_files : list of str
+        List of paths to all L1 FITS files generated
     """
     host_star_properties = {'Vmag': Vmag,
                             'spectral_type': sptype,
@@ -89,7 +89,9 @@ def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, f
         fsm_offset_3D_optics_list.append(fsm_offset_3D_optics)
     
     emccd_keywords = {'cr_rate':0.0, 'em_gain':gain}
-    detector = instrument.CorgiDetector(emccd_keywords)
+    detector = instrument.CorgiDetector(emccd_keywords, photon_counting=False)
+    
+    L1_fits_files = []
     
     for ii, (offset_mas, optics_3F, optics_3D) in enumerate(zip(fsm_offsets_mas, fsm_offset_3F_optics_list, fsm_offset_3D_optics_list)):
         print("------------------------------")
@@ -131,7 +133,9 @@ def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, f
 
         detector.generate_detector_image(sim_cfam3D, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
         outputs.save_hdu_to_fits(sim_cfam3D.image_on_detector, outdir=outdir, write_as_L1=True)
-        png_fname, header_txt_fname = write_png_and_header(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
+        L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
+        L1_fits_files.append(L1_fitsname)
+        png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
 
         print("Evaluating filter 3F image...") 
         sim_cfam3F = optics_3F.get_host_star_psf(base_scene)
@@ -163,7 +167,11 @@ def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, f
 
         detector.generate_detector_image(sim_cfam3F, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
         outputs.save_hdu_to_fits(sim_cfam3F.image_on_detector, outdir=outdir, write_as_L1=True)
-        png_fname, header_txt_fname = write_png_and_header(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
+        L1_fitsname = os.path.join(outdir, sim_cfam3F.image_on_detector[0].header['FILENAME'])
+        L1_fits_files.append(L1_fitsname)
+        png_fname = write_png_from_sceneobj(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
+
+    return L1_fits_files
 
 def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas, gain, exptime, cycle_subband_filters=True, ref_flag=False, nd=0, output_dim=121, overfac=5, loc_x=512, loc_y=512):
     """
@@ -205,8 +213,8 @@ def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas,
     
     Returns
     -------
-    None
-        Saves FITS files, PNG images, and header text files to outdir
+    L1_fits_files : list of str
+        List of paths to all L1 FITS files generated
     """
     host_star_properties = {'Vmag': Vmag,
                             'spectral_type': sptype,
@@ -223,7 +231,9 @@ def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas,
     polaxis = 10
 
     emccd_keywords = {'cr_rate':0.0, 'em_gain':gain}
-    detector = instrument.CorgiDetector(emccd_keywords)
+    detector = instrument.CorgiDetector(emccd_keywords, photon_counting=False)
+
+    L1_fits_files = []
 
     offset_star_optics_keywords = {'cor_type':cor_type, 'use_errors':0, 'polaxis':polaxis, 'output_dim':output_dim, 
             'use_dm1':0, 'use_dm2':0, 'use_fpm':0, 'nd':nd, 'use_lyot_stop':1, 'fsm_y_offset_mas':fsm_source_offset_mas,
@@ -277,7 +287,9 @@ def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas,
     # sim_cfam3D.image_on_detector.writeto(crop_frame_fname, overwrite=True)
     detector.generate_detector_image(sim_cfam3D, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
     outputs.save_hdu_to_fits(sim_cfam3D.image_on_detector, outdir=outdir, write_as_L1=True)
-    png_fname, header_txt_fname = write_png_and_header(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
+    L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
+    L1_fits_files.append(L1_fitsname)
+    png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
 
     for filter_name, optics in optics_config_dict.items():
         if filter_name == '3D':
@@ -314,4 +326,8 @@ def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas,
         # sim.image_on_detector.writeto(crop_frame_fname, overwrite=True)
         detector.generate_detector_image(sim, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
         outputs.save_hdu_to_fits(sim.image_on_detector, outdir=outdir, write_as_L1=True)
-        png_fname, header_txt_fname = write_png_and_header(sim, outdir, loc_x, loc_y, output_dim)
+        L1_fitsname = os.path.join(outdir, sim.image_on_detector[0].header['FILENAME'])
+        L1_fits_files.append(L1_fitsname)
+        png_fname = write_png_from_sceneobj(sim, outdir, loc_x, loc_y, output_dim)
+
+    return L1_fits_files
