@@ -239,7 +239,8 @@ def calibrate_nonlin(dataset_nl,
         nonlin_params = nonlin_params_default
         
     check_nonlin_params(nonlin_params)
-
+    if dataset_nl[0].data is None:
+        ram_heavy = True
     # cast dataset objects into np arrays and retrieve aux information
     cal_list, mean_frame_list, exp_arr, datetime_arr, len_list, actual_gain_arr, datetimes_sort_inds, _ = \
         nonlin_kgain_dataset_2_stack(dataset_nl, apply_dq = apply_dq, cal_type='nonlin')
@@ -263,117 +264,119 @@ def calibrate_nonlin(dataset_nl,
     min_bin = nonlin_params['min_bin']
     min_mask_factor = nonlin_params['min_mask_factor']
 
-    # if type(cal_arr) != np.ndarray:
-    #     raise TypeError('cal_arr must be an ndarray.')
-    # if np.ndim(cal_arr) != 3:
-    #     raise CalNonlinException('cal_arr must be 3-D')
-    # if len(len_list) < 1:
-    #     raise CalNonlinException('Number of elements in len_list must '
-    #             'be greater than or equal to 1.')
-    # if np.sum(len_list) != len(cal_arr):
-    #     raise CalNonlinException('Number of sub-stacks in cal_arr must '
-    #             'equal the sum of the elements in len_list')
-    # # cal_arr must have at least 20 frames for each EM gain
-    # if np.any(np.array(len_list) < n_cal):
-    #     raise Exception(f'cal_arr must have at least {n_cal} frames for each EM value')
-    # if len(np.unique(datetime_arr)) != len(datetime_arr):
-    #     raise CalNonlinException('All elements of datetime_arr must be unique.')
-    # for g_index in range(len(len_list)):
-    #     # Define the start and stop indices
-    #     start_index = int(np.sum(len_list[0:g_index]))
-    #     stop_index = start_index + len_list[g_index]
-    #     # Convert camera times to datetime objects
-    #     ctim_strings = datetime_arr[start_index:stop_index]
-    #     ctim_datetime = pd.to_datetime(ctim_strings, errors='coerce')
-    #     # Check if the array is time-ordered in increasing order
-    #     is_increasing = np.all(ctim_datetime[:-1] <= ctim_datetime[1:])
-    #     if not is_increasing:
-    #         raise CalNonlinException('Elements of datetime_arr must be '
-    #                 'in increasing time order for each EM gain value.')
-    # if type(mean_frame_arr) != np.ndarray:
-    #     raise TypeError('mean_frame_arr must be an ndarray.')
-    # if np.ndim(mean_frame_arr) != 3:
-    #     raise CalNonlinException('mean_frame_arr must be 3-D (i.e., a stack of '
-    #             '2-D sub-stacks')
-    # # mean_frame_arr must have at least 30 frames
-    # if len(mean_frame_arr) < n_mean:
-    #     raise CalNonlinException(f'Number of frames in mean_frame_arr must '
-    #             'be at least {n_mean}.')
+    if type(cal_arr) != np.ndarray:
+        raise TypeError('cal_arr must be an ndarray.')
+    if not ram_heavy: # if RAM-heavy, this is a set of filepaths, not a 3-D array
+        if np.ndim(cal_arr) != 3:
+            raise CalNonlinException('cal_arr must be 3-D')
+    if len(len_list) < 1:
+        raise CalNonlinException('Number of elements in len_list must '
+                'be greater than or equal to 1.')
+    if np.sum(len_list) != len(cal_arr):
+        raise CalNonlinException('Number of sub-stacks in cal_arr must '
+                'equal the sum of the elements in len_list')
+    # cal_arr must have at least 20 frames for each EM gain
+    if np.any(np.array(len_list) < n_cal):
+        raise Exception(f'cal_arr must have at least {n_cal} frames for each EM value')
+    if len(np.unique(datetime_arr)) != len(datetime_arr):
+        raise CalNonlinException('All elements of datetime_arr must be unique.')
+    for g_index in range(len(len_list)):
+        # Define the start and stop indices
+        start_index = int(np.sum(len_list[0:g_index]))
+        stop_index = start_index + len_list[g_index]
+        # Convert camera times to datetime objects
+        ctim_strings = datetime_arr[start_index:stop_index]
+        ctim_datetime = pd.to_datetime(ctim_strings, errors='coerce')
+        # Check if the array is time-ordered in increasing order
+        is_increasing = np.all(ctim_datetime[:-1] <= ctim_datetime[1:])
+        if not is_increasing:
+            raise CalNonlinException('Elements of datetime_arr must be '
+                    'in increasing time order for each EM gain value.')
+    if type(mean_frame_arr) != np.ndarray:
+        raise TypeError('mean_frame_arr must be an ndarray.')
+    if not ram_heavy: # if RAM-heavy, this is a set of filepaths, not a 3-D array
+        if np.ndim(mean_frame_arr) != 3:
+            raise CalNonlinException('mean_frame_arr must be 3-D (i.e., a stack of '
+                    '2-D sub-stacks')
+    # mean_frame_arr must have at least 30 frames
+    if len(mean_frame_arr) < n_mean:
+        raise CalNonlinException(f'Number of frames in mean_frame_arr must '
+                'be at least {n_mean}.')
     
-    # check.real_array(exp_arr, 'exp_arr', TypeError)
-    # check.oneD_array(exp_arr, 'exp_arr', TypeError)
-    # if (exp_arr <= min_exp_time).any():
-    #     raise CalNonlinException('Each element of exp_arr must be '
-    #         ' greater than min_exp_time.')
-    # # check to see if there is at least one set of exposure times with length different from that of the others
-    # index = 0
-    # r_flag = True
-    # for x in range(len(len_list)):
-    #     temp = np.copy(exp_arr[index:index+len_list[x]])
-    #     # Unique counts of exposure times
-    #     _, u_counts = np.unique(temp, return_counts=True)
-    #     # Check if all elements are the same
-    #     all_elements_same = np.all(u_counts == u_counts[0])
-    #     if all_elements_same == True:
-    #         r_flag = False
-    #     index = index + len_list[x]
-    # # check to see that there is a repeated exposure time (e.g., at least one set in between 2 sets of the same exposure time)
-    # index = 0
-    # repeated_lens = [] # to be used later, to know how to split up the repeated sets
-    # for x in range(len(len_list)):
-    #     temp = np.copy(exp_arr[index:index+len_list[x]])
-    #     # first condition below: frames are already time-ordered, so if there is non-monotonicity, there is repitition, which we want
-    #     # r_flag condition:  merely a set with length longer than the others (which TVAC code has); this gives a "way out" if no repeated set after other sets
-    #     if np.all(np.diff(temp) >= 0) and not r_flag:
-    #         raise CalNonlinException('Each substack of cal_arr must have a '
-    #         'group of frames with a repeated exposure time.')
-    #     if np.all(np.diff(temp) < 0):
-    #         repeat_ind = np.where(np.diff(temp) < 0)[0][0]
-    #         ending = np.where(np.diff(temp)[repeat_ind+1:] != 0)[0]
-    #         if len(ending) == 0: # repeated set is last one in time
-    #             end_ind = None
-    #         else:
-    #             end_ind = ending[0]+1
-    #         repeated_lens.append(len(np.diff(temp)[repeat_ind:end_ind]))
+    check.real_array(exp_arr, 'exp_arr', TypeError)
+    check.oneD_array(exp_arr, 'exp_arr', TypeError)
+    if (exp_arr <= min_exp_time).any():
+        raise CalNonlinException('Each element of exp_arr must be '
+            ' greater than min_exp_time.')
+    # check to see if there is at least one set of exposure times with length different from that of the others
+    index = 0
+    r_flag = True
+    for x in range(len(len_list)):
+        temp = np.copy(exp_arr[index:index+len_list[x]])
+        # Unique counts of exposure times
+        _, u_counts = np.unique(temp, return_counts=True)
+        # Check if all elements are the same
+        all_elements_same = np.all(u_counts == u_counts[0])
+        if all_elements_same == True:
+            r_flag = False
+        index = index + len_list[x]
+    # check to see that there is a repeated exposure time (e.g., at least one set in between 2 sets of the same exposure time)
+    index = 0
+    repeated_lens = [] # to be used later, to know how to split up the repeated sets
+    for x in range(len(len_list)):
+        temp = np.copy(exp_arr[index:index+len_list[x]])
+        # first condition below: frames are already time-ordered, so if there is non-monotonicity, there is repitition, which we want
+        # r_flag condition:  merely a set with length longer than the others (which TVAC code has); this gives a "way out" if no repeated set after other sets
+        if np.all(np.diff(temp) >= 0) and not r_flag:
+            raise CalNonlinException('Each substack of cal_arr must have a '
+            'group of frames with a repeated exposure time.')
+        if np.all(np.diff(temp) < 0):
+            repeat_ind = np.where(np.diff(temp) < 0)[0][0]
+            ending = np.where(np.diff(temp)[repeat_ind+1:] != 0)[0]
+            if len(ending) == 0: # repeated set is last one in time
+                end_ind = None
+            else:
+                end_ind = ending[0]+1
+            repeated_lens.append(len(np.diff(temp)[repeat_ind:end_ind]))
         
-    #     index = index + len_list[x]
-    # if len(len_list) != len(actual_gain_arr):
-    #     raise CalNonlinException('Length of actual_gain_arr be the same as the '
-    #                              'length of len_list.')
-    # if sum(1 for number in actual_gain_arr if number < 1) != 0:
-    #     raise CalNonlinException('Each element of actual_gain_arr must be greater '
-    #         'than or equal to 1.')
-    # check.real_array(actual_gain_arr, 'actual_gain_arr', TypeError)
-    # check.oneD_array(actual_gain_arr, 'actual_gain_arr', TypeError)
-    # check.positive_scalar_integer(norm_val, 'norm_val', TypeError)
-    # if np.mod(norm_val, 20) !=0:
-    #     raise CalNonlinException('norm_val must be divisible by 20.')
-    # check.real_positive_scalar(min_write, 'min_write', TypeError)
-    # check.real_positive_scalar(max_write, 'max_write', TypeError)
-    # if min_write >= max_write:
-    #     raise CalNonlinException('max_write must be greater than min_write')
-    # if (norm_val < min_write) or (norm_val > max_write):
-    #     raise CalNonlinException('norm_val must be between min_write and '
-    #                              'max_write.')
-    # check.real_nonnegative_scalar(rms_low_limit, 'rms_low_limit', TypeError)
-    # check.real_nonnegative_scalar(rms_upp_limit, 'rms_upp_limit', TypeError)
-    # if rms_low_limit >= rms_upp_limit:
-    #     raise CalNonlinException('rms_upp_limit must be greater than rms_low_limit')
+        index = index + len_list[x]
+    if len(len_list) != len(actual_gain_arr):
+        raise CalNonlinException('Length of actual_gain_arr be the same as the '
+                                 'length of len_list.')
+    if sum(1 for number in actual_gain_arr if number < 1) != 0:
+        raise CalNonlinException('Each element of actual_gain_arr must be greater '
+            'than or equal to 1.')
+    check.real_array(actual_gain_arr, 'actual_gain_arr', TypeError)
+    check.oneD_array(actual_gain_arr, 'actual_gain_arr', TypeError)
+    check.positive_scalar_integer(norm_val, 'norm_val', TypeError)
+    if np.mod(norm_val, 20) !=0:
+        raise CalNonlinException('norm_val must be divisible by 20.')
+    check.real_positive_scalar(min_write, 'min_write', TypeError)
+    check.real_positive_scalar(max_write, 'max_write', TypeError)
+    if min_write >= max_write:
+        raise CalNonlinException('max_write must be greater than min_write')
+    if (norm_val < min_write) or (norm_val > max_write):
+        raise CalNonlinException('norm_val must be between min_write and '
+                                 'max_write.')
+    check.real_nonnegative_scalar(rms_low_limit, 'rms_low_limit', TypeError)
+    check.real_nonnegative_scalar(rms_upp_limit, 'rms_upp_limit', TypeError)
+    if rms_low_limit >= rms_upp_limit:
+        raise CalNonlinException('rms_upp_limit must be greater than rms_low_limit')
 
-    # if not isinstance(lowess_frac, (float, int)):
-    #     raise TypeError('lowess_frac is not a number')
-    # if not isinstance(rms_low_limit, (float, int)):
-    #     raise TypeError('rms_low_limit is not a number')
-    # if not isinstance(rms_upp_limit, (float, int)):
-    #     raise TypeError('rms_upp_limit is not a number')
-    # if not isinstance(pfit_upp_cutoff1, (float, int)):
-    #     raise TypeError('pfit_upp_cutoff1 is not a number')
-    # if not isinstance(pfit_upp_cutoff2, (float, int)):
-    #     raise TypeError('pfit_upp_cutoff2 is not a number')
-    # if not isinstance(pfit_low_cutoff1, (float, int)):
-    #     raise TypeError('pfit_low_cutoff1 is not a number')
-    # if not isinstance(pfit_low_cutoff2, (float, int)):
-    #     raise TypeError('pfit_low_cutoff2 is not a number')
+    if not isinstance(lowess_frac, (float, int)):
+        raise TypeError('lowess_frac is not a number')
+    if not isinstance(rms_low_limit, (float, int)):
+        raise TypeError('rms_low_limit is not a number')
+    if not isinstance(rms_upp_limit, (float, int)):
+        raise TypeError('rms_upp_limit is not a number')
+    if not isinstance(pfit_upp_cutoff1, (float, int)):
+        raise TypeError('pfit_upp_cutoff1 is not a number')
+    if not isinstance(pfit_upp_cutoff2, (float, int)):
+        raise TypeError('pfit_upp_cutoff2 is not a number')
+    if not isinstance(pfit_low_cutoff1, (float, int)):
+        raise TypeError('pfit_low_cutoff1 is not a number')
+    if not isinstance(pfit_low_cutoff2, (float, int)):
+        raise TypeError('pfit_low_cutoff2 is not a number')
 
     if make_plot is True:
         # Avoid issues with importing matplotlib on headless servers without GUI
@@ -399,26 +402,35 @@ def calibrate_nonlin(dataset_nl,
     
     ####################### create good_mean_frame ###################
     
-    nrow = len(mean_frame_arr[0])
-    ncol = len(mean_frame_arr[0][0])
-    
-    good_mean_frame = np.zeros((nrow, ncol))
-    nFrames = len(mean_frame_arr)
+    if ram_heavy:
+        temp_frame = data.Image(mean_frame_arr[0])
+        frame_shape = temp_frame.data.shape
+        good_mean_frame = np.zeros(frame_shape)
+        for filepath in mean_frame_arr:
+            temp_frame = data.Image(filepath)
+            good_mean_frame += temp_frame.data
+        good_mean_frame = good_mean_frame / len(mean_frame_arr)
+    else:
+        nrow = len(mean_frame_arr[0])
+        ncol = len(mean_frame_arr[0][0])
+        
+        good_mean_frame = np.zeros((nrow, ncol))
+        nFrames = len(mean_frame_arr)
 
-    good_mean_frame = good_mean_frame / nFrames
-    
-    mean_frame_index = 0
-    # Loop over the mean_frame_arr frames
-    for i in range(nFrames):
-        frame = mean_frame_arr[i]
-    
-        # Add this frame to the cumulative good_mean_frame
-        good_mean_frame += frame
-        mean_frame_index += 1
+        good_mean_frame = good_mean_frame / nFrames
+        
+        mean_frame_index = 0
+        # Loop over the mean_frame_arr frames
+        for i in range(nFrames):
+            frame = mean_frame_arr[i]
+        
+            # Add this frame to the cumulative good_mean_frame
+            good_mean_frame += frame
+            mean_frame_index += 1
 
-    # Calculate the average of the frames if required
-    if mean_frame_index > 0:
-        good_mean_frame /= mean_frame_index 
+        # Calculate the average of the frames if required
+        if mean_frame_index > 0:
+            good_mean_frame /= mean_frame_index 
     
     # plot, if requested
     if make_plot:
@@ -583,8 +595,10 @@ def calibrate_nonlin(dataset_nl,
                 frame_mean = []
                 if not repeat_flag:
                     for iframe in range(len(selected_files)):
-                        
-                        frame_1 = selected_files[iframe]
+                        if ram_heavy:
+                            frame_1 = data.Image(selected_files[iframe]).data
+                        else:
+                            frame_1 = selected_files[iframe]
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
@@ -616,8 +630,10 @@ def calibrate_nonlin(dataset_nl,
                     # is what the TVAC code has), but for more general case, use repeated_lens[gain_index] instead for the number of frames in the 2nd (repeated) set
                     first_half = len(selected_files) // 2
                     for i in range(first_half):
-
-                        frame_1 = selected_files[i]
+                        if ram_heavy:
+                            frame_1 = data.Image(selected_files[i]).data
+                        else:
+                            frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
@@ -647,8 +663,10 @@ def calibrate_nonlin(dataset_nl,
                     
                     second_half = len(selected_files)
                     for i in range(first_half + 1, second_half):
-                       
-                        frame_1 = selected_files[i]
+                        if ram_heavy:
+                            frame_1 = data.Image(selected_files[i]).data
+                        else:
+                            frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
@@ -883,8 +901,8 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
             are truncated so that each has the same number of frames.  Otherwise (for the 'nonlin' case), there is no truncation.
 
     Returns:
-        list of data arrays associated with each frame
-        list of mean frames
+        list of data arrays associated with each frame (just the filepaths if data is None for input dataset)
+        list of mean frames (just the filepaths if data is None for input dataset)
         array of exposure times associated with each frame
         array of datetimes associated with each frame
         list with the number of frames with same EM gain
@@ -894,17 +912,19 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
 
     """
     # Split Dataset
+    if dataset[0].data is None: #RAM-heavy mode
+        ram_heavy = True
     dataset_cp = dataset#XXX .copy()
-    for fr in dataset_cp[:30]: #XXX
-        fr.pri_hdr['OBSNAME'] = 'MNFRAME'
-    for fr in dataset_cp[30:]:
-        fr.pri_hdr['OBSNAME'] = 'NONLIN'#XXX
+    # for fr in dataset_cp[:30]: #XXX
+    #     fr.pri_hdr['OBSNAME'] = 'MNFRAME'
+    # for fr in dataset_cp[30:]:
+    #     fr.pri_hdr['OBSNAME'] = 'NONLIN'#XXX
     split = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
     
     # Calibration data
     stack = []
     # Mean frame data
-    mean_frame_stack = []
+    mean_frame_list = []
     record_exp_time = True
     # Exposure times
     exp_times = []
@@ -941,7 +961,10 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
                     raise Exception('Frames used to build the mean frame must have the same exposure time')
                 if frame.ext_hdr['EMGAIN_C'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
-                mean_frame_stack.append(frame.data)
+                if ram_heavy:
+                    mean_frame_list.append(frame.filepath)
+                else:
+                    mean_frame_list.append(frame.data)
         for cal_dset in cal_dsets:
             # each of dsets has just one frame in it
             dsets, vals = cal_dset.split_dataset(exthdr_keywords=['DATETIME','EXPTIME'])
@@ -967,7 +990,10 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
             if cal_type == 'nonlin':
                 smallest_set_length = None # for nonlin, don't need to truncate exptime sets to be same length for a given EM gain
             for i, exptime_dset_list in enumerate(exptime_dsets):
-                sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]])
+                if ram_heavy:
+                    sub = np.stack([dset.frames[0].filepath for dset in exptime_dset_list[:smallest_set_length]])
+                else:
+                    sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]])
                 for exptime_dset in exptime_dset_list[:smallest_set_length]:
                     frame = exptime_dset.frames[0]
                     if not (frame.pri_hdr['OBSNAME'] == 'KGAIN' or 
@@ -1014,5 +1040,5 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
     
     # sort frames by time stamp for drift correction later
     datetimes_sort_inds = np.argsort(datetimes)
-    return (stack, mean_frame_stack, np.array(exp_times)[datetimes_sort_inds],
+    return (stack, mean_frame_list, np.array(exp_times)[datetimes_sort_inds],
         np.array(datetimes)[datetimes_sort_inds], len_sstack, np.array(gains), datetimes_sort_inds, smallest_set_len)
