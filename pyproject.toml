@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corgidrp"
+description = "(Roman Space Telescope) CORonaGraph Instrument Data Reduction Pipeline"
+dynamic = ["version", "dependencies"]
+readme = "README.md"
+license = "BSD-3-Clause"
+classifiers = [
+        "Intended Audience :: Science/Research",
+        "Topic :: Scientific/Engineering :: Astronomy",
+        "Programming Language :: Python :: 3"
+]
+keywords = ["Roman Space Telescope", "Exoplanets", "Astronomy"]
+
+
+[tool.setuptools.dynamic]
+version = {attr = "corgidrp.__version__"}
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages]
+find = {}

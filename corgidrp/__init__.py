@@ -3,7 +3,7 @@ import os
 import pathlib
 import numpy as np
 
-__version__ = "3.2"
+__version__ = "3.2.1"
 version = __version__ # temporary backwards compatability 
 
 #### Create a configuration file for the corgidrp if it doesn't exist. 
