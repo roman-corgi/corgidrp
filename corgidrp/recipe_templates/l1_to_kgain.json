@@ -70,6 +70,12 @@
 	    }		
 	},
         {
+            "name" : "discard_setup_frames",
+            "keywords" : {
+                "keywords_to_check" : ["ISACQ"]
+            }
+        },
+        {
             "name" : "save"
         }
     ]
