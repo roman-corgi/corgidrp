@@ -292,7 +292,7 @@ def threshold_sum_L1_images(fits_files, outdir, ext=1, thresh=None, nsigma=5.0,
     
     return output_fname
 
-def get_L1_config_dict(fits_file, file_trunc=None, descrip=None, header_keys=None):
+def get_L1_config_dict(fits_file, file_trunc=None, descrip=None, calib_product=None, header_keys=None):
     """
     Extract simulation configuration information from an L1 FITS file into a dictionary.
 
@@ -306,6 +306,8 @@ def get_L1_config_dict(fits_file, file_trunc=None, descrip=None, header_keys=Non
     descrip : str, optional
         Description string to store in the dictionary. If None, uses an
         empty string (default=None)
+    calib_product : str, optional
+        Data calibration product type
     header_keys : list of tuple, optional
         List of (ext, key) tuples defining which header values to extract.
         ext is the FITS extension index, key is the header keyword string.
@@ -339,6 +341,11 @@ def get_L1_config_dict(fits_file, file_trunc=None, descrip=None, header_keys=Non
     if descrip is None:
         descrip = ''
     config_dict['Description'] = descrip
+
+    # Set description to empty string if not provided
+    if calib_product is None:
+        calib_product = ''
+    config_dict['Calibration Product'] = calib_product
     
     # Extract additional header values if specified
     if header_keys is not None:
