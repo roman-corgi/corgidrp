@@ -427,3 +427,64 @@ def update_to_l2a(input_dataset):
     updated_dataset.update_after_processing_step(history_msg)
 
     return updated_dataset
+
+def discard_setup_frames(input_dataset, keywords_to_check=None):
+    """
+    Discard frames that are setup/engineering frames based on header keywords.
+
+    Checks each frame's extension header for the specified keywords. If any
+    keyword has a value of 1, the frame is considered a setup frame and is
+    discarded. This is used to filter out acquisition frames (ISACQ),
+    speckle balance frames (SPBAL), and HOWFSC frames (ISHOWFSC).
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images
+        keywords_to_check (list of str): FITS header keywords to check.
+            Frames where any of these keywords equals 1 will be discarded.
+            If None or empty, no frames are discarded.
+
+    Returns:
+        corgidrp.data.Dataset: dataset with setup frames removed
+    """
+    pruned_dataset = input_dataset.copy()
+
+    if not keywords_to_check:
+        history_msg = "No setup frame keywords to check; all frames kept"
+        pruned_dataset.update_after_processing_step(history_msg)
+        return pruned_dataset
+
+    discard_indices = []
+    discard_reasons = {}
+
+    for i, frame in enumerate(pruned_dataset.frames):
+        matched_keywords = []
+        for kw in keywords_to_check:
+            if frame.ext_hdr.get(kw, 0) == 1:
+                matched_keywords.append(kw)
+        if matched_keywords:
+            discard_indices.append(i)
+            discard_reasons[i] = ", ".join(matched_keywords)
+
+    if len(discard_indices) == len(pruned_dataset):
+        raise ValueError("All frames are setup frames. Unable to continue.")
+
+    if len(discard_indices) == 0:
+        history_msg = "Checked for setup frames ({0}); none found".format(
+            ", ".join(keywords_to_check))
+        pruned_dataset.update_after_processing_step(history_msg)
+        return pruned_dataset
+
+    keep_indices = [i for i in range(len(pruned_dataset)) if i not in discard_indices]
+    kept_frames = pruned_dataset.frames[keep_indices]
+    pruned_dataset = data.Dataset(kept_frames)
+
+    history_msg = "Discarded {0} setup frames (checked: {1}):".format(
+        len(discard_indices), ", ".join(keywords_to_check))
+    for idx in discard_indices:
+        history_msg += " {0} ({1}),".format(
+            input_dataset.frames[idx].filename, discard_reasons[idx])
+    history_msg = history_msg[:-1]  # remove trailing comma
+
+    pruned_dataset.update_after_processing_step(history_msg)
+
+    return pruned_dataset
