@@ -11,7 +11,7 @@ import astropy.io.fits as fits
 import time
 from specL1sims_utils import write_png_from_sceneobj
 
-def create_spec_satspot_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, spot_contrast, gain=200, exptime=200, nframes=3, output_dim=121, overfac=5, loc_x=512, loc_y=512):
+def create_spec_satspot_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, spot_contrast, gain=200, exptime=200, num_frames=3, output_dim=121, overfac=5, loc_x=512, loc_y=512):
     """
     Generate slit + prism spectroscopic simulations with DM satellite spots.
     
@@ -37,7 +37,7 @@ def create_spec_satspot_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, spot_
         EMCCD gain value (default: 200)
     exptime : float, optional
         Exposure time in seconds (default: 200)
-    nframes : int, optional
+    num_frames : int, optional
         Number of frames to generate (default: 3)
     output_dim : int, optional
         Dimension (width/height) of the output image in pixels (default: 121)
@@ -125,7 +125,7 @@ def create_spec_satspot_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, spot_
     # plt.colorbar()
     # plt.show()
 
-    for ii in range(nframes):
+    for ii in range(num_frames):
         detector.generate_detector_image(sim_satspot, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
         outputs.save_hdu_to_fits(sim_satspot.image_on_detector, outdir=outdir, write_as_L1=True)
         L1_fitsname = os.path.join(outdir, sim_satspot.image_on_detector[0].header['FILENAME'])

@@ -9,7 +9,7 @@ import itertools
 import astropy.io.fits as fits
 from specL1sims_utils import write_png_from_sceneobj
 
-def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offsets_mas, gain, exptime, ref_flag=False, nd=0, output_dim=121, overfac=5, loc_x=512, loc_y=512):
+def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offsets_mas, gain, exptime, num_frames=1, ref_flag=False, nd=0, output_dim=121, overfac=5, loc_x=512, loc_y=512):
     """
     Generate slit + prism spectroscopic simulations for target or reference star visits.
     
@@ -35,6 +35,8 @@ def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, f
         EMCCD gain value
     exptime : float
         Exposure time in seconds
+    num_frames : int, optional
+        Number of EXCAM frames to collect for each configuration (default: 1)
     ref_flag : bool, optional
         If True, marks this as a reference star observation (default: False)
     nd : int, optional
@@ -132,11 +134,12 @@ def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, f
         # detector.generate_detector_image(sim_cfam3D, exptime, full_frame=False)
         # sim_cfam3D.image_on_detector.writeto(crop_frame_3D_fname, overwrite=True)
 
-        detector.generate_detector_image(sim_cfam3D, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
-        outputs.save_hdu_to_fits(sim_cfam3D.image_on_detector, outdir=outdir, write_as_L1=True)
-        L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
-        L1_fits_files.append(L1_fitsname)
-        png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
+        for frame_idx in range(num_frames):
+            detector.generate_detector_image(sim_cfam3D, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
+            outputs.save_hdu_to_fits(sim_cfam3D.image_on_detector, outdir=outdir, write_as_L1=True)
+            L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
+            L1_fits_files.append(L1_fitsname)
+            png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
 
         print("Evaluating filter 3F image...") 
         sim_cfam3F = optics_3F.get_host_star_psf(base_scene)
@@ -166,15 +169,16 @@ def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, f
         # detector.generate_detector_image(sim_cfam3F, exptime, full_frame=False)
         # sim_cfam3F.image_on_detector.writeto(crop_frame_3F_fname, overwrite=True)
 
-        detector.generate_detector_image(sim_cfam3F, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
-        outputs.save_hdu_to_fits(sim_cfam3F.image_on_detector, outdir=outdir, write_as_L1=True)
-        L1_fitsname = os.path.join(outdir, sim_cfam3F.image_on_detector[0].header['FILENAME'])
-        L1_fits_files.append(L1_fitsname)
-        png_fname = write_png_from_sceneobj(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
+        for frame_idx in range(num_frames):
+            detector.generate_detector_image(sim_cfam3F, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
+            outputs.save_hdu_to_fits(sim_cfam3F.image_on_detector, outdir=outdir, write_as_L1=True)
+            L1_fitsname = os.path.join(outdir, sim_cfam3F.image_on_detector[0].header['FILENAME'])
+            L1_fits_files.append(L1_fitsname)
+            png_fname = write_png_from_sceneobj(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
 
     return L1_fits_files
 
-def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas, gain, exptime, cycle_subband_filters=True, ref_flag=False, nd=0, output_dim=121, overfac=5, loc_x=512, loc_y=512):
+def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas, gain, exptime, num_frames=1, cycle_subband_filters=True, ref_flag=False, nd=0, output_dim=121, overfac=5, loc_x=512, loc_y=512):
     """
     Generate slitless prism spectroscopic simulations for target or reference star visits.
     
@@ -196,6 +200,8 @@ def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas,
         EMCCD gain value
     exptime : float
         Exposure time in seconds
+    num_frames : int, optional
+        Number of EXCAM frames to collect for each configuration (default: 1)
     cycle_subband_filters : bool, optional
         If True, generates images for all sub-band filters (3A-3F). If False, 
         only generates 3F and 3D filter images (default: True)
@@ -286,11 +292,12 @@ def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas,
     # noisy image
     # detector.generate_detector_image(sim_cfam3D, exptime, full_frame=False)
     # sim_cfam3D.image_on_detector.writeto(crop_frame_fname, overwrite=True)
-    detector.generate_detector_image(sim_cfam3D, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
-    outputs.save_hdu_to_fits(sim_cfam3D.image_on_detector, outdir=outdir, write_as_L1=True)
-    L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
-    L1_fits_files.append(L1_fitsname)
-    png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
+    for frame_idx in range(num_frames):
+        detector.generate_detector_image(sim_cfam3D, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
+        outputs.save_hdu_to_fits(sim_cfam3D.image_on_detector, outdir=outdir, write_as_L1=True)
+        L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
+        L1_fits_files.append(L1_fitsname)
+        png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
 
     for filter_name, optics in optics_config_dict.items():
         if filter_name == '3D':
@@ -325,15 +332,16 @@ def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas,
         # noisy image 
         # detector.generate_detector_image(sim, exptime, full_frame=False)
         # sim.image_on_detector.writeto(crop_frame_fname, overwrite=True)
-        detector.generate_detector_image(sim, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
-        outputs.save_hdu_to_fits(sim.image_on_detector, outdir=outdir, write_as_L1=True)
-        L1_fitsname = os.path.join(outdir, sim.image_on_detector[0].header['FILENAME'])
-        L1_fits_files.append(L1_fitsname)
-        png_fname = write_png_from_sceneobj(sim, outdir, loc_x, loc_y, output_dim)
+        for frame_idx in range(num_frames):
+            detector.generate_detector_image(sim, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
+            outputs.save_hdu_to_fits(sim.image_on_detector, outdir=outdir, write_as_L1=True)
+            L1_fitsname = os.path.join(outdir, sim.image_on_detector[0].header['FILENAME'])
+            L1_fits_files.append(L1_fitsname)
+            png_fname = write_png_from_sceneobj(sim, outdir, loc_x, loc_y, output_dim)
 
     return L1_fits_files
 
-def create_dithered_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offsets_mas, use_fpm=1, use_nd=0, gain=1.0, exptime=5.0, ref_flag=False, 
+def create_dithered_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fsm_offsets_mas, use_fpm=1, use_nd=0, gain=1.0, exptime=5.0, num_frames=1, ref_flag=False, 
                                output_dim=121, overfac=5, loc_x=512, loc_y=512):
     """
     Generate FSM-dithered prism images for simulations of standard star and line spread function calibrations.
@@ -361,6 +369,8 @@ def create_dithered_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fs
         EMCCD gain value
     exptime : float
         Exposure time in seconds
+    num_frames : int, optional
+        Number of EXCAM frames to collect for each configuration (default: 1)
     ref_flag : bool, optional
         If True, marks this as a reference star observation (default: False)
     output_dim : int, optional
@@ -450,11 +460,12 @@ def create_dithered_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fs
     # plt.colorbar()
     # plt.show()
 
-    detector.generate_detector_image(sim_cfam3F_slitless, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
-    outputs.save_hdu_to_fits(sim_cfam3F_slitless.image_on_detector, outdir=outdir, write_as_L1=True)
-    L1_fitsname = os.path.join(outdir, sim_cfam3F_slitless.image_on_detector[0].header['FILENAME'])
-    L1_fits_files.append(L1_fitsname)
-    png_fname = write_png_from_sceneobj(sim_cfam3F_slitless, outdir, loc_x, loc_y, output_dim)
+    for frame_idx in range(num_frames):
+        detector.generate_detector_image(sim_cfam3F_slitless, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
+        outputs.save_hdu_to_fits(sim_cfam3F_slitless.image_on_detector, outdir=outdir, write_as_L1=True)
+        L1_fitsname = os.path.join(outdir, sim_cfam3F_slitless.image_on_detector[0].header['FILENAME'])
+        L1_fits_files.append(L1_fitsname)
+        png_fname = write_png_from_sceneobj(sim_cfam3F_slitless, outdir, loc_x, loc_y, output_dim)
 
     # FSM-dithered prism images with slit
     fsm_offset_3F_optics_list = list() 
@@ -520,11 +531,12 @@ def create_dithered_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fs
         noiseless_image_hdr_3D['wv0_y'] = (centy_cropframe_3D, 'y centroid of dispersed source image at zeropoint wavelength')
         fits.writeto(noiseless_3D_fname, noiseless_image_3D, header=noiseless_image_hdr_3D, overwrite=True)
 
-        detector.generate_detector_image(sim_cfam3D, short_exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
-        outputs.save_hdu_to_fits(sim_cfam3D.image_on_detector, outdir=outdir, write_as_L1=True)
-        L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
-        L1_fits_files.append(L1_fitsname)
-        png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
+        for frame_idx in range(num_frames):
+            detector.generate_detector_image(sim_cfam3D, short_exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
+            outputs.save_hdu_to_fits(sim_cfam3D.image_on_detector, outdir=outdir, write_as_L1=True)
+            L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
+            L1_fits_files.append(L1_fitsname)
+            png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
 
         # noisy image
         # detector.generate_detector_image(sim_cfam3D, short_exptime, full_frame=False)
@@ -562,10 +574,11 @@ def create_dithered_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fs
         # detector.generate_detector_image(sim_cfam3F, short_exptime, full_frame=False)
         # sim_cfam3F.image_on_detector.writeto(crop_frame_3F_fname, overwrite=True)
 
-        detector.generate_detector_image(sim_cfam3F, short_exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
-        outputs.save_hdu_to_fits(sim_cfam3F.image_on_detector, outdir=outdir, write_as_L1=True)
-        L1_fitsname = os.path.join(outdir, sim_cfam3F.image_on_detector[0].header['FILENAME'])
-        L1_fits_files.append(L1_fitsname)
-        png_fname = write_png_from_sceneobj(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
+        for frame_idx in range(num_frames):
+            detector.generate_detector_image(sim_cfam3F, short_exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
+            outputs.save_hdu_to_fits(sim_cfam3F.image_on_detector, outdir=outdir, write_as_L1=True)
+            L1_fitsname = os.path.join(outdir, sim_cfam3F.image_on_detector[0].header['FILENAME'])
+            L1_fits_files.append(L1_fitsname)
+            png_fname = write_png_from_sceneobj(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
 
     return L1_fits_files

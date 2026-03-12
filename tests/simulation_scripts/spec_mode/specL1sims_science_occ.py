@@ -12,7 +12,7 @@ import astropy.io.fits as fits
 from specL1sims_utils import write_png_from_sceneobj
 
 def create_occ_refstar_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, 
-                          gain=200, exptime=200, nframes=5, output_dim=161, overfac=5, 
+                          gain=200, exptime=200, num_frames=5, output_dim=161, overfac=5, 
                           loc_x=512, loc_y=512, photon_counting=False):
     """
     Generate occulted reference star science observations with slit + prism spectroscopy.
@@ -36,7 +36,7 @@ def create_occ_refstar_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas,
         EMCCD gain value (default: 200)
     exptime : float, optional
         Exposure time in seconds (default: 200)
-    nframes : int, optional
+    num_frames : int, optional
         Number of frames to generate (default: 5)
     output_dim : int, optional
         Dimension (width/height) of the output image in pixels (default: 161)
@@ -104,7 +104,7 @@ def create_occ_refstar_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas,
     # plt.colorbar()
     # plt.show()
 
-    for ii in range(nframes):
+    for ii in range(num_frames):
         detector.generate_detector_image(sim_occ_refstar, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
         outputs.save_hdu_to_fits(sim_occ_refstar.image_on_detector, outdir=outdir, write_as_L1=True)
         L1_fitsname = os.path.join(outdir, sim_occ_refstar.image_on_detector[0].header['FILENAME'])
@@ -115,7 +115,7 @@ def create_occ_refstar_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas,
     return L1_fits_files
 
 def create_occ_target_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, comp_dra, comp_ddec, 
-                          comp_fluxratio, gain=200, exptime=200, nframes=5, output_dim=161, overfac=5, 
+                          comp_fluxratio, gain=200, exptime=200, num_frames=5, output_dim=161, overfac=5, 
                           loc_x=512, loc_y=512, photon_counting=False):
     """
     Generate occulted target star science observations with companion source.
@@ -146,7 +146,7 @@ def create_occ_target_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, comp_dr
         EMCCD gain value (default: 200)
     exptime : float, optional
         Exposure time in seconds (default: 200)
-    nframes : int, optional
+    num_frames : int, optional
         Number of frames to generate (default: 5)
     output_dim : int, optional
         Dimension (width/height) of the output image in pixels (default: 161)
@@ -227,7 +227,7 @@ def create_occ_target_sim(outdir, Vmag, sptype, slit_name, slit_pos_mas, comp_dr
     # plt.colorbar()
     # plt.show()
 
-    for ii in range(nframes):
+    for ii in range(num_frames):
         detector.generate_detector_image(sim_occ_target, exptime, full_frame=True, loc_x=loc_x, loc_y=loc_y)
         outputs.save_hdu_to_fits(sim_occ_target.image_on_detector, outdir=outdir, write_as_L1=True)
         L1_fitsname = os.path.join(outdir, sim_occ_target.image_on_detector[0].header['FILENAME'])
@@ -243,7 +243,7 @@ if __name__ == '__main__':
     if not os.path.exists(outdir_ref):
         os.mkdir(outdir_ref)
     create_occ_refstar_sim(outdir_ref, Vmag=2.0, sptype='A0V', slit_name='R1C2', slit_pos_mas=320.0, 
-                          gain=500, exptime=800, nframes=0)
+                          gain=500, exptime=800, num_frames=0)
 
     # Target star observations
     outdir_target = os.path.relpath('./spec_occ_targetstar')
@@ -251,4 +251,4 @@ if __name__ == '__main__':
         os.mkdir(outdir_target)
     create_occ_target_sim(outdir_target, Vmag=5.0, sptype='G0V', slit_name='R1C2', slit_pos_mas=320.0, 
                           comp_dra=0.0, comp_ddec=320.0, comp_fluxratio=5E-7, 
-                          gain=500, exptime=2000, nframes=0)
+                          gain=500, exptime=2000, num_frames=0)
