@@ -326,12 +326,12 @@ def test_skip_missing_calib():
     assert recipe['name'] == 'l1_to_l2b'
     assert recipe['template'] == False
 
-    assert recipe['steps'][0]['skip'] # prescan bias sub    
-    assert recipe['steps'][2]['skip'] # nonlinearity
-    assert recipe['steps'][6]['skip'] # kgain
-    
-    # cut down to recipe to just the first 5 steps (to the first save)
-    recipe['steps'] = recipe['steps'][:5]
+    assert recipe['steps'][0]['skip'] # prescan bias sub
+    assert recipe['steps'][3]['skip'] # nonlinearity
+    assert recipe['steps'][7]['skip'] # kgain
+
+    # cut down to recipe to just the first 6 steps (to the first save)
+    recipe['steps'] = recipe['steps'][:6]
 
     # run with all the ksips
     walker.run_recipe(recipe, save_recipe_file=False)
@@ -398,7 +398,7 @@ def test_skip_missing_optional_calib():
     assert recipe['steps'][0]['calibs']['DetectorNoiseMaps'] is None
 
     # assert nonlinearity is indeed skipped
-    assert recipe['steps'][2]['skip'] # nonlinearity
+    assert recipe['steps'][3]['skip'] # nonlinearity
 
     corgidrp.skip_missing_cal_steps = old_setting
     corgidrp.caldb_filepath = old_caldb_filepath
@@ -469,7 +469,7 @@ def test_jit_calibs():
     template_recipe = json.load(open(template_filepath, "r"))
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
 
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC'
 
     walker.run_recipe(recipe)
 
@@ -481,7 +481,7 @@ def test_jit_calibs():
     
     # check that the recipe is saved into the header with specified calibrations
     new_recipe = json.loads(output_dataset[0].ext_hdr['RECIPE'])
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC'
 
 
     #### Test cases where JIT should be enabled or not
@@ -491,35 +491,35 @@ def test_jit_calibs():
     corgidrp.jit_calib_id = False
     template_recipe = json.load(open(template_filepath, "r"))
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
 
     # pipeline setting false, but recipe says JIT. Should keep automatic calibration
     corgidrp.jit_calib_id = False
     template_recipe = json.load(open(template_filepath, "r"))
     template_recipe['drpconfig']['jit_calib_id'] = True
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
 
     # pipeline setting false, and recipe says no JIT. Should define calibrations
     corgidrp.jit_calib_id = False
     template_recipe = json.load(open(template_filepath, "r"))
     template_recipe['drpconfig']['jit_calib_id'] = False
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
 
     # pipeline setting True, and recipe says no JIT. Should define calibrations
     corgidrp.jit_calib_id = True
     template_recipe = json.load(open(template_filepath, "r"))
     template_recipe['drpconfig']['jit_calib_id'] = False
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
 
     # pipeline setting True, and recipe says JIT. Should keep automatic calibration
     corgidrp.jit_calib_id = True
     template_recipe = json.load(open(template_filepath, "r"))
     template_recipe['drpconfig']['jit_calib_id'] = True
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
 
 
     # clean up
