@@ -260,25 +260,29 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     fwhm_pix = fwhm_mas / pixscale_mas  
     res_elem = sep_spacing * fwhm_pix # pix
     
+    
     if seps is None:
         if sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'NFOV':
             owa_mas = 450. 
-            owa_pix = owa_mas / pixscale_mas
         elif sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'WFOV':
-            owa_mas = 1447. 
-            owa_pix = owa_mas / pixscale_mas          
+            if sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'SPC34_R5C1':
+                owa_mas = 1447.4
+                iwa_mas = 4254.9
+            elif sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'SPC12_R1C1':
+                owa_mas = 1008.8
+                iwa_mas = 296.1
         else:
             raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
-        
+        owa_pix = owa_mas / pixscale_mas          
+
         if sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'HLC12_C2R1':
             iwa_mas = 140. 
-            iwa_pix = iwa_mas / pixscale_mas 
-        elif sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'SPC34_R5C1':
-            iwa_mas = 425. 
-            iwa_pix = iwa_mas / pixscale_mas     
+        elif sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'SPC34_R5C1' or  sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'SPC12_R1C1':
+            pass
         else:
             raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
-        
+        iwa_pix = iwa_mas / pixscale_mas               
+
         seps = np.arange(iwa_pix,owa_pix,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
     if pas is None:
         pas = np.linspace(0.,360.,n_pas+1)[:-1] # Some linear spacing between the IWA & OWA, around 5x the fwhm
