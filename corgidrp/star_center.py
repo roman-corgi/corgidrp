@@ -1002,28 +1002,30 @@ def star_center_from_satellite_spots(
         img_spots, xOffsetGuess, yOffsetGuess, tuningParamDict['offset']
     )
 
-    # estimate spot separation (from the star, i.e., radius)
-    spotRadiusEst = calc_spot_separation(
-        img_spots, xOffsetEst, yOffsetEst, tuningParamDict['separation']
-    )
 
-    # get spot rotation vector (angles in degrees)
-    probeRotVecDeg = tuningParamDict['separation']["probeRotVecDeg"]
+    ## Commenting out the lines below since we're not using it right now. 
+    # # estimate spot separation (from the star, i.e., radius)
+    # spotRadiusEst = calc_spot_separation(
+    #     img_spots, xOffsetEst, yOffsetEst, tuningParamDict['separation']
+    # )
 
-    # calculate locations of spot pairs
-    list_spots_xy = []
-    for theta_deg in probeRotVecDeg:
-        theta = (theta_deg + thetaOffsetGuess) * np.pi / 180.0
-        # One spot
-        list_spots_xy.append([
-            spotRadiusEst * np.cos(theta) + xOffsetEst,
-            spotRadiusEst * np.sin(theta) + yOffsetEst,
-        ])
-        # Opposite spot (theta + pi)
-        list_spots_xy.append([
-            spotRadiusEst * np.cos(theta + np.pi) + xOffsetEst,
-            spotRadiusEst * np.sin(theta + np.pi) + yOffsetEst,
-        ])
+    # # get spot rotation vector (angles in degrees)
+    # probeRotVecDeg = tuningParamDict['separation']["probeRotVecDeg"]
+
+    # # calculate locations of spot pairs
+    # list_spots_xy = []
+    # for theta_deg in probeRotVecDeg:
+    #     theta = (theta_deg + thetaOffsetGuess) * np.pi / 180.0
+    #     # One spot
+    #     list_spots_xy.append([
+    #         spotRadiusEst * np.cos(theta) + xOffsetEst,
+    #         spotRadiusEst * np.sin(theta) + yOffsetEst,
+    #     ])
+    #     # Opposite spot (theta + pi)
+    #     list_spots_xy.append([
+    #         spotRadiusEst * np.cos(theta + np.pi) + xOffsetEst,
+    #         spotRadiusEst * np.sin(theta + np.pi) + yOffsetEst,
+    #     ])
 
     # Convert estimated offsets back to absolute coordinates
     star_xy = np.array([
@@ -1031,6 +1033,7 @@ def star_center_from_satellite_spots(
         yOffsetEst + img_center_y
     ], dtype='float')
 
-    list_spots_xy = np.array(list_spots_xy, dtype='float')
+    # list_spots_xy = np.array(list_spots_xy, dtype='float')
 
-    return star_xy, list_spots_xy
+    # return star_xy, list_spots_xy
+    return star_xy, None
