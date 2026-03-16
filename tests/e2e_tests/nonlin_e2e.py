@@ -120,20 +120,20 @@ def test_nonlin_cal_e2e(
         raise FileNotFoundError(f"TVAC reference nonlinearity file not found at {tvac_nonlin_file}")
 
     # Define the raw science data to process
-    # nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
-    # nonlin_l1_list.sort()
-    # kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
-    # kgain_l1_list.sort()
-    # nonlin_l1_list = nonlin_l1_list + kgain_l1_list
+    nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
+    nonlin_l1_list.sort()
+    kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
+    kgain_l1_list.sort()
+    nonlin_l1_list = nonlin_l1_list + kgain_l1_list
 
-    # Copy files to input_data directory and update file list
-    # nonlin_l1_list = [
-    #     shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
-    #     for file_path in nonlin_l1_list
-    # ]
+    #Copy files to input_data directory and update file list
+    nonlin_l1_list = [
+        shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
+        for file_path in nonlin_l1_list
+    ]
     
-    input_data_dir = r'E:\E2E_Test_Data3\E2E_Test_Data3\simdata' #os.path.join(os.path.dirname(__file__), 'simdata')
-    nonlin_l1_list = glob.glob(os.path.join(input_data_dir, "*.fits"))
+    # input_data_dir = r'E:\E2E_Test_Data3\E2E_Test_Data3\simdata' #os.path.join(os.path.dirname(__file__), 'simdata') XXX
+    # nonlin_l1_list = glob.glob(os.path.join(input_data_dir, "*.fits"))
     print("number of files: ", len(nonlin_l1_list))
     
     # Set TVAC OBSNAME to MNFRAME/NONLIN (flight data should have these values)
@@ -275,8 +275,8 @@ if __name__ == "__main__":
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 
-    OUTPUT_DIR = r'E:\E2E_tests'#thisfile_dir
-    e2edata_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3'
+    OUTPUT_DIR = thisfile_dir #r'E:\E2E_tests'#thisfile_dir
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data' #r'E:\E2E_Test_Data3\E2E_Test_Data3'
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

@@ -129,7 +129,8 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     output_filelist = None
     for i, recipe in enumerate(recipes):
         # check for recipe chaining
-        if i > 0 and  len(recipe['inputs']) == 0:
+        if i > 0: #XXX and  len(recipe['inputs']) == 0:
+            recipe["inputs"] = []
             for filename in output_filelist:
                 recipe["inputs"].append(filename)
 
@@ -320,7 +321,7 @@ def guess_template(dataset):
                 recipe_filename = ["build_trad_dark_image_1.json", "build_trad_dark_image_2.json"] #"build_trad_dark_image.json"
                 chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
-            recipe_filename = ["l1_to_l2a_nonlin_1.json", "l1_to_l2a_nonlin_2.json", "l1_to_l2a_nonlin_3.json"]# XXX, "l1_to_kgain.json"] #["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
+            recipe_filename = ["l1_to_l2a_nonlin_1.json", "l1_to_l2a_nonlin_2.json", "l1_to_l2a_nonlin_3_test.json"]# XXX, "l1_to_kgain.json"] #["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
             if len(fsm_unique) > 1:

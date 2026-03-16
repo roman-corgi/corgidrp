@@ -244,7 +244,10 @@ def calibrate_nonlin(dataset_nl,
     # cast dataset objects into np arrays and retrieve aux information
     cal_list, mean_frame_list, exp_arr, datetime_arr, len_list, actual_gain_arr, datetimes_sort_inds, _ = \
         nonlin_kgain_dataset_2_stack(dataset_nl, apply_dq = apply_dq, cal_type='nonlin')
-    cal_arr = np.vstack(cal_list)[datetimes_sort_inds]
+    if ram_heavy:
+        cal_arr = np.array(cal_list)[datetimes_sort_inds]
+    else:
+        cal_arr = np.vstack(cal_list)[datetimes_sort_inds]
     mean_frame_arr = np.stack(mean_frame_list)
     # Get relevant constants
     rowroi1 = nonlin_params['rowroi1']
@@ -403,11 +406,14 @@ def calibrate_nonlin(dataset_nl,
     ####################### create good_mean_frame ###################
     
     if ram_heavy:
-        temp_frame = data.Image(mean_frame_arr[0])
+        temp_frame = data.Image(mean_frame_arr[0]) # just to get shape
         frame_shape = temp_frame.data.shape
         good_mean_frame = np.zeros(frame_shape)
         for filepath in mean_frame_arr:
             temp_frame = data.Image(filepath)
+            if apply_dq:
+                bad = np.where(temp_frame.dq > 0)
+                temp_frame.data[bad] = np.nan
             good_mean_frame += temp_frame.data
         good_mean_frame = good_mean_frame / len(mean_frame_arr)
     else:
@@ -596,7 +602,11 @@ def calibrate_nonlin(dataset_nl,
                 if not repeat_flag:
                     for iframe in range(len(selected_files)):
                         if ram_heavy:
-                            frame_1 = data.Image(selected_files[iframe]).data
+                            image_1 = data.Image(selected_files[iframe])
+                            frame_1 = image_1.data
+                            if apply_dq: # in ram_heavy case, this hasn't been applied yet
+                                bad = np.where(image_1.dq > 0)
+                                frame_1[bad] = np.nan
                         else:
                             frame_1 = selected_files[iframe]
                         frame_1 = frame_1.astype(np.float64)
@@ -631,7 +641,11 @@ def calibrate_nonlin(dataset_nl,
                     first_half = len(selected_files) // 2
                     for i in range(first_half):
                         if ram_heavy:
-                            frame_1 = data.Image(selected_files[i]).data
+                            image_1 = data.Image(selected_files[i])
+                            frame_1 = image_1.data
+                            if apply_dq: # in ram_heavy case, this hasn't been applied yet
+                                bad = np.where(image_1.dq > 0)
+                                frame_1[bad] = np.nan
                         else:
                             frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
@@ -664,7 +678,11 @@ def calibrate_nonlin(dataset_nl,
                     second_half = len(selected_files)
                     for i in range(first_half + 1, second_half):
                         if ram_heavy:
-                            frame_1 = data.Image(selected_files[i]).data
+                            image_1 = data.Image(selected_files[i])
+                            frame_1 = image_1.data
+                            if apply_dq: # in ram_heavy case, this hasn't been applied yet
+                                bad = np.where(image_1.dq > 0)
+                                frame_1[bad] = np.nan
                         else:
                             frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
@@ -952,8 +970,11 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
         if mnframe_ind is not None:
             for frame in obsname_dsets[mnframe_ind]:
                 if apply_dq:
-                    bad = np.where(frame.dq > 0)
-                    frame.data[bad] = np.nan
+                    if ram_heavy:
+                        pass # don't apply yet; apply later when loading in data
+                    else:
+                        bad = np.where(frame.dq > 0)
+                        frame.data[bad] = np.nan
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
                     record_exp_time = False
@@ -991,7 +1012,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
                 smallest_set_length = None # for nonlin, don't need to truncate exptime sets to be same length for a given EM gain
             for i, exptime_dset_list in enumerate(exptime_dsets):
                 if ram_heavy:
-                    sub = np.stack([dset.frames[0].filepath for dset in exptime_dset_list[:smallest_set_length]])
+                    sub = [dset.frames[0].filepath for dset in exptime_dset_list[:smallest_set_length]]
                 else:
                     sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]])
                 for exptime_dset in exptime_dset_list[:smallest_set_length]:
@@ -1020,13 +1041,19 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
                             record_gain = False
                     if gains[-1] == 1:
                         smallest_set_len = smallest_set_length
-                stack_cp.append(sub)
+                if ram_heavy:
+                    stack_cp += sub
+                else:
+                    stack_cp.append(sub)
                 len_cal_frames += len(sub)
             # Length of substack must be at least 1
             if len(stack_cp) == 0:
                 raise Exception('Substacks must have at least one element')
             else:
-                stack.append(np.vstack(stack_cp))
+                if ram_heavy:
+                    stack += stack_cp
+                else:
+                    stack.append(np.vstack(stack_cp))
                 len_sstack.append(len_cal_frames)
     
     # All elements of datetimes must be unique

@@ -130,6 +130,8 @@ class Dataset():
                     frame.data = temp_frame.data
                 if frame.err is None:
                     frame.err = temp_frame.err
+                if frame.dq is None:
+                    frame.dq = temp_frame.dq
                 for name in frame.hdu_names: # by construction hdus other than the usual err and dq
                     if frame.hdu_list[name] is None: 
                         frame.hdu_list[name].data = temp_frame.hdu_list[name].data
