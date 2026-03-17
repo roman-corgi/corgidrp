@@ -336,13 +336,19 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
-            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-            if len(fsm_unique) > 1:
-                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
+            is_spec_mode = image.ext_hdr.get('DPAMNAME', '').startswith('PRISM')
+            has_nd_filter = any(img.ext_hdr.get('FPAMNAME', '').startswith('ND') for img in dataset)
+            if is_spec_mode and has_nd_filter:
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", "l2b_to_nd_filter_spec.json"]
                 chained = True
             else:
-                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
-                chained = True
+                _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
+                if len(fsm_unique) > 1:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
+                    chained = True
+                else:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+                    chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
             chained = True
@@ -379,14 +385,19 @@ def guess_template(dataset):
     # L2b -> L3 data processing
     elif image.ext_hdr['DATALVL'] == "L2b":
         if image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
-            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-            if len(fsm_unique) > 1:
-                recipe_filename = "l2b_to_nd_filter.json"
+            is_spec_mode = image.ext_hdr.get('DPAMNAME', '').startswith('PRISM')
+            has_nd_filter = any(img.ext_hdr.get('FPAMNAME', '').startswith('ND') for img in dataset)
+            if is_spec_mode and has_nd_filter:
+                recipe_filename = "l2b_to_nd_filter_spec.json"
             else:
-                if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
-                    recipe_filename = 'l2b_to_fluxcal_factor_pol.json'
+                _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
+                if len(fsm_unique) > 1:
+                    recipe_filename = "l2b_to_nd_filter.json"
                 else:
-                    recipe_filename = "l2b_to_fluxcal_factor.json"
+                    if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+                        recipe_filename = 'l2b_to_fluxcal_factor_pol.json'
+                    else:
+                        recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":

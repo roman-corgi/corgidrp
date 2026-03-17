@@ -4,9 +4,9 @@ import numpy as np
 from astropy.io import fits
 import corgidrp.fluxcal as fluxcal
 from corgidrp.data import (Dataset, FluxcalFactor, NDFilterSweetSpotDataset,
-    FpamFsamCal)
+    NDSpectroscopy, FpamFsamCal)
 from corgidrp.astrom import centroid_with_roi
-from scipy.interpolate import griddata
+from scipy.interpolate import griddata, interp1d
 import warnings
 
 # =============================================================================
@@ -525,3 +525,214 @@ def create_nd_filter_cal(stars_dataset,
 
     #TO DO: do we want to return flux?
     return sweet_spot_dataset
+
+
+# =============================================================================
+# Spectroscopic ND Filter Calibration (Prism Mode)
+# =============================================================================
+
+def _compute_od_spectrum_for_frame(entry, sf_cal, calspec_filepath):
+    """
+    Compute OD(lambda) for a single bright-star frame observed through the ND
+    filter with the prism in.
+
+    Parameters:
+        entry (corgidrp.data.Image): L3 frame with SPEC, SPEC_WAVE, and SPEC_ERR
+            extensions (units photoelectron/s/bin) produced by extract_spec.
+        sf_cal (corgidrp.data.SpecFluxCal): Spectral flux calibration C(lambda)
+            derived from the dim (no-ND) star.  Units:
+            erg/(s*cm^2*AA) / (photoelectron/s/bin).
+        calspec_filepath (str): Path to the CALSPEC SED FITS file for the bright
+            star being observed through the ND filter.
+
+    Returns:
+        tuple:
+            od_spectrum (np.array): OD(lambda) at each wavelength bin, length M.
+            spec_wave (np.array): Wavelength grid in nm, length M.
+            od_err (np.array): 1-sigma OD uncertainty at each bin, length M.
+    """
+    # Measured spectrum (e-/s/bin) and wavelength grid (nm) from extract_spec
+    counts_nd = entry.hdu_list['SPEC'].data.astype(float)
+    spec_wave  = entry.hdu_list['SPEC_WAVE'].data.astype(float)
+    spec_err   = entry.hdu_list['SPEC_ERR'].data.astype(float)
+    if spec_err.ndim > 1:
+        spec_err = spec_err[0]   # extract first error plane -> shape (M,)
+
+    # CALSPEC SED for the bright star at these wavelengths.
+    # read_cal_spec expects wavelengths in Angstrom; spec_wave is in nm.
+    sed_bright = fluxcal.read_cal_spec(calspec_filepath, spec_wave * 10.0)
+
+    # Interpolate C(lambda) from SpecFluxCal onto the bright-star wavelength grid.
+    c_interp_fn = interp1d(sf_cal.wavelength, sf_cal.specflux,
+                           kind='linear', fill_value='extrapolate')
+    c_at_wave = c_interp_fn(spec_wave)   # erg/(s*cm^2*AA) / (e-/s/bin)
+
+    # Expected e-/s/bin with no ND filter in beam
+    expected_counts = sed_bright / c_at_wave
+
+    # Transmission and OD
+    with np.errstate(divide='ignore', invalid='ignore'):
+        transmission = counts_nd / expected_counts
+        od_spectrum  = -np.log10(transmission)
+
+    # Propagate photon-counting uncertainty: sigma_OD = sigma_counts / (N * ln10)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        od_err = spec_err / (np.abs(counts_nd) * np.log(10))
+
+    return od_spectrum, spec_wave, od_err
+
+
+def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=None):
+    """
+    Spectroscopic ND filter calibration workflow (prism mode).
+
+    Accepts a dataset of L3 frames that have already been processed through
+    divide_by_exptime, determine_wave_zeropoint, add_wavelength_map, and
+    extract_spec (i.e. each frame carries SPEC, SPEC_WAVE, and SPEC_ERR
+    extensions with BUNIT='photoelectron/s').
+
+    The dataset must contain:
+      * dim-star frames  (FPAMNAME not starting with 'ND') — used to derive
+        the spectral flux calibration C(lambda) via spec_fluxcal(), unless a
+        pre-computed SpecFluxCal is supplied via the spec_fluxcal argument.
+      * bright-star frames (FPAMNAME starting with 'ND') — the star observed
+        through the ND filter whose OD(lambda) is to be measured.
+
+    If multiple bright frames are present (e.g. repeated exposures at the same
+    position) their OD(lambda) spectra are remapped to a common wavelength grid
+    and averaged before the calibration product is created.
+
+    Parameters:
+        stars_dataset (corgidrp.data.Dataset): L3 frames with SPEC extensions.
+        spec_fluxcal (corgidrp.data.SpecFluxCal, optional): Pre-computed spectral
+            flux calibration product.  When supplied, dim-star frames in the
+            dataset are ignored.
+        calspec_files (str or list, optional): CALSPEC filepath(s) for the
+            bright-star target(s).  A single string is used for all bright
+            frames; a list must have one entry per bright frame in dataset order.
+            When None the TARGET primary-header keyword is used to look up each
+            star automatically.
+
+    Returns:
+        corgidrp.data.NDSpectroscopy: OD(lambda) calibration product.
+    """
+    import corgidrp.spec as spec_module
+
+    # 1. Split the dataset into dim (no ND) and bright (ND) frames by FPAMNAME.
+    try:
+        grouped = group_by_keyword(stars_dataset, exthdr_keyword='FPAMNAME')
+    except Exception:
+        grouped = group_by_keyword(stars_dataset, exthdr_keyword='FSAMNAME')
+
+    dim_frames    = []
+    bright_frames = []
+    for keyword, records in grouped.items():
+        if keyword.startswith('ND'):
+            bright_frames.extend(records)
+        else:
+            dim_frames.extend(records)
+
+    if not bright_frames:
+        raise ValueError(
+            "No bright (ND-filter) frames found in the dataset. "
+            "Frames with FPAMNAME starting with 'ND' are required."
+        )
+
+    bright_dataset = Dataset(bright_frames)
+
+    # 2. Validate that we are in prism (spectroscopic) mode.
+    first_bright = bright_dataset[0]
+    dpam = first_bright.ext_hdr.get('DPAMNAME', '')
+    if not dpam.startswith('PRISM'):
+        raise ValueError(
+            f"Expected DPAMNAME starting with 'PRISM' for spectroscopic ND "
+            f"calibration, got '{dpam}'."
+        )
+
+    # 3. Obtain the spectral flux calibration C(lambda).
+    if spec_fluxcal is not None:
+        sf_cal = spec_fluxcal
+    else:
+        if not dim_frames:
+            raise ValueError(
+                "No dim-star (HOLE) frames found and no spec_fluxcal provided. "
+                "Either include dim-star frames (FPAMNAME != ND*) in the dataset "
+                "or pass a pre-computed SpecFluxCal via the spec_fluxcal argument."
+            )
+        dim_dataset = Dataset(dim_frames)
+        # Always auto-look up the dim star from its TARGET header keyword.
+        # calspec_files is reserved for the bright (ND-filter) star(s) only.
+        sf_cal = spec_module.spec_fluxcal(dim_dataset, calspec_file=None)
+
+    # 4. Compute OD(lambda) for every bright frame.
+    od_spectra  = []
+    wave_grids  = []
+    od_errs     = []
+
+    for i, entry in enumerate(bright_dataset):
+        # Resolve the CALSPEC filepath for this bright frame.
+        if calspec_files is None:
+            target     = entry.pri_hdr.get('TARGET', '')
+            calspec_fp = fluxcal.get_calspec_file(target)[0]
+        elif isinstance(calspec_files, str):
+            calspec_fp = calspec_files
+        else:
+            calspec_fp = calspec_files[i]
+
+        od_spec, spec_wave, od_err = _compute_od_spectrum_for_frame(
+            entry, sf_cal, calspec_fp
+        )
+        od_spectra.append(od_spec)
+        wave_grids.append(spec_wave)
+        od_errs.append(od_err)
+
+    # 5. If multiple bright frames, remap to a common wavelength grid and average.
+    common_wave = wave_grids[0]
+
+    if len(od_spectra) == 1:
+        od_combined  = od_spectra[0]
+        od_err_combined = od_errs[0]
+    else:
+        od_stack  = [od_spectra[0]]
+        err_stack = [od_errs[0]]
+
+        for od, wave, oderr in zip(od_spectra[1:], wave_grids[1:], od_errs[1:]):
+            if not np.allclose(wave, common_wave, atol=0.01):
+                remap_od  = interp1d(wave, od,    kind='linear',
+                                     bounds_error=False, fill_value=np.nan)
+                remap_err = interp1d(wave, oderr, kind='linear',
+                                     bounds_error=False, fill_value=np.nan)
+                od    = remap_od(common_wave)
+                oderr = remap_err(common_wave)
+            od_stack.append(od)
+            err_stack.append(oderr)
+
+        od_stack  = np.array(od_stack)
+        err_stack = np.array(err_stack)
+        od_combined  = np.nanmean(od_stack, axis=0)
+        # Combined uncertainty: sqrt(sum of variances) / N
+        od_err_combined = (
+            np.sqrt(np.nansum(err_stack ** 2, axis=0)) / len(err_stack)
+        )
+
+    avg_od = np.nanmean(od_combined)
+    print(f"Average OD across wavelength range: {avg_od:.4f}")
+
+    # 6. Pack into (2, M) data array and (1, 2, M) error array.
+    data = np.array([common_wave, od_combined])
+    err  = np.array([[np.zeros_like(common_wave), od_err_combined]])  # (1, 2, M)
+    dq   = np.zeros(data.shape, dtype=int)
+
+    # 7. Build the NDSpectroscopy calibration product.
+    nd_spec_cal = NDSpectroscopy(
+        data,
+        err=err,
+        dq=dq,
+        input_dataset=stars_dataset,
+    )
+    nd_spec_cal.ext_hdr['FPAMNAME'] = first_bright.ext_hdr.get('FPAMNAME', '')
+    nd_spec_cal.ext_hdr['FPAM_H']   = first_bright.ext_hdr.get('FPAM_H', 0.0)
+    nd_spec_cal.ext_hdr['FPAM_V']   = first_bright.ext_hdr.get('FPAM_V', 0.0)
+    nd_spec_cal.ext_hdr['DPAMNAME'] = dpam
+
+    return nd_spec_cal
