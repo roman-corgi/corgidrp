@@ -386,10 +386,12 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     # Step 1/2 b: Do the stap spot data. 
     logger.info('Step 1/2b: Running L1 to L3 on the polarimetry satspots...')
     input_satspots_filenames = os.listdir(os.path.join(l1_datadir,"sat_spots"))
-    logger.info(f'Found {len(input_satspots_filenames)} sat spot files in input directory: {l1_datadir}/sat_spots')
-    input_files = [os.path.join(l1_datadir, "sat_spots", f) for f in input_satspots_filenames if f.endswith('l1_.fits')]
+    input_files = sorted([os.path.join(l1_datadir, "sat_spots", f) for f in input_satspots_filenames if f.endswith('l1_.fits')])
+    logger.info(f'Found {len(input_files)} sat spot files in input directory: {l1_datadir}/sat_spots')
     sat_spot_dir = os.path.join(l4_outputdir,"sat_spots")
-    walker.walk_corgidrp(input_files, "", sat_spot_dir, template="l1_to_l2b.json")
+    walker.walk_corgidrp(input_files[:6], "", sat_spot_dir, template="l1_to_l2b.json") #The first 6 are from one target with one exposure time
+    walker.walk_corgidrp(input_files[6:12], "", sat_spot_dir, template="l1_to_l2b.json") #The second 6 are from another target with a different exposure time
+    
     l2b_satspot_files = [os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l2b.fits')]    
     walker.walk_corgidrp(l2b_satspot_files, "", sat_spot_dir)    
     logger.info('L1 to L3 sat spots complete')
@@ -398,13 +400,15 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     # # # Append the satspot files to the l3_filelist
     l3_filelist.extend(l3_satspot_files)
 
-    # Step 1/2 b: Do the stap spot data. 
-    logger.info('Step 1/2b: Running L1 to L3 on the off-axis images...')
+    # Step 1/2 b: Do the unocculted data. 
+    logger.info('Step 1/2b: Running L1 to L3 on the unocculted images...')
     input_offaxis_filenames = os.listdir(os.path.join(l1_datadir,"off_axis"))
     logger.info(f'Found {len(input_offaxis_filenames)} off-axis files in input directory: {l1_datadir}/off_axis')
-    input_files = [os.path.join(l1_datadir, "off_axis", f) for f in input_offaxis_filenames if f.endswith('l1_.fits')]
+    input_files = sorted([os.path.join(l1_datadir, "off_axis", f) for f in input_offaxis_filenames if f.endswith('l1_.fits')])
     off_axis_dir = os.path.join(l4_outputdir,"off_axis")
-    walker.walk_corgidrp(input_files, "", off_axis_dir, template="l1_to_l2b.json")
+    walker.walk_corgidrp(input_files[:6], "", off_axis_dir, template="l1_to_l2b.json") #The first 6 are from one target with one exposure time
+    walker.walk_corgidrp(input_files[6:], "", off_axis_dir, template="l1_to_l2b.json") #The second 6 are from another target with a different exposure time
+    
     l2b_offaxis_files = [os.path.join(off_axis_dir, f) for f in os.listdir(off_axis_dir) if f.endswith('_l2b.fits')]    
     walker.walk_corgidrp(l2b_offaxis_files, "", off_axis_dir)    
     logger.info('L1 to L3 off-axis complete')
