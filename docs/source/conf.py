@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath('..'))
 project = 'corgidrp'
 copyright = '2026, corgidrp Developers'
 author = 'corgidrp Developers'
-release = '3.2'
+release = '3.2.1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
