@@ -975,7 +975,7 @@ def star_center_from_satellite_spots(
         numpy.ndarray:
             Estimated absolute coordinates [x, y] of the star center in the spots image.
         numpy.ndarray:
-            Calculated locations of the satellite spots.
+            Calculated locations of the satellite spots. (Note: Currently returning 'None', since this isn't being used)
     """
 
     # check inputs
