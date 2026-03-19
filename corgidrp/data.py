@@ -3747,11 +3747,12 @@ class NDFilterSweetSpotDataset(Image):
 
 class NDSpectroscopy(Image):
     """
-    Spectroscopic ND filter calibration product.
+    ND filter calibration product for spectroscopy.
 
-    Stores OD(lambda) — the optical depth of the ND filter as a function of
-    wavelength — measured in a prism-mode (DPAMNAME=PRISM*) observation at a
-    single detector location.
+    For spectroscopy observations (DPAMNAME=PRISM*) - stores OD(lambda), 
+    the optical depth of the ND filter as a function of wavelength. 
+    Unlike the imaging mode ND filter calibration product, spectroscopy mode
+    ND filter calibration product is only measured at a single detector location.
 
     Data shape: (2, M)
         row 0: wavelengths in nm
@@ -3826,14 +3827,14 @@ class NDSpectroscopy(Image):
             dq_hdr=dq_hdr,
         )
 
-        # Shape validation: expect (2, M)
+        # Shape validation - expect (2, M)
         if self.data.ndim != 2 or self.data.shape[0] != 2:
             raise ValueError(
                 "NDSpectroscopy data must be a 2D array of shape (2, M). "
                 f"Received shape {self.data.shape}."
             )
 
-        # Convenience attributes
+        # Class attributes
         self.wavelengths = self.data[0, :]
         self.od_spectrum = self.data[1, :]
         if self.err is not None and self.err.shape == (1, 2, self.data.shape[1]):
@@ -3843,12 +3844,12 @@ class NDSpectroscopy(Image):
             self.wave_err = np.zeros_like(self.wavelengths)
             self.od_err   = np.zeros_like(self.od_spectrum)
 
-        # Bookkeeping for new files (ext_hdr is not None when raw array passed in)
+        # Bookkeeping info for new files
         if ext_hdr is not None:
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-                self.filename = "{0}_nd_spec_cal.fits".format(orig_input_filename)
+                self.filename = "{0}_nds_cal.fits".format(orig_input_filename)
                 self.filename = re.sub('_l[0-9].', '', self.filename)
             self.ext_hdr['DATATYPE'] = 'NDSpectroscopy'
             self.ext_hdr['BUNIT']    = ''        # dimensionless OD

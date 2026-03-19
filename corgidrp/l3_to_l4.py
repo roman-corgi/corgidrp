@@ -1069,8 +1069,7 @@ def find_spec_star(input_dataset, r_lamD=3, phi_deg=0):
     dataset.update_after_processing_step(history_msg)
     return dataset
 
-def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False,
-                 subtract_bkg = False, bkg_offset = 3, bkg_halfwidth = 5):
+def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
     """
     extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around
     the wavelength zero point with units photoelectron/s/bin.
@@ -1080,12 +1079,6 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
         halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
         halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
         apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
-        subtract_bkg (boolean): if True, estimate and subtract the background from the extracted spectrum.
-            Background is estimated per wavelength bin as the nanmedian of pixels in two strips on either
-            side of the trace aperture.
-        bkg_offset (int): gap in pixels between the edge of the trace aperture and the start of each
-            background strip (only used when subtract_bkg=True).
-        bkg_halfwidth (int): half-width in pixels of each background strip (only used when subtract_bkg=True).
 
     Returns:
         corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
@@ -1129,26 +1122,6 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
             algo_thru_spec = algo_thru_cutout
             weight_str = "no weights applied"
 
-        if subtract_bkg:
-            n_trace = 2 * halfwidth + 1
-            nx = image.data.shape[1]
-            y0 = ycent_round - halfheight
-            y1 = ycent_round + halfheight + 1
-            x_lo0 = max(0, xcent_round - halfwidth - bkg_offset - bkg_halfwidth)
-            x_lo1 = max(0, xcent_round - halfwidth - bkg_offset)
-            x_hi0 = min(nx, xcent_round + halfwidth + bkg_offset + 1)
-            x_hi1 = min(nx, xcent_round + halfwidth + bkg_offset + bkg_halfwidth + 1)
-            left_bkg  = image.data[y0:y1, x_lo0:x_lo1]
-            right_bkg = image.data[y0:y1, x_hi0:x_hi1]
-            bkg_pixels = np.hstack([left_bkg, right_bkg]) if (left_bkg.size > 0 and right_bkg.size > 0) \
-                         else (left_bkg if left_bkg.size > 0 else right_bkg)
-            bkg_per_pix = np.nanmedian(bkg_pixels, axis=1)
-            spec = spec - bkg_per_pix * n_trace
-            # Propagate background uncertainty into the error
-            n_bkg = np.sum(np.isfinite(bkg_pixels), axis=1)
-            bkg_std = np.nanstd(bkg_pixels, axis=1)
-            bkg_err = np.where(n_bkg > 1, bkg_std * n_trace / np.sqrt(n_bkg), 0.0)
-            err[0] = np.sqrt(err[0]**2 + bkg_err**2)
         
         spec_header = fits.Header()
         spec_header['BUNIT'] = "photoelectron/s/bin"
