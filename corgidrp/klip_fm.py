@@ -274,10 +274,11 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                 iwa_mas = 140.0
             case _: 
                 raise NotImplementedError("Automatic separation choices not configured for this mode.")
-
+                
+        owa_pix = owa_mas / pixscale_mas          
         iwa_pix = iwa_mas / pixscale_mas               
         seps = np.arange(iwa_pix,owa_pix,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
-        
+
     if pas is None:
         pas = np.linspace(0.,360.,n_pas+1)[:-1] # Some linear spacing between the IWA & OWA, around 5x the fwhm
 
