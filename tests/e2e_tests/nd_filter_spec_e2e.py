@@ -1,32 +1,89 @@
 """
 End-to-end test for spectroscopic ND filter calibration (prism mode).
 
-Starts from L1 FITS files produced by corgisim and exercises the full
-corgidrp pipeline:
+Measures optical density as a function of wavelength, OD(lambda), for the
+ND225 focal-plane filter in Band 3 spectroscopy (PRISM3) mode.
 
-    L1 → L2a (l1_to_l2a_basic.json)
-       → L2b (l2a_to_l2b_spec.json)
-       → NDSpectroscopy calibration product (l2b_to_nd_filter_spec.json)
-              which internally runs:
-                divide_by_exptime
-                determine_wave_zeropoint
-                add_wavelength_map
-                extract_spec
-                create_nd_filter_cal_spec
+Pipeline
+--------
+L1 → L2a  (l1_to_l2a_basic.json)
+   → L2b  (l2a_to_l2b_spec.json)
+   → NDSpectroscopy cal product  (l2b_to_nd_filter_spec.json)
+        steps: divide_by_exptime
+               determine_wave_zeropoint   [needs 3D + 3F frames]
+               add_wavelength_map         [needs DispersionModel from CalDB]
+               extract_spec
+               create_nd_filter_cal_spec  [needs SpecFluxCal or dim-star frames]
 
-Expected data layout under e2edata_path:
-    <e2edata_path>/
-        ND_SPEC/
-            L1/               ← L1 FITS files from corgisim
-                cgi_*_l1_.fits  (dim-star frames with FPAMNAME=HOLE)
-                cgi_*_l1_.fits  (bright-star frames with FPAMNAME=ND225)
-        TV-36_Coronagraphic_Data/
-            Cals/             ← standard detector calibration files
+Required L1 input files  (<e2edata_path>/ND_SPEC/L1/)
+-----------------------------------------------------
+All frames must share the same EXPTIME, EMGAIN_C, and KGAINPAR so that
+a single synthesized dark can be subtracted.  Generate them with
+corgisim/make_nd_spec_l1_data.py.
 
-Baseline configuration:
-    FPAM  : ND225
-    Band  : 3 (CFAM 3F or similar)
+  1. Narrowband dim-star frames  (CFAMNAME=3D, FPAMNAME=OPEN_34, DPAMNAME=PRISM3)
+       VISTYPE  = CGIVST_CAL_ABSFLUX_FAINT
+       TARGET   = <dim CALSPEC star, e.g. "tyc 4424-1286-1">
+       Purpose  : wavelength zero-point via determine_wave_zeropoint
+       Minimum  : 1 frame (2 recommended)
+
+  2. Broadband dim-star frames   (CFAMNAME=3F, FPAMNAME=OPEN_34, DPAMNAME=PRISM3)
+       VISTYPE  = CGIVST_CAL_ABSFLUX_FAINT
+       TARGET   = <same dim CALSPEC star>
+       Purpose  : spectral flux calibration C(lambda) via spec_fluxcal,
+                  which converts CALSPEC SED [erg/s/cm^2/AA] to detector
+                  counts [e-/s/bin] at each wavelength
+       Minimum  : 1 frame (3 recommended)
+
+  3. Broadband bright-star frames (CFAMNAME=3F, FPAMNAME=ND225, DPAMNAME=PRISM3)
+       VISTYPE  = CGIVST_CAL_ABSFLUX_BRIGHT
+       TARGET   = <bright CALSPEC star, e.g. "109 vir">
+       Purpose  : OD(lambda) measurement — pipeline computes
+                  OD(lambda) = -log10(counts_ND / expected_counts)
+                  where expected_counts = SED_bright(lambda) / C(lambda)
+       Minimum  : 1 frame (3 recommended)
+
+TARGET must be a key in corgidrp.fluxcal.calspec_names so that the
+CALSPEC SED can be auto-downloaded from STScI.
+
+Required calibration files
+--------------------------
+A. Detector calibrations — flat files under <e2edata_path>/TV-36_Coronagraphic_Data/Cals/:
+     nonlin_table_240322.txt    — nonlinearity correction table
+     dark_current_20240322.fits — per-pixel dark current [e-/s]
+     flat.fits                  — flat field
+     fpn_20240322.fits          — fixed-pattern noise map
+     cic_20240322.fits          — clock-induced charge map
+     bad_pix.fits               — bad pixel map
+   These are used to build NonLinearityCalibration, KGain, DetectorNoiseMaps,
+   SynthesizedDark, FlatField, and BadPixelMap products in a temporary CalDB.
+
+B. Spectroscopy calibrations — loaded automatically from corgidrp.default_cal_dir
+   (~/.corgidrp/default_calibs/):
+     DispersionModel_*.fits     — maps pixel position → wavelength (nm)
+                                  for each band/prism combination
+     SpecFilterOffset_*.fits    — narrowband/broadband filter centroid offsets,
+                                  used by determine_wave_zeropoint
+
+   These files ship with corgidrp and are created on first use by
+   corgidrp.caldb.create_default_calibrations().  No manual action needed
+   unless the default_calibs directory is missing or corrupted.
+
+Output
+------
+A single NDSpectroscopy FITS product (*_nd_spec_cal.fits) containing:
+    data[0, :]  — wavelength grid (nm)
+    data[1, :]  — OD(lambda) spectrum
+    err[0, 0, :] — wavelength uncertainty (nm)
+    err[0, 1, :] — OD uncertainty (1-sigma)
+with header keywords DATATYPE='NDSpectroscopy', FPAMNAME='ND225',
+DPAMNAME='PRISM3', DATALVL='CAL'.
+
+Baseline configuration tested here:
+    FPAM  : ND225  (OD ~ 2.25)
+    Band  : 3  (CFAMNAME = 3F / 3D)
     DPAM  : PRISM3
+    Stars : TYC 4424-1286-1 (dim, Vmag~12) + 109 Vir (bright, Vmag~3.7)
 """
 import argparse
 import logging
@@ -75,27 +132,40 @@ def _patch_eacq_to_center(filelist):
 
 def _setup_caldb(l1_datadir, processed_cal_path, calibrations_dir, logger):
     """
-    Build a temporary CalDB populated with standard detector calibrations
-    and the corgidrp default spectroscopy calibrations.
+    Build a temporary CalDB populated with detector calibrations and the
+    corgidrp default spectroscopy calibrations.
+
+    The CalDB is written to a temporary CSV (tmp_nd_spec_e2e_caldb.csv) so
+    it does not interfere with the user's real CalDB.
 
     Parameters
     ----------
     l1_datadir : str
-        Directory containing the L1 input files (used to create mock
-        input_dataset headers for calibration products).
+        Directory containing the L1 input files.  Two files are copied to
+        create provenance headers for the calibration products.
     processed_cal_path : str
-        Directory containing detector calibration flat files (dark, flat,
-        nonlinearity table, noise maps, bad pixel map).
+        Directory containing flat detector calibration files.  The following
+        filenames are expected (TV-36 TVAC naming convention):
+            nonlin_table_240322.txt    — nonlinearity correction table (CSV)
+            dark_current_20240322.fits — per-pixel dark current image
+            flat.fits                  — flat field image
+            fpn_20240322.fits          — fixed-pattern noise image
+            cic_20240322.fits          — clock-induced charge image
+            bad_pix.fits               — bad pixel map image
     calibrations_dir : str
-        Output directory where mock calibration FITS products are saved.
+        Output directory where the built calibration FITS files are saved.
     logger : logging.Logger
 
     Returns
     -------
     this_caldb : corgidrp.caldb.CalDB
-        Populated temporary calibration database.
+        Populated temporary calibration database containing:
+            NonLinearityCalibration, KGain, DetectorNoiseMaps,
+            SynthesizedDark (analog mode only), FlatField, BadPixelMap,
+            DispersionModel, SpecFilterOffset  (from corgidrp.default_cal_dir)
     is_pc_data : bool
-        True if the L1 data is photon-counted.
+        True if the L1 data are photon-counted (ISPC=1).
+        If True, a PC dark is built later from L2a frames rather than here.
     """
     # Use a temporary CSV so we don't pollute the user's real CalDB.
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_nd_spec_e2e_caldb.csv')
@@ -139,9 +209,15 @@ def _setup_caldb(l1_datadir, processed_cal_path, calibrations_dir, logger):
     ext_hdr['DRPCTIME'] = time.Time.now().isot
     ext_hdr['DRPVERSN'] = corgidrp.__version__
 
-    # Determine whether the data are photon-counted
+    # Determine whether the dataset contains any photon-counted frames.
+    # Check all L1 files, not just mock_cal_files, because the last files
+    # written (bright star through ND) are in analog mode (ISPC=0) while
+    # the dim star frames are in PC mode (ISPC=1).
     sample_hdr = fits.getheader(mock_cal_files[0], ext=1)
-    is_pc_data = bool(int(sample_hdr.get('ISPC', 0)))
+    is_pc_data = any(
+        bool(int(fits.getheader(os.path.join(l1_datadir, f), ext=1).get('ISPC', 0)))
+        for f in all_l1
+    )
 
     # Nonlinearity
     nonlin_dat  = np.genfromtxt(nonlin_path, delimiter=",")
@@ -188,15 +264,31 @@ def _setup_caldb(l1_datadir, processed_cal_path, calibrations_dir, logger):
 
     # Dark (analog only; PC dark is created later from L2a frames)
     if not is_pc_data:
-        exptime  = float(sample_hdr['EXPTIME'])
-        emgain_c = float(sample_hdr['EMGAIN_C'])
-        tmp_ds = data.Dataset(mock_cal_files[:1])
-        tmp_ds.frames[0].ext_hdr['EXPTIME']  = exptime
-        tmp_ds.frames[0].ext_hdr['EMGAIN_C'] = emgain_c
-        dark_cal = build_synthesized_dark(tmp_ds, noise_map)
-        mocks.rename_files_to_cgi_format([dark_cal], calibrations_dir, "drk_cal")
-        this_caldb.create_entry(dark_cal)
-        logger.info("Analog dark calibration created.")
+        # Build one synthesized dark per unique (EXPTIME, EMGAIN_C) so that
+        # dim-star and bright-star frames can use different exposure times.
+        seen_configs = {}
+        for fname in all_l1:
+            h = fits.getheader(os.path.join(l1_datadir, fname), ext=1)
+            key = (float(h['EXPTIME']), float(h['EMGAIN_C']))
+            if key not in seen_configs:
+                seen_configs[key] = fname
+        for (exptime, emgain_c), fname in seen_configs.items():
+            src = os.path.join(l1_datadir, fname)
+            tmp_f = shutil.copy2(
+                src, os.path.join(mock_cal_dir, os.path.basename(src)))
+            tmp_fixed = fix_hdrs_for_tvac([tmp_f], mock_cal_dir)
+            if not tmp_fixed:
+                tmp_fixed = [tmp_f]
+            with fits.open(tmp_fixed[0], mode='update') as hdul:
+                if 'ISPC' in hdul[1].header:
+                    hdul[1].header['ISPC'] = int(hdul[1].header['ISPC'])
+            tmp_ds = data.Dataset(tmp_fixed)
+            tmp_ds.frames[0].ext_hdr['EXPTIME']  = exptime
+            tmp_ds.frames[0].ext_hdr['EMGAIN_C'] = emgain_c
+            dark_cal = build_synthesized_dark(tmp_ds, noise_map)
+            mocks.rename_files_to_cgi_format([dark_cal], calibrations_dir, "drk_cal")
+            this_caldb.create_entry(dark_cal)
+            logger.info(f"Analog dark created: EXPTIME={exptime}s, EMGAIN_C={emgain_c}.")
     else:
         logger.info("PC dark will be created from L2a frames.")
 
@@ -229,20 +321,52 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     Execute the full ND filter spectroscopy calibration pipeline and validate
     the resulting NDSpectroscopy product.
 
+    Steps
+    -----
+    1. Build a temporary CalDB from detector flat files + corgidrp default
+       spectroscopy calibrations (DispersionModel, SpecFilterOffset).
+    2. Copy and fix L1 FITS headers (fix_hdrs_for_tvac).
+    3. L1 → L2a  via walker (prescan_biassub, cosmic ray detection,
+       nonlinearity correction).
+    4. Optionally build a PC dark from L2a frames (photon-counted data only).
+    5. L2a → L2b  via walker (convert_to_electrons, em_gain_division,
+       dark_subtraction, desmear, CTI correction, bad-pixel correction).
+       Patches EACQ_ROW/EACQ_COL to image centre after this step.
+    6. L2b → NDSpectroscopy  via walker (divide_by_exptime,
+       determine_wave_zeropoint, add_wavelength_map, extract_spec,
+       create_nd_filter_cal_spec).
+    7. Validate the output NDSpectroscopy product (shape, wavelength range,
+       OD positivity, header keywords).
+
     Parameters
     ----------
     l1_datadir : str
-        Directory containing the L1 input FITS files.
+        Directory containing L1 FITS files.  Must include at least:
+          - Narrowband dim-star frames  (CFAMNAME=3D, FPAMNAME=OPEN_34,
+            DPAMNAME=PRISM3, VISTYPE=CGIVST_CAL_ABSFLUX_FAINT)
+          - Broadband dim-star frames   (CFAMNAME=3F, FPAMNAME=OPEN_34,
+            DPAMNAME=PRISM3, VISTYPE=CGIVST_CAL_ABSFLUX_FAINT)
+          - Broadband bright-star frames (CFAMNAME=3F, FPAMNAME=ND225,
+            DPAMNAME=PRISM3, VISTYPE=CGIVST_CAL_ABSFLUX_BRIGHT)
+        All frames must share the same EXPTIME, EMGAIN_C, and KGAINPAR.
+        TARGET primary-header keyword must be a key in
+        corgidrp.fluxcal.calspec_names for auto CALSPEC lookup.
+        Generate with corgisim/make_nd_spec_l1_data.py.
     processed_cal_path : str
-        Directory containing detector calibration files.
+        Directory containing flat detector calibration files; see
+        _setup_caldb() for the expected filenames.
     outputdir : str
-        Root output directory for all intermediate and final products.
+        Root output directory.  Intermediate L2a/L2b files and the final
+        NDSpectroscopy product are written here.
     logger : logging.Logger
 
     Returns
     -------
     nd_spec_cal : corgidrp.data.NDSpectroscopy
-        The recovered spectroscopic ND filter calibration product.
+        Validated spectroscopic ND filter calibration product with:
+            .wavelengths  — wavelength grid (nm), shape (M,)
+            .od_spectrum  — OD(lambda),           shape (M,)
+            .od_err       — 1-sigma OD error,     shape (M,)
     """
     # ------------------------------------------------------------------ #
     # 1. Calibration database                                             #
@@ -282,7 +406,8 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     logger.info("Running L1 → L2a …")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l1_filelist, "", outputdir)
+        walker.walk_corgidrp(l1_filelist, "", outputdir,
+                             template="l1_to_l2a_basic.json")
 
     l2a_filelist = sorted(
         os.path.join(outputdir, f)
@@ -323,22 +448,47 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     # ------------------------------------------------------------------ #
     logger.info("Running L2a → L2b (spec) …")
     if is_pc_data:
-        recipe = walker.autogen_recipe(l2a_filelist, outputdir)
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=UserWarning)
-            out1 = walker.run_recipe(recipe[0], save_recipe_file=True)
-        recipe[1]['inputs'] = out1
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=UserWarning)
-            out2 = walker.run_recipe(recipe[1], save_recipe_file=True)
-        recipe[2]['inputs'] = out2
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=UserWarning)
-            walker.run_recipe(recipe[2], save_recipe_file=True)
+        # get_pc_mean requires a single VISTYPE per run.  Split by VISTYPE
+        # (CGIVST_CAL_ABSFLUX_FAINT / CGIVST_CAL_ABSFLUX_BRIGHT) and run
+        # the three PC spec recipes independently for each group.
+        l2a_dataset = data.Dataset(l2a_filelist, no_data=True, no_err=True, no_dq=True)
+        vistype_groups, _ = l2a_dataset.split_dataset(prihdr_keywords=['VISTYPE'])
+        for group in vistype_groups:
+            group_files = [f.filepath for f in group.frames]
+            vt = group.frames[0].pri_hdr['VISTYPE']
+            group_ispc = int(group.frames[0].ext_hdr.get('ISPC', 1))
+            logger.info(f"  L2a→L2b: VISTYPE={vt}, ISPC={group_ispc} ({len(group_files)} files)")
+            if group_ispc == 1:
+                # Photon-counting path (dim star, ISPC=1)
+                recipe = walker.autogen_recipe(group_files, outputdir)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=UserWarning)
+                    out1 = walker.run_recipe(recipe[0], save_recipe_file=True)
+                recipe[1]['inputs'] = out1
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=UserWarning)
+                    out2 = walker.run_recipe(recipe[1], save_recipe_file=True)
+                recipe[2]['inputs'] = out2
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=UserWarning)
+                    walker.run_recipe(recipe[2], save_recipe_file=True)
+            else:
+                # Analog path (bright star through ND filter, ISPC=0)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=UserWarning)
+                    walker.walk_corgidrp(group_files, "", outputdir,
+                                         template="l2a_to_l2b_spec.json")
     else:
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=UserWarning)
-            walker.walk_corgidrp(l2a_filelist, "", outputdir)
+        # Split by EXPTIME so each group is paired with its matching dark.
+        # Dim-star and bright-star frames may use different exposure times.
+        l2a_ds = data.Dataset(l2a_filelist, no_data=True, no_err=True, no_dq=True)
+        exptime_groups, _ = l2a_ds.split_dataset(exthdr_keywords=['EXPTIME'])
+        for group in exptime_groups:
+            group_files = [f.filepath for f in group.frames]
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=UserWarning)
+                walker.walk_corgidrp(group_files, "", outputdir,
+                                     template="l2a_to_l2b_spec.json")
 
     l2b_filelist = sorted(
         os.path.join(outputdir, f)
@@ -350,6 +500,26 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     _patch_eacq_to_center(l2b_filelist)
 
     # ------------------------------------------------------------------ #
+    # Diagnostic: inspect L2b frame signal levels before NDSpec recipe   #
+    # ------------------------------------------------------------------ #
+    for fpath in sorted(l2b_filelist):
+        hdr  = fits.getheader(fpath, ext=1)
+        data_arr = fits.getdata(fpath, ext=1).astype(float)
+        cfam = hdr.get('CFAMNAME', '?')
+        fpam = hdr.get('FPAMNAME', '?')
+        logger.info(
+            f"L2b {os.path.basename(fpath)}: "
+            f"CFAM={cfam} FPAM={fpam} "
+            f"shape={data_arr.shape} "
+            f"min={data_arr.min():.3g} max={data_arr.max():.3g} "
+            f"sum={data_arr.sum():.3g} mean={data_arr.mean():.3g} "
+            f"median={np.median(data_arr):.3g}"
+        )
+        if cfam == '3D':
+            ypeak, xpeak = np.unravel_index(np.argmax(data_arr), data_arr.shape)
+            logger.info(f"  NB peak pixel: ({xpeak}, {ypeak}) = {data_arr[ypeak, xpeak]:.3g}")
+
+    # ------------------------------------------------------------------ #
     # 5. L2b → NDSpectroscopy calibration product                        #
     #    (via l2b_to_nd_filter_spec.json:                                 #
     #     divide_by_exptime → determine_wave_zeropoint →                 #
@@ -359,7 +529,8 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     logger.info("Running L2b → NDSpectroscopy …")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l2b_filelist, "", outputdir)
+        walker.walk_corgidrp(l2b_filelist, "", outputdir,
+                             template="l2b_to_nd_filter_spec.json")
 
     # ------------------------------------------------------------------ #
     # 6. Locate and load the NDSpectroscopy product                      #
@@ -428,13 +599,28 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
     """
     Pytest wrapper for the spectroscopic ND filter calibration E2E test.
 
-    Expected data layout::
+    Skips gracefully if the L1 data directory does not exist.
+
+    Expected directory layout::
 
         <e2edata_path>/
             ND_SPEC/
-                L1/               ← L1 FITS files from corgisim
+                L1/
+                    cgi_*_l1_.fits   (3D dim-star frames,  CFAMNAME=3D, FPAMNAME=OPEN_34)
+                    cgi_*_l1_.fits   (3F dim-star frames,  CFAMNAME=3F, FPAMNAME=OPEN_34)
+                    cgi_*_l1_.fits   (3F bright-star frames, CFAMNAME=3F, FPAMNAME=ND225)
             TV-36_Coronagraphic_Data/
-                Cals/             ← detector calibration files
+                Cals/
+                    nonlin_table_240322.txt
+                    dark_current_20240322.fits
+                    flat.fits
+                    fpn_20240322.fits
+                    cic_20240322.fits
+                    bad_pix.fits
+
+    Generate the L1 files with::
+
+        python corgisim/make_nd_spec_l1_data.py -o <e2edata_path>
     """
     l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "L1")
     processed_cal_path = os.path.join(

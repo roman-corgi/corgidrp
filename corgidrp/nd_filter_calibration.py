@@ -558,12 +558,22 @@ def _compute_od_spectrum_for_frame(entry, sf_cal, calspec_filepath):
     if spec_err.ndim > 1:
         spec_err = spec_err[0]   # extract first error plane -> shape (M,)
 
+    # Ensure spec_wave is in ascending order; read_cal_spec and interp1d both
+    # require ascending wavelength grids.
+    sort_idx = np.argsort(spec_wave)
+    spec_wave  = spec_wave[sort_idx]
+    counts_nd  = counts_nd[sort_idx]
+    spec_err   = spec_err[sort_idx]
+
     # CALSPEC SED for the bright star at these wavelengths.
     # read_cal_spec expects wavelengths in Angstrom; spec_wave is in nm.
     sed_bright = fluxcal.read_cal_spec(calspec_filepath, spec_wave * 10.0)
 
     # Interpolate C(lambda) from SpecFluxCal onto the bright-star wavelength grid.
-    c_interp_fn = interp1d(sf_cal.wavelength, sf_cal.specflux,
+    # sf_cal.wavelength may also be in descending order; sort it ascending.
+    sf_sort_idx = np.argsort(sf_cal.wavelength)
+    c_interp_fn = interp1d(sf_cal.wavelength[sf_sort_idx],
+                           sf_cal.specflux[sf_sort_idx],
                            kind='linear', fill_value='extrapolate')
     c_at_wave = c_interp_fn(spec_wave)   # erg/(s*cm^2*AA) / (e-/s/bin)
 

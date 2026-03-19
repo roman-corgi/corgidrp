@@ -9,10 +9,16 @@
         "name": "divide_by_exptime"
       },
       {
-        "name": "determine_wave_zeropoint"
+        "name": "determine_wave_zeropoint",
+        "calibs": {
+          "SpecFilterOffset": "AUTOMATIC"
+        }
       },
       {
-        "name": "add_wavelength_map"
+        "name": "add_wavelength_map",
+        "calibs": {
+          "DispersionModel": "AUTOMATIC"
+        }
       },
       {
         "name": "extract_spec"

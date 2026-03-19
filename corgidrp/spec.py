@@ -137,7 +137,7 @@ def psf_registration_costfunc(p, template, data):
     yshift = p[1]
     amp = p[2]
     shifted_template = amp * ndi.shift(template, (yshift, xshift), order=1, prefilter=False)
-    return np.sum((data - shifted_template)**2)
+    return np.nansum((data - shifted_template)**2)
 
 def get_center_of_mass(frame):
     """
@@ -154,8 +154,8 @@ def get_center_of_mass(frame):
     """
     y, x = np.indices(frame.shape)
 
-    ycen = np.sum(y * frame)/np.sum(frame)
-    xcen = np.sum(x * frame)/np.sum(frame)
+    ycen = np.nansum(y * frame)/np.nansum(frame)
+    xcen = np.nansum(x * frame)/np.nansum(frame)
 
     return xcen, ycen
 
@@ -244,7 +244,7 @@ def fit_psf_centroid(psf_data, psf_template,
     data_stamp = psf_data[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1]
 
     xoffset_guess, yoffset_guess = (0.0, 0.0)
-    amp_guess = np.sum(psf_data) / np.sum(psf_template)
+    amp_guess = np.nansum(psf_data) / np.nansum(psf_template)
     guess_params = (xoffset_guess, yoffset_guess, amp_guess)
     registration_result = optimize.minimize(psf_registration_costfunc, guess_params,
                                          args=(template_stamp, data_stamp),
@@ -258,7 +258,7 @@ def fit_psf_centroid(psf_data, psf_template,
 
     psf_data_bkg = psf_data.copy()
     psf_data_bkg[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1] = np.nan
-    psf_peakpix_snr = np.max(psf_data) / np.nanstd(psf_data_bkg)
+    psf_peakpix_snr = np.nanmax(psf_data) / np.nanstd(psf_data_bkg)
 
     (gauss2d_xfit, gauss2d_yfit, xfwhm, yfwhm, gauss2d_peakfit,
      fitted_data_stamp, model, residual) = gaussfit2d_pix(psf_data,
@@ -267,7 +267,7 @@ def fit_psf_centroid(psf_data, psf_template,
                                                 xfwhm_guess = fwhm_minor_guess,
                                                 yfwhm_guess = fwhm_major_guess,
                                                 halfwidth = 1, halfheight = halfheight,
-                                                guesspeak = np.max(psf_data), oversample = gauss2d_oversample,
+                                                guesspeak = np.nanmax(psf_data), oversample = gauss2d_oversample,
                                                 refinefit = True)
 
     (x_precis, y_precis) = (np.abs(xfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr,
@@ -391,9 +391,33 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     for idx, frame in enumerate(dataset):
         cfam = frame.ext_hdr['CFAMNAME']
         filters.append(cfam)
-        psf_data = frame.data
+        # Background-subtract each frame so that the PSF signal dominates
+        # the centre-of-mass computation.  For a large science frame the
+        # background noise across all pixels can sum to nearly zero, making
+        # the raw CoM unreliable; subtracting the median (a robust background
+        # estimator) removes this bias before any fitting.  Use nanmedian so
+        # that NaN pixels (e.g. from bad-pixel correction) do not propagate.
+        psf_data = frame.data - np.nanmedian(frame.data)
+        # When there are NaN pixels (e.g. saturated or bad-pixel-corrected),
+        # derive a robust initial centroid guess from the peak of the
+        # median-filtered NaN-filled frame before replacing NaN with 0.
+        # Centre-of-mass on a large frame with a zeroed-out core is biased
+        # by integrated background noise; argmax stays near the brightest
+        # surviving wing pixel, which is a better starting point for the
+        # template fit.  Only override xguess/yguess when no explicit guess
+        # has been provided by the caller.
+        had_nan = np.any(np.isnan(psf_data))
+        # Replace any remaining NaN pixels with the background level (0 after
+        # subtraction) so they do not propagate through the fitting steps.
+        psf_data = np.where(np.isnan(psf_data), 0.0, psf_data)
         if xcent is None:
-            xguess, yguess = None, None
+            if had_nan:
+                # argmax of the median-filtered frame as initial guess
+                _med = ndi.median_filter(psf_data, size=2)
+                _ypk, _xpk = np.unravel_index(np.argmax(_med), _med.shape)
+                xguess, yguess = float(_xpk), float(_ypk)
+            else:
+                xguess, yguess = None, None
         else:
             xguess = xcent[idx]
             yguess = ycent[idx]
