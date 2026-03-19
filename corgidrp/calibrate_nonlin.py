@@ -16,7 +16,6 @@ except:
 
 from corgidrp import check
 import corgidrp.data as data
-from memory_profiler import profile
 
 # Dictionary with constant non-linearity calibration parameters
 nonlin_params_default = {
@@ -123,7 +122,6 @@ def check_nonlin_params(nonlin_params):
 class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
 
-@profile
 def calibrate_nonlin(dataset_nl,
                      n_cal=20, n_mean=30, norm_val = 2500, min_write = 800.0,
                      max_write = 10000.0,
@@ -906,7 +904,6 @@ def calibrate_nonlin(dataset_nl,
     
     return nonlin
 
-@profile
 def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
     """
     Casts the CORGIDRP Dataset object for non-linearity calibration into a stack
