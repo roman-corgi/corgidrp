@@ -42,7 +42,8 @@ def calc_stokes_unocculted(input_dataset,
                            phot_kwargs=None,
                            image_center_x=None, 
                            image_center_y=None,
-                           split_rolls=True):
+                           split_pa_states=True,
+                           pa_tolerance=0.1):
     """
     Compute uncalibrated Stokes parameters (I, Q/I, U/I) from unocculted L3 polarimetric datacubes.
 
@@ -62,9 +63,12 @@ def calc_stokes_unocculted(input_dataset,
         image_center_y (float, optional):
             Y-coordinate of the aperture center in pixels. Default is None.
             If None, assume the center of the array is a good guess. 
-        split_rolls (bool, optional):
-            If True, split the input dataset by both target and roll angle. If False, split only by target.
+        split_pa_states (bool, optional):
+            If True, split the input dataset by both target and PA_APER. If False, split only by target.
             Default is True.
+        pa_tolerance (float, optional):
+            Maximum allowed difference in PA_APER (deg) to group frames together when split_pa_states is True.
+            Default is 0.1.
 
     Returns:
         Image:
@@ -94,10 +98,42 @@ def calc_stokes_unocculted(input_dataset,
 
     prism_map = {'POL0': [0., 90.], 'POL45': [45., 135.]}
 
-    #split datasets by target if there are multiple targets
-    # targets = []
-    if split_rolls:   
-        datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET", "ROLL"])
+    # split datasets by target if there are multiple targets
+    if split_pa_states:
+        datasets = []
+        target_datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
+        for target_dataset in target_datasets:
+            # Assign frames to a cluster based on the nearest PA_APER
+            clusters = []
+            for frame in target_dataset.frames:
+                pa = frame.pri_hdr["PA_APER"] % 360.0 # in case PA_APER can be negative..
+                pa_rad = np.deg2rad(pa)
+                pa_sin = np.sin(pa_rad)
+                pa_cos = np.cos(pa_rad)
+                best_idx = None
+                best_diff = None
+                for idx, cluster in enumerate(clusters):
+                    pa_diff = abs(((pa - cluster["pa_center"] + 180.0) % 360.0) - 180.0)
+                    if pa_diff <= pa_tolerance and (best_diff is None or pa_diff < best_diff):
+                        best_idx = idx
+                        best_diff = pa_diff
+                if best_idx is None:
+                    clusters.append({
+                        "pa_center": pa,
+                        "sum_sin": pa_sin,
+                        "sum_cos": pa_cos,
+                        "frames": [frame],
+                    })
+                else:
+                    cluster = clusters[best_idx]
+                    cluster["frames"].append(frame)
+                    cluster["sum_sin"] += pa_sin
+                    cluster["sum_cos"] += pa_cos
+                    cluster["pa_center"] = np.degrees(
+                        np.arctan2(cluster["sum_sin"], cluster["sum_cos"])
+                    ) % 360.0
+            for cluster in clusters:
+                datasets.append(Dataset(cluster["frames"]))
     else:
         datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
 
@@ -199,7 +235,7 @@ def generate_mueller_matrix_cal(input_dataset,
     '''
     Calculates the Mueller Matrix calibration for a given dataset of polarimetric observations.
     The expected input is a dataset of stokes vectors measured from known polarized standard stars, separated by 
-    target and roll angle. The function reads in a polarization reference file containing the known polarization 
+    target and PA_APER angle. The function reads in a polarization reference file containing the known polarization 
     properties of the targets, and uses these to calculate the Mueller Matrix elements via SVD inversion.
     
     The pol reference file should contain the known polarization properties of the targets in the dataset.
@@ -253,21 +289,22 @@ def generate_mueller_matrix_cal(input_dataset,
     # measure the normalized difference for each dataset
     stokes_vectors = []
     stokes_vector_errs = []
-    roll_angles = []
+    rotation_angles = []
     for image in dataset:
         stokes_vectors.append(image.data[1:3]) #Grab just Q and U
         stokes_vector_errs.append(image.err[0][1:3]) #Grab just Q and U errors
-        roll_angles.append(image.pri_hdr["ROLL"])
+        # PA_APER is the on-sky position angle east of north for the CGI aperture
+        rotation_angles.append(image.pri_hdr["PA_APER"])
     stokes_vectors = np.append(stokes_vectors[0], stokes_vectors[1:])
     stokes_vector_errs = np.append(stokes_vector_errs[0], stokes_vector_errs[1:])
 
     # generate the matrix of meausurements six columns [1 q_star, u_star, 0,0,0] for q_measured
-    # and [0,0,0, 1, q_star, u_star] for u_measured #Where Q and U have been rotated by the roll angle: 
+    # and [0,0,0, 1, q_star, u_star] for u_measured #Where Q and U have been rotated by the PA_APER angle: 
     stokes_matrix = np.zeros((2*len(dataset), 6))
     for i, target in enumerate(targets):
         pol_row = pol_ref[pol_ref["TARGET"] == target]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
-        PA = pol_row["PA"].values[0] + roll_angles[i] # in degrees
+        PA = pol_row["PA"].values[0] + rotation_angles[i] # in degrees
 
         # calculate the Stokes parameters Q and U from P and PA
         Q, U = get_qu_from_p_theta(P, PA)

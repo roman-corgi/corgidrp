@@ -17,7 +17,7 @@ def test_kgain():
     dat = np.ones([1024,1024]) * 2
     err = np.ones([1,1024,1024]) * 0.5
     ptc = np.ones([2,1024])
-    exthd["RN"] = 100
+    exthd["RN"] = 100.0
     exthd["RN_ERR"] = 2
     ptc_hdr = fits.Header()
     image1 = data.Image(dat,pri_hdr = prhd, ext_hdr = exthd, err = err)
@@ -75,9 +75,10 @@ def test_kgain():
         
     kgain_filepath = os.path.join(calibdir, kgain_filename)
     kgain_open = data.KGain(kgain_filepath)
-    assert kgain_open.value == gain_value
-    assert kgain_open.error == gain_err
-    assert kgain_open.ptc[0,0] == 1.
+    # use isclose to deal with 64 bit vs 32 bit precision 
+    assert np.isclose(kgain_open.value, gain_value, rtol=1e-6)
+    assert np.isclose(kgain_open.error, gain_err, rtol=1e-6)
+    assert np.isclose(kgain_open.ptc[0,0], 1., rtol=1e-6)
     assert kgain_open.ptc_hdr["EXTNAME"] == "PTC"
     assert kgain_open.err_hdr is not None
     

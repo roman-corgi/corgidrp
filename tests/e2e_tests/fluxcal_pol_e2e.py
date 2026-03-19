@@ -12,7 +12,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.fluxcal as fluxcal
 from corgidrp import caldb
-from corgidrp.check import (check_filename_convention, check_dimensions, verify_header_keywords)
+from corgidrp.check import (check_filename_convention, check_dimensions, verify_header_keywords, compare_to_mocks_hdrs)
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
@@ -279,6 +279,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #check the flux values are similar regardless of the wollaston used
     assert flux_fac_WP1.fluxcal_fac == pytest.approx(flux_fac_WP2.fluxcal_fac, rel=0.05)
 
+    compare_to_mocks_hdrs(fluxcal_file_WP2)
+
     # clean up
     this_caldb = caldb.CalDB()
     this_caldb.remove_entry(flux_fac_WP1)
@@ -286,7 +288,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
-
 
 
 if __name__ == "__main__":
@@ -297,7 +298,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  "/home/ericshen/corgi/E2E_Test_Data/"
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#"/home/ericshen/corgi/E2E_Test_Data/"
 
     ap = argparse.ArgumentParser(description="run the l2b-> PolFluxcalFactor end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

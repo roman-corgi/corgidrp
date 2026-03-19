@@ -6,8 +6,10 @@ from corgidrp.data import PyKLIPDataset, Image
 from pyklip.parallelized import klip_dataset
 from pyklip.fakes import gaussfit2d, inject_planet
 from scipy.ndimage import shift, rotate
+from scipy.stats import t as t_dist, norm
 from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy
 from corgidrp.fluxcal import phot_by_gauss2d_fit
+import corgidrp.check as check
 
 def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
     """_summary_
@@ -63,8 +65,8 @@ def inject_psf(frame_in, ct_calibration, amp,
     frame = frame_in.copy()
 
     # Get closest psf model
-    frame_roll = frame.pri_hdr['ROLL']
-    rel_pa = pa_deg - frame_roll
+    pa_aper_deg = frame.pri_hdr['PA_APER']
+    rel_pa = pa_deg - pa_aper_deg
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
     psf_model = get_closest_psf(ct_calibration,
@@ -90,28 +92,50 @@ def inject_psf(frame_in, ct_calibration, amp,
     return frame, psf_model, psf_cenxy
 
 
-def measure_noise(frame, seps_pix, hw, klmode_index=None, cand_locs = []):
-    """Calculates the noise (standard deviation of counts) of an 
-        annulus at a given separation from the mask or star center.
-        TODO: Correct for small sample statistics?
+def measure_noise(frame, seps_pix, hw, klmode_index=None, cand_locs = [],
+                  nsigma=1, fwhm=None, small_sample_correction=False):
+    """Calculates the noise (standard deviation of counts) of an
+        annulus at a given separation from the mask or star center,
+        scaled to a given sigma level, with optional small sample
+        statistics correction (Mawet et al. 2014).
         TODO: Mask known off-axis sources.
-    
+
     Args:
         frame (corgidrp.Image): Image containing data as well as "STARLOCX/Y" in header
-        seps_pix (np.array of float): Separations (in pixels from specified center) at which to calculate 
+        seps_pix (np.array of float): Separations (in pixels from specified center) at which to calculate
             the noise level.
         hw (float): halfwidth of the annulus to use for noise calculation.
-        klmode_index (int, optional): If provided, returns only the noise values for the KL mode with 
-            the given index. I.e. klmode_index=0 would return only the values for the first KL mode 
+        klmode_index (int, optional): If provided, returns only the noise values for the KL mode with
+            the given index. I.e. klmode_index=0 would return only the values for the first KL mode
             truncation choice.  If None (by default), all indices are returned.
-        cand_locs (list of tuples, optional): Locations of known off-axis sources, so we can mask them. 
+        cand_locs (list of tuples, optional): Locations of known off-axis sources, so we can mask them.
             This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
-        
-    Returns: np.array: array of shape (number of separtions, number of KL modes) containing the annular noise.  If klmode_index 
+        nsigma (float, optional): Sigma multiplier for the noise. E.g. nsigma=5 returns a 5-sigma noise
+            curve. Defaults to 1.
+        fwhm (float or array-like, optional): PSF FWHM in pixels, used for computing the number of
+            resolution elements at each separation when small_sample_correction is True. A scalar is
+            broadcast to all separations; an array must match the length of seps_pix. Required when
+            small_sample_correction is True. Defaults to None.
+        small_sample_correction (bool, optional): If True, apply the small sample statistics correction
+            from Mawet et al. (2014) using the Student's t-distribution. This accounts for the limited
+            number of independent resolution elements at small separations. Defaults to False.
+
+    Returns: np.array: array of shape (number of separations, number of KL modes) containing the annular noise.  If klmode_index
         specified, the number of KL modes in the output array is 1.
     """
     cenx, ceny = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-    
+
+    # Validate nsigma and small sample correction inputs
+    check.real_positive_scalar(nsigma, 'nsigma', ValueError)
+    if small_sample_correction:
+        if fwhm is None:
+            raise ValueError("fwhm must be provided when small_sample_correction is True.")
+        fwhm_arr = np.atleast_1d(np.array(fwhm, dtype=float))
+        if fwhm_arr.size == 1:
+            fwhm_arr = np.full(len(seps_pix), fwhm_arr[0])
+        elif len(fwhm_arr) != len(seps_pix):
+            raise ValueError("fwhm array length must match seps_pix length.")
+
     # Mask data outside the specified annulus
     y, x = np.indices(frame.data.shape[1:])
     sep_map = np.sqrt((y-ceny)**2 + (x-cenx)**2)
@@ -151,9 +175,26 @@ def measure_noise(frame, seps_pix, hw, klmode_index=None, cand_locs = []):
 
     stds_arr = np.array(stds)
 
+    # Apply nsigma scaling, with optional small sample statistics correction
+    if small_sample_correction:
+        fpf = norm.sf(nsigma)  # false positive fraction for the given nsigma
+        for s_idx, sep_pix in enumerate(seps_pix):
+            n = 2 * np.pi * sep_pix / fwhm_arr[s_idx]
+            if n <= 2:
+                warnings.warn(
+                    f"Only {n:.1f} resolution elements at separation {sep_pix:.1f} pix; "
+                    "small sample correction unreliable, falling back to nsigma * std."
+                )
+                stds_arr[s_idx] *= nsigma
+            else:
+                # Mawet et al. 2014, Eq. 9
+                stds_arr[s_idx] *= t_dist.ppf(1 - fpf, n - 1) * np.sqrt(1 + 1/n)
+    elif nsigma != 1:
+        stds_arr *= nsigma
+
     if klmode_index != None:
         return stds_arr[:,klmode_index]
-    
+
     return stds_arr
 
 
@@ -208,6 +249,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     
     if sci_dataset_in[0].ext_hdr['CFAMNAME'] == '1F':
         lam = 573.8e-9 #m
+    elif sci_dataset_in[0].ext_hdr['CFAMNAME'] == '4F':
+        lam =825.8e-9 #m
     else:
         raise NotImplementedError("Only band 1 observations using CFAMNAME 1F are currently configured.")
 
@@ -217,20 +260,25 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     fwhm_pix = fwhm_mas / pixscale_mas  
     res_elem = sep_spacing * fwhm_pix # pix
     
+    
     if seps is None:
-        if sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'NFOV':
-            owa_mas = 450. 
-            owa_pix = owa_mas / pixscale_mas   
-        else:
-            raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
-        
-        if sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'HLC12_C2R1':
-            iwa_mas = 140. 
-            iwa_pix = iwa_mas / pixscale_mas 
-        else:
-            raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
-        
+        match sci_dataset_in[0].ext_hdr['FPAMNAME']: 
+            case 'SPC34_R5C1':
+                owa_mas = 1447.4
+                iwa_mas = 425.9             
+            case 'SPC12_R1C1':
+                owa_mas = 1008.8
+                iwa_mas = 296.1  
+            case 'HLC12_C2R1':
+                owa_mas = 450.0
+                iwa_mas = 140.0
+            case _: 
+                raise NotImplementedError("Automatic separation choices not configured for this mode.")
+                
+        owa_pix = owa_mas / pixscale_mas          
+        iwa_pix = iwa_mas / pixscale_mas               
         seps = np.arange(iwa_pix,owa_pix,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
+
     if pas is None:
         pas = np.linspace(0.,360.,n_pas+1)[:-1] # Some linear spacing between the IWA & OWA, around 5x the fwhm
 
@@ -240,7 +288,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         
         sci_dataset = sci_dataset_in.copy()
 
-        rolls = [frame.pri_hdr['ROLL'] for frame in sci_dataset]
+        pa_aper_degs = [frame.pri_hdr['PA_APER'] for frame in sci_dataset]
         
         # Measure noise at each separation in psf subtracted dataset (for this kl mode)
         noise_vals = measure_noise(psfsub_dataset[0],seps,fwhm_pix,k,cand_locs)
@@ -279,8 +327,10 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                     if i==0:
                         too_close = False
                         for cand_sep, cand_pa in cand_locs:
-                            # Account for telescope roll angles, skip if any are too close
-                            for roll in rolls:
+                            # Account for rotations, skip if any are too close
+                            for pa_aper_deg in pa_aper_degs:
+                                # NOTE: rotation angle is not applied here, cand_pa_adj == cand_pa.
+                                # It may not be necessary to loop over rolls here.
                                 cand_pa_adj = cand_pa
                                 dist = get_polar_dist((cand_sep,cand_pa_adj),inject_loc)
                                 if dist < res_elem:

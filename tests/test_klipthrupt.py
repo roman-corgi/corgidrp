@@ -11,7 +11,7 @@ from pyklip.fakes import gaussfit2d
 import pytest
 import numpy as np
 import os
-
+import itertools
 ## Helper functions/quantities
 
 lam = 573.8e-9 #m
@@ -39,7 +39,7 @@ cenx, ceny = (25.,30.)
 st_amp = 100.
 noise_amp = 1e-3
 pl_contrast = 0.0
-rolls = [0,10.,0,0]
+pa_aper_degs = [0,10.,0,0]
 
 # Injection test settings
 inj_flux = 10.
@@ -138,13 +138,13 @@ def test_inject_psf():
     # Test 0 separation to make sure we can scale and center
     sep = 0.0
     pa = 0.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -161,13 +161,13 @@ def test_inject_psf():
     # Test separation of exactly 1 pixel
     sep = 1.0
     pa = 0.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (50,60)
     expected_peak = (ceny+1,cenx)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -182,13 +182,13 @@ def test_inject_psf():
     # Test PA
     sep = 1.0
     pa = 90.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx-1)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -200,16 +200,16 @@ def test_inject_psf():
     
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak
 
-    # Test Roll
+    # Test Rotation
     sep = 5.0
     pa = 0.0
-    roll = 90.0
+    pa_aper_deg = 90.0
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx+5)
 
     pri_hdr = fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -224,14 +224,14 @@ def test_inject_psf():
     # Test injecting a psf over the left edge of the array
     sep = 9.0
     pa = 90.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,21)
     ceny,cenx = (5,10)
     expected_peak_yx = (5,1)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -246,14 +246,14 @@ def test_inject_psf():
     # Test injecting a psf over the right edge of the array
     sep = 9.0
     pa = -90.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,21)
     ceny,cenx = (5,10)
     expected_peak_yx = (5,19)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -269,14 +269,14 @@ def test_inject_psf():
     # Test injecting a psf over the top edge of the array
     sep = 4.0
     pa = 0.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,21)
     ceny,cenx = (5,10)
     expected_peak_yx = (9,10)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -292,14 +292,14 @@ def test_inject_psf():
     # Test injecting a psf over the bottom edge of the array
     sep = 4.0
     pa = 180.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,21)
     ceny,cenx = (5,10)
     expected_peak_yx = (1,10)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -315,14 +315,14 @@ def test_inject_psf():
     # Test injecting a psf over the bottom left corner of the array
     sep = 4.0 * np.sqrt(2)
     pa = 135.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,11)
     ceny,cenx = (5,5)
     expected_peak_yx = (1,1)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -338,14 +338,14 @@ def test_inject_psf():
     # Test injecting a psf over the bottom right corner of the array
     sep = 4.0 * np.sqrt(2)
     pa = -135.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,11)
     ceny,cenx = (5,5)
     expected_peak_yx = (1,9)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -360,14 +360,14 @@ def test_inject_psf():
     # Test injecting a psf over the top left corner of the array
     sep = 4.0 * np.sqrt(2)
     pa = 45.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,11)
     ceny,cenx = (5,5)
     expected_peak_yx = (9,1)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -382,14 +382,14 @@ def test_inject_psf():
     # Test injecting a psf over the top right corner of the array
     sep = 4.0 * np.sqrt(2)
     pa = -45.0
-    roll = 0.0
+    pa_aper_deg = 0.0
     frame_shape_yx = (11,11)
     ceny,cenx = (5,5)
     expected_peak_yx = (9,9)
 
     pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    pri_hdr['ROLL'] = roll
+    pri_hdr['PA_APER'] = pa_aper_deg
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
@@ -505,7 +505,7 @@ def test_meas_klip_ADI():
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -535,13 +535,13 @@ def test_meas_klip_ADI():
     
     # # Plot Psf subtraction result
     # if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
-    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
     # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
-    #     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+    #     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-pa_aper_degs[1],reshape=False,cval=0)) / 2,
     #                     [0.5,0.5],
     #                     cval=np.nan)
     # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
-    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-pa_aper_degs[1],reshape=False,cval=0)) / 2
     # import matplotlib.pyplot as plt
     # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
     # im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
@@ -609,7 +609,7 @@ def test_meas_klip_RDI():
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -678,7 +678,7 @@ def test_meas_klip_ADIRDI():
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -729,8 +729,8 @@ def test_compare_RDI_ADI():
 
     assert mean_adi < mean_rdi
 
-
-def test_psfsub_withklipandctmeas_adi():
+@pytest.mark.parametrize("coro_type,FOV,band", [("HLC", "NFOV", "1F"), ("SPC", "WFOV", "4F"), ("SPC", "WFOV", "1F")])
+def test_psfsub_withklipandctmeas_adi(coro_type,FOV,band):
     """Check that KLIP throughput and CT calibration can be run as part 
     of the PSF subtraction step function. Check that KLIP throughput and 
     core throughput sample the same separations by default. Check that an 
@@ -746,7 +746,7 @@ def test_psfsub_withklipandctmeas_adi():
     pl_loc = (20.,0.)
     est_pl_snr = pl_amp / noise_amp
     data_shape = [101,101]
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -754,10 +754,18 @@ def test_psfsub_withklipandctmeas_adi():
                                             pl_sep=pl_loc[0],
                                             data_shape=data_shape,
                                 )
-
+    if coro_type == "SPC":
+        for im in mock_sci:
+            im.ext_hdr['SPAMNAME'] = FOV
+            im.ext_hdr['LSAMNAME'] = FOV
+            im.ext_hdr['CFAMNAME'] = band
+            if band == "1F":
+                im.ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
+            if band == "4F":
+                im.ext_hdr['FPAMNAME'] = 'SPC34_R5C1'
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
-    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+    ctcal = create_ct_cal(fwhm_mas, cfam_name=band,
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
     
@@ -776,11 +784,11 @@ def test_psfsub_withklipandctmeas_adi():
 
     # # Plot Psf subtraction result
     # if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
-    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
     # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
-    #     analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2
+    #     analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-pa_aper_degs[1],reshape=False,cval=0)) / 2
     # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
-    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-pa_aper_degs[1],reshape=False,cval=0)) / 2
     # import matplotlib.pyplot as plt
     # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
     # im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
@@ -911,8 +919,8 @@ def test_psfsub_withklipandctmeas_adi():
 
     assert pl_counts == pytest.approx(recovered_pl_counts_ktcorrected,rel = 0.10) 
 
-
-def test_psfsub_withklipandctmeas_rdi():
+@pytest.mark.parametrize("coro_type,FOV,band", [("HLC", "NFOV", "1F"), ("SPC", "WFOV", "4F"),("SPC", "WFOV", "1F")])
+def test_psfsub_withklipandctmeas_rdi(coro_type,FOV,band):
     """Check that KLIP throughput and CT calibration can be run as part 
     of the PSF subtraction step function. Check that KLIP throughput and 
     core throughput sample the same separations by default. Check that an 
@@ -928,7 +936,7 @@ def test_psfsub_withklipandctmeas_rdi():
     pl_loc = (20.,0.)
     est_pl_snr = pl_amp / noise_amp
     data_shape = (101,101)
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,pa_aper_degs,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -936,10 +944,19 @@ def test_psfsub_withklipandctmeas_rdi():
                                             pl_sep=pl_loc[0],
                                             data_shape=data_shape
                                 )
-
+    complete_dataset = [mock_sci,mock_ref]
+    if coro_type == "SPC":
+        for im in itertools.chain(*complete_dataset):                                
+            im.ext_hdr['SPAMNAME'] = FOV
+            im.ext_hdr['LSAMNAME'] = FOV
+            im.ext_hdr['CFAMNAME'] = band
+            if band == "1F":
+                im.ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
+            if band == "4F":
+                im.ext_hdr['FPAMNAME'] = 'SPC34_R5C1'
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
-    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+    ctcal = create_ct_cal(fwhm_mas, cfam_name=band,
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
     
@@ -995,7 +1012,7 @@ def test_psfsub_withklipandctmeas_rdi():
     medsubtracted_data = psfsub_dataset[0].data[0] #- bg_level
 
     # # Plot Psf subtraction result
-    # analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    # analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
     # mask = create_circular_mask(analytical_result.shape[-2:],
     #                             r=3*fwhm_pix,
     #                             center=(psfsub_dataset[0].ext_hdr['STARLOCX'],
@@ -1097,11 +1114,114 @@ def test_psfsub_withklipandctmeas_rdi():
     assert pl_counts == pytest.approx(recovered_pl_counts_ktcorrected,rel = 0.05) 
 
 
-if __name__ == '__main__':  
+def test_measure_noise_nsigma_and_correction():
+    """Tests for nsigma scaling and small sample statistics correction
+    in measure_noise().
+
+    This is a unit test that directly tests measure_noise() with synthetic data.
+    It verifies:
+      - Simple nsigma scaling (noise * nsigma)
+      - Backward compatibility (default behavior unchanged)
+      - Mawet et al. (2014) small sample correction behavior
+      - Convergence of the correction at large separations
+      - Input validation (bad inputs raise errors)
+      - FWHM input flexibility (scalar vs array)
+    """
+    from scipy.stats import t as t_dist, norm
+
+    # --- Setup: create a synthetic frame with known Gaussian noise ---
+    # Two KL-mode slices of pure Gaussian noise (mean=0, std=1) so that
+    # the expected annular standard deviation is ~1.0 everywhere.
+    cenx, ceny = (120., 130.)
+    frame_shape_yx = (200, 200)
+    seps = np.arange(50., 71., 5.)  # separations where we'll measure noise
+    fwhm = 2.  # PSF FWHM in pixels (used as annulus halfwidth and for small sample correction)
+
+    ext_hdr = fits.Header()
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+
+    rng = np.random.default_rng(42)
+    image = rng.normal(0., 1., (2, *frame_shape_yx))  # 2 KL mode slices
+    frame = Image(image, pri_hdr=fits.Header(), ext_hdr=ext_hdr)
+
+    # --- Test 1: nsigma scaling is a pure multiplier ---
+    # Without small sample correction, nsigma=5 should produce exactly 5x the nsigma=1 result,
+    # since it's just multiplying the standard deviation by nsigma.
+    noise_1sig = measure_noise(frame, seps, fwhm, nsigma=1)
+    noise_5sig = measure_noise(frame, seps, fwhm, nsigma=5)
+    assert noise_5sig == pytest.approx(5 * noise_1sig)
+
+    # --- Test 2: backward compatibility ---
+    # Calling without nsigma (default=1) should give the same result as nsigma=1,
+    # ensuring old code that doesn't pass nsigma still works.
+    noise_default = measure_noise(frame, seps, fwhm)
+    assert noise_1sig == pytest.approx(noise_default)
+
+    # --- Test 3: small sample correction makes noise MORE conservative ---
+    # The Mawet et al. (2014) correction replaces the naive nsigma multiplier with a
+    # t-distribution threshold that's always >= nsigma for finite n (number of resolution
+    # elements). So corrected noise should be >= naive nsigma * std at every separation.
+    noise_corr = measure_noise(frame, seps, fwhm, nsigma=5, fwhm=fwhm,
+                               small_sample_correction=True)
+    for i, sep in enumerate(seps):
+        n = 2 * np.pi * sep / fwhm  # number of independent resolution elements in annulus
+        if n > 2:
+            # t-distribution threshold > Gaussian threshold for finite degrees of freedom
+            assert np.all(noise_corr[i] >= noise_5sig[i] - 1e-10)
+
+    # --- Test 4: convergence at large separations ---
+    # With many resolution elements (large n), the t-distribution converges to the
+    # Gaussian, so the corrected noise should be approximately equal to the naive
+    # nsigma * std (within 5% tolerance).
+    large_seps = np.array([500., 600., 700.])
+    large_shape = (1500, 1500)  # need a bigger frame to fit these separations
+    large_cenx, large_ceny = (750., 750.)
+    ext_hdr_large = fits.Header()
+    ext_hdr_large['STARLOCX'] = large_cenx
+    ext_hdr_large['STARLOCY'] = large_ceny
+    large_image = rng.normal(0., 1., (1, *large_shape))
+    large_frame = Image(large_image, pri_hdr=fits.Header(), ext_hdr=ext_hdr_large)
+    noise_large_naive = measure_noise(large_frame, large_seps, fwhm, nsigma=5)
+    noise_large_corr = measure_noise(large_frame, large_seps, fwhm, nsigma=5, fwhm=fwhm,
+                                     small_sample_correction=True)
+    assert noise_large_corr == pytest.approx(noise_large_naive, rel=0.05)
+
+    # --- Test 5: input validation ---
+    # Requesting small_sample_correction without providing fwhm should fail
+    with pytest.raises(ValueError):
+        measure_noise(frame, seps, fwhm, nsigma=5, small_sample_correction=True)
+
+    # nsigma must be positive
+    with pytest.raises(ValueError):
+        measure_noise(frame, seps, fwhm, nsigma=0)
+    with pytest.raises(ValueError):
+        measure_noise(frame, seps, fwhm, nsigma=-1)
+
+    # fwhm array length must match number of separations
+    with pytest.raises(ValueError):
+        measure_noise(frame, seps, fwhm, nsigma=5, fwhm=np.array([1., 2.]),
+                      small_sample_correction=True)
+
+    # --- Test 6: fwhm input flexibility ---
+    # Scalar fwhm should be broadcast to all separations
+    noise_scalar_fwhm = measure_noise(frame, seps, fwhm, nsigma=5, fwhm=2.0,
+                                      small_sample_correction=True)
+    assert noise_scalar_fwhm.shape == noise_5sig.shape
+
+    # An array of identical values should give the same result as the scalar
+    fwhm_arr = np.full(len(seps), 2.0)
+    noise_arr_fwhm = measure_noise(frame, seps, fwhm, nsigma=5, fwhm=fwhm_arr,
+                                   small_sample_correction=True)
+    assert noise_arr_fwhm == pytest.approx(noise_scalar_fwhm)
+
+
+if __name__ == '__main__':
     # test_create_ct_cal()
     # test_get_closest_psf()
     # test_inject_psf()
     # test_measure_noise()
+    # test_measure_noise_nsigma_and_correction()
 
     # test_meas_klip_ADI()
     # test_meas_klip_RDI()

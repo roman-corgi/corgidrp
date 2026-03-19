@@ -23,7 +23,7 @@ from corgidrp.detector import *
 from scipy.optimize import curve_fit
 
 import corgidrp.check as check
-from corgidrp.data import TrapCalibration
+from corgidrp.data import TrapCalibration, typical_bool_keywords, typical_cal_invalid_keywords
 
 class TPumpAnException(Exception):
     """Exception class for tpumpanalysis."""
@@ -2119,7 +2119,7 @@ def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
     return (E, sig_E, cs, sig_cs, Rsq, tau_input_T, sig_tau_input_T)
 
 
-def tpump_analysis(input_dataset,time_head = 'TPTAU', 
+def tpump_analysis(input_dataset, time_head = 'TPTAU', 
                    mean_field = None, length_lim = 5,
     thresh_factor = 1.5, k_prob = 1, ill_corr = True, tfit_const = True,
     tau_fit_thresh = 0.8, tau_min = 0.7e-6, tau_max = 1.3e-2, tauc_min = 0,
@@ -3292,13 +3292,16 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
         #Release time constant at desired Temperature
         trap_cal_array[i,9] = dict_entry['tau at input T']
 
-    #Great the header from the first file
-    first_file_pri_hdr = input_dataset[0].pri_hdr
-    first_file_ext_hdr = input_dataset[0].ext_hdr
-    first_file_ext_hdr['BUNIT'] = ""
+    invalid_tpu_keywords = typical_cal_invalid_keywords + ['EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'KGAINPAR', 'HVCBIAS', 'KGAIN_ER', 'TPTAU', 'TPSCHEM1', 'TPSCHEM2', 'TPSCHEM3', 'TPSCHEM4']
+    # Remove specific keywords
+    for key in ['PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT', 'VISNUM', 'OBSNUM', 'CPGSFILE', 'VISITID']:
+        if key in invalid_tpu_keywords:
+            invalid_tpu_keywords.remove(key)
+    prhdr, exthdr, errhdr, dqhdr = check.merge_headers(input_dataset, invalid_keywords=invalid_tpu_keywords)
+    exthdr['BUNIT'] = ""
 
-    trapcal = TrapCalibration(trap_cal_array,pri_hdr = first_file_pri_hdr, 
-                    ext_hdr = first_file_ext_hdr, 
+    trapcal = TrapCalibration(trap_cal_array, pri_hdr = prhdr, 
+                    ext_hdr = exthdr, 
                     input_dataset=input_dataset)
     
     return trapcal

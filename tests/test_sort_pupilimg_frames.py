@@ -228,7 +228,7 @@ def setup_module():
     
     # Global constants
     # Mean frame
-    EXPTIME_MEAN_FRAME = 5
+    EXPTIME_MEAN_FRAME = 5.
     NFRAMES_MEAN_FRAME = 30
     # Checks
     if NFRAMES_MEAN_FRAME < 30:

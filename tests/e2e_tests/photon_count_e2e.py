@@ -13,7 +13,9 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import corgidrp.check as check
 import shutil
+import warnings
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
@@ -29,13 +31,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     np.random.seed(1234)
     # using CIC and dark current average values which come from the corresponding values from cic_path and dark_path above; FPN mean is already 0 in fpn_path and simulated set below
-    #ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=1300, Ndarks=1350, cosmic_rate=0, flux=0.5, cic=0.0035075, dark_current=0.00086158) #cosmic_rate=1
-    dark_mean = 0.0035505790000000003
-    ill_mean = 0.026050579000000004
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, cic=0.0035075, dark_current=0.00086158)
     output_dir = os.path.join(e2eoutput_path, 'photon_count_e2e')
-    # if os.path.exists(output_dir):
-    #     shutil.rmtree(output_dir)
-    # os.makedirs(output_dir)
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
 
     # Create input_data subfolder
     input_data_dir = os.path.join(output_dir, 'input_l1')
@@ -62,21 +62,22 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     if not os.path.exists(output_l2a_dir):
         os.makedirs(output_l2a_dir)
 
-    # ill_dataset.save(output_ill_dir)
-    # dark_dataset.save(output_dark_dir)
-    # del ill_dataset
-    # del dark_dataset
-    import psutil
-    pr = psutil.Process()
-    import tracemalloc
-    tracemalloc.start()
-
+    ill_dataset.save(output_ill_dir)
+    dark_dataset.save(output_dark_dir)
+    del ill_dataset
+    del dark_dataset
     l1_data_ill_filelist = []
     l1_data_dark_filelist = []
     for f in os.listdir(output_ill_dir):
         l1_data_ill_filelist.append(os.path.join(output_ill_dir, f))
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
+    # fix_str_for_tvac(l1_data_ill_filelist)
+    # fix_str_for_tvac(l1_data_dark_filelist)
+
+    # Update headers for TVAC files
+    l1_data_ill_filelist = check.fix_hdrs_for_tvac(l1_data_ill_filelist, output_ill_dir)
+    l1_data_dark_filelist = check.fix_hdrs_for_tvac(l1_data_dark_filelist, output_dark_dir)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -91,13 +92,14 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
-    mock_input_dataset = data.Dataset(l1_data_ill_filelist[0:5])
+    mock_input_dataset = data.Dataset(l1_data_ill_filelist[:5])
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
-    kgain.ext_hdr['RN'] = 100
-    kgain.ext_hdr['RN_ERR'] = 0
+    kgain.ext_hdr['RN'] = 100.
+    kgain.ext_hdr['RN_ERR'] = 0.
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
+    #fix_str_for_tvac([kgain.filepath])
     this_caldb.create_entry(kgain)
 
     # NoiseMap (meaningless data; won't be used in dark subtraction for this first test which instead uses PC master dark)
@@ -106,12 +108,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
+    #fix_str_for_tvac([noise_map.filepath])
     this_caldb.create_entry(noise_map)
 
     here = os.path.abspath(os.path.dirname(__file__))
@@ -139,6 +142,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
+    #fix_str_for_tvac([flat.filepath])
     this_caldb.create_entry(flat)
 
     # bad pixel map
@@ -146,6 +150,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
+    #fix_str_for_tvac([bp_map.filepath])
     this_caldb.create_entry(bp_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not
@@ -170,7 +175,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # make PC illuminated, subtracting the PC dark
     # below I leave out the template specification to check that the walker recipe guesser works as expected
     # L1 to L2a
-    walker.walk_corgidrp(l1_data_ill_filelist, '', output_l2a_dir)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=UserWarning)
+        walker.walk_corgidrp(l1_data_ill_filelist, '', output_l2a_dir)
 
     # grab L2a files to go to L2b
     l2a_files = []
@@ -180,37 +188,22 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)
-
+    
     recipe = walker.autogen_recipe(l2a_files, l2a_to_l2b_output_dir)
     ### Modify they keywords of some of the steps
     for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = master_dark_filepath_list[0] # to find PC dark
-    #recipe[0]['drpconfig']['chunk_size'] = 80 # exercise chunk size; RAM-heavy status exercised in this test
-    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[0]['drpconfig']['chunk_size'] = 80 # exercise chunk size; RAM-heavy status exercised in this test
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=UserWarning)
+        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
     recipe[1]['inputs'] = output_filepaths
-    #recipe[1]['ram_heavy'] = False #XXX
     output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
     # files are overwritten with same filenames
     recipe[2]['inputs'] = output_filepaths1
     walker.run_recipe(recipe[2], save_recipe_file=True)
-
-    # Get current and peak memory usage
-    current, peak = tracemalloc.get_traced_memory()
-
-    # Stop tracing
-    tracemalloc.stop()
-
-    # Print the peak memory usage
-    print(f"Peak memory usage was {peak / (1024 * 1024):.2f} MB")
-
-    mem = pr.memory_info()
-    # peak_wset is only available on Windows; fall back to rss on other platforms
-    if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
-        peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
-    else:
-        peak_memory = mem.rss / (1024 ** 2)  # convert to MB
-    print(f"noisemap_cal_e2e peak memory usage:  {peak_memory:.2f} MB")
 
     # get photon-counted frame
     master_ill_filename_list = []
@@ -234,16 +227,18 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         pc_dark_frame = fits.getdata(master_dark_filepath_list[i])
         pc_dark_frame_err = fits.getdata(master_dark_filepath_list[i], 'ERR')
 
+        check.compare_to_mocks_hdrs(pc_processed_filepath)
+
         # more frames gets a better agreement; agreement to 2% for ~160 darks and illuminated
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02)
         assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01)
         assert pc_frame_err.min() >= 0
         assert pc_dark_frame_err.min() >= 0
 
-    # remove PC master dark
-    for f in os.listdir(output_dir):
-        if f.endswith('_drk_cal.fits'):
-            os.remove(os.path.join(output_dir, f))
+    # don't remove PC master dark b/c needed for zz_dataformat_e2e.py test
+    # for f in os.listdir(output_dir):
+    #     if f.endswith('_drk_cal.fits'):
+    #         os.remove(os.path.join(output_dir, f))
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -274,8 +269,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
@@ -290,10 +285,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
     # means the ones above will be preferentially selected
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
-    # go from L2a, where now dark subtraction should be performed using the noise_map made above,
-    # and get_pc_mean() should ignore the Dark created from noise_map when it
+    # go from L2a, where now dark subtraction should be performed using the noise_map made above, 
+    # and get_pc_mean() should ignore the Dark created from noise_map when it 
     # detects that dark-subtraction has already occurred (during the dark_subtraction() step)
-    walker.walk_corgidrp(l2a_files, '', output_dir)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=UserWarning)
+        walker.walk_corgidrp(l2a_files, '', output_dir)
 
     # get photon-counted frame
     master_ill_filename_list = []
@@ -310,8 +308,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
         # slightly bigger rtol here for synthesized dark vs pc dark above
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.05)
-        assert pc_frame_err.min() >= 0
-
+        assert pc_frame_err.min() >= 0 
+    
     # remove synthesized master dark
     for f in os.listdir(output_dir):
         if f.endswith('_drk_cal.fits'):
@@ -321,7 +319,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     os.remove(tmp_caldb_csv)
 
     print('Second part of e2e test for photon counting with synthesized master dark passed')
-
+    
     #___________________________________________________
     # now test that the pipeline works if we use an analog traditional master dark (most likely will not be used in practice)
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -339,7 +337,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
     # means the ones above will be preferentially selected
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
-
+    
     # this will add the traditional dark to the caldb
     walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir, template="build_trad_dark_image.json")
     for f in os.listdir(output_dir):
@@ -351,15 +349,18 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
                                     dq = np.zeros((1024,1024)).astype('uint16'), err_hdr=err_hdr)
     trad_dark_cal.save(filedir=output_dir)
     this_caldb.create_entry(trad_dark_cal)
-    # go from L2a, where now dark subtraction should be performed using the traditional dark made above,
-    # and get_pc_mean() should ignore the Dark created from traditional dark when it
+    # go from L2a, where now dark subtraction should be performed using the traditional dark made above, 
+    # and get_pc_mean() should ignore the Dark created from traditional dark when it 
     # detects that dark-subtraction has already occurred (during the dark_subtraction() step)
     recipe = walker.autogen_recipe(l2a_files, output_dir)
     ### Modify they keywords of some of the steps
     for step in recipe[0]['steps']:
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = trad_dark_cal.filepath # to find traditional dark
-    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    with warnings.catch_warnings():
+        # suppress astropy warnings
+        warnings.filterwarnings('ignore', category=UserWarning)
+        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
     recipe[1]['inputs'] = output_filepaths
     output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
     recipe[2]['inputs'] = output_filepaths1
@@ -378,9 +379,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         pc_frame = fits.getdata(master_ill_filepath_list[i])
         pc_frame_err = fits.getdata(master_ill_filepath_list[i], 'ERR')
 
-        # using trad dark
+        # using trad dark 
         assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02)
-        assert pc_frame_err.min() >= 0
+        assert pc_frame_err.min() >= 0 
 
     # Print success message
     print('e2e test for photon counting calibration passed')
@@ -392,11 +393,9 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
-
-
     thisfile_dir = os.path.dirname(__file__)
-    outputdir = r'E:\E2E_tests'#thisfile_dir
-    e2edata_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3' #'/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    outputdir = thisfile_dir
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
@@ -407,4 +406,3 @@ if __name__ == "__main__":
     outputdir = args.outputdir
     e2edata_dir = args.e2edata_dir
     test_expected_results_e2e(e2edata_dir, outputdir)
-

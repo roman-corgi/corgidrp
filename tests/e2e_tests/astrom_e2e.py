@@ -8,6 +8,7 @@ import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
 import corgidrp
+import corgidrp.check as check
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
@@ -39,9 +40,9 @@ def fix_str_for_tvac(
             prihdr["OBSNAME"] = prihdr['OBSTYPE']
         else:
             prihdr["OBSNAME"] = "BORESITE"  # Default value
-        prihdr["PHTCNT"] = False
-        
-        exthdr["ISPC"] = False
+        prihdr["PHTCNT"] = "False"
+
+        exthdr["ISPC"] = 0
         
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
@@ -143,6 +144,15 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
         if len(mock_cal_filelist) == 2:
             break
 
+    # Copy and fix mock cal headers
+    mock_cal_dir = os.path.join(astrom_cal_outputdir, 'mock_cal_input')
+    os.makedirs(mock_cal_dir, exist_ok=True)
+    mock_cal_filelist = [
+        shutil.copy2(f, os.path.join(mock_cal_dir, os.path.basename(f)))
+        for f in mock_cal_filelist
+    ]
+    mock_cal_filelist = check.fix_hdrs_for_tvac(mock_cal_filelist, mock_cal_dir)
+
     # Fix string values
     fix_str_for_tvac(sim_data_filelist)
 
@@ -195,8 +205,8 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
-    ext_hdr['B_O'] = 0
-    ext_hdr['B_O_ERR'] = 0
+    ext_hdr['B_O'] = 0.
+    ext_hdr['B_O_ERR'] = 0.
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
@@ -264,7 +274,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
             output_files.append(file)
 
     expected_platescale = 21.8
-    expected_northangle = 45
+    expected_northangle = 45.
     target = (80.553428801, -69.514096821)
 
     # Look for astrometric calibration file in the main directory (it's not L2a or L2b data)
@@ -289,13 +299,15 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
+
+    check.compare_to_mocks_hdrs(astrom_cal_files[0])
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

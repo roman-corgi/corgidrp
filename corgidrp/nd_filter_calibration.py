@@ -334,26 +334,20 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, od
     """
     final_sweet_spot_data = aggregated_sweet_spot_data.copy()
 
-    # Build the NDFilterSweetSpotDataset, use info from last/ most recent
-    pri_hdr = input_dataset[-1].pri_hdr
-    ext_hdr = input_dataset[-1].ext_hdr
-
-    # keeping the common metadata because if you do provide dim stars as part of the dataset
-    # and grab the last header you might get the FPAM info of a frame with no ND filter in.
-    ext_hdr['BUNIT']    = '' #dimensionless
-    ext_hdr['DATALVL']  = 'CAL'
-    ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
-    ext_hdr['FPAM_H']   = common_metadata.get('FPAM_H')
-    ext_hdr['FPAM_V']   = common_metadata.get('FPAM_V')
-    ext_hdr['ODFLAG'] = od_var_flag
-    ext_hdr['HISTORY']  = "Combined sweet-spot dataset from bright star dithers"
-
+    # Create the NDFilterSweetSpotDataset, merge_headers is called inside __init__ 
     ndsweetspot_dataset = NDFilterSweetSpotDataset(
         data_or_filepath=final_sweet_spot_data,
-        pri_hdr=pri_hdr,
-        ext_hdr=ext_hdr,
         input_dataset=input_dataset
     )
+
+    # Set ND-filter-specific metadata (want to overwrite the FPAM info with ND filter info)
+    ndsweetspot_dataset.ext_hdr['BUNIT'] = ''  # dimensionless
+    ndsweetspot_dataset.ext_hdr['DATALVL'] = 'CAL'
+    ndsweetspot_dataset.ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
+    ndsweetspot_dataset.ext_hdr['FPAM_H'] = common_metadata.get('FPAM_H')
+    ndsweetspot_dataset.ext_hdr['FPAM_V'] = common_metadata.get('FPAM_V')
+    ndsweetspot_dataset.ext_hdr['ODFLAG'] = od_var_flag
+    ndsweetspot_dataset.ext_hdr['HISTORY'] = "Combined sweet-spot dataset from bright star dithers"
 
     return ndsweetspot_dataset
 

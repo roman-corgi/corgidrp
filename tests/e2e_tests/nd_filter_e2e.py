@@ -6,7 +6,7 @@ import corgidrp.mocks as mocks
 import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.nd_filter_calibration as nd_filter_calibration
-from corgidrp import caldb
+from corgidrp import caldb, check
 import time
 
 # ----------------------------------------------------------------------
@@ -81,6 +81,8 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     print("Input OD:", od_truth)
     assert recovered_od == pytest.approx(od_truth, abs=1e-1)
 
+    check.compare_to_mocks_hdrs(nd_file[0])
+    
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 

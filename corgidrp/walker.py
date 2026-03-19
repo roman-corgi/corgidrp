@@ -292,10 +292,10 @@ def guess_template(dataset):
         if 'VISTYPE' not in image.pri_hdr:
             # this is probably IIT test data. Do generic processing
             recipe_filename = "l1_to_l2b.json"
-        elif image.pri_hdr['VISTYPE'][:11] == "CGIVST_ENG_":
-            # if this is an ENG calibration visit
-            # for either pupil or image
-            recipe_filename = "l1_to_l2a_eng.json"
+        # elif image.pri_hdr['VISTYPE'][:11] == "CGIVST_ENG_":
+        #     # if this is an ENG calibration visit
+        #     # for either pupil or image
+        #     recipe_filename = "l1_to_l2a_eng.json"
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_BORESIGHT":
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_boresight.json'] #"l1_to_boresight.json"
             chained = True
@@ -308,7 +308,7 @@ def guess_template(dataset):
                 recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC'] in (True, 1):
+            if image.ext_hdr['ISPC'] == 1:
                 recipe_filename = ["l1_to_l2b_pc_dark_1.json", "l1_to_l2b_pc_dark_2.json"]# "l1_to_l2b_pc_dark.json"
                 chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
@@ -336,7 +336,7 @@ def guess_template(dataset):
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.ext_hdr['ISPC'] in (True, 1):
+            if image.ext_hdr['ISPC'] == 1:
                 recipe_filename = ["l2a_to_l2b_pc_dark_1.json", "l2a_to_l2b_pc_dark_2.json"]#"l2a_to_l2b_pc_dark.json"
                 chained = True
             elif len(unique_vals) > 1: # darks for noisemap creation
@@ -350,13 +350,13 @@ def guess_template(dataset):
             is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
 
             if is_spectroscopy:
-                if image.ext_hdr['ISPC'] in (True, 1):
+                if image.ext_hdr['ISPC'] == 1:
                     recipe_filename = ["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"] #"l2a_to_l2b_pc_spec.json"
                 else:
                     recipe_filename = "l2a_to_l2b_spec.json"
             else:
-                if image.ext_hdr['ISPC'] in (True, 1):
-                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json
+                if image.ext_hdr['ISPC'] == 1:
+                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
                     chained = True
                 else:
                     recipe_filename = "l2a_to_l2b.json"  # science data and all else
@@ -384,14 +384,14 @@ def guess_template(dataset):
         if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l3_to_l4_pol.json"
         elif image.ext_hdr['DPAMNAME'] == 'PRISM3':
-            if image.ext_hdr['FSMLOS'] == 1:
+            if image.ext_hdr['FSMLOS'] == "1":
                 # coronagraphic obs - PSF subtraction
                 recipe_filename = "l3_to_l4_psfsub_spec.json"
             else:
                 # noncoronagraphic obs - no PSF subtraction
                 recipe_filename = "l3_to_l4_noncoron_spec.json"
         else:
-            if image.ext_hdr['FSMLOS'] == 1:
+            if image.ext_hdr['FSMLOS'] == "1":
                 # coronagraphic obs - PSF subtraction
                 recipe_filename = "l3_to_l4.json"
             else:
@@ -593,6 +593,15 @@ def run_recipe(recipe, save_recipe_file=True):
 
                 # run the step!
                 curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
+
+                # make sure RECIPE header is propagated to output
+                if isinstance(curr_dataset, data.Dataset):
+                    for frame in curr_dataset:
+                        if "RECIPE" not in frame.ext_hdr:
+                            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+                elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
+                    curr_dataset.ext_hdr["RECIPE"] = json.dumps(recipe)
+
     if not save_step:
         output_filepaths = None
 

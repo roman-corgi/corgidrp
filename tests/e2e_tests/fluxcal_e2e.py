@@ -13,6 +13,7 @@ import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.fluxcal as fluxcal
 from corgidrp import caldb
+from corgidrp import check
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2eoutput_path):
@@ -58,6 +59,8 @@ def test_expected_results_e2e(e2eoutput_path):
     print("fluxcal factor error", flux_fac.fluxcal_err)
     assert flux_fac.fluxcal_fac == pytest.approx(cal_factor, abs = 1.5 * flux_fac.fluxcal_err)
     
+    check.compare_to_mocks_hdrs(fluxcal_file)
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
