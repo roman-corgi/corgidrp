@@ -8,6 +8,7 @@ from astropy import wcs
 from astropy.io import fits, ascii
 from astropy.coordinates import SkyCoord
 import corgidrp
+from corgidrp.combine import combine_subexposures
 from photutils.aperture import CircularAperture
 from photutils.background import LocalBackground
 from photutils.psf import fit_2dgaussian
@@ -480,7 +481,8 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
     """
     d_or_i = dataset_or_image.copy()
     if isinstance(d_or_i, corgidrp.data.Dataset):
-        image = d_or_i[0]
+        #take the median of images in the dataset
+        image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
         dataset = d_or_i
     else:
         image = d_or_i
@@ -611,7 +613,8 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
     """
     d_or_i = dataset_or_image.copy()
     if isinstance(d_or_i, corgidrp.data.Dataset):
-        image = d_or_i[0]
+        #take the mean of images in the dataset
+        image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
         dataset = d_or_i
     else:
         image = d_or_i
@@ -846,7 +849,8 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr
     """
     d_or_i = dataset_or_image.copy()
     if isinstance(d_or_i, corgidrp.data.Dataset):
-        image = d_or_i[0]
+        #take the mean of images in the dataset
+        image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
         dataset = d_or_i
     else:
         image = d_or_i
