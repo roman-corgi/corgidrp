@@ -729,7 +729,7 @@ def test_compare_RDI_ADI():
 
     assert mean_adi < mean_rdi
 
-@pytest.mark.parametrize("coro_type,FOV,band", [("HLC", "NFOV", "1"), ("SPC", "WFOV", "4F")])
+@pytest.mark.parametrize("coro_type,FOV,band", [("HLC", "NFOV", "1F"), ("SPC", "WFOV", "4F"), ("SPC", "WFOV", "1F")])
 def test_psfsub_withklipandctmeas_adi(coro_type,FOV,band):
     """Check that KLIP throughput and CT calibration can be run as part 
     of the PSF subtraction step function. Check that KLIP throughput and 
@@ -757,13 +757,15 @@ def test_psfsub_withklipandctmeas_adi(coro_type,FOV,band):
     if coro_type == "SPC":
         for im in mock_sci:
             im.ext_hdr['SPAMNAME'] = FOV
-            im.ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
             im.ext_hdr['LSAMNAME'] = FOV
             im.ext_hdr['CFAMNAME'] = band
-            
+            if band == "1F":
+                im.ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
+            if band == "4F":
+                im.ext_hdr['FPAMNAME'] = 'SPC34_R5C1'
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
-    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+    ctcal = create_ct_cal(fwhm_mas, cfam_name=band,
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
     
@@ -917,7 +919,7 @@ def test_psfsub_withklipandctmeas_adi(coro_type,FOV,band):
 
     assert pl_counts == pytest.approx(recovered_pl_counts_ktcorrected,rel = 0.10) 
 
-@pytest.mark.parametrize("coro_type,FOV,band", [("HLC", "NFOV", "1"), ("SPC", "WFOV", "4F")])
+@pytest.mark.parametrize("coro_type,FOV,band", [("HLC", "NFOV", "1F"), ("SPC", "WFOV", "4F"),("SPC", "WFOV", "1F")])
 def test_psfsub_withklipandctmeas_rdi(coro_type,FOV,band):
     """Check that KLIP throughput and CT calibration can be run as part 
     of the PSF subtraction step function. Check that KLIP throughput and 
@@ -946,12 +948,15 @@ def test_psfsub_withklipandctmeas_rdi(coro_type,FOV,band):
     if coro_type == "SPC":
         for im in itertools.chain(*complete_dataset):                                
             im.ext_hdr['SPAMNAME'] = FOV
-            im.ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
             im.ext_hdr['LSAMNAME'] = FOV
             im.ext_hdr['CFAMNAME'] = band
+            if band == "1F":
+                im.ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
+            if band == "4F":
+                im.ext_hdr['FPAMNAME'] = 'SPC34_R5C1'
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
-    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+    ctcal = create_ct_cal(fwhm_mas, cfam_name=band,
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
     
