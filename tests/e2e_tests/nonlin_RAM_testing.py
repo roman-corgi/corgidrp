@@ -1,4 +1,22 @@
-""" Module to test the generation of the non-linearity calibration """
+# RAM testing; NOT part of automated e2e tests 
+
+'''
+This test script is meant to quantify RAM usage and is not included in the automated e2e test suite.
+
+Add in 
+
+from memory_profiler import profile
+
+and add @profile decorator above walker.walk_corgidrp() and calibrate_nonlin(),
+
+and things like this:
+current, peak = tracemalloc.get_traced_memory()
+                print(f"Current memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
+                tracemalloc.stop()
+                logging.basicConfig(filename=os.path.join(os.path.dirname(__file__), "memory_usage.log"), level=logging.INFO)
+                logging.info(f"peak memory usage:  {peak/10**6} MB")
+'''
+
 import os
 import glob
 import argparse
@@ -14,7 +32,16 @@ from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
 import shutil
+import logging
+from datetime import date
+from memory_profiler import profile
 
+ram_testing = True # only True for Kevin's RAM testing; set True manually and run manually
+if ram_testing:
+    import tracemalloc
+    tracemalloc.start()
+    import psutil
+    pr = psutil.Process()
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
 def set_vistype_for_tvac(
@@ -43,6 +70,7 @@ def set_vistype_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
+@profile
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
     e2edata_path,
@@ -122,6 +150,9 @@ def test_nonlin_cal_e2e(
         for file_path in nonlin_l1_list
     ]
     
+    if ram_testing: #for Kevin's RAM test
+        input_data_dir = r'E:\E2E_Test_Data3\E2E_Test_Data3\simdata' 
+    #os.path.join(os.path.dirname(__file__), 'simdata')
     nonlin_l1_list = glob.glob(os.path.join(input_data_dir, "*.fits"))
     
     print("number of files: ", len(nonlin_l1_list))
@@ -169,17 +200,40 @@ def test_nonlin_cal_e2e(
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     # Run the walker on some test_data
     print('Running walker')
-    recipe = walker.autogen_recipe(nonlin_l1_list, e2eoutput_path)
-    ### Modify they keywords of some of the steps
-    for step in recipe[2]['steps']:
-        if step['name'] == "calibrate_nonlin":
-            step['keywords']['apply_dq'] = False # full shaped pupil FOV
-            step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
-    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
-    recipe[1]['inputs'] = output_filepaths
-    output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
-    recipe[2]['inputs'] = output_filepaths1
-    walker.run_recipe(recipe[2], save_recipe_file=True)
+    if ram_testing:
+        walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path)
+    else:
+        recipe = walker.autogen_recipe(nonlin_l1_list, e2eoutput_path)
+        ### Modify they keywords of some of the steps
+        for step in recipe[2]['steps']:
+            if step['name'] == "calibrate_nonlin":
+                step['keywords']['apply_dq'] = False # full shaped pupil FOV
+                step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
+        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+        recipe[1]['inputs'] = output_filepaths
+        output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
+        recipe[2]['inputs'] = output_filepaths1
+        walker.run_recipe(recipe[2], save_recipe_file=True)
+    
+    if ram_testing:
+        mem = pr.memory_info()
+        # peak_wset is only available on Windows; fall back to rss on other platforms
+        if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+            peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+        else:
+            peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+        print(f"noisemap_cal_e2e peak memory usage:  {peak_memory:.2f} MB")
+        logging.basicConfig(filename=os.path.join(os.path.dirname(__file__), "sorting_e2e_memory_usage.log"), level=logging.INFO)
+        todays_date = date.today()
+        logging.info(todays_date.strftime("%Y-%m-%d"))
+        logging.info(f"psutil sorting e2e peak memory usage:  {peak_memory} MB")
+        # Get current and peak memory usage
+        current, peak = tracemalloc.get_traced_memory()
+        # Stop tracing
+        tracemalloc.stop()
+        # Print the peak memory usage
+        print(f"tracemalloc Peak memory usage was {peak / (1024 * 1024):.2f} MB")
+        logging.info(f"tracemalloc sorting e2e peak memory usage:  {peak/(1024 * 1024)} MB")
 
     # Compare results
     print('Comparing the results with TVAC')

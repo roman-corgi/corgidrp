@@ -414,19 +414,6 @@ def sort_pupilimg_frames(
     # free up memory
     del split_exptime, split_cmdgain, dataset_in
     dataset_sorted = data.Dataset(mean_frame_list + cal_frame_list)
-    # now load into memory the actual data
-
-    # if dataset_sorted[0].data is None:  XXX
-    #     for frame in dataset_sorted.frames:
-    #         temp_frame = data.Image(frame.filepath)
-    #         if frame.data is None:
-    #             frame.data = temp_frame.data
-    #             # no err or dq to worry about here since these frames are L1
-    #     # get .all_data and .data restored and linked up
-    #     dataset_sorted.all_data = np.array([frame.data for frame in dataset_sorted.frames])
-    #     for i, frame in enumerate(dataset_sorted.frames):
-    #         frame.data = dataset_sorted.all_data[i]
-    # dataset_sorted.data_loaded = True
 
     dataset_sorted.update_after_processing_step(history)
     # Return Dataset with mean frame and cal type

@@ -53,7 +53,6 @@ class Dataset():
                 fr = Image(filepath)
                 if no_data:
                     fr.data = None
-                    #if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_err: XXX
                     if no_err:
                         #in this case, the frames are L1 and don't yet
                         # have err and dq, so don't set those
@@ -61,7 +60,6 @@ class Dataset():
                         # the default starting err and dq for further
                         # pipeline processes
                         fr.err = None
-                    #if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_dq: XXX
                     if no_dq:
                         fr.dq = None
                 self.frames.append(fr)

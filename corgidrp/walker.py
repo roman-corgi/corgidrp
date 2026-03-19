@@ -25,9 +25,6 @@ import corgidrp.fluxcal
 import corgidrp.spec
 
 import os
-import logging
-import tracemalloc
-from memory_profiler import profile
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -129,7 +126,7 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     output_filelist = None
     for i, recipe in enumerate(recipes):
         # check for recipe chaining
-        if i > 0: #XXX and  len(recipe['inputs']) == 0:
+        if i > 0: 
             recipe["inputs"] = []
             for filename in output_filelist:
                 recipe["inputs"].append(filename)
@@ -321,7 +318,7 @@ def guess_template(dataset):
                 recipe_filename = ["build_trad_dark_image_1.json", "build_trad_dark_image_2.json"] #"build_trad_dark_image.json"
                 chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
-            recipe_filename = ["l1_to_l2a_nonlin_1.json", "l1_to_l2a_nonlin_2.json", "l1_to_l2a_nonlin_3_test.json"]# XXX, "l1_to_kgain.json"] #["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
+            recipe_filename = ["l1_to_l2a_nonlin_1.json", "l1_to_l2a_nonlin_2.json", "l1_to_l2a_nonlin_3.json"] # "l1_to_kgain.json"] is another viable choice. #["l1_to_l2a_nonlin.json"
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
             if len(fsm_unique) > 1:
@@ -404,7 +401,6 @@ def guess_template(dataset):
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
     return recipe_filename, chained
 
-@profile
 def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
     """
     Saves the dataset or image that has currently been outputted by the last step function.
@@ -450,7 +446,6 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
             this_caldb.create_entry(image)
 
 
-@profile
 def run_recipe(recipe, save_recipe_file=True):
     """
     Run the specified recipe
@@ -598,11 +593,6 @@ def run_recipe(recipe, save_recipe_file=True):
 
                 # run the step!
                 curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
-                current, peak = tracemalloc.get_traced_memory()
-                print(f"Current memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
-                tracemalloc.stop()
-                logging.basicConfig(filename=os.path.join(os.path.dirname(__file__), "memory_usage.log"), level=logging.INFO)
-                logging.info(f"peak memory usage:  {peak/10**6} MB")
     if not save_step:
         output_filepaths = None
 
