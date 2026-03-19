@@ -47,7 +47,7 @@ def test_l1_to_fluxcal(e2edata_path, e2eoutput_path):
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
-    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]]
+    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in range(5)]
     # Copy and fix mock cal headers 
     mock_cal_dir = os.path.join(test_outputdir, 'mock_cal_input')
     os.makedirs(mock_cal_dir, exist_ok=True)
