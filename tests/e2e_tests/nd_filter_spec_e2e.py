@@ -180,11 +180,11 @@ def _setup_caldb(l1_datadir, processed_cal_path, calibrations_dir, logger):
     logger.info(f"Loaded default calibrations from {corgidrp.default_cal_dir}")
 
     # Paths to flat detector calibration files
-    nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
-    dark_path   = os.path.join(processed_cal_path, "dark_current_20240322.fits")
+    nonlin_path = os.path.join(processed_cal_path, "nonlin_table.txt")
+    dark_path   = os.path.join(processed_cal_path, "dark_current.fits")
     flat_path   = os.path.join(processed_cal_path, "flat.fits")
-    fpn_path    = os.path.join(processed_cal_path, "fpn_20240322.fits")
-    cic_path    = os.path.join(processed_cal_path, "cic_20240322.fits")
+    fpn_path    = os.path.join(processed_cal_path, "fpn.fits")
+    cic_path    = os.path.join(processed_cal_path, "cic.fits")
     bp_path     = os.path.join(processed_cal_path, "bad_pix.fits")
 
     # Build a minimal mock input_dataset from a couple of L1 files so that
@@ -609,13 +609,12 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
                     cgi_*_l1_.fits   (3D dim-star frames,  CFAMNAME=3D, FPAMNAME=OPEN_34)
                     cgi_*_l1_.fits   (3F dim-star frames,  CFAMNAME=3F, FPAMNAME=OPEN_34)
                     cgi_*_l1_.fits   (3F bright-star frames, CFAMNAME=3F, FPAMNAME=ND225)
-            TV-36_Coronagraphic_Data/
                 Cals/
-                    nonlin_table_240322.txt
-                    dark_current_20240322.fits
+                    nonlin_table.txt
+                    dark_current.fits
                     flat.fits
-                    fpn_20240322.fits
-                    cic_20240322.fits
+                    fpn.fits
+                    cic.fits
                     bad_pix.fits
 
     Generate the L1 files with::
@@ -623,8 +622,7 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
         python corgisim/make_nd_spec_l1_data.py -o <e2edata_path>
     """
     l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "L1")
-    processed_cal_path = os.path.join(
-        e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
+    processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
     outputdir = os.path.join(e2eoutput_path, "nd_filter_spec_e2e")
 
     # Skip gracefully if test data have not been provided yet
@@ -667,7 +665,7 @@ if __name__ == "__main__":
     )
     ap.add_argument(
         "-tvac", "--e2edata_dir",
-        default=os.path.join(thisfile_dir, "test_data"),
+        default="/Users/jmilton/Documents/CGI/E2E_Test_Data2",
         help="Root directory containing ND_SPEC/L1/ and TV-36.../Cals/ sub-folders"
     )
     ap.add_argument(
@@ -678,8 +676,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     l1_datadir         = os.path.join(args.e2edata_dir, "ND_SPEC", "L1")
-    processed_cal_path = os.path.join(
-        args.e2edata_dir, "TV-36_Coronagraphic_Data", "Cals")
+    processed_cal_path = os.path.join(args.e2edata_dir, "ND_SPEC", "Cals")
     outputdir = os.path.join(args.outputdir, "nd_filter_spec_e2e")
 
     if os.path.exists(outputdir):
