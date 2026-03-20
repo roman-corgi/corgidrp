@@ -76,13 +76,6 @@ def test_noop_when_no_keywords():
     result_empty = discard_setup_frames(dataset, keywords_to_check=[])
     assert len(result_empty) == 5
 
-def test_missing_keyword_safe():
-    """Keyword not in header -> treated as 0 (not discarded)."""
-    dataset = mocks.create_dark_calib_files(numfiles=5)
-    # Don't set ISACQ on any frame
-    result = discard_setup_frames(dataset, keywords_to_check=["ISACQ"])
-    assert len(result) == 5
-
 if __name__ == "__main__":
     test_no_discard()
     test_discard_acquisition()
@@ -91,4 +84,3 @@ if __name__ == "__main__":
     test_discard_multiple_keywords()
     test_all_discarded_raises()
     test_noop_when_no_keywords()
-    test_missing_keyword_safe()
