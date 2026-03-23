@@ -1071,15 +1071,15 @@ def find_spec_star(input_dataset, r_lamD=3, phi_deg=0):
 
 def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
     """
-    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around
+    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
     the wavelength zero point with units photoelectron/s/bin.
-
+    
     Args:
-        input_dataset (corgidrp.data.Dataset):
+        input_dataset (corgidrp.data.Dataset): 
         halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
         halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
         apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
-
+        
     Returns:
         corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
     """
@@ -1115,13 +1115,12 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
             whts = 1./np.square(err_cutout[0])
             spec = np.nansum(image_cutout * whts, axis = 1) / np.nansum (whts, axis = 1) * (2 * halfwidth + 1)
             err[0] = 1./np.sqrt(np.nansum(whts, axis = 1))
-            algo_thru_spec = np.nanmean(algo_thru_cutout[:,None] * whts, axis = 1) / np.nanmean (whts, axis = 1)
+            algo_thru_spec = np.nanmean(algo_thru_cutout[:,None] * whts, axis = 1) / np.nanmean (whts, axis = 1) 
             weight_str = "weights applied"
         else:
             spec = np.nansum(image_cutout, axis=1)
             algo_thru_spec = algo_thru_cutout
             weight_str = "no weights applied"
-
         
         spec_header = fits.Header()
         spec_header['BUNIT'] = "photoelectron/s/bin"

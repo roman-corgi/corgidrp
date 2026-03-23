@@ -8,6 +8,8 @@ from corgidrp.data import (Dataset, FluxcalFactor, NDFilterSweetSpotDataset,
 from corgidrp.astrom import centroid_with_roi
 from scipy.interpolate import griddata, interp1d
 import warnings
+import corgidrp.spec as spec_module
+
 
 # =============================================================================
 # Helper Functions
@@ -536,7 +538,7 @@ def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath):
     Compute OD(lambda) for a single bright-star frame observed through the ND
     filter with the prism in.
 
-    Parameters:
+    Args:
         frame (corgidrp.data.Image): L3 frame with SPEC, SPEC_WAVE, and SPEC_ERR
             extensions (in units of photoelectron/s/bin) produced by extract_spec.
         sf_cal (corgidrp.data.SpecFluxCal): Spectral flux calibration C(lambda)
@@ -579,7 +581,7 @@ def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath):
     # Expected e-/s/bin with no ND filter in beam
     expected_counts = sed_bright / c_at_wave
 
-    # Transmission and OD (suppress warnings incase it encounters nan or 0)
+    # Transmission and OD (suppress warnings in case it encounters nan or 0)
     with np.errstate(divide='ignore', invalid='ignore'):
         transmission = counts_nd / expected_counts
         od_spectrum  = -np.log10(transmission)
@@ -612,7 +614,7 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=No
     their OD(lambda) spectra are remapped to a common wavelength grid and averaged 
     before the calibration product is created.
 
-    Parameters:
+    Args:
         stars_dataset (corgidrp.data.Dataset): L3 frames with SPEC extensions.
         spec_fluxcal (corgidrp.data.SpecFluxCal, optional): Pre-computed spectral
             flux calibration product.  When supplied, dim-star frames in the
@@ -626,12 +628,10 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=No
     Returns:
         corgidrp.data.NDSpectroscopy: OD(lambda) calibration product.
     """
-    import corgidrp.spec as spec_module
-
     # 1. Split the dataset into dim (no ND) and bright (ND) frames by FPAMNAME.
-    try:
-        grouped = group_by_keyword(stars_dataset, exthdr_keyword='FPAMNAME')
-    except Exception:
+    # Fall back to FSAMNAME if only 1 FPAMNAME group
+    grouped = group_by_keyword(stars_dataset, exthdr_keyword='FPAMNAME')
+    if len(grouped) < 2:
         grouped = group_by_keyword(stars_dataset, exthdr_keyword='FSAMNAME')
 
     dim_frames    = []
@@ -645,7 +645,7 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=No
     if not bright_frames:
         raise ValueError(
             "No bright (ND-filter) frames found in the dataset. "
-            "Frames with FPAMNAME starting with 'ND' are required."
+            "Frames with FPAMNAME (or FSAMNAME) starting with 'ND' are required."
         )
 
     bright_dataset = Dataset(bright_frames)
@@ -655,7 +655,7 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=No
     dpam = first_bright.ext_hdr.get('DPAMNAME', '')
     if not dpam.startswith('PRISM'):
         raise ValueError(
-            f"Expected DPAMNAME starting with 'PRISM' for spectroscopic ND "
+            f"Expected DPAMNAME starting with 'PRISM' for spectroscopy ND "
             f"calibration, got '{dpam}'."
         )
 
