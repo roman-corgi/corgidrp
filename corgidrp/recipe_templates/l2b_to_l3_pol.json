@@ -8,6 +8,12 @@
     "outputdir": "",
     "steps": [
         {
+            "name" : "discard_setup_frames",
+            "keywords" : {
+                "keywords_to_check" : ["SPBAL", "ISHOWFSC"]
+            }
+        },
+        {
             "name": "create_wcs",
             "calibs": {
                 "AstrometricCalibration": "AUTOMATIC"

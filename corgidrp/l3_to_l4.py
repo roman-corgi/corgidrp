@@ -189,7 +189,9 @@ def find_star(input_dataset,
               star_coordinate_guess=None,
               thetaOffsetGuess=0,
               satellite_spot_parameters=None,
-              drop_satspots_frames=True):
+              drop_satspots_frames=True,
+              pri_split_keywords = None,
+              ext_split_keywords = None):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that 
     contain satellite spots (indicated by ``SATSPOTS=True`` in the image header). The 
@@ -271,6 +273,14 @@ def find_star(input_dataset,
         drop_satspots_frames (bool, optional):
             If True, frames with satellite spots (``SATSPOTS=True``) will be removed from 
             the returned dataset. Defaults to True.
+        pri_split_keywords (list of str, optional): 
+            List of primary header keywords to use for splitting the dataset into subsets.
+            If None, defaults to ['VISITID']. Defaults to None.
+        ext_split_keywords (list of str, optional):
+            List of extension header keywords to use for splitting the dataset into subsets.
+            If None, defaults to ['DPAMNAME']. Defaults to None.
+
+
 
     Returns:
         corgidrp.data.Dataset:
@@ -302,9 +312,14 @@ def find_star(input_dataset,
 
     satellite_spot_parameters_defaults = star_center.satellite_spot_parameters_defaults
 
+    if pri_split_keywords is None:
+        pri_split_keywords = ['VISITID']
+    
+    if ext_split_keywords is None:
+        ext_split_keywords = ['DPAMNAME']
 
     # Separate the dataset into frames with and without satellite spots
-    split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+    split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=pri_split_keywords, exthdr_keywords=ext_split_keywords)
     out_frames = []
     for val, split_dataset in  zip(unique_vals, split_datasets):
         observing_mode = []
@@ -338,7 +353,7 @@ def find_star(input_dataset,
         img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
 
         # if polarimetry
-        if val  == 'POL0' or val == 'POL45': 
+        if 'POL0' in val  or 'POL45' in val: 
             # Compute median images and find star on both slices
             star_xy_list = []
             for i in [0,1]: #for i in range(0, len(unique_vals))
@@ -371,8 +386,6 @@ def find_star(input_dataset,
                                 )
 
                     out_frames.append(frame)
-            processed_dataset = data.Dataset(out_frames)
-
         else :
 
             # Default star_coordinate_guess to center of img_sat_spot if None
@@ -390,19 +403,18 @@ def find_star(input_dataset,
             if drop_satspots_frames:
                 processed_dataset = sci_dataset
 
-            # Add star location to frame headers
-            header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
+            for frame in split_dataset:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
+                    frame.ext_hdr['STARLOCX'] =star_xy[0]
+                    frame.ext_hdr['STARLOCY'] =star_xy[1]
+                    frame.ext_hdr['HISTORY'] = (
+                                    f"Satellite spots analyzed. Star location at x={star_xy[0]} "
+                                    f"and y={star_xy[1]}."
+                                )
 
-            history_msg = (
-                f"Satellite spots analyzed. Star location at x={star_xy[0]} "
-                f"and y={star_xy[1]}."
-            )
+                    out_frames.append(frame)
 
-            processed_dataset.update_after_processing_step(
-                history_msg,
-                header_entries=header_entries,
-                update_err_header=False)
-
+    processed_dataset = data.Dataset(out_frames)
     return processed_dataset
 
 

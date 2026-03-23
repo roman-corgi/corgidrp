@@ -17,6 +17,12 @@
             }
         },
         {
+            "name" : "discard_setup_frames",
+            "keywords" : {
+                "keywords_to_check" : ["ISACQ"]
+            }
+        },
+        {
             "name" : "correct_nonlinearity",
             "calibs" : {
                 "NonLinearityCalibration" : "AUTOMATIC"
