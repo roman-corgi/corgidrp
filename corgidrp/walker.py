@@ -27,6 +27,7 @@ import corgidrp.spec
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
+    "discard_setup_frames" : corgidrp.l1_to_l2a.discard_setup_frames,
     "detect_cosmic_rays" : corgidrp.l1_to_l2a.detect_cosmic_rays,
     "calibrate_nonlin": corgidrp.calibrate_nonlin.calibrate_nonlin,
     "correct_nonlinearity" : corgidrp.l1_to_l2a.correct_nonlinearity,
