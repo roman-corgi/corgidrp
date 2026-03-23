@@ -478,6 +478,10 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
     """
     Pytest wrapper for the spectroscopy ND filter calibration E2E test.
 
+    Args:
+        e2edata_path (str): Path to the E2E test data
+        e2eoutput_path (str): Path to the E2E test output
+
     """
     l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "L1")
     processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
