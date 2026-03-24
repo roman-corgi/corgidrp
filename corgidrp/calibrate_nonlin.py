@@ -936,6 +936,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
         dataset_cp = dataset
     else:
         dataset_cp = dataset.copy()
+        ram_heavy = False
     split = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
     
     # Calibration data
