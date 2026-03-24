@@ -647,6 +647,7 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CDELT2'] = 0.
     exthdr['CRVAL1'] = 0.
     exthdr['CRVAL2'] = 0.
+    exthdr['NORTHANG'] = 0.
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
