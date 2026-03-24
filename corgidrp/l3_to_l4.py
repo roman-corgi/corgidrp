@@ -56,8 +56,10 @@ def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
             im_err[f][e] = np.where(im_dq_bool[f], np.nan,im_err[f][e])
 
     # Interpolate over the bad pixels using nanmedian
-    im_filtered = generic_filter(im_data,np.nanmedian,size=kernelsize,axes=[-1,-2])
-    err_filtered = generic_filter(im_err,np.nanmedian,size=kernelsize,axes=[-1,-2])
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=RuntimeWarning) #suppress warnings about all-NaN slices in the median filter
+        im_filtered = generic_filter(im_data,np.nanmedian,size=kernelsize,axes=[-1,-2])
+        err_filtered = generic_filter(im_err,np.nanmedian,size=kernelsize,axes=[-1,-2])
     
     # Replace the bad pixels with the interpolated pixels
     im_replaced = np.where(np.isnan(im_data),im_filtered,im_data)
@@ -336,7 +338,7 @@ def find_star(input_dataset,
             else:
                 raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
 
-        assert all(mode == observing_mode[0] for mode in observing_mode), \
+        assert all([mode == observing_mode[0] for mode in observing_mode]), \
             "All frames should have the same observing mode."
 
         observing_mode = observing_mode[0]
@@ -349,8 +351,8 @@ def find_star(input_dataset,
         if satellite_spot_parameters is not None:
             tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
         # Compute median images
-        img_ref = np.median(sci_dataset.all_data, axis=0)
-        img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
+        img_ref = np.nanmedian(sci_dataset.all_data, axis=0)
+        img_sat_spot = np.nanmedian(sat_spot_dataset.all_data, axis=0)
 
         # if polarimetry
         if 'POL0' in val  or 'POL45' in val: 
@@ -1260,7 +1262,6 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
     Returns:
         corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
     """
-    
     # check that the data is at the L3 level, and only polarimetric observations are inputted
     dataset = input_dataset.copy()
     for frame in dataset:
@@ -1282,7 +1283,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         unocculted_pol45_frames = []
         target_name = target_dataset.frames[0].pri_hdr['TARGET']
         for frame in target_dataset:
-            if frame.ext_hdr['FPAMNAME'] == 'ND225':
+            if frame.ext_hdr['FPAMNAME'] == 'ND225' or frame.ext_hdr['FPAMNAME'] == 'ND475':
                 # unocculted observations, separate by wollaston
                 if frame.ext_hdr['DPAMNAME'] == 'POL0':
                     unocculted_pol0_frames.append(frame)
@@ -1517,6 +1518,7 @@ def combine_polarization_states(input_dataset,
                                          err_hdr=frame.err_hdr.copy(),
                                          dq=total_intensity_dq,
                                          dq_hdr=frame.dq_hdr.copy())
+        total_intensity_img.filename = frame.pri_hdr['FILENAME']
         total_intensity_frames.append(total_intensity_img)
     # add reference star dataset to total intensity dataset as well for psf subtraction
     if reference_star_dataset is not None:
@@ -1538,6 +1540,7 @@ def combine_polarization_states(input_dataset,
                                                 err_hdr=frame.err_hdr.copy(),
                                                 dq=total_intensity_dq,
                                                 dq_hdr=frame.dq_hdr.copy())
+                total_intensity_img.filename = frame.pri_hdr['FILENAME']
                 total_intensity_frames.append(total_intensity_img)
             else:
                 total_intensity_frames.append(frame)
@@ -1567,6 +1570,7 @@ def combine_polarization_states(input_dataset,
         # suppress astropy warnings
         warnings.filterwarnings('ignore', category=VerifyWarning)
         warnings.filterwarnings('ignore', category=FITSFixedWarning)
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
         psf_subtracted_dataset = do_psf_subtraction(total_intensity_dataset,
                                                     ct_calibration=ct_calibration,
                                                     measure_klip_thrupt=measure_klip_thrupt,
