@@ -132,6 +132,15 @@ def test_l1_to_fluxcal(e2edata_path, e2eoutput_path):
     # define the raw science data to process
     l1_data_filelist = [os.path.join(sci_datadir, os.listdir(sci_datadir)[i]) for i in range(len(os.listdir(sci_datadir))) if os.listdir(sci_datadir)[i].endswith("l1_.fits")] 
 
+    ## fix some headers introduced in corgisim
+    for filename in l1_data_filelist:
+        with fits.open(filename) as hdulist:
+            prihdr = hdulist[0].header
+            del prihdr['SATSPOTS']
+            del prihdr['COMMENT']
+            hdulist.writeto(filename, overwrite=True)
+            
+
     ####### Run the walker on some test_data
     walker.walk_corgidrp(l1_data_filelist, "", l2b_outputdir)
 
