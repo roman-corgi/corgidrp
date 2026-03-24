@@ -31,7 +31,8 @@ column_dtypes = {
     "EXCAMT": float,
     "CFAMNAME": str,
     "DPAMNAME": str,
-    "FPAMNAME": str
+    "FPAMNAME": str,
+    "FSAMNAME": str
 }
 
 default_values = {
@@ -348,18 +349,17 @@ class CalDB:
             calib_filepath = options.iloc[result_index, 0]
 
         elif dtype_label in ["Dark"]:
-            # general selection criteria for 2D image frames. Can use different selection criteria for different dtypes
+            # match on exposure time and EM gain - darks are characterized for specific gain/exptime combinations
             options = self.filter_calib(calibdf, "EXPTIME", frame_dict["EXPTIME"], err_if_none=True)
+            options = self.filter_calib(options, "EMGAIN_C", frame_dict["EMGAIN_C"], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['NDFilterSweetSpot']:
-            # filter by color filter
-            # filter_calib() is configured to not throw an error if no matches are found, so that
-            # no existing e2e tests breaks, if in the future we want to strictly only use the calibration
-            # files with matching headers, then set err_if_none to True
+            # filter by color filter (CFAM) and ND filter (FPAM)
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
+            options = self.filter_calib(options, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -367,8 +367,7 @@ class CalDB:
         elif dtype_label in ['FluxcalFactor']:
             # filter by color filter and DPAM
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
-            if frame_dict['DPAMNAME'] in ['POL0', 'POL45']:
-                options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
+            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -380,9 +379,48 @@ class CalDB:
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
-        elif dtype_label in ['FlatField'] and frame_dict['DPAMNAME'] in ['POL0', 'POL45']:
-            # filter by DPAM
+        elif dtype_label in ['FlatField']:
+            # filter by color filter and DPAM - flats exist for IMAGING, POL0, and POL45 configurations
+            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
+            if frame_dict['DPAMNAME'] in ['IMAGING', 'POL0', 'POL45']:
+                options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['DispersionModel']:
+            # filter by prism (DPAM) and color filter (CFAM) - different prisms have different dispersion profiles
             options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['MuellerMatrix']:
+            # filter by color filter - polarimetric properties are band-dependent
+            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['NDMuellerMatrix']:
+            # filter by ND filter (FPAM) - ND225 and ND475 have distinct Mueller matrices
+            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=False)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['SpecFluxCal']:
+            # filter by color filter and DPAM - same logic as FluxcalFactor
+            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
+            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['SlitTransmission']:
+            # filter by slit mask (FSAM) - different slits have distinct transmission profiles
+            options = self.filter_calib(calibdf, "FSAMNAME", frame_dict['FSAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
