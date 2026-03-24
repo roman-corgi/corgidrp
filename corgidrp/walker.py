@@ -407,7 +407,7 @@ def guess_template(dataset):
         if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l3_to_l4_pol.json"
         elif image.ext_hdr['DPAMNAME'] == 'PRISM3':
-            if image.pri_hdr['VISTYPE'] != 'CGIVST_CAL_SPEC_TGTREF': #image.ext_hdr['FSMLOS'] == "1":
+            if image.pri_hdr['VISTYPE'] != 'CGIVST_CAL_SPEC_TGTREF':
                 # coronagraphic spec obs - PSF subtraction
                 recipe_filename = "l3_to_l4_psfsub_spec.json"
             else:
