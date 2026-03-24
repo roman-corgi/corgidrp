@@ -1393,6 +1393,8 @@ def test_star_pos():
     ext_hdr['WV0_X'], ext_hdr['WV0_Y'] = 38, 42
     # Add expected wavelength for a satellite spot (for UT, it could be any)
     ext_hdr['WAVLEN0'] = 753.83
+    # Add custom vistype
+    pri_hdr['VISTYPE'] = 'CGIVST_CAL_SPEC_TGTREF'
     # Arbitrary number of images
     image_list = []
     for _ in range(12):
