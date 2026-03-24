@@ -263,14 +263,14 @@ def setup_module():
         df = pd.read_csv(filepath)
         return [df[col].tolist() for col in df.columns]
     
-    pathname = os.path.join('tests','e2e_tests','CAR-121_AUX')
+    pathname = os.path.join('tests','e2e_tests','CAR-121_AUX') 
     exptimes = []
     gains = []
     #numframes = []
     tot_numframes = 0
     types = []
     auxfiles = []
-    for f in os.listdir(pathname):
+    for f in sorted(os.listdir(pathname)): # AUX files: observations will be made in numerical ordering according to aux filename
         cols = read_csv_columns(os.path.join(pathname, f))
         #auxfiles += len(cols[0]) * [f[:-4]]
         for i in range(len(cols[0])):
@@ -307,6 +307,10 @@ def setup_module():
     exptimes += [10]*700
     gains += [5000]*700 # actually, 50 frames each for 14 different values, but doesn't matter for RAM testing
     tot_numframes += 700
+    
+    # mean frame:  30
+    # Nonlin:  mean frame 30 + 110 unity-gain frames + 726 >1-gain frames = 866 frames
+    # kgain:  mean frame 30 + 110 unity-gain frames = 140 frames
 
     idx_frame = 0
     filename_list = []

@@ -522,13 +522,13 @@ def run_recipe(recipe, save_recipe_file=True):
                 frame.ext_hdr["RECIPE"] = json_dump
         # execute each pipeline step
         print('Executing recipe: {0}'.format(recipe['name']))
-        print('number of frames: ', len(filelist))
+        if type(filelist) == list:
+            print('number of frames: ', len(filelist))
         if ram_increment_bool and len(filelist_chunks) > 1:
             print('Processing frames in chunks of {0} frames'.format(corgidrp.chunk_size))
         if ram_heavy_bool:
             print('Processing frames in RAM-heavy mode (data not loaded into memory until necessary, one frame at a time)')
         for i, step in enumerate(recipe["steps"]):
-            tracemalloc.start()
             print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
             if step["name"].lower() == "save":
                 # special save instruction

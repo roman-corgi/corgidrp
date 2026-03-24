@@ -302,7 +302,16 @@ def sort_pupilimg_frames(
     mean_frame_list = []
 
     n_mean_frame = 0
-    for frame in split_exptime[0][idx_mean_frame]:
+    # sorter can find frames that satisfy sorting constraints from different aux files which are not intended to be grouped together
+    # Require sets of frames to be from one AUXFILE (the largest such set) if possible
+    mn_fr_aux_sets, aux_vals = split_exptime[0][idx_mean_frame].split_dataset(prihdr_keywords=['AUXFILE'])
+    aux_set_lengths = [len(s) for s in mn_fr_aux_sets]
+    if len(aux_set_lengths) == 0:
+        mean_frames = split_exptime[0][idx_mean_frame] # no AUXFILE value, so use original split_exptime[0][idx_mean_frame]
+    else:
+        max_aux_ind = np.argmax(aux_set_lengths)
+        mean_frames = mn_fr_aux_sets[max_aux_ind]
+    for frame in mean_frames:
         if extract_datetime(frame.ext_hdr['DATETIME']) in frame_id_mean_frame:
             exptime_mean_frame = frame.ext_hdr['EXPTIME']
             # Update keyword OBSNAME
@@ -323,8 +332,7 @@ def sort_pupilimg_frames(
         raise Exception('Unrecognized calibration type (expected k-gain, non-lin)')
 
     # Remove MNFRAME frames from unity gain frames
-    split_exptime[0].remove(split_exptime[0][idx_mean_frame])
-    split_exptime[1].remove(split_exptime[1][idx_mean_frame])
+    split_exptime[0].remove(mean_frames)
     # in the datasets, use the AUXFILE with the most frames unless the specific AUXFILE name available
     unity_gain_exptimes_auxs = []
     for dataset in split_exptime[0]:
@@ -359,10 +367,11 @@ def sort_pupilimg_frames(
                 frame.pri_hdr['OBSNAME'] = 'KGAIN'
                 cal_frame_list += [frame]
                 n_kgain += 1
-
+    kgain_exptimes = np.delete(exptime_cons, np.array(del_rep_inds_tot).astype(int)).astype(float)
+    kgain_frame_numbers = np.delete(count_cons, np.array(del_rep_inds_tot).astype(int)).astype(int)
     sorting_summary += (f'K-gain has {n_kgain} unity frames with exposure ' +
-        f'times {list(np.delete(exptime_cons, np.array(del_rep_inds_tot).astype(int)))} seconds with ' +
-        f'{list(np.delete(count_cons, np.array(del_rep_inds_tot).astype(int)))} frames each. ')
+        f'times {list(kgain_exptimes)} seconds with ' +
+        f'{list(kgain_frame_numbers)} frames each. ')
 
     # Non-unity gain frames for Non-linearity
     if cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':
@@ -400,10 +409,10 @@ def sort_pupilimg_frames(
                         frame.pri_hdr['OBSNAME'] = 'NONLIN'
                         cal_frame_list += [frame]
                         n_nonlin += 1
-            nonlin_emgain += [split_cmdgain[1][idx_gain_set]]
+            nonlin_emgain += [split_cmdgain[1][idx_gain_set].astype(float)]
 
-            sorting_summary += (f'Non-linearity has {n_nonlin} frames with gains ' +
-                f'{nonlin_emgain}')
+        sorting_summary += (f'Non-linearity has {n_nonlin} frames with gains ' +
+            f'{nonlin_emgain}')
 
     history = (f'Dataset to calibrate {cal_type.upper()}. A sorting algorithm ' +
         'based on the constraints that NFRAMES, EXPTIME and CMDGAIN have when collecting ' +
