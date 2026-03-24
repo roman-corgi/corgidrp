@@ -159,10 +159,11 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image.pri_hdr.set('FRAMET', str(frame_exptime_sec[ibatch]))
         new_image.ext_hdr.set('EXPTIME', frame_exptime_sec[ibatch])
         new_image.pri_hdr.set('PA_APER',rotation[ibatch])
+        new_image.pri_hdr.set('VISTYPE', 'CGIVST_CAL_TGTREF_PHOT') # tip/tilt enabled only in coronagraphic images
         new_image.ext_hdr.set('FSMPRFL','NFOV')
         new_image.ext_hdr.set('LSAMNAME','NFOV')
         new_image.ext_hdr.set('CFAMNAME','1F')
-        new_image.ext_hdr.set('FSMLOS', "1") # tip/tilt enabled only in coronagraphic images
+        new_image.ext_hdr.set('FSMLOS', "1")
         new_image.ext_hdr.set('FPAMNAME', 'HLC12_C2R1')
         new_image.ext_hdr.set('EACQ_ROW', big_cols/2.0)
         new_image.ext_hdr.set('EACQ_COL', big_cols/2.0)

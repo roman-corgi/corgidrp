@@ -121,10 +121,12 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         frame_info = f"L3 Frame {i}"
         #simulation seems to be done without coronagraph
         frame.ext_hdr['FSMLOS'] = "1"
+        frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_SPEC_TGTREF'
         check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l3_.fits', frame_info, logger, data_level = 'l3_')
         check_dimensions(frame.data, (125, 125), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3', 'FSMLOS' : "1"}, frame_info, logger)
+        verify_header_keywords(frame.pri_hdr, {'VISTYPE' : 'CGIVST_CAL_SPEC_TGTREF'}, frame_info, logger)
         verify_header_keywords(frame.pri_hdr, {'PSFREF'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'SATSPOTS'}, frame_info, logger)
         logger.info("")

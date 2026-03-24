@@ -177,8 +177,8 @@ def convert_spec_to_flux(input_dataset, fluxcal):
         if 'SPEC' not in frame.hdu_list:
             raise ValueError("Input dataset does not contain a 'SPEC' extension.")
 
-        is_coron = frame.ext_hdr.get('FSMLOS') == "1" # using FSMLOS=1 to check if the image is coronagraphic
-        if is_coron:
+        is_coron = frame.pri_hdr.get('VISTYPE') # using VISTYPE keyword to check if the image is coronagraphic
+        if is_coron in ['CGIVST_CAL_SPEC_TGTREF','CGIVST_CAL_TGTREF_PHOT']:
             if not frame.hdu_list['SPEC'].header.get('CTCOR', False):
                 raise ValueError("Core throughput correction must be applied before convert_spec_to_flux for coronagraphic images (missing CTCOR flag).")
 
