@@ -348,10 +348,10 @@ def guess_template(dataset):
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
             chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_TGTREF':
-            recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b_spec.json","l2b_to_l3.json","l3_to_l4_psfsub_spec.json"]
+            recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b_spec.json","l2b_to_l3.json","l3_to_l4_noncoron_spec.json"]
             chained = True
-        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TGTREF_PHOT':
-            recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b.json","l2b_to_l3.json","l3_to_l4.json"]
+        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TGTREF_PHOT' and image.ext_hdr['DPAMNAME'] not in ['POL0','POL45']:
+            recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b.json","l2b_to_l3.json","l3_to_l4_nopsfsub.json"]
             chained = True
         else:
             recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
@@ -407,14 +407,14 @@ def guess_template(dataset):
         if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l3_to_l4_pol.json"
         elif image.ext_hdr['DPAMNAME'] == 'PRISM3':
-            if image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_TGTREF': #image.ext_hdr['FSMLOS'] == "1":
+            if image.pri_hdr['VISTYPE'] != 'CGIVST_CAL_SPEC_TGTREF': #image.ext_hdr['FSMLOS'] == "1":
                 # coronagraphic spec obs - PSF subtraction
                 recipe_filename = "l3_to_l4_psfsub_spec.json"
             else:
                 # noncoronagraphic spec obs - no PSF subtraction
                 recipe_filename = "l3_to_l4_noncoron_spec.json" 
         else:
-            if image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TGTREF_PHOT':
+            if image.pri_hdr['VISTYPE'] != 'CGIVST_CAL_TGTREF_PHOT':
                 # coronagraphic obs - PSF subtraction
                 recipe_filename = "l3_to_l4.json"
             else:

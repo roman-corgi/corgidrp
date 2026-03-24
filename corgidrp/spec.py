@@ -1319,7 +1319,7 @@ def star_pos_spec(
         
         vistype = img.pri_hdr['VISTYPE']
         # shift of star location only for coronagraphic observations
-        if vistype == 'CGIVST_CAL_SPEC_TGTREF':
+        if vistype != 'CGIVST_CAL_SPEC_TGTREF':
             # Conversion from EXCAM pixels to milliarsec
             plate_scale_mas = img.ext_hdr['PLTSCALE']
             # Conversion from radians to milliarsec (mas/rad)

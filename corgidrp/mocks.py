@@ -649,7 +649,6 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CRVAL2'] = 0.
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
-
     errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
 
     return prihdr, exthdr, errhdr, dqhdr
