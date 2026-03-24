@@ -420,10 +420,10 @@ def sort_pupilimg_frames(
                         frame.pri_hdr['OBSNAME'] = 'NONLIN'
                         cal_frame_list += [frame]
                         n_nonlin += 1
-            nonlin_emgain += [split_cmdgain[1][idx_gain_set].astype(float)]
+            nonlin_emgain += [split_cmdgain[1][idx_gain_set]]
 
         sorting_summary += (f'Non-linearity has {n_nonlin} frames with gains ' +
-            f'{np.array(nonlin_emgain).tolist()}') #gets rid of np.float64() around each number
+            f'{nonlin_emgain}') #gets rid of np.float64() around each number
 
     history = (f'Dataset to calibrate {cal_type.upper()}. A sorting algorithm ' +
         'based on the constraints that the number of frames, EXPTIME and EMGAIN_C have when collecting ' +
