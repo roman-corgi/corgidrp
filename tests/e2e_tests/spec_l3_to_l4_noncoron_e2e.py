@@ -82,6 +82,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
         
         # Create dataset with mock headers and noise
         pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
+        pri_hdr["VISTYPE"] = 'CGIVST_CAL_SPEC_TGTREF'
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
         ext_hdr["FSMLOS"] = "0"
