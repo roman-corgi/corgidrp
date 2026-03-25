@@ -62,6 +62,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
         # Fix dtypes
         for file in saved_files:
             with fits.open(file, mode='update') as hdul:
+                hdul[0].header['VISTYPE'] = 'CGIVST_CAL_SPEC_TGTREF'
                 if 'ISPC' in hdul[1].header:
                     hdul[1].header['ISPC'] = int(hdul[1].header['ISPC'])
         l3_dataset_with_filenames = Dataset(saved_files)
@@ -81,6 +82,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
         
         # Create dataset with mock headers and noise
         pri_hdr, ext_hdr, errhdr, dqhdr = create_default_L3_headers()
+        pri_hdr["VISTYPE"] = 'CGIVST_CAL_SPEC_TGTREF'
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
         ext_hdr["FSMLOS"] = "0"

@@ -425,7 +425,8 @@ def test_compute_spec_flux_ratio_single_rotation():
 
     host_ds.ext_hdr['FSMLOS'] = "0"
     comp_ds.ext_hdr['FSMLOS'] = "1"
-
+    host_ds.pri_hdr['VISTYPE'] = 'CGIVST_CAL_SPEC_TGTREF'
+    
     # Place the companion at a valid WV0 location 
     comp_ds.ext_hdr.setdefault('STARLOCX', 0.0)
     comp_ds.ext_hdr.setdefault('STARLOCY', 0.0)
@@ -510,7 +511,8 @@ def test_compute_spec_flux_ratio_weighted():
 
     host_comb_image.ext_hdr['FSMLOS'] = "0"
     comp_comb_image.ext_hdr['FSMLOS'] = "1"
-
+    host_comb_image.pri_hdr['VISTYPE'] = 'CGIVST_CAL_SPEC_TGTREF'
+    
     # Apply core-throughput correction to the combined companion spectrum
     ct_cal = create_ct_cal(fwhm_mas=50)
     fpam_fsam_cal = create_mock_fpamfsam_cal()
