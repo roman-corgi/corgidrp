@@ -132,12 +132,14 @@ def test_l1_to_fluxcal(e2edata_path, e2eoutput_path):
     # define the raw science data to process
     l1_data_filelist = [os.path.join(sci_datadir, os.listdir(sci_datadir)[i]) for i in range(len(os.listdir(sci_datadir))) if os.listdir(sci_datadir)[i].endswith("l1_.fits")] 
 
-    ## fix some headers introduced in corgisim
+    ## delete some headers introduced in corgisim that aren't part of real data
     for filename in l1_data_filelist:
         with fits.open(filename) as hdulist:
             prihdr = hdulist[0].header
-            del prihdr['SATSPOTS']
-            del prihdr['COMMENT']
+            if 'SATSPOTS' in prihdr:
+                del prihdr['SATSPOTS']
+            if 'COMMENT' in prihdr:
+                del prihdr['COMMENT']
             hdulist.writeto(filename, overwrite=True)
             
 
@@ -191,8 +193,11 @@ if __name__ == "__main__":
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1-> FluxcalFactor end-to-end test")
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
+                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     outputdir = args.outputdir
+    e2edata_dir = args.e2edata_dir
     test_l1_to_fluxcal(e2edata_dir, outputdir)
