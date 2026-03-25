@@ -383,13 +383,37 @@ class CalDB:
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['FlatField']:
-            # filter by color filter and DPAM - flats exist for IMAGING, POL0, and POL45 configurations
-            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
-            if frame_dict['DPAMNAME'] in ['IMAGING', 'POL0', 'POL45']:
+            # DPAM: IMAGING, POL0, or POL45 only. All other DPAM settings, including PUPIL, use flat = ones
+            # CFAM: spectroscopy bands (2F/3F and their sub-filters) use flat = ones
+            # Sub-bands 1A/1B/1C and 4A/4B/4C are grouped with their corresponding broadband (1F, 4F) and pick most recently created
+            # FPAM: FPM-in data uses the open-substrate flat for the appropriate band pair (OPEN_12 or OPEN_34)
+            spectroscopy_cfams = {'2F', '3F', '2A', '2B', '2C', '3A', '3B', '3C', '3D', '3E', '3G'}
+            cfam_subband_map = {'1A': '1F', '1B': '1F', '1C': '1F',
+                                '4A': '4F', '4B': '4F', '4C': '4F'}
+            if frame_dict['DPAMNAME'] not in ['IMAGING', 'POL0', 'POL45'] or frame_dict['CFAMNAME'] in spectroscopy_cfams:
+                options = calibdf[calibdf["Filepath"].str.endswith("ones_flat.fits")]
+                if len(options) == 0:
+                    raise ValueError("No ones_flat.fits found in caldb at {0}".format(self.filepath))
+                result_index = options["MJD"].argmax()
+            else:
+                # sub-bands map to their broadband parent (no sub-band flats are planned)
+                cfam_lookup = cfam_subband_map.get(frame_dict['CFAMNAME'], frame_dict['CFAMNAME'])
+                options = self.filter_calib(calibdf, "CFAMNAME", cfam_lookup, err_if_none=False)
                 options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
-
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+                # FPM-in data uses the open-substrate flat for the appropriate band 
+                fpam = frame_dict['FPAMNAME']
+                if fpam in ['OPEN_12', 'OPEN_34']:
+                    fpam_lookup = fpam
+                elif fpam.startswith('SPC12') or fpam.startswith('HLC12'):
+                    fpam_lookup = 'OPEN_12'
+                elif fpam.startswith('SPC34') or fpam.startswith('HLC34'):
+                    fpam_lookup = 'OPEN_34'
+                else:
+                    # no dedicated flats for other FPAM positions (e.g. ND225, ND475)
+                    # fall back to the open-substrate flat for the appropriate band
+                    fpam_lookup = 'OPEN_12' if cfam_lookup == '1F' else 'OPEN_34'
+                options = self.filter_calib(options, "FPAMNAME", fpam_lookup, err_if_none=False)
+                result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['DispersionModel']:
             # filter by prism (DPAM) and color filter (CFAM) - different prisms have different dispersion
