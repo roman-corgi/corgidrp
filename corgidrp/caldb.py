@@ -349,8 +349,9 @@ class CalDB:
             calib_filepath = options.iloc[result_index, 0]
 
         elif dtype_label in ["Dark"]:
-            # general selection criteria for 2D image frames. Can use different selection criteria for different dtypes
+            # match on exposure time and EM gain
             options = self.filter_calib(calibdf, "EXPTIME", frame_dict["EXPTIME"], err_if_none=True)
+            options = self.filter_calib(options, "EMGAIN_C", frame_dict["EMGAIN_C"], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
