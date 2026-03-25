@@ -562,8 +562,8 @@ def test_l1_to_l4(e2edata_path, e2eoutput_path):
     logger.info("")
     
     # L1 data directories
-    analog_datadir = os.path.join(e2edata_path, "POL_sims", "corgisim_L1", "analog_data")
-    pc_datadir = os.path.join(e2edata_path, "POL_sims", "L1", "PC_data")
+    analog_datadir = os.path.join(e2edata_path, "POL_sims", "l1s_for_l4", "analog_data")
+    # pc_datadir = os.path.join(e2edata_path, "POL_sims", "L1", "PC_data")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     
     # Run the complete end-to-end test
