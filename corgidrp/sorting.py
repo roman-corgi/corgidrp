@@ -305,18 +305,23 @@ def sort_pupilimg_frames(
     # sorter can find frames that satisfy sorting constraints from different aux files which are not intended to be grouped together
     # Require sets of frames to be from one AUXFILE (the largest such set) if possible.
     # keep the AUXFILE set with all the same EMGAIN_C value of 1 which is biggest
+    aux_sets, aux_vals = dataset_in.split_dataset(prihdr_keywords=['AUXFILE'])
+    aux_val_to_use = []
+    for ind, s in enumerate(aux_sets):
+        s_sets, s_vals = s.split_dataset(exthdr_keywords=["EMGAIN_C"])
+        if len(s_sets) == 1 and s_vals[0] == 1.0:
+            aux_val_to_use.append(aux_vals[ind])
     mn_fr_aux_sets, aux_vals = split_exptime[0][idx_mean_frame].split_dataset(prihdr_keywords=['AUXFILE'])
     aux_set_lengths = [len(s) for s in mn_fr_aux_sets]
     aux_set_lengths_sorted_indices = np.argsort(aux_set_lengths)[::-1]
     aux_set_lengths = np.array(aux_set_lengths)[aux_set_lengths_sorted_indices]
-    if len(aux_set_lengths) == 0:
+    if len(aux_set_lengths) == 0 or not actual_visit:
         mean_frames = split_exptime[0][idx_mean_frame] # no AUXFILE value, so use original split_exptime[0][idx_mean_frame]
     else:
         for i in aux_set_lengths_sorted_indices:
             mean_frames = mn_fr_aux_sets[i]
-            mn_emgain_dsets, emgain_vals = mean_frames.split_dataset(exthdr_keywords=['EMGAIN_C'])
             max_aux_ind = i
-            if len(mn_emgain_dsets) == 1 and emgain_vals[0] == 1.0:
+            if aux_vals[aux_set_lengths_sorted_indices[i]] in aux_val_to_use:
                 break # keep the AUXFILE set with all the same EMGAIN_C value of 1 which is biggest
     for frame in mean_frames:
         if extract_datetime(frame.ext_hdr['DATETIME']) in frame_id_mean_frame:
