@@ -647,9 +647,9 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CDELT2'] = 0.
     exthdr['CRVAL1'] = 0.
     exthdr['CRVAL2'] = 0.
+    exthdr['NORTHANG'] = 0.
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
-
     errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
 
     return prihdr, exthdr, errhdr, dqhdr
@@ -3886,6 +3886,7 @@ def create_psfsub_dataset(n_sci,n_ref,pa_aper_degs,darkhole_scifiles=None,darkho
         exthdr['EACQ_COL'] = psfcentx
         exthdr['EACQ_ROW'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
+        exthdr['NORTHANG'] = pa_aper_degs[i]
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
         
         # Add WCS header info, if provided
