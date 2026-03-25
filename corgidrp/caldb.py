@@ -385,7 +385,7 @@ class CalDB:
         elif dtype_label in ['FlatField']:
             # DPAM: IMAGING, POL0, or POL45 only. All other DPAM settings, including PUPIL, use flat = ones
             # CFAM: spectroscopy bands (2F/3F and their sub-filters) use flat = ones
-            # Sub-bands 1A/1B/1C and 4A/4B/4C are grouped with their corresponding broadband (1F, 4F) and pick most recently created
+            # Sub-bands 1A/1B/1C and 4A/4B/4C are mapped to their corresponding broadband (1F, 4F)
             # FPAM: FPM-in data uses the open-substrate flat for the appropriate band pair (OPEN_12 or OPEN_34)
             spectroscopy_cfams = {'2F', '3F', '2A', '2B', '2C', '3A', '3B', '3C', '3D', '3E', '3G'}
             cfam_subband_map = {'1A': '1F', '1B': '1F', '1C': '1F',
@@ -396,21 +396,22 @@ class CalDB:
                     raise ValueError("No ones_flat.fits found in caldb at {0}".format(self.filepath))
                 result_index = options["MJD"].argmax()
             else:
-                # sub-bands map to their broadband parent (no sub-band flats are planned)
+                # sub-bands map to their corresponding broadband flat
                 cfam_lookup = cfam_subband_map.get(frame_dict['CFAMNAME'], frame_dict['CFAMNAME'])
                 options = self.filter_calib(calibdf, "CFAMNAME", cfam_lookup, err_if_none=False)
                 options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
-                # FPM-in data uses the open-substrate flat for the appropriate band 
+    
                 fpam = frame_dict['FPAMNAME']
                 if fpam in ['OPEN_12', 'OPEN_34']:
                     fpam_lookup = fpam
                 elif fpam.startswith('SPC12') or fpam.startswith('HLC12'):
+                    # FPM-in data uses the open substrate flat for the appropriate band 
                     fpam_lookup = 'OPEN_12'
                 elif fpam.startswith('SPC34') or fpam.startswith('HLC34'):
                     fpam_lookup = 'OPEN_34'
                 else:
-                    # no dedicated flats for other FPAM positions (e.g. ND225, ND475)
-                    # fall back to the open-substrate flat for the appropriate band
+                    # no dedicated flats for other FPAM positions (eg ND225, ND475)
+                    # fall back to the open substrate flat for the appropriate band
                     fpam_lookup = 'OPEN_12' if cfam_lookup == '1F' else 'OPEN_34'
                 options = self.filter_calib(options, "FPAMNAME", fpam_lookup, err_if_none=False)
                 result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -424,9 +425,8 @@ class CalDB:
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['MuellerMatrix']:
-            # filter by color filter and Wollaston
+            # filter by color filter
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
-            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
