@@ -8,8 +8,7 @@ import numpy as np
 from corgidrp.darks import calibrate_darks_lsq, CalDarksLSQException
 from corgidrp.detector import slice_section, imaging_area_geom, imaging_slice
 from corgidrp.mocks import create_synthesized_master_dark_calib, rename_files_to_cgi_format
-#from corgidrp.mocks import detector_areas_test as dat
-from corgidrp.detector import detector_areas as dat 
+from corgidrp.mocks import detector_areas_test as dat
 from corgidrp.data import DetectorNoiseMaps, DetectorParams, Dataset
 import shutil
 
