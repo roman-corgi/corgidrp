@@ -159,7 +159,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         # average/delete header keywords as L4 involves combination of multiple frames
         pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
         last_frame_keywords=['VISITID', 'MJDEND'],
-        first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2'],
+        first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2','NORTHANG'],
         deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
         invalid_keywords=[
                         #Primary header keywords
@@ -188,17 +188,18 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     return new_dataset
 
 
-def derotate_arr(data_arr,pa_aper_deg, xcen,ycen,new_center=None,astr_hdr=None,
+def derotate_arr(data_arr,northang_deg, xcen,ycen,new_center=None,astr_hdr=None,
                  is_dq=False,dq_round_threshold=0.05):
-    """Derotates an array based on the provided PA_APER angle, about the provided
+    """Derotates an array based on the provided NORTHANG angle, about the provided
     center. Treats DQ arrays specially, converting to float to do the rotation, 
     and converting back to np.int64 afterwards. DQ output becomes only zeros and
     ones, so detailed DQ flag information is not preserved.
 
     Args:
         data_arr (np.array): an array with 2-4 dimensions
-        pa_aper_deg (float): position angle (measured counter-clockwise) of the detector y axis from 
-            celestial north (degrees)
+        northang_deg (float): angle (measured counter-clockwise) of the detector y axis from 
+            celestial north (degrees). Calculated from the northangle of the astrometric cal frame and 
+            the PA_APER offset between the astrom cal frame and the science frame. 
         xcen (float): x-coordinate of center about which to rotate
         ycen (float): y-coordinate of center about which to rotate
         new_center (tuple, optional): tuple of x- and y- coordinate of the new center to shift to.
@@ -215,14 +216,14 @@ def derotate_arr(data_arr,pa_aper_deg, xcen,ycen,new_center=None,astr_hdr=None,
         data_arr = data_arr.astype(np.float32)
 
     if data_arr.ndim == 2:
-        derotated_arr = rotate(data_arr,pa_aper_deg,(xcen,ycen),
+        derotated_arr = rotate(data_arr,northang_deg,(xcen,ycen),
                                new_center=new_center,
                                astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
     
     elif data_arr.ndim == 3:
         derotated_arr = []
         for i,im in enumerate(data_arr):
-            derotated_im = rotate(im,pa_aper_deg,(xcen,ycen),
+            derotated_im = rotate(im,northang_deg,(xcen,ycen),
                                new_center=new_center,
                                astr_hdr=astr_hdr if (i==0) else None) # astr_hdr is corrected only once
         
@@ -235,7 +236,7 @@ def derotate_arr(data_arr,pa_aper_deg, xcen,ycen,new_center=None,astr_hdr=None,
         for s,set in enumerate(data_arr):
             derotated_set = []
             for i,im in enumerate(set):
-                derotated_im = rotate(im,pa_aper_deg,(xcen,ycen),
+                derotated_im = rotate(im,northang_deg,(xcen,ycen),
                                new_center=new_center,
                                astr_hdr=astr_hdr if (i==0 and s==0) else None) # astr_hdr is corrected only once
         
@@ -337,11 +338,11 @@ def prop_err_dq(sci_dataset,ref_dataset,mode,dq_thresh=1,new_center=None):
     derotated_dq_arr = []
     derotated_err_arr = []
     for i,frame in enumerate(sci_dataset):
-        pa_aper_deg = frame.pri_hdr['PA_APER']
+        northang_deg = frame.ext_hdr['NORTHANG']
         xcen, ycen = frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']
         
-        derotated_dq = derotate_arr(aligned_sci_dq_arr[i],pa_aper_deg, xcen,ycen,is_dq=True)
-        derotated_err = derotate_arr(aligned_sci_err_arr[i],pa_aper_deg, xcen,ycen)
+        derotated_dq = derotate_arr(aligned_sci_dq_arr[i],northang_deg, xcen,ycen,is_dq=True)
+        derotated_err = derotate_arr(aligned_sci_err_arr[i],northang_deg, xcen,ycen)
         
         derotated_dq_arr.append(derotated_dq)
         derotated_err_arr.append(derotated_err)
