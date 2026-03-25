@@ -355,6 +355,7 @@ def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20, dataset_copy=
             and will be discarded, Frame saturations equal to this argument are not discarded.
         dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
+    
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
         pruned_sat_fwcs (list): input sat_fwcs with corresponding saturated frame fwcs removed

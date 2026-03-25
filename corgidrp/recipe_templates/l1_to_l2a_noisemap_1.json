@@ -22,7 +22,8 @@
                 "KGain" : "AUTOMATIC, OPTIONAL"
             },
             "keywords" : {
-                "mode" : "full"
+                "mode" : "full",
+                "dataset_copy" : false
             }
         },
         {
