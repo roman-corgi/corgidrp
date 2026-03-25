@@ -201,7 +201,8 @@ def flat_division_pol(input_dataset, flat_fieldPOL0, flat_fieldPOL45):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        flat_field (corgidrp.data.FlatField): a master flat field to divide by
+        flat_fieldPOL0 (corgidrp.data.FlatField): a master flat field to divide by
+        flat_fieldPOL45 (corgidrp.data.FlatField): a master flat field to divide by
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
@@ -215,12 +216,12 @@ def flat_division_pol(input_dataset, flat_fieldPOL0, flat_fieldPOL45):
     #Ouptut file container. 
     output_frames = []
 
-    for flatdiv_dataset in split_dataset_list:
+    for flatdiv_dataset, val in zip(split_dataset_list, unique_vals):
 
         #Get the right flat: 
-        if unique_vals[0][0] == 'POL0':
+        if val == 'POL0':
             flat_field = flat_fieldPOL0
-        elif unique_vals[0][0] == 'POL45':
+        elif val == 'POL45':
             flat_field = flat_fieldPOL45
         else: #Throw error
             raise Exception('DPAMNAME value in input dataset should be either POL0 or POL45 for the flat division step function with polarization-dependent flats.')
