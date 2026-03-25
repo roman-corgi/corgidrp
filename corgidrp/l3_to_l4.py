@@ -1299,8 +1299,8 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         if len(unocculted_pol45_frames) == 0:
             raise ValueError(f"Input dataset must contain unocculted POL45 frame(s) for target {target_name}")
         
-        unocculted_pol0_img = unocculted_pol0_frames[0]
-        unocculted_pol45_img = unocculted_pol45_frames[0]
+        unocculted_pol0_img = combine_subexposures(data.Dataset(unocculted_pol0_frames), collapse="median")[0]
+        unocculted_pol45_img = combine_subexposures(data.Dataset(unocculted_pol45_frames), collapse="median")[0]
 
         # construct image for each polarization to pass into aper_phot function in order to obtain flux
         I_0_img = data.Image(unocculted_pol0_img.data[0], 
