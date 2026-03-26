@@ -268,19 +268,41 @@ def sort_pupilimg_frames(
     # Mean frame: split by EXPTIME
     idx_unity = np.where(np.array(split_cmdgain[1])==1)[0][0]
     split_exptime = split_cmdgain[0][idx_unity].split_dataset(exthdr_keywords=['EXPTIME'])
+    if actual_visit:
+        # sorter can find frames that satisfy sorting constraints from different aux files which are not intended to be grouped together
+        # Require sets of frames to be from one AUXFILE (the largest such set) if possible.
+        # keep the AUXFILE set with all the same EMGAIN_C value of 1 which is biggest
+        aux_sets, aux_vals = dataset_in.split_dataset(prihdr_keywords=['AUXFILE'])
+        aux_val_to_use = None
+        aux_set_size = 0 # initialize
+        for ind, s in enumerate(aux_sets):
+            s_sets, s_vals = s.split_dataset(exthdr_keywords=["EMGAIN_C"])
+            if len(s_sets) == 1 and s_vals[0] == 1.0:
+                if aux_val_to_use is not None and len(s) <= aux_set_size:
+                    continue
+                else:
+                    aux_val_to_use = aux_vals[ind]
+                    aux_set_to_use = aux_sets[ind]
+                    aux_set_size = len(s)
+        if aux_val_to_use is None:
+            raise ValueError('Actual visit must have an AUXFILE with all frames of unity EM gain.')
+        # frames coming from the AUXFILE with all unity-gain frames:
+        exptime_sets = aux_set_to_use.split_dataset(exthdr_keywords=['EXPTIME'])
+    else: 
+        exptime_sets = split_exptime
     # Get the set with the most frames
-    n_frames_list = np.zeros(len(split_exptime[0]))
-    for i_sub, subset in enumerate(split_exptime[0]):
-        n_frames_list[i_sub] = len(split_exptime[0][i_sub])
+    n_frames_list = np.zeros(len(exptime_sets[0]))
+    for i_sub, subset in enumerate(exptime_sets[0]):
+        n_frames_list[i_sub] = len(exptime_sets[0][i_sub])
     # Choice: choose the subset with the maximum number of frames
     idx_mean_frame = np.argmax(n_frames_list)
     frame_time_list = []
-    for dataset in split_exptime[0]:
+    for dataset in exptime_sets[0]:
         for frame in dataset:
             frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
     frame_time_sort = sorted(frame_time_list)
     mean_frame_time_list = []
-    for frame in split_exptime[0][idx_mean_frame]:
+    for frame in exptime_sets[0][idx_mean_frame]:
         mean_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
     # Choose the frames with consecutive time stamp values
     mean_frame_time_sort = np.array(mean_frame_time_list)
@@ -299,30 +321,10 @@ def sort_pupilimg_frames(
     idx_mean_frame_last = np.sum(count_cons[0:idx_mean_frame_cons+1]).astype(int)
     idx_mean_frame_first = idx_mean_frame_last - count_cons[idx_mean_frame_cons]
     frame_id_mean_frame = mean_frame_time_sort[idx_mean_frame_first:idx_mean_frame_last]
+    
     mean_frame_list = []
-
     n_mean_frame = 0
-    # sorter can find frames that satisfy sorting constraints from different aux files which are not intended to be grouped together
-    # Require sets of frames to be from one AUXFILE (the largest such set) if possible.
-    # keep the AUXFILE set with all the same EMGAIN_C value of 1 which is biggest
-    aux_sets, aux_vals = dataset_in.split_dataset(prihdr_keywords=['AUXFILE'])
-    aux_val_to_use = []
-    for ind, s in enumerate(aux_sets):
-        s_sets, s_vals = s.split_dataset(exthdr_keywords=["EMGAIN_C"])
-        if len(s_sets) == 1 and s_vals[0] == 1.0:
-            aux_val_to_use.append(aux_vals[ind])
-    mn_fr_aux_sets, aux_vals = split_exptime[0][idx_mean_frame].split_dataset(prihdr_keywords=['AUXFILE'])
-    aux_set_lengths = [len(s) for s in mn_fr_aux_sets]
-    aux_set_lengths_sorted_indices = np.argsort(aux_set_lengths)[::-1]
-    aux_set_lengths = np.array(aux_set_lengths)[aux_set_lengths_sorted_indices]
-    if len(aux_set_lengths) == 0 or not actual_visit:
-        mean_frames = split_exptime[0][idx_mean_frame] # no AUXFILE value, so use original split_exptime[0][idx_mean_frame]
-    else:
-        for i in aux_set_lengths_sorted_indices:
-            mean_frames = mn_fr_aux_sets[i]
-            max_aux_ind = i
-            if aux_vals[aux_set_lengths_sorted_indices[i]] in aux_val_to_use:
-                break # keep the AUXFILE set with all the same EMGAIN_C value of 1 which is biggest
+    mean_frames = exptime_sets[0][idx_mean_frame] 
     for frame in mean_frames:
         if extract_datetime(frame.ext_hdr['DATETIME']) in frame_id_mean_frame:
             exptime_mean_frame = frame.ext_hdr['EXPTIME']
@@ -344,29 +346,23 @@ def sort_pupilimg_frames(
         raise Exception('Unrecognized calibration type (expected k-gain, non-lin)')
 
     # Remove MNFRAME frames from unity gain frames
-    if len(aux_set_lengths) != 0:
+    mean_frames_datetime_list = []
+    for frame in mean_frames:
+        mean_frames_datetime_list.append(frame.ext_hdr['DATETIME'])
+    if actual_visit: 
         inds_to_remove = []
-        for ind, f in enumerate(split_exptime[0][idx_mean_frame]):
-            if f.pri_hdr['AUXFILE'] == aux_vals[max_aux_ind]:
+        for ind, f in enumerate(aux_set_to_use):
+            if extract_datetime(f.ext_hdr['DATETIME']) in frame_id_mean_frame:
                 inds_to_remove.append(ind)
-        split_exptime[0][idx_mean_frame].frames = np.delete(split_exptime[0][idx_mean_frame].frames, np.array(inds_to_remove))
-        split_exptime[0][idx_mean_frame].all_data = np.delete(split_exptime[0][idx_mean_frame].all_data, np.array(inds_to_remove))
-        split_exptime[0][idx_mean_frame].all_err = np.delete(split_exptime[0][idx_mean_frame].all_err, np.array(inds_to_remove))
-        split_exptime[0][idx_mean_frame].all_dq = np.delete(split_exptime[0][idx_mean_frame].all_dq, np.array(inds_to_remove))
+        aux_set_to_use.frames = np.delete(aux_set_to_use.frames, np.array(inds_to_remove))
+        aux_set_to_use.all_data = np.delete(aux_set_to_use.all_data, np.array(inds_to_remove))
+        aux_set_to_use.all_err = np.delete(aux_set_to_use.all_err, np.array(inds_to_remove))
+        aux_set_to_use.all_dq = np.delete(aux_set_to_use.all_dq, np.array(inds_to_remove))
     else:
         split_exptime[0].remove(split_exptime[0][idx_mean_frame])
 
-    # in the datasets, use the AUXFILE with the most frames unless the specific AUXFILE name available
-    unity_gain_exptimes_auxs = []
-    for dataset in split_exptime[0]:
-        subs, vals = dataset.split_dataset(prihdr_keywords=['AUXFILE'])
-        subs_lengths = [len(sub) for sub in subs]
-        if len(subs_lengths) == 0:
-            unity_gain_exptimes_auxs.append(dataset)  # no AUXFILE value, so use the dataset as is
-        else:
-            dominant_ind = np.argmax(subs_lengths) # works if no EM gain cal files included in input dataset, but in general, they will be
-            unity_gain_exptimes_auxs.append(subs[dominant_ind])
-    inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, unity_gain_filepath_list = sort_remove_frames(unity_gain_exptimes_auxs, cal_type=cal_type, actual_visit=actual_visit)
+    # K gain frames in same AUXFILE used for mean frame
+    inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, unity_gain_filepath_list = sort_remove_frames([aux_set_to_use], cal_type=cal_type, actual_visit=actual_visit)
     if actual_visit and (inds_leave_out is None or del_rep_inds_tot is None):
         raise Exception('No repeated exposure time sets found within the frames for k gain calibration.')
     elif not actual_visit and (cal_type.lower() == 'k-gain' or cal_type.lower() == 'kgain'):
@@ -375,21 +371,21 @@ def sort_pupilimg_frames(
         del_rep_inds_tot = []
 
     # Sort unity gain filenames
-    # Update OBSNAME and take profit to check files are in the list
+    # Update OBSNAME and check files are in the list
     n_kgain = 0
     cal_frame_list = []
     index = -1 #initiate
-    for subset in unity_gain_exptimes_auxs:
-        for i in range(len(subset)):
-            index += 1
-            frame = subset.frames[i]
-            if frame.filepath in unity_gain_filepath_list:
-                if index in inds_leave_out:
-                    continue
-                vistype = frame.pri_hdr['VISTYPE']
-                frame.pri_hdr['OBSNAME'] = 'KGAIN'
-                cal_frame_list += [frame]
-                n_kgain += 1
+    # for subset in unity_gain_wo_mean_frames:
+    for i in range(len(aux_set_to_use)):
+        index += 1
+        frame = aux_set_to_use.frames[i]
+        if frame.filepath in unity_gain_filepath_list:
+            if index in inds_leave_out:
+                continue
+            vistype = frame.pri_hdr['VISTYPE']
+            frame.pri_hdr['OBSNAME'] = 'KGAIN'
+            cal_frame_list += [frame]
+            n_kgain += 1
     kgain_exptimes = np.delete(exptime_cons, np.array(del_rep_inds_tot).astype(int)).astype(float)
     kgain_frame_numbers = np.delete(count_cons, np.array(del_rep_inds_tot).astype(int)).astype(int)
     sorting_summary += (f'K-gain has {n_kgain} unity frames with exposure ' +
@@ -435,7 +431,7 @@ def sort_pupilimg_frames(
             nonlin_emgain += [split_cmdgain[1][idx_gain_set]]
 
         sorting_summary += (f'Non-linearity has {n_nonlin} frames with gains ' +
-            f'{nonlin_emgain}') #gets rid of np.float64() around each number
+            f'{nonlin_emgain}') 
 
     history = (f'Dataset to calibrate {cal_type.upper()}. A sorting algorithm ' +
         'based on the constraints that the number of frames, EXPTIME and EMGAIN_C have when collecting ' +
