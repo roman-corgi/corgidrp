@@ -274,6 +274,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
             if 'ISPC' in fits_file[1].header:
                 fits_file[1].header['ISPC'] = int(fits_file[1].header['ISPC'])
             print(fits_file[1].header['EXPTIME'])
+            fits_file[0].header['VISTYPE'] = 'CGIVST_TDD_OBS'
             if fits_file[1].header['EXPTIME'] >= 100:
                 fits_file[1].data = fits_file[1].data/10.
                 fits_file[1].header['EXPTIME'] = fits_file[1].header['EXPTIME']/10.
@@ -466,7 +467,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
             check_dimensions(img.data, (125,125), frame_info, logger)
             
             # Verify WCS headers exist (from create_wcs step)
-            wcs_keys = ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2', 'CTYPE1', 'CTYPE2']
+            wcs_keys = ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2', 'CTYPE1', 'CTYPE2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2','PLTSCALE','NORTHANG' ]
             missing_wcs = [k for k in wcs_keys if k not in img.ext_hdr]
             if not missing_wcs:
                 logger.info(f"{frame_info}: WCS headers present ({', '.join(wcs_keys)}). PASS")

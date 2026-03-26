@@ -550,7 +550,8 @@ def create_default_L2b_headers(arrtype="SCI"):
     errhdr['BUNIT']         = 'photoelectron'   # Unit of error map
     errhdr['KGAINPAR']      = exthdr['KGAINPAR'] # Calculated kgain parameter (copied from exthdr)
     errhdr['KGAIN_ER']      = exthdr['KGAIN_ER'] # Kgain error (copied from exthdr)
-    errhdr['RN']            = exthdr['RN']       # Kgain error (copied from exthdr)
+    errhdr['RN']            = exthdr['RN']       # Read Noise (copied from exthdr)
+    errhdr['RN_ERR']        = exthdr['RN_ERR']   # Read Noise error (copied from exthdr)
     errhdr['DESMEAR']       = exthdr['DESMEAR']  # Whether desmearing was used (copied from exthdr)
     errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
 
@@ -647,9 +648,9 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CDELT2'] = 0.
     exthdr['CRVAL1'] = 0.
     exthdr['CRVAL2'] = 0.
+    exthdr['NORTHANG'] = 0.
     exthdr['PLTSCALE'] = 21.8             # mas/ pixel
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
-
     errhdr['LAYER_1']       = 'combined_error' # The type of error reported in this slice
 
     return prihdr, exthdr, errhdr, dqhdr
@@ -3001,16 +3002,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
     exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
     exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
-    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
-    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
-    exthdr['CTYPE1']   = 'RA---TAN'
-    exthdr['CTYPE2']   = 'DEC--TAN'
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600.  # Ensure platescale is defined
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
-    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
-    exthdr['CRVAL2']   = target_location[1]
     exthdr['BUNIT'] = 'photoelectron'
-    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr, err_hdr=errhdr)
    
     # Set filename
     ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
@@ -3168,15 +3161,7 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
     exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
     exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
     exthdr['EXPTIME']  = float(exptime)            # Ensure exptime is defined       # Ensure color_cor is defined
-    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
-    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
-    exthdr['CTYPE1']   = 'RA---TAN'
-    exthdr['CTYPE2']   = 'DEC--TAN'
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600.  # Ensure platescale is defined
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
-    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
-    exthdr['CRVAL2']   = target_location[1]
-    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr, err_hdr=errhdr)
    
     # Set filename
     ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])

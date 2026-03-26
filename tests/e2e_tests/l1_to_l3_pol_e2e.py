@@ -312,7 +312,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
                 logger.info(f"{frame_info}: Expected polarimetry datacube (2, N, N), got {img.data.shape}. FAIL")
             
             # Verify WCS headers exist (from create_wcs step)
-            wcs_keys = ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2', 'CTYPE1', 'CTYPE2']
+            wcs_keys = ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2', 'CTYPE1', 'CTYPE2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2','PLTSCALE','NORTHANG' ]
             missing_wcs = [k for k in wcs_keys if k not in img.ext_hdr]
             if not missing_wcs:
                 logger.info(f"{frame_info}: WCS headers present ({', '.join(wcs_keys)}). PASS")

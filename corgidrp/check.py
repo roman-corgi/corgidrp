@@ -991,11 +991,11 @@ def merge_headers(
                 break
         if sample is None:
             inv_val = "-999"
-        elif isinstance(sample, (int, np.integer)):
-            inv_val = -999
         # TODO: what to do about bool?
         elif isinstance(sample, bool):
             inv_val = False
+        elif isinstance(sample, (int, np.integer)):
+            inv_val = -999
         elif isinstance(sample, (float, np.floating)):
             inv_val = -999.0
         else:
@@ -1025,7 +1025,12 @@ def merge_headers(
                     values.append(h[key])
             if values:
                 any_true = any(bool(v) for v in values)
-                out_hdr[key] = int(any_true)
+                
+                all_bool = all(isinstance(v, bool) for v in values) # don't convert to int if it's all bools
+                if all_bool:
+                    out_hdr[key] = bool(any_true)
+                else:
+                    out_hdr[key] = int(any_true)
 
     # All other keywords: must be identical across frames, error if not
     exempt = (first_frame_keywords | last_frame_keywords | averaged_keywords |
