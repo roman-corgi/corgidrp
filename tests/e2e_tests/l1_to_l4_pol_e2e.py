@@ -13,18 +13,15 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
-import corgidrp.astrom as astrom
 import corgidrp.check as check
 from corgidrp import corethroughput
 import shutil
 import logging
 import traceback
-from corgidrp.check import (check_filename_convention, check_dimensions, 
-                           verify_hdu_count, verify_header_keywords, 
-                           get_latest_cal_file)
+from corgidrp.check import (check_filename_convention,
+                           verify_hdu_count, verify_header_keywords,
+                           )
 import warnings
-
-from tests.e2e_tests.l1_to_l3_pol_e2e import run_l1_to_l3_e2e_test
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
