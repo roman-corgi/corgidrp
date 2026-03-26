@@ -487,7 +487,7 @@ def update_to_l3(input_dataset):
 
     for frame in updated_dataset:
         # Apply header rules to each frame
-        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(data.Dataset([frame]))
+        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(data.Dataset([frame]), invalid_keywords=[])
         frame.pri_hdr = pri_hdr
         frame.ext_hdr = ext_hdr
         frame.err_hdr = err_hdr
