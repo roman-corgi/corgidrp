@@ -147,6 +147,20 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     # import psutil 
     # process = psutil.Process()
 
+    split_dataset, unique_vals = input_dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+
+    if len(unique_vals) > 1: 
+        output_frames = []
+        for dataset in split_dataset:
+            pc_mean_dataset = get_pc_mean(dataset, pc_master_dark=pc_master_dark, T_factor=T_factor, pc_ecount_max=pc_ecount_max, 
+                                          niter=niter, mask_filepath=mask_filepath, safemode=safemode, inputmode=inputmode, 
+                                          bin_size=bin_size, dataset_copy=dataset_copy)
+            output_frames.extend(list(pc_mean_dataset.frames))
+        output_dataset = data.Dataset(output_frames)
+        return output_dataset
+
+ 
+
     if not isinstance(niter, (int, np.integer)) or niter < 1:
             raise PhotonCountException('niter must be an integer greater than '
                                         '0')
