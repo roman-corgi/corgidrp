@@ -51,7 +51,7 @@
             "name" : "flat_division_pol",
             "calibs" : {
                 "FlatFieldPOL0" : "AUTOMATIC",
-                "FlatFieldPOL45": "AUTOMATIC",
+                "FlatFieldPOL45": "AUTOMATIC"
             }
         },
         {

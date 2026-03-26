@@ -20,9 +20,10 @@
             }
         },
         {
-            "name" : "flat_division",
+            "name" : "flat_division_pol",
             "calibs" : {
-                "FlatField" : "AUTOMATIC"
+                "FlatFieldPOL0" : "AUTOMATIC",
+                "FlatFieldPOL45": "AUTOMATIC"
             }
         },
         {
