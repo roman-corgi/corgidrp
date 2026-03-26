@@ -193,6 +193,70 @@ def flat_division(input_dataset, flat_field):
 
     return flatdiv_dataset
 
+
+def flat_division_pol(input_dataset, flat_fieldPOL0, flat_fieldPOL45):
+    """
+
+    Divide the dataset by the master flat field.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        flat_fieldPOL0 (corgidrp.data.FlatField): a master flat field to divide by
+        flat_fieldPOL45 (corgidrp.data.FlatField): a master flat field to divide by
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
+    """
+
+     # copy of the dataset
+    flatdiv_dataset0 = input_dataset.copy()
+
+    split_dataset_list, unique_vals = flatdiv_dataset0.split_dataset(exthdr_keywords=['DPAMNAME'])
+
+    #Ouptut file container. 
+    output_frames = []
+
+    for flatdiv_dataset, val in zip(split_dataset_list, unique_vals):
+
+        #Get the right flat: 
+        if val == 'POL0':
+            flat_field = flat_fieldPOL0
+        elif val == 'POL45':
+            flat_field = flat_fieldPOL45
+        else: #Throw error
+            raise Exception('DPAMNAME value in input dataset should be either POL0 or POL45 for the flat division step function with polarization-dependent flats.')
+        
+        #Divide by the master flat
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning) # catch divide by zero
+            flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
+
+        #Find where the flat_field is 0 and set a DQ flag: 
+        where_zero = np.where(flat_field.data == 0)
+        flatdiv_dq = copy.deepcopy(flatdiv_dataset.all_dq)
+        for i in range(len(flatdiv_dataset)):
+            flatdiv_dq[i][where_zero] = np.bitwise_or(flatdiv_dataset[i].dq[where_zero], 4)
+
+        # propagate the error of the master flat frame
+        if hasattr(flat_field, "err"):
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning) # catch divide by zero
+                flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
+                flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
+        else:
+            raise Warning("no error attribute in the FlatField")
+
+        history_msg = "Flat calibration done using Flat field {0}".format(flat_field.filename)
+
+        # update the output dataset with this new flat calibrated data and update the history
+        flatdiv_dataset.update_after_processing_step(history_msg,new_all_data=flatdiv_cube, new_all_dq = flatdiv_dq)
+
+        output_frames.extend(flatdiv_dataset.frames)
+
+    output_dataset = data.Dataset(output_frames)
+
+    return output_dataset
+
 def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_rms_thres=None, tt_bias_thres=None, discard_bad=True):
     """
 
