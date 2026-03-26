@@ -101,6 +101,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
     ptc = np.column_stack([signal_array, noise_array])
+    ext_hdr['RN'] = 100
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                       input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
@@ -266,7 +267,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
     logger.info('')
 
-    logger.info('Step 1: Running L2a to L2b polarimetry recipe...')
+    logger.info('Step 2: Running L2a to L2b polarimetry recipe...')
     with warnings.catch_warnings():  
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
         walker.walk_corgidrp(l2a_filelist, "", l3_outputdir)
@@ -276,8 +277,8 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     logger.info(f'L1 to L2b complete. Generated {len(l2b_filelist)} L2b files.')
     logger.info('')
     
-    # Step 2: L2b -> L3 
-    logger.info('Step 2: Running L2b to L3 polarimetry recipe...')
+    # Step 3: L2b -> L3 
+    logger.info('Step 3: Running L2b to L3 polarimetry recipe...')
     walker.walk_corgidrp(l2b_filelist, "", l3_outputdir)
     logger.info('L2b to L3 complete.')
     logger.info('')
