@@ -153,9 +153,20 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     # Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
-    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
-    this_caldb.create_entry(flat)
+    #Mock up some important header things
+    ext_hdr_flat0 = ext_hdr.copy()
+    ext_hdr_flat0['DPAMNAME'] = 'POL0'
+    pri_hdr_flat45 = pri_hdr.copy()
+    pri_hdr_visitID = str(int(pri_hdr['VISITID']) + 1)  #Change the visit id so the filename will be different
+    pri_hdr_flat45['VISITID'] = pri_hdr_visitID
+    ext_hdr_flat45 = ext_hdr.copy()
+    ext_hdr_flat45['DPAMNAME'] = 'POL45'
+    flat0 = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    flat45 = data.FlatField(flat_dat, pri_hdr=pri_hdr_flat45, ext_hdr=ext_hdr_flat45, input_dataset=mock_input_dataset)
+    mocks.rename_files_to_cgi_format(list_of_fits=[flat0, flat45], output_dir=calibrations_dir, level_suffix="flt_cal")
+    this_caldb.create_entry(flat0)
+    this_caldb.create_entry(flat45)
+
 
     # Bad pixel map
     with fits.open(bp_path) as hdulist:
@@ -182,7 +193,8 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     logger.info(f"  - DetectorNoiseMaps: {noise_map.filename}")
     if sample_l1_files:
         logger.info(f"  - Dark: {dark_cal.filename}")
-    logger.info(f"  - FlatField: {flat.filename}")
+    logger.info(f"  - FlatField POL0: {flat0.filename}")
+    logger.info(f"  - FlatField POL45: {flat45.filename}")
     logger.info(f"  - BadPixelMap: {bp_map.filename}")
     logger.info(f"  - AstrometricCalibration: {astrom_cal.filename}")
     logger.info('')
@@ -244,10 +256,20 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     logger.info('='*80)
     
     # Step 1: L1 -> L2b
-    logger.info('Step 1: Running L1 to L2b recipe...')
+    logger.info('Step 1: Running L1 to L2a recipe...')
     with warnings.catch_warnings():  
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-        walker.walk_corgidrp(input_data_filelist, "", l3_outputdir, template="l1_to_l2b.json")
+        walker.walk_corgidrp(input_data_filelist, "", l3_outputdir)
+
+    l2a_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2a.fits')]
+    l2a_filelist = [os.path.join(l3_outputdir, f) for f in l2a_files]
+    logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
+    logger.info('')
+
+    logger.info('Step 1: Running L2a to L2b polarimetry recipe...')
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.walk_corgidrp(l2a_filelist, "", l3_outputdir)
     
     l2b_files = [f for f in os.listdir(l3_outputdir) if f.endswith('_l2b.fits')]
     l2b_filelist = [os.path.join(l3_outputdir, f) for f in l2b_files]
@@ -439,8 +461,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
-    outputdir = thisfile_dir
+    e2edata_dir = '/Users/maxmb/Data/corgi/E2E_Test_Data/'
+    outputdir = '/Users/maxmb/Data/corgi/e2e_output/'
 
     ap = argparse.ArgumentParser(description="run the l1->l3 polarimetry end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
