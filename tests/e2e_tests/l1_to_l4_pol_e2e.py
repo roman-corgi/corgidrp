@@ -159,9 +159,20 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     # Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
-    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
-    this_caldb.create_entry(flat)
+    #Mock up some important header things
+    ext_hdr_flat0 = ext_hdr.copy()
+    ext_hdr_flat0['DPAMNAME'] = 'POL0'
+    pri_hdr_flat45 = pri_hdr.copy()
+    pri_hdr_visitID = str(int(pri_hdr['VISITID']) + 1)  #Change the visit id so the filename will be different
+    pri_hdr_flat45['VISITID'] = pri_hdr_visitID
+    ext_hdr_flat45 = ext_hdr.copy()
+    ext_hdr_flat45['DPAMNAME'] = 'POL45'
+    flat0 = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    flat45 = data.FlatField(flat_dat, pri_hdr=pri_hdr_flat45, ext_hdr=ext_hdr_flat45, input_dataset=mock_input_dataset)
+    mocks.rename_files_to_cgi_format(list_of_fits=[flat0, flat45], output_dir=calibrations_dir, level_suffix="flt_cal")
+    this_caldb.create_entry(flat0)
+    this_caldb.create_entry(flat45)
+
 
     # Bad pixel map
     with fits.open(bp_path) as hdulist:
@@ -293,7 +304,8 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f"  - DetectorNoiseMaps: {noise_map.filename}")
     if sample_l1_files:
         logger.info(f"  - Dark: {dark_cal.filename}")
-    logger.info(f"  - FlatField: {flat.filename}")
+    logger.info(f"  - FlatFieldPOL0: {flat0.filename}")
+    logger.info(f"  - FlatFieldPOL45: {flat45.filename}")
     logger.info(f"  - BadPixelMap: {bp_map.filename}")
     logger.info(f"  - AstrometricCalibration: {astrom_cal.filename}")
     logger.info(f"  - CTM Calibration: {ct_cal_tmp.filename}")
@@ -399,8 +411,8 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     input_files = sorted([os.path.join(l1_datadir, "sat_spots", f) for f in input_satspots_filenames if f.endswith('l1_.fits')])
     logger.info(f'Found {len(input_files)} sat spot files in input directory: {l1_datadir}/sat_spots')
     sat_spot_dir = os.path.join(l4_outputdir,"sat_spots")
-    walker.walk_corgidrp(input_files[:6], "", sat_spot_dir, template="l1_to_l2b.json") #The first 6 are from one target with one exposure time
-    walker.walk_corgidrp(input_files[6:12], "", sat_spot_dir, template="l1_to_l2b.json") #The second 6 are from another target with a different exposure time
+    walker.walk_corgidrp(input_files[:6], "", sat_spot_dir, template="l1_to_l2b_pol.json") #The first 6 are from one target with one exposure time
+    walker.walk_corgidrp(input_files[6:12], "", sat_spot_dir, template="l1_to_l2b_pol.json") #The second 6 are from another target with a different exposure time
     
     l2b_satspot_files = [os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l2b.fits')]    
     walker.walk_corgidrp(l2b_satspot_files, "", sat_spot_dir)    
@@ -416,8 +428,8 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f'Found {len(input_offaxis_filenames)} off-axis files in input directory: {l1_datadir}/off_axis')
     input_files = sorted([os.path.join(l1_datadir, "off_axis", f) for f in input_offaxis_filenames if f.endswith('l1_.fits')])
     off_axis_dir = os.path.join(l4_outputdir,"off_axis")
-    walker.walk_corgidrp(input_files[:6], "", off_axis_dir, template="l1_to_l2b.json") #The first 6 are from one target with one exposure time
-    walker.walk_corgidrp(input_files[6:], "", off_axis_dir, template="l1_to_l2b.json") #The second 6 are from another target with a different exposure time
+    walker.walk_corgidrp(input_files[:6], "", off_axis_dir, template="l1_to_l2b_pol.json") #The first 6 are from one target with one exposure time
+    walker.walk_corgidrp(input_files[6:], "", off_axis_dir, template="l1_to_l2b_pol.json") #The second 6 are from another target with a different exposure time
     
     l2b_offaxis_files = [os.path.join(off_axis_dir, f) for f in os.listdir(off_axis_dir) if f.endswith('_l2b.fits')]    
     walker.walk_corgidrp(l2b_offaxis_files, "", off_axis_dir)    
