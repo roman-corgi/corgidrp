@@ -2,6 +2,7 @@ import os
 import json
 import astropy.time as time
 import warnings
+import xml.etree.ElementTree as ET
 import corgidrp
 import corgidrp.astrom
 import corgidrp.bad_pixel_calibration
@@ -24,7 +25,6 @@ import corgidrp.sorting
 import corgidrp.fluxcal
 import corgidrp.spec
 
-import os
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -130,7 +130,25 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
             recipe["inputs"] = []
             for filename in output_filelist:
                 recipe["inputs"].append(filename)
+        
+        # check for functions that require CPGS XML info
+        for step in recipe['steps']:
+            if step['name'].lower() == 'find_spec_star':
+                if not 'keywords' in step:
+                    read_cpgs = True
+                    step['keywords'] = {}
+                elif "r_lamD" not in step['keywords']:
+                    read_cpgs = True
+                else:
+                    read_cpgs = False
 
+                if read_cpgs: # if not already specified.
+                    # need to populate satellite spot info from XML
+                    cpgs_xml = ET.parse(CPGS_XML_filepath)
+                    sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
+                    step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
+                    step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
+        
         output_filelist = run_recipe(recipe)
 
     # return just the recipe if there was only one
@@ -462,9 +480,12 @@ def run_recipe(recipe, save_recipe_file=True):
         recipe = json.load(open(recipe, "r"))
 
     # configure pipeline as needed
+    # these settings should only apply to this recipe, so we will restore old settings later
+    old_settings = {} 
     for setting in recipe['drpconfig']:
         # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
         setattr(corgidrp, setting, recipe['drpconfig'][setting])
+        old_settings[setting] = recipe['drpconfig'][setting]
 
     # save recipe before running recipe
     if save_recipe_file:
@@ -507,19 +528,18 @@ def run_recipe(recipe, save_recipe_file=True):
     for filelist in filelist_chunks:
         if recipe["inputs"]:
             if ram_heavy_bool:
-                curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
+                curr_dataset = data.Dataset(filelist, no_data=True)
                 recipe_temp = recipe.copy()
-                recipe_temp["inputs"] = 'see RECIPE header value in {0}'.format(curr_dataset[0].filepath)
+                # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
+                recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
             else:
                 curr_dataset = data.Dataset(filelist)
+                recipe_temp = recipe
             # write the recipe into the image extension header
-            curr_dataset[0].ext_hdr["RECIPE"] = json.dumps(recipe)
-            for frame in curr_dataset[1:]:
-                if ram_heavy_bool: # to avoid having huge list of thousands of frames in every frame of the dataset, which can be gigabytes for the case of noise maps
-                    json_dump = json.dumps(recipe_temp)
-                else:
-                    json_dump = json.dumps(recipe)
-                frame.ext_hdr["RECIPE"] = json_dump
+            curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
+            if len(curr_dataset) > 1:
+                for frame in curr_dataset[:-1]:
+                    frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
         # execute each pipeline step
         print('Executing recipe: {0}'.format(recipe['name']))
         if type(filelist) == list:
@@ -562,18 +582,28 @@ def run_recipe(recipe, save_recipe_file=True):
                     # by default, this is false
                     if (corgidrp.jit_calib_id and ("jit_calib_id" not in recipe['drpconfig'])) or (("jit_calib_id" in recipe['drpconfig']) and recipe['drpconfig']["jit_calib_id"]) :
                         this_caldb = caldb.CalDB()
-                        # dataset may have turned into a single image. handle this case.
+                        # dataset may have turned into a single image. handle this case. 
                         if isinstance(curr_dataset, data.Dataset):
                             ref_image = curr_dataset[0]
                             list_of_frames = curr_dataset
                         else:
                             ref_image = curr_dataset
                             list_of_frames = [curr_dataset]
+                        if ram_heavy_bool:
+                            ref_image = data.Image(ref_image.filepath) #load in data for calibration matching
                         _fill_in_calib_files(step, this_caldb, ref_image)
 
                         # also update the recipe we used in the headers
-                        for frame in list_of_frames:
-                            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+                        if ram_heavy_bool:
+                            recipe_temp = recipe.copy()
+                            # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
+                            recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
+                        else: 
+                            recipe_temp = recipe
+                        list_of_frames[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
+                        if len(list_of_frames) > 1:
+                            for frame in list_of_frames[:-1]:
+                                frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
 
 
                     # load the calibration files in from disk
@@ -605,4 +635,45 @@ def run_recipe(recipe, save_recipe_file=True):
     if not save_step:
         output_filepaths = None
 
+    # restore old pipeline settings that this recipe overwrote
+    for setting in old_settings:
+        # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
+        setattr(corgidrp, setting, old_settings[setting])
+
+    
     return output_filepaths
+
+
+def _get_satellite_spot_info_from_xml(xml_tree):
+    """
+    Extracts satellite spot information from the CPGS XML file
+
+    Args:
+        xml_tree (ElementTree): loaded in CPGS XML file
+        
+    Returns:
+        dict: dictionary with satellite spot information
+            "num_spots": int, number of satellite spots
+            "spot1_contrast": float, contrast of spot 1
+            "spot1_sep": float, separation of spot 1 in lam/D
+            "spo1_angle": float, angle of spot 1 in degrees
+            "spot2_contrast": float, contrast of spot 2
+            "spot2_sep": float, separation of spot 2 in lam/D
+            "spo2_angle": float, angle of spot 2 in degrees
+    """
+    obs_specification = xml_tree.getroot()
+    sat_spot_info = obs_specification.find("satellite_spots")
+    sat_spot_output = {}
+    sat_spot_output['num_spots'] = 0
+    for i, pair in enumerate(sat_spot_info.findall("pair")):
+        sat_spot_output['num_spots'] += 1
+        if i == 0:
+            sat_spot_output['spot1_contrast'] = float(pair.find("intensity").text)
+            sat_spot_output['spot1_sep'] = float(pair.find("radial_distance").text)
+            sat_spot_output['spot1_angle'] = float(pair.find("clocking_angle").text)
+        elif i == 1:
+            sat_spot_output['spot2_contrast'] = float(pair.find("intensity").text)
+            sat_spot_output['spot2_sep'] = float(pair.find("radial_distance").text)
+            sat_spot_output['spot2_angle'] = float(pair.find("clocking_angle").text)
+
+    return sat_spot_output
