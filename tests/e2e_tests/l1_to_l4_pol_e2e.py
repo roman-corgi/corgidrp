@@ -120,7 +120,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         dark_dat = hdulist[0].data
     
     noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_dat])
-    noise_map_dat = np.zeros((12, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
+    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     noise_map_dat[:, r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = noise_map_dat_img
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
@@ -129,7 +129,9 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     err_hdr['BUNIT'] = 'detected electron'
     ext_hdr['B_O'] = 0.
     ext_hdr['B_O_ERR'] = 0.
-    noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+    noisemap_ext_hdr = ext_hdr.copy()
+    noisemap_ext_hdr['DRPNFILE'] = 100
+    noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=noisemap_ext_hdr,
                                        input_dataset=mock_input_dataset, err=noise_map_noise,
                                        dq=noise_map_dq, err_hdr=err_hdr)
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
@@ -362,18 +364,29 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info('='*80)
     
     # # Step 1: L1 -> L2b
-    logger.info('Step 1: Running L1 to L2b recipe...')
+    logger.info('Step 1: Running L1 to L2a recipe...')
     with warnings.catch_warnings():  
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-        walker.walk_corgidrp(input_data_filelist, "", l4_outputdir, template="l1_to_l2b.json")
+        walker.walk_corgidrp(input_data_filelist, "", l4_outputdir)
     
+    l2a_files = [f for f in os.listdir(l4_outputdir) if f.endswith('_l2a.fits')]
+    l2a_filelist = [os.path.join(l4_outputdir, f) for f in l2a_files]
+    logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
+    logger.info('')
+    
+    logger.info('Step 2: Running L2a to L2b recipe...')
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.walk_corgidrp(l2a_filelist, "", l4_outputdir)
+
+
     l2b_files = [f for f in os.listdir(l4_outputdir) if f.endswith('_l2b.fits')]
     l2b_filelist = [os.path.join(l4_outputdir, f) for f in l2b_files]
-    logger.info(f'L1 to L2b complete. Generated {len(l2b_filelist)} L2b files.')
+    logger.info(f'L2a to L2b complete. Generated {len(l2b_filelist)} L2b files.')
     logger.info('')
     
     # # Step 2: L2b -> L3 
-    logger.info('Step 2: Running L2b to L3 polarimetry recipe...')
+    logger.info('Step 3: Running L2b to L3 polarimetry recipe...')
     walker.walk_corgidrp(l2b_filelist, "", l4_outputdir)
     l3_filelist = [os.path.join(l4_outputdir, f) for f in os.listdir(l4_outputdir) if f.endswith('_l3_.fits')]
     logger.info(f'L2b to L3 complete. Generated {len(l3_filelist)} L3 files.')
