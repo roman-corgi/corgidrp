@@ -120,7 +120,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         dark_dat = hdulist[0].data
     
     noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_dat])
-    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
+    noise_map_dat = np.zeros((12, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     noise_map_dat[:, r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = noise_map_dat_img
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
