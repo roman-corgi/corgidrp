@@ -268,7 +268,7 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
 
             # try to look up the best calibration, but it could raise an error
             try:
-                best_cal_file = this_caldb.get_calib(ref_frame, calib_dtype)
+                best_cal_file = this_caldb.fd(ref_frame, calib_dtype)
                 best_cal_filepath = best_cal_file.filepath
             except ValueError as e:
                 if "OPTIONAL" in step["calibs"][calib].upper():
@@ -372,11 +372,19 @@ def guess_template(dataset):
             # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
             is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
             
+            is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']
+
             if is_spectroscopy:
                 if image.ext_hdr['ISPC'] == 1:
                     recipe_filename = ["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"] #"l2a_to_l2b_pc_spec.json"
                 else:
                     recipe_filename = "l2a_to_l2b_spec.json"
+            elif is_polarimetry:
+                if image.ext_hdr['ISPC'] == 1:
+                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_pol_3.json"] #"l2a_to_l2b_pc_pol.json"
+                    chained = True
+                else: 
+                    recipe_filename = "l2a_to_l2b_pol.json"
             else:
                 if image.ext_hdr['ISPC'] == 1:
                     recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
