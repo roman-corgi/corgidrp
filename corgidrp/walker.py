@@ -35,6 +35,7 @@ all_steps = {
     "add_shot_noise_to_err" : corgidrp.l2a_to_l2b.add_shot_noise_to_err,
     "dark_subtraction" : corgidrp.l2a_to_l2b.dark_subtraction,
     "flat_division" : corgidrp.l2a_to_l2b.flat_division,
+    "flat_division_pol" : corgidrp.l2a_to_l2b.flat_division_pol,
     "frame_select" : corgidrp.l2a_to_l2b.frame_select,
     "convert_to_electrons" : corgidrp.l2a_to_l2b.convert_to_electrons,
     "em_gain_division" : corgidrp.l2a_to_l2b.em_gain_division,
@@ -376,11 +377,19 @@ def guess_template(dataset):
             # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
             is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
             
+            is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']
+
             if is_spectroscopy:
                 if image.ext_hdr['ISPC'] == 1:
                     recipe_filename = ["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"] #"l2a_to_l2b_pc_spec.json"
                 else:
                     recipe_filename = "l2a_to_l2b_spec.json"
+            elif is_polarimetry:
+                if image.ext_hdr['ISPC'] == 1:
+                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pol_pc_3.json"] #"l2a_to_l2b_pc_pol.json"
+                    chained = True
+                else: 
+                    recipe_filename = "l2a_to_l2b_pol.json"
             else:
                 if image.ext_hdr['ISPC'] == 1:
                     recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
@@ -613,8 +622,12 @@ def run_recipe(recipe, save_recipe_file=True):
 
                     # load the calibration files in from disk
                     for calib in step["calibs"]:
-                        calib_dtype = data.datatypes[calib]
                         if step["calibs"][calib] is not None:
+                            # special case for pol flat because it has multiple files
+                            if calib == "FlatFieldPOL0" or calib == "FlatFieldPOL45":
+                                calib_dtype = data.datatypes['FlatField']
+                            else: 
+                                calib_dtype = data.datatypes[calib]
                             cal_file = calib_dtype(step["calibs"][calib])
                         else:
                             cal_file = None
