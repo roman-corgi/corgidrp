@@ -239,6 +239,8 @@ def calibrate_nonlin(dataset_nl,
     check_nonlin_params(nonlin_params)
     if dataset_nl[0].data is None:
         ram_heavy = True
+    else:
+        ram_heavy = False
     # cast dataset objects into np arrays and retrieve aux information
     cal_list, mean_frame_list, exp_arr, datetime_arr, len_list, actual_gain_arr, datetimes_sort_inds, _ = \
         nonlin_kgain_dataset_2_stack(dataset_nl, apply_dq = apply_dq, cal_type='nonlin')
