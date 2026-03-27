@@ -15,6 +15,7 @@ from corgidrp import walker
 from corgidrp import caldb
 from corgidrp import check
 import shutil
+import json
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
@@ -127,18 +128,30 @@ def test_nonlin_and_kgain_e2e(
 
     # Run the walker on some test_data
     print('Running walker')
-    #walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)
-    recipe = walker.autogen_recipe(pupilimg_l1_list, e2eoutput_path)
+    # for kgain
+    recipe_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'corgidrp', 'recipe_templates')
+    recipe_filepath1 = os.path.join(recipe_dir, "l1_to_kgain_1.json")
+    recipe1 = walker.autogen_recipe(pupilimg_l1_list, e2eoutput_path, template=json.load(open(recipe_filepath1, 'r')))
+    output_filepaths1 = walker.run_recipe(recipe1, save_recipe_file=True)
+    recipe_filepath2 = os.path.join(recipe_dir, "l1_to_kgain_2.json")
+    recipe2 = walker.autogen_recipe(output_filepaths1, e2eoutput_path, template=json.load(open(recipe_filepath2, 'r')))
     ### Modify they keywords of some of the steps
-    for step in recipe[1]['steps']:
+    for step in recipe2['steps']:
         if step['name'] == "calibrate_kgain":
             step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-    walker.run_recipe(recipe[1], save_recipe_file=True)
-    for step in recipe[0]['steps']:
+    walker.run_recipe(recipe2, save_recipe_file=True)
+    # for nonlin
+    recipe = walker.autogen_recipe(pupilimg_l1_list, e2eoutput_path)
+    ### Modify they keywords of some of the steps
+    for step in recipe[2]['steps']:
         if step['name'] == "calibrate_nonlin":
-            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
+            step['keywords']['apply_dq'] = False # do not apply the cosmics in e2e test
             step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
-    walker.run_recipe(recipe[0], save_recipe_file=True)
+    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = output_filepaths
+    output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
+    recipe[2]['inputs'] = output_filepaths1
+    walker.run_recipe(recipe[2], save_recipe_file=True)
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests
     # NL from CORGIDRP
@@ -168,7 +181,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     OUTPUT_DIR = thisfile_dir
 

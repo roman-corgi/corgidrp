@@ -906,7 +906,7 @@ def calibrate_nonlin(dataset_nl,
     
     return nonlin
 
-def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
+def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', dataset_copy=True):
     """
     Casts the CORGIDRP Dataset object for non-linearity calibration into a stack
     of numpy arrays sharing the same commanded gain value. It also returns the list of
@@ -920,6 +920,10 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
         apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
         cal_type (str): If 'kgain', then sets of frames with the same exposure time for a given EM gain 
             are truncated so that each has the same number of frames.  Otherwise (for the 'nonlin' case), there is no truncation.
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  
+            If False, the output dataset will be the input dataset modified, and 
+            the input and output datasets will be identical.  This is useful when 
+            handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
 
     Returns:
         list of data arrays associated with each frame (just the filepaths if data is None for input dataset)
@@ -937,7 +941,10 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
         ram_heavy = True
         dataset_cp = dataset
     else:
-        dataset_cp = dataset.copy()
+        if dataset_copy:
+            dataset_cp = dataset.copy()
+        else:
+            dataset_cp = dataset
         ram_heavy = False
     split = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
     
