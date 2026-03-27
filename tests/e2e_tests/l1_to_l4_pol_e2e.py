@@ -404,34 +404,70 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f'L2b to L3 complete. Generated {len(l3_filelist)} L3 files.')
     logger.info('')
 
-    
+    ##############################################
     # Step 1/2 b: Do the stap spot data. 
-    logger.info('Step 1/2b: Running L1 to L3 on the polarimetry satspots...')
+    logger.info('Running L1 to L2a on the polarimetry satspots...')
     input_satspots_filenames = os.listdir(os.path.join(l1_datadir,"sat_spots"))
-    input_files = sorted([os.path.join(l1_datadir, "sat_spots", f) for f in input_satspots_filenames if f.endswith('l1_.fits')])
+    input_files = np.array(sorted([os.path.join(l1_datadir, "sat_spots", f) for f in input_satspots_filenames if f.endswith('l1_.fits')]))
     logger.info(f'Found {len(input_files)} sat spot files in input directory: {l1_datadir}/sat_spots')
     sat_spot_dir = os.path.join(l4_outputdir,"sat_spots")
-    walker.walk_corgidrp(input_files[:6], "", sat_spot_dir, template="l1_to_l2b_pol.json") #The first 6 are from one target with one exposure time
-    walker.walk_corgidrp(input_files[6:12], "", sat_spot_dir, template="l1_to_l2b_pol.json") #The second 6 are from another target with a different exposure time
-    
-    l2b_satspot_files = [os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l2b.fits')]    
+
+    #Split the input data by targets
+    input_targets = np.array([fits.getheader(f)['TARGET'] for f in input_files])
+    unique_targets = np.unique(input_targets)
+    # import IPython; IPython.embed()
+    for target in unique_targets:
+        filelist = input_files[np.where(input_targets == target)]
+        walker.walk_corgidrp(list(filelist), "", sat_spot_dir)
+    l2a_satspot_files = np.array([os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l2a.fits')])
+    logger.info(f'L1 to L2a complete for satspots. Generated {len(l2a_satspot_files)} L2a files.')
+
+    logger.info('Running L2a to L2b on the polarimetry satspots...')
+    input_targets = np.array([fits.getheader(f)['TARGET'] for f in l2a_satspot_files])
+    unique_targets = np.unique(input_targets)
+    for target in unique_targets:
+        filelist = l2a_satspot_files[input_targets == target]
+        walker.walk_corgidrp(list(filelist), "", sat_spot_dir)
+    l2b_satspot_files = [os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l2b.fits')]
+    logger.info(f'L2a to L2b complete for satspots. Generated {len(l2b_satspot_files)} L2b files.')    
+
+    #Don't need to split them for L3 - data can be more inhomogeneous. 
+    logger.info('Running L2b to L3 on the polarimetry satspots...')
     walker.walk_corgidrp(l2b_satspot_files, "", sat_spot_dir)    
-    logger.info('L1 to L3 sat spots complete')
+    logger.info('L2b to L3 sat spots complete')
     l3_satspot_files = [os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l3_.fits')]
 
     # # # Append the satspot files to the l3_filelist
     l3_filelist.extend(l3_satspot_files)
 
+
+    ##############################################
     # Step 1/2 b: Do the unocculted data. 
-    logger.info('Step 1/2b: Running L1 to L3 on the unocculted images...')
+    logger.info('Running L1 to L2a on the unocculted images...')
     input_offaxis_filenames = os.listdir(os.path.join(l1_datadir,"off_axis"))
     logger.info(f'Found {len(input_offaxis_filenames)} off-axis files in input directory: {l1_datadir}/off_axis')
-    input_files = sorted([os.path.join(l1_datadir, "off_axis", f) for f in input_offaxis_filenames if f.endswith('l1_.fits')])
+    input_files = np.array(sorted([os.path.join(l1_datadir, "off_axis", f) for f in input_offaxis_filenames if f.endswith('l1_.fits')]))
     off_axis_dir = os.path.join(l4_outputdir,"off_axis")
-    walker.walk_corgidrp(input_files[:6], "", off_axis_dir, template="l1_to_l2b_pol.json") #The first 6 are from one target with one exposure time
-    walker.walk_corgidrp(input_files[6:], "", off_axis_dir, template="l1_to_l2b_pol.json") #The second 6 are from another target with a different exposure time
     
-    l2b_offaxis_files = [os.path.join(off_axis_dir, f) for f in os.listdir(off_axis_dir) if f.endswith('_l2b.fits')]    
+    #Split the input data by targets
+    input_targets = np.array([fits.getheader(f)['TARGET'] for f in input_files])
+    unique_targets = np.unique(input_targets)
+    for target in unique_targets:
+        filelist = input_files[np.where(input_targets == target)[0]]
+        walker.walk_corgidrp(list(filelist), "", off_axis_dir)
+    l2a_unocculted_files = np.array([os.path.join(off_axis_dir, f) for f in os.listdir(off_axis_dir) if f.endswith('_l2a.fits')])
+    logger.info(f'L1 to L2a complete for unocculted images. Generated {len(l2a_unocculted_files)} L2a files.')
+
+    logger.info('Running L2a to L2b on the unocculted images...')
+    input_targets = np.array([fits.getheader(f)['TARGET'] for f in l2a_unocculted_files])
+    unique_targets = np.unique(input_targets)
+    for target in unique_targets:
+        filelist = l2a_unocculted_files[np.where(input_targets == target)[0]]
+        walker.walk_corgidrp(list(filelist), "", off_axis_dir)
+    l2b_offaxis_files = [os.path.join(off_axis_dir, f) for f in os.listdir(off_axis_dir) if f.endswith('_l2b.fits')]   
+    logger.info(f'L2a to L2b complete for unocculted images. Generated {len(l2b_offaxis_files)} L2b files.')
+
+    logger.info('Running L2b to L3 on the unocculted images...')
     walker.walk_corgidrp(l2b_offaxis_files, "", off_axis_dir)    
     logger.info('L1 to L3 off-axis complete')
     l3_offaxis_files = [os.path.join(off_axis_dir, f) for f in os.listdir(off_axis_dir) if f.endswith('_l3_.fits')]
