@@ -362,7 +362,12 @@ def sort_pupilimg_frames(
         split_exptime[0].remove(split_exptime[0][idx_mean_frame])
 
     # K gain frames in same AUXFILE used for mean frame
-    inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, unity_gain_filepath_list = sort_remove_frames([aux_set_to_use], cal_type=cal_type, actual_visit=actual_visit)
+    if actual_visit:
+        unity_gain_exptimes_auxs = [aux_set_to_use]
+    else:
+        unity_gain_exptimes_auxs = split_exptime[0]
+    inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, unity_gain_filepath_list = sort_remove_frames(unity_gain_exptimes_auxs, cal_type=cal_type, actual_visit=actual_visit)
+    
     if actual_visit and (inds_leave_out is None or del_rep_inds_tot is None):
         raise Exception('No repeated exposure time sets found within the frames for k gain calibration.')
     elif not actual_visit and (cal_type.lower() == 'k-gain' or cal_type.lower() == 'kgain'):
@@ -376,16 +381,17 @@ def sort_pupilimg_frames(
     cal_frame_list = []
     index = -1 #initiate
     # for subset in unity_gain_wo_mean_frames:
-    for i in range(len(aux_set_to_use)):
-        index += 1
-        frame = aux_set_to_use.frames[i]
-        if frame.filepath in unity_gain_filepath_list:
-            if index in inds_leave_out:
-                continue
-            vistype = frame.pri_hdr['VISTYPE']
-            frame.pri_hdr['OBSNAME'] = 'KGAIN'
-            cal_frame_list += [frame]
-            n_kgain += 1
+    for sub in unity_gain_exptimes_auxs:
+        for i in range(len(sub)):
+            index += 1
+            frame = sub.frames[i]
+            if frame.filepath in unity_gain_filepath_list:
+                if index in inds_leave_out:
+                    continue
+                vistype = frame.pri_hdr['VISTYPE']
+                frame.pri_hdr['OBSNAME'] = 'KGAIN'
+                cal_frame_list += [frame]
+                n_kgain += 1
     kgain_exptimes = np.delete(exptime_cons, np.array(del_rep_inds_tot).astype(int)).astype(float)
     kgain_frame_numbers = np.delete(count_cons, np.array(del_rep_inds_tot).astype(int)).astype(int)
     sorting_summary += (f'K-gain has {n_kgain} unity frames with exposure ' +
