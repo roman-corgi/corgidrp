@@ -22,7 +22,9 @@ thisfile_dir = os.path.dirname(__file__)  # this file's folder
 def set_vistype_for_tvac(
     list_of_fits,
     ):
-    """ Adds proper values to VISTYPE for non-linearity calibration.
+    """ Adds proper values to VISTYPE for non-linearity calibration.  Also 
+    Adjusts AUXFILE appropriately for as expected from the CAR so that the 
+    sorting function gets metadata as it expects.
 
     This function is unnecessary with future data because data will have
     the proper values in VISTYPE. Hence, the "tvac" string in its name.
@@ -37,10 +39,11 @@ def set_vistype_for_tvac(
         # Adjust VISTYPE
         if prihdr['VISTYPE'] == 'N/A':
             prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
-            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
         exthdr = fits_file[1].header
         if exthdr['EMGAIN_A'] == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        if exthdr['EMGAIN_C'] == 1.0:
+            prihdr['AUXFILE'] = 'KGAIN' # something to differentiate the default
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -119,6 +122,7 @@ def test_nonlin_and_kgain_e2e(
     pupilimg_l1_list = check.fix_hdrs_for_tvac(pupilimg_l1_list, input_data_dir)
 
     # Set TVAC data to have VISTYPE=CGIVST_CAL_PUPIL_IMAGING (flight data should have these values)
+    # Also set AUXFILE appropriately
     set_vistype_for_tvac(pupilimg_l1_list)
 
    # now get any default cal files that might be needed; if any reside in the folder that are not 

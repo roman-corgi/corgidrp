@@ -147,6 +147,8 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
         with fits.open(filepath, mode='update') as hdul:
             if hdul[0].header.get('VISTYPE') in (None, 'N/A', 'PUPILIMG'):
                 hdul[0].header['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
+            if hdul[1].header['EMGAIN_C'] == 1.0:
+                hdul[0].header['AUXFILE'] = 'KGAIN' # something to differentiate from the default
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')

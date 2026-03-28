@@ -108,6 +108,9 @@ def test_nonlin_cal_e2e(
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
             prihdr['PHTCNT'] = "False"
+            exthdr = fits_file[1].header
+            if exthdr['EMGAIN_C'] == 1.0:
+                prihdr['AUXFILE'] = 'KGAIN' # something to differentiate from the default
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
