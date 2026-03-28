@@ -2183,7 +2183,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
         temperatures.
 
     Args:
-        input_dataset (corgi.drp.Dataset): The input dataset to be analyzed. The dataset should be a stack of trap-pumped frames.
+        input_dataset (corgidrp.data.Dataset): The input dataset to be analyzed. The dataset should be a stack of trap-pumped frames.
         time_head (str): Keyword corresponding to phase time for each FITS file. The keyword value is assumed to be a float (units of microseconds). Defaults to 'TPTAU'.
         mean_field (float, optional): The mean electron level that was present in each pixel before trap pumping was performed (excluding EM gain). Only useful if the mean level is less than num_pumps/4 e-. If num_pumps/4 e- or higher, use None.
         length_lim (int, optional): Minimum number of frames for which a dipole needs to meet the threshold to be considered a true trap. Defaults to 5.
@@ -2215,11 +2215,29 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             this function could be run several times with decreasing bin size until the maximum number of traps have been detected.
     
     Returns:
-        corgi.drp.TrapCalibration: An object containing the results of the trap calibration. The trap densities are appended as an extension HDU, and several other parameters are stored as header keywords in the ext_hdr header.
+        corgidrp.data.TrapCalibration: An object containing the results of the trap calibration. The trap densities are appended as an extension HDU, and several other parameters are stored as header keywords in the ext_hdr header.
     """
     
     # Make a copy of the input dataset to operate on
     working_dataset = input_dataset.copy()
+
+    dsets, vals = working_dataset.split_dataset(prihdr_keywords=['OPMODE', 'FRMTYPE'])
+    good_inds = []
+    for val in vals:
+        if val[0] == 'TRAP_PUMPING' and val[1] == 'NUM':
+            good_inds.append(vals.index(val))
+        if val[0] == 'SPARE_9' and val[1] == 'NUM':
+            good_inds.append(vals.index(val))
+    frames_to_keep = []
+    for ind in good_inds:
+        for fr in dsets[ind]:
+            if 'LEGACY' in fr.pri_hdr['AUXFILE'].upper():
+                continue
+            frames_to_keep.append(fr)
+    # overwrite working_dataset
+    working_dataset = data.Dataset(frames_to_keep)
+
+    
 
     if type(sample_data) != bool:
         raise TypeError('sample_data should be True or False')

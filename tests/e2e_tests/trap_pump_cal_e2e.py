@@ -29,7 +29,7 @@ except:
     pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
-metadata_path = os.path.join(thisfile_dir, '..', 'test_data', "metadata_eng.yaml")
+metadata_path = os.path.join(thisfile_dir, '..', 'test_data', "metadata.yaml")
 #metadata_path = os.path.join(os.path.abspath(os.path.dirname(__name__)), 'tests', 'test_data', "metadata_test.yaml")
 
 def fix_headers_for_tvac(
@@ -95,7 +95,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     np.random.seed(39)
     e2e = True
     # Generate mock trap pump data with standard filenames
-    mocks.generate_mock_pump_trap_data(trap_pump_datadir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='ENG')
+    mocks.generate_mock_pump_trap_data(trap_pump_datadir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='SCI')
     
     # Organize the generated files into temperature/scheme directories for tpump_analysis
     all_files = [f for f in os.listdir(trap_pump_datadir) if f.endswith('.fits') and f.startswith('cgi_')]
