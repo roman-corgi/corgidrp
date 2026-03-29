@@ -2369,9 +2369,19 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
 
                 #Get the data and the phase time - convert from us to seconds
                 phase_time = float(frame.ext_hdr[time_head])/10**6
-
+                # load in frame if RAM-heavy mode
+                # At most, 300 1024x1024 frames put together here, which is < 100 GB RAM
+                if frame.data is None:
+                    fr = data.Image(frame.filepath)
+                    frame_data = fr.data
+                else:
+                    frame_data = frame.data
+                # ignore legacy frames, which are 0 except for rows 1027 through 1037 in image area (1024x1024)
+                if (np.abs(frame_data[0:3]).max() == 0 and
+                    np.abs(frame_data[13:]).max() == 0):
+                    continue 
                 timings.append(phase_time)   
-                frames.append(frame.data)
+                frames.append(frame_data)
 
             # no need for cosmic ray removal since we do ill. correction
             # plus cosmics wouldn't look same as it would on regular frame,

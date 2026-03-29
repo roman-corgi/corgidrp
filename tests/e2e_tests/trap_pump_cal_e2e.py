@@ -29,6 +29,7 @@ except:
     pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
+# TPUMP data will now be SCI, not ENG
 metadata_path = os.path.join(thisfile_dir, '..', 'test_data', "metadata.yaml")
 #metadata_path = os.path.join(os.path.abspath(os.path.dirname(__name__)), 'tests', 'test_data', "metadata_test.yaml")
 
@@ -289,15 +290,19 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
         walker.run_recipe(recipe)
     if e2e:
         #template = json.load(open(os.path.join(thisfile_dir,"trap_pump_cal_e2e.json"), 'r'))
-        template_path = template = os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'recipe_templates', "trap_pump_cal.json")
+        template_path = os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'recipe_templates', "trap_pump_cal_1.json")
         template = json.load(open(template_path, 'r'))
         recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir, template=template)
+        output_filepaths = walker.run_recipe(recipe)
+        template_path2 = os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'recipe_templates', "trap_pump_cal_2.json")
+        template2 = json.load(open(template_path2, 'r'))
+        recipe2 = walker.autogen_recipe(output_filepaths, trap_pump_outputdir, template=template2)
         ### Modify they keywords of some of the steps
-        for step in recipe['steps']:
+        for step in recipe2['steps']:
             if step['name'] == "calibrate_trap_pump":
                 step['keywords'] = {}
                 step['keywords']['bin_size'] = None
-        walker.run_recipe(recipe)
+        walker.run_recipe(recipe2)
 
     # find cal file (naming convention for data.TrapCalibration class)
     for f in os.listdir(trap_pump_outputdir):
