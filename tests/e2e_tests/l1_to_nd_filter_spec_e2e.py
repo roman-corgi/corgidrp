@@ -430,7 +430,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     # ------------------------------------------------------------------ 
     # 7. Validation                                                       
     # ------------------------------------------------------------------ 
-    print("Validating NDSpectroscopy product …")
+    print("Validating NDSpectroscopy product")
 
     # Data shape: (2, M)
     assert nd_spec_cal.data.ndim == 2 and nd_spec_cal.data.shape[0] == 2, \
@@ -450,6 +450,15 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     assert np.all(np.isfinite(od)), "OD spectrum contains non-finite values."
     assert np.all(od > 0), f"OD spectrum contains non-positive values (min={od.min():.3f})."
     print(f"  OD range: {od.min():.3f}–{od.max():.3f} ")
+
+    od_expected = 2.25
+    od_tolerance = 0.05
+    od_median = np.median(od)
+    assert abs(od_median - od_expected) < od_tolerance, (
+        f"Median OD {od_median:.3f} is more than {od_tolerance} away from "
+        f"nominal ND225 value of {od_expected}."
+    )
+    print(f"  Median OD: {od_median:.3f} (nominal {od_expected}, tol ±{od_tolerance})  PASSED")
 
     # Headers
     assert nd_spec_cal.ext_hdr['DATATYPE'] == 'NDSpectroscopy'

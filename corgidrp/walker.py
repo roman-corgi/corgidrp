@@ -235,6 +235,10 @@ def autogen_recipe(filelist, outputdir, template=None):
                 if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
                     step["keywords"]["outputdir"] = recipe["outputdir"]
 
+            if step["name"].lower() == "create_nd_filter_cal_spec":
+                if "keywords" in step and step["keywords"].get("outputdir", "").upper() == "AUTOMATIC":
+                    step["keywords"]["outputdir"] = recipe["outputdir"]
+
         recipe_list.append(recipe)
     
     # if only a single recipe, return the recipe. otherwise return list

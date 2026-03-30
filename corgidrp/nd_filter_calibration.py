@@ -593,25 +593,25 @@ def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath):
     return od_spectrum, spec_wave, od_err
 
 
-def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=None):
+def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=None, outputdir=None):
     """
     Create the spectroscopy ND filter calibration product.
 
     Accepts a dataset of L3 frames that have already been processed through
     divide_by_exptime, determine_wave_zeropoint, add_wavelength_map, and
-    extract_spec. Each frame has SPEC, SPEC_WAVE, and SPEC_ERR extensions 
+    extract_spec. Each frame has SPEC, SPEC_WAVE, and SPEC_ERR extensions
     with BUNIT='photoelectron/s').
 
     The stars_dataset must contain:
-      * dim-star frames taken with no ND filter (FPAMNAME not starting with 'ND') - 
-        these are used to calculate the spectral flux calibration for the instrument 
-        C(lambda) via spec_fluxcal(), unless a pre-computed SpecFluxCal is given via 
+      * dim-star frames taken with no ND filter (FPAMNAME not starting with 'ND') -
+        these are used to calculate the spectral flux calibration for the instrument
+        C(lambda) via spec_fluxcal(), unless a pre-computed SpecFluxCal is given via
         the spec_fluxcal argument.
-      * bright-star frames (FPAMNAME starting with 'ND') — the star observed through 
+      * bright-star frames (FPAMNAME starting with 'ND') — the star observed through
         the ND filter whose OD(lambda) should be measured.
 
-    If multiple bright frames are present (ie repeated images at the same position) 
-    their OD(lambda) spectra are remapped to a common wavelength grid and averaged 
+    If multiple bright frames are present (ie repeated images at the same position)
+    their OD(lambda) spectra are remapped to a common wavelength grid and averaged
     before the calibration product is created.
 
     Args:
@@ -624,6 +624,9 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=No
             frames so a list must have one entry per bright frame in dataset order.
             When None the TARGET primary-header keyword is used to look up each
             star automatically.
+        outputdir (str, optional): Directory where the auto-generated SpecFluxCal
+            is saved when it is computed from dim-star frames.  Defaults to the
+            current directory.
 
     Returns:
         corgidrp.data.NDSpectroscopy: OD(lambda) calibration product.
@@ -673,6 +676,9 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=No
         # Automatically look up the dim star from its TARGET header keyword.
         # (should be a known CALSPEC standard used for flux calibration)
         sf_cal = spec_module.spec_fluxcal(dim_dataset, calspec_file=None)
+        if outputdir is None:
+            outputdir = '.'
+        sf_cal.save(filedir=outputdir)
 
     # 4. Compute OD(lambda) for every bright frame
     od_spectra  = []

@@ -24,7 +24,10 @@
         "name": "extract_spec"
       },
       {
-        "name": "create_nd_filter_cal_spec"
+        "name": "create_nd_filter_cal_spec",
+        "keywords": {
+          "outputdir": "AUTOMATIC"
+        }
       },
       {
         "name": "save"
