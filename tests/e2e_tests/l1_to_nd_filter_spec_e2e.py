@@ -525,7 +525,7 @@ if __name__ == "__main__":
 
     l1_datadir         = os.path.join(args.e2edata_dir, "ND_SPEC", "L1")
     processed_cal_path = os.path.join(args.e2edata_dir, "ND_SPEC", "Cals")
-    outputdir = os.path.join(args.outputdir, "nd_filter_spec_e2e")
+    outputdir = os.path.join(args.outputdir, "l1_to_nd_filter_spec_e2e")
 
     if os.path.exists(outputdir):
         shutil.rmtree(outputdir)

@@ -2315,7 +2315,7 @@ class SpecFluxCal(Image):
             # use the start date for the filename by default
             self.filedir = "."
             # slight hack for old mocks not in the standard filename format
-            self.filename = "{0}_spfl_cal.fits".format(orig_input_filename)
+            self.filename = "{0}_sfl_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
