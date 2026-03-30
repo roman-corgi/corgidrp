@@ -32,7 +32,9 @@ column_dtypes = {
     "CFAMNAME": str,
     "DPAMNAME": str,
     "FPAMNAME": str,
-    "FSAMNAME": str
+    "FSAMNAME": str,
+    "SPAMNAME": str,
+    "PC_STAT": str
 }
 
 default_values = {
@@ -356,6 +358,19 @@ class CalDB:
             options = self.filter_calib(calibdf, "EXPTIME", frame_dict["EXPTIME"], err_if_none=True)
             options = self.filter_calib(options, "EMGAIN_C", frame_dict["EMGAIN_C"], err_if_none=True)
 
+            # for analog frames, exclude PC master darks. for PC frames, prefer them
+            is_pc = frame.ext_hdr.get('ISPC', 0)
+            if is_pc:
+                # prefer PC master dark if available, otherwise fall back to any matching dark
+                pc_options = options[options['PC_STAT'] == 'photon-counted master dark']
+                if len(pc_options) > 0:
+                    options = pc_options
+            else:
+                # analog frame: do not select a matching PC master dark
+                options = options[options['PC_STAT'] != 'photon-counted master dark']
+                if len(options) == 0:
+                    raise ValueError("No valid analog Dark calibration in caldb located at {0}".format(self.filepath))
+
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
@@ -441,17 +456,29 @@ class CalDB:
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['NDSpectroscopy']:
+            # filter by ND filter (FPAM), prism (DPAM), and color filter (CFAM)
+            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['SpecFluxCal']:
-            # filter by color filter and DPAM - same logic as FluxcalFactor
+            # filter by color filter, DPAM, and shaped pupil mask (SPAM) - SPEC vs SPECROT have different transmission
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "SPAMNAME", frame_dict['SPAMNAME'], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['SlitTransmission']:
-            # filter by slit mask (FSAM)
+            # filter by slit mask (FSAM), prism (DPAM), and color filter (CFAM)
             options = self.filter_calib(calibdf, "FSAMNAME", frame_dict['FSAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
