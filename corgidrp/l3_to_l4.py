@@ -1117,7 +1117,7 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
             algo_thru_cutout = np.ones(image_cutout.shape[0])
         bad_ind = np.where(dq_cutout > 0)
         image_cutout[bad_ind] = np.nan
-        err_cutout[bad_ind] = np.nan
+        err_cutout[:, bad_ind[0], bad_ind[1]] = np.nan
         wave = np.mean(wave_cal_map_cutout, axis=1)
         wave_err = np.mean(wave_err_cutout, axis=1)
         err = np.sqrt(np.nansum(np.square(err_cutout), axis=2))
