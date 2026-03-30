@@ -3936,6 +3936,14 @@ def format_ftimeutc(ftime_str):
     return formatted_time
 
 
+class FlatFieldPOL0:
+    def __init__(self, ref: FlatField):
+        self.ref = ref
+
+class FlatFieldPOL45:
+    def __init__(self, ref: FlatField):
+        self.ref = ref
+
 datatypes = { "Image" : Image,
               "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -3943,6 +3951,8 @@ datatypes = { "Image" : Image,
               "BadPixelMap" : BadPixelMap,
               "DetectorNoiseMaps": DetectorNoiseMaps,
               "FlatField" : FlatField,
+              "FlatFieldPOL0" : FlatFieldPOL0,
+              "FlatFieldPOL45" : FlatFieldPOL45,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration" : TrapCalibration,

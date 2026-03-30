@@ -49,6 +49,8 @@ labels = {data.Dark: "Dark",
           data.BadPixelMap: "BadPixelMap",
           data.DetectorNoiseMaps: "DetectorNoiseMaps",
           data.FlatField : "FlatField",
+          data.FlatFieldPOL0 : "FlatField",
+          data.FlatFieldPOL45 : "FlatField",
           data.DetectorParams : "DetectorParams",
           data.AstrometricCalibration : "AstrometricCalibration",
           data.TrapCalibration : "TrapCalibration",
@@ -360,7 +362,7 @@ class CalDB:
             # filter_calib() is configured to not throw an error if no matches are found, so that
             # no existing e2e tests breaks, if in the future we want to strictly only use the calibration
             # files with matching headers, then set err_if_none to True
-            options = self.filter_calib(options, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=False)
+            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -398,12 +400,12 @@ class CalDB:
                 cfam_lookup = cfam_subband_map.get(frame_dict['CFAMNAME'], frame_dict['CFAMNAME'])
                 options = self.filter_calib(calibdf, "CFAMNAME", cfam_lookup, err_if_none=False)
                 options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
-    
+
                 fpam = frame_dict['FPAMNAME']
                 if fpam in ['OPEN_12', 'OPEN_34']:
                     fpam_lookup = fpam
                 elif fpam.startswith('SPC12') or fpam.startswith('HLC12'):
-                    # FPM-in data uses the open substrate flat for the appropriate band 
+                    # FPM-in data uses the open substrate flat for the appropriate band
                     fpam_lookup = 'OPEN_12'
                 elif fpam.startswith('SPC34') or fpam.startswith('HLC34'):
                     fpam_lookup = 'OPEN_34'
@@ -414,6 +416,8 @@ class CalDB:
                 options = self.filter_calib(options, "FPAMNAME", fpam_lookup, err_if_none=False)
                 result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
+            # FlatFieldPOL0/FlatFieldPOL45 are looked up as FlatField entries on disk
+            dtype = data.FlatField
         elif dtype_label in ['DispersionModel']:
             # filter by prism (DPAM) and color filter (CFAM) - different prisms have different dispersion
             options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
@@ -445,7 +449,7 @@ class CalDB:
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['SlitTransmission']:
-            # filter by slit mask (FSAM) 
+            # filter by slit mask (FSAM)
             options = self.filter_calib(calibdf, "FSAMNAME", frame_dict['FSAMNAME'], err_if_none=False)
 
             # select the one closest in time
