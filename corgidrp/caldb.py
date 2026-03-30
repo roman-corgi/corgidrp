@@ -48,6 +48,8 @@ labels = {data.Dark: "Dark",
           data.BadPixelMap: "BadPixelMap",
           data.DetectorNoiseMaps: "DetectorNoiseMaps",
           data.FlatField : "FlatField",
+          data.FlatFieldPOL0 : "FlatField",
+          data.FlatFieldPOL45 : "FlatField",
           data.DetectorParams : "DetectorParams",
           data.AstrometricCalibration : "AstrometricCalibration",
           data.TrapCalibration : "TrapCalibration",
@@ -382,9 +384,14 @@ class CalDB:
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['FlatField'] and frame_dict['DPAMNAME'] in ['POL0', 'POL45']:
-            # filter by DPAM
-            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
+            # filter by the datatype here: 
+            if dtype == data.FlatFieldPOL0:
+                options = self.filter_calib(calibdf, "DPAMNAME", "POL0", err_if_none=False)
+                
+            elif dtype == data.FlatFieldPOL45:
+                options = self.filter_calib(calibdf, "DPAMNAME", "POL45", err_if_none=False)
 
+            dtype = data.FlatField
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]

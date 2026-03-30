@@ -950,12 +950,14 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Flux Calibration ===")
-    fluxcal_data_files = glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits"))
+    fluxcal_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_fluxcal_e2e", "l2b_results", "*_abf_cal.fits"))
+    #fluxcal_data_files = glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits"))
     fluxcal_data_file = max(fluxcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(fluxcal_data_file, 'abf_cal')
     
-    generate_fits_excel_documentation(fluxcal_data_file, os.path.join(e2eoutput_path, "flux_cal_e2e", "abf_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(fluxcal_data_file, os.path.join(e2eoutput_path, "l1_to_fluxcal_e2e", "l2b_results", "abf_cal_documentation.xlsx"))
+    #generate_fits_excel_documentation(fluxcal_data_file, os.path.join(e2eoutput_path, "flux_cal_e2e", "abf_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
