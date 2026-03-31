@@ -369,6 +369,9 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TGTREF_PHOT' and image.ext_hdr['DPAMNAME'] not in ['POL0','POL45']:
             recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b.json","l2b_to_l3.json","l3_to_l4_nopsfsub.json"]
             chained = True
+        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TPUMP':
+            recipe_filename = ['trap_pump_cal_1.json', 'trap_pump_cal_2.json']
+            chained = True
         else:
             recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
     # L2a -> L2b data processing
