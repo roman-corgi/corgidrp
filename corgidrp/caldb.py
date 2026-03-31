@@ -67,7 +67,8 @@ labels = {data.Dark: "Dark",
           data.NDMuellerMatrix: "NDMuellerMatrix",
           data.SpecFilterOffset: "SpecFilterOffset",
           data.SpecFluxCal: "SpecFluxCal",
-          data.SlitTransmission: "SlitTransmission"
+          data.SlitTransmission: "SlitTransmission",
+          data.LineSpread: "LineSpread"
           }
 
 class CalDB:
@@ -398,6 +399,7 @@ class CalDB:
         elif dtype_label in ['CoreThroughputCalibration']:
             # filter by focal plane mask
             options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -452,6 +454,7 @@ class CalDB:
         elif dtype_label in ['NDMuellerMatrix']:
             # filter by ND filter (FPAM)
             options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -478,6 +481,22 @@ class CalDB:
             # filter by slit mask (FSAM), prism (DPAM), and color filter (CFAM)
             options = self.filter_calib(calibdf, "FSAMNAME", frame_dict['FSAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['LineSpread']:
+            # filter by prism (DPAM) and color filter (CFAM)
+            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['SpectroscopyCentroidPSF']:
+            # filter by prism (DPAM) and color filter (CFAM)
+            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
             # select the one closest in time
