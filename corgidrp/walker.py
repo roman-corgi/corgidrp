@@ -85,7 +85,8 @@ all_steps = {
     "combine_polarization_states": corgidrp.l3_to_l4.combine_polarization_states,
     "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization,
     "align_2d_frames": corgidrp.l3_to_l4.align_2d_frames,
-    "combine_spec": corgidrp.l3_to_l4.combine_spec
+    "combine_spec": corgidrp.l3_to_l4.combine_spec,
+    "spec_fluxcal": corgidrp.spec.spec_fluxcal
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -412,8 +413,11 @@ def guess_template(dataset):
         if image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             is_spec_mode = image.ext_hdr.get('DPAMNAME', '').startswith('PRISM')
             has_nd_filter = any(img.ext_hdr.get('FPAMNAME', '').startswith('ND') for img in dataset)
-            if is_spec_mode and has_nd_filter:
-                recipe_filename = "l2b_to_nd_filter_spec.json"
+            if is_spec_mode:
+                if has_nd_filter:
+                    recipe_filename = "l2b_to_nd_filter_spec.json"
+                else:
+                    recipe_filename = "l2b_to_spec_flux.json"
             else:
                 _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
                 if len(fsm_unique) > 1:
