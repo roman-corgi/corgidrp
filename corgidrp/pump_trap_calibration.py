@@ -2221,7 +2221,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     # Make a copy of the input dataset to operate on
     working_dataset = input_dataset.copy()
 
-    dsets, vals = working_dataset.split_dataset(prihdr_keywords=['OPMODE', 'FRMTYPE'])
+    dsets, vals = working_dataset.split_dataset(exthdr_keywords=['OPMODE', 'FRMTYPE'])
     good_inds = []
     for val in vals:
         if val[0] == 'TRAP_PUMPING' and val[1] == 'NUM':
@@ -2376,9 +2376,8 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
                     frame_data = fr.data
                 else:
                     frame_data = frame.data
-                # ignore legacy frames, which are 0 except for rows 1027 through 1037 in image area (1024x1024)
-                if (np.abs(frame_data[0:3]).max() == 0 and
-                    np.abs(frame_data[13:]).max() == 0):
+                # ignore legacy frames, which are 0 except for rows 1027 through 1037 in imaging area (rows 0-1037, cols 1088-2144)
+                if np.abs(frame_data[0:1027]).max()==0:
                     continue 
                 timings.append(phase_time)   
                 frames.append(frame_data)
@@ -3328,7 +3327,7 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
     prhdr, exthdr, errhdr, dqhdr = check.merge_headers(input_dataset, invalid_keywords=invalid_tpu_keywords)
     exthdr['BUNIT'] = ""
 
-    trapcal = TrapCalibration(trap_cal_array, pri_hdr = prhdr, 
+    trapcal = TrapCalibration(trap_cal_array, pri_hdr = prhdr,
                     ext_hdr = exthdr, 
                     input_dataset=input_dataset)
     
