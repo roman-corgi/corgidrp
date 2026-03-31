@@ -8,6 +8,7 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.spec as spec
+import corgidrp.flat as flat
 
 import astropy.time as time
 from astropy.io import fits
@@ -648,6 +649,14 @@ def initialize():
         
         disp_model = data.DispersionModel(disp_dict, pri_hdr = prihdr, ext_hdr = exthdr)
         disp_model.save(output_dir, disp_model.filename)
+        rescan_needed = True
+
+    # Add default ones_flat.fits calibration file
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "ones_flat.fits")):
+        ones_flat_dataset = mocks.create_flatfield_dummy(numfiles=1)
+        ones_flat_dataset[0].data[:] = 1.0
+        ones_flat = flat.create_flatfield(ones_flat_dataset)
+        ones_flat.save(filedir=corgidrp.default_cal_dir, filename="ones_flat.fits")
         rescan_needed = True
 
     if rescan_needed:

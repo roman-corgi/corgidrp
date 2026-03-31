@@ -154,16 +154,21 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     # Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
-    #Mock up some important header things
-    ext_hdr_flat0 = ext_hdr.copy()
-    ext_hdr_flat0['DPAMNAME'] = 'POL0'
+    # Flats are taken with an open FP mask (OPEN_12 for band 1)
+    # Create separate input datasets for each pol flat with the correct DPAMNAME and FPAMNAME
+    mock_dataset_flat0 = data.Dataset([frame.copy() for frame in mock_input_dataset])
+    for frame in mock_dataset_flat0:
+        frame.ext_hdr['DPAMNAME'] = 'POL0'
+        frame.ext_hdr['FPAMNAME'] = 'OPEN_12'
     pri_hdr_flat45 = pri_hdr.copy()
     pri_hdr_visitID = str(int(pri_hdr['VISITID']) + 1)  #Change the visit id so the filename will be different
     pri_hdr_flat45['VISITID'] = pri_hdr_visitID
-    ext_hdr_flat45 = ext_hdr.copy()
-    ext_hdr_flat45['DPAMNAME'] = 'POL45'
-    flat0 = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    flat45 = data.FlatField(flat_dat, pri_hdr=pri_hdr_flat45, ext_hdr=ext_hdr_flat45, input_dataset=mock_input_dataset)
+    mock_dataset_flat45 = data.Dataset([frame.copy() for frame in mock_input_dataset])
+    for frame in mock_dataset_flat45:
+        frame.ext_hdr['DPAMNAME'] = 'POL45'
+        frame.ext_hdr['FPAMNAME'] = 'OPEN_12'
+    flat0 = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_dataset_flat0)
+    flat45 = data.FlatField(flat_dat, pri_hdr=pri_hdr_flat45, ext_hdr=ext_hdr, input_dataset=mock_dataset_flat45)
     mocks.rename_files_to_cgi_format(list_of_fits=[flat0, flat45], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat0)
     this_caldb.create_entry(flat45)
@@ -462,8 +467,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/maxmb/Data/corgi/E2E_Test_Data/'
-    outputdir = '/Users/maxmb/Data/corgi/e2e_output/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    outputdir = '/Users/jmilton/Github/corgidrp/tests/e2e_tests'
 
     ap = argparse.ArgumentParser(description="run the l1->l3 polarimetry end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

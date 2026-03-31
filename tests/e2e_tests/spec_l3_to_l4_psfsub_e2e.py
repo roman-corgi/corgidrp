@@ -471,7 +471,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
