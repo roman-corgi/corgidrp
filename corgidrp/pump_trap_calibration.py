@@ -2370,7 +2370,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
                 #Get the data and the phase time - convert from us to seconds
                 phase_time = float(frame.ext_hdr[time_head])/10**6
                 # load in frame if RAM-heavy mode
-                # At most, 300 1024x1024 frames put together here, which is < 100 GB RAM
+                # At most, 300 imaging-area frames (1037x1056; includes shielded pixels beyond 1024x1024) put together here, which is < 100 GB RAM
                 if frame.data is None:
                     fr = data.Image(frame.filepath)
                     frame_data = fr.data
