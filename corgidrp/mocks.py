@@ -305,7 +305,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     
     # Override some values that should be dynamic
     prihdr['FILETIME'] = dt_str
-    prihdr['VISTYPE'] = 'TPUMP'  # Trap pump specific
+    prihdr['VISTYPE'] = 'CGIVST_CAL_TPUMP'  # Trap pump specific
     
     # Parse image header values  
     image_values = parse_csv_table(csv_file_path, "Image Header (HDU 1)")

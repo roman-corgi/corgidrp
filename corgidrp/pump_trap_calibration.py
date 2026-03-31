@@ -2226,7 +2226,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     for val in vals:
         if val[0] == 'TRAP_PUMPING' and val[1] == 'NUM':
             good_inds.append(vals.index(val))
-        if val[0] == 'SPARE_9' and val[1] == 'NUM':
+        if (val[0] == 'SPARE_9' or val[0] == 'SPARE9') and val[1] == 'NUM':
             good_inds.append(vals.index(val))
     frames_to_keep = []
     for ind in good_inds:
