@@ -790,7 +790,7 @@ def calibrate_kgain(dataset_kgain,
     
     # prepare PTC array
     ptc_list = [compiled_binned_averages, 
-                current_binned_total_deviations]
+                compiled_binned_total_deviations]
     ptc = np.column_stack(ptc_list)
 
     invalid_krn_keywords = data.typical_cal_invalid_keywords + ['EXPTIME', 'EMGAIN_C', 'EMGAIN_A', 'HVCBIAS']
