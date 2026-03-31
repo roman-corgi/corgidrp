@@ -119,6 +119,9 @@ def test_l1_to_fluxcal(e2edata_path, e2eoutput_path):
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    flat.ext_hdr['FPAMNAME'] = 'OPEN_12'
+    flat.ext_hdr['CFAMNAME'] = '1F'
+    flat.ext_hdr['DPAMNAME'] = 'IMAGING'
     mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat)
 
@@ -188,7 +191,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/schreiber/DataCopy/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
 

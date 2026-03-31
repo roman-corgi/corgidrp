@@ -261,7 +261,8 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     exthd['CFAMNAME'] = '1F'
     exthd['DPAMNAME'] = 'POL0'
     exthd['FPAMNAME'] = 'HLC12_C2R1'
-    fluxcal_fac = data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = distortion_dataset_base)
+    exthd['DRPNFILE'] = 0  # mock calibration, no input files
+    fluxcal_fac = data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd)
 
     mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)

@@ -2200,7 +2200,7 @@ class FluxcalFactor(Image):
                 # give it a default filename using the first input file as the base
                 # strip off everything starting at .fits
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-  
+
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
             # JM: moved the below to fluxcal.py since it varies depending on the method
             #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
@@ -2214,8 +2214,11 @@ class FluxcalFactor(Image):
             # use the start date for the filename by default
             self.filedir = "."
             # slight hack for old mocks not in the standard filename format
-            self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            if input_dataset is not None:
+                self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
+                self.filename = re.sub('_l[0-9].', '', self.filename)
+            else:
+                self.filename = re.sub(r'\.fits$', '_abf_cal.fits', self.pri_hdr['FILENAME'])
             self.pri_hdr['FILENAME'] = self.filename
 
 class SpecFluxCal(Image):

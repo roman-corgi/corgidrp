@@ -115,11 +115,15 @@ class CalDB:
         """
         Load/update db from filepath
         """
-        self._db = pd.read_csv(self.filepath, dtype=column_dtypes)
+        self._db = pd.read_csv(self.filepath)
         # Scan the database for any columns that might be missing, fill in missing columns with default values if necessary
         for col in column_names:
             if col not in self._db.columns:
                 self._db[col] = default_values[column_dtypes[col]]
+        # fill any NA values with defaults and enforce column types
+        for col, dtype in column_dtypes.items():
+            if col in self._db.columns:
+                self._db[col] = self._db[col].fillna(default_values[dtype]).astype(dtype)
 
     def save(self):
         """
@@ -376,19 +380,6 @@ class CalDB:
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
-        elif dtype_label in ['NDFilterSweetSpot']:
-            # filter by DPAM, ND filter (FPAM), and CFAM
-            # sub-band CFAMs fall back to the corresponding broadband (eg 1A/1B/1C -> 1F)
-            cfam_subband_map = {'1A': '1F', '1B': '1F', '1C': '1F',
-                                '4A': '4F', '4B': '4F', '4C': '4F'}
-            cfam_lookup = cfam_subband_map.get(frame_dict['CFAMNAME'], frame_dict['CFAMNAME'])
-            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "CFAMNAME", cfam_lookup, err_if_none=True)
-
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['FluxcalFactor']:
             # filter by color filter and DPAM
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
@@ -433,47 +424,16 @@ class CalDB:
 
                 # FPAM should be either OPEN_12 for bands 1&2, or OPEN_34 for bands 3&4
                 options = options[options["FPAMNAME"].str.startswith("OPEN")]
+                if len(options) == 0:
+                    raise ValueError("No FlatField with OPEN FPAM found in caldb at {0} for CFAMNAME={1}, DPAMNAME={2}".format(
+                        self.filepath, cfam_lookup, frame_dict['DPAMNAME']))
                 result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
             # FlatFieldPOL0/FlatFieldPOL45 are looked up as FlatField entries on disk
             dtype = data.FlatField
-        elif dtype_label in ['DispersionModel']:
-            # filter by prism (DPAM) and color filter (CFAM) - different prisms have different dispersion
-            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
-
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['MuellerMatrix']:
             # filter by color filter
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
-
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
-        elif dtype_label in ['NDMuellerMatrix']:
-            # filter by ND filter (FPAM)
-            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
-
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
-        elif dtype_label in ['NDSpectroscopy']:
-            # filter by ND filter (FPAM), prism (DPAM), and color filter (CFAM)
-            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
-
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
-        elif dtype_label in ['SpecFluxCal']:
-            # filter by color filter, DPAM, and shaped pupil mask (SPAM) - SPEC vs SPECROT have different transmission
-            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "SPAMNAME", frame_dict['SPAMNAME'], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -530,7 +490,10 @@ class CalDB:
                     continue
 
                 filepath = os.path.join(dirpath, filename)
-                frame = data.autoload(filepath)
+                try:
+                    frame = data.autoload(filepath)
+                except Exception:
+                    continue
 
                 # check what class it has been loaded as. only save frames that fall into calibration classes
                 if frame.__class__ in labels:
@@ -619,7 +582,7 @@ def initialize():
         dt = dt_time.to_datetime()
         dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
         ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-        disp_filename = f"cgi_{prihdr['VISITID']}_{ftime}_l2b.fits"
+        disp_filename = f"cgi_{prihdr['VISITID']}_{ftime}_dpm_cal.fits"
         prihdr['FILETIME'] = dt_str
         prihdr['FILENAME'] = disp_filename
         exthdr['DATETIME'] = dt_str
