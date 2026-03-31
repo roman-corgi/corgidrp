@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import itertools
+import time
 import astropy.io.fits as fits
 from specL1sims_utils import write_png_from_sceneobj
 
@@ -140,6 +141,7 @@ def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, f
             L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
             L1_fits_files.append(L1_fitsname)
             png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
+            time.sleep(1)  # Wait 1 sec to prevent filename collision
 
         print("Evaluating filter 3F image...") 
         sim_cfam3F = optics_3F.get_host_star_psf(base_scene)
@@ -175,6 +177,7 @@ def create_star_slit_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, f
             L1_fitsname = os.path.join(outdir, sim_cfam3F.image_on_detector[0].header['FILENAME'])
             L1_fits_files.append(L1_fitsname)
             png_fname = write_png_from_sceneobj(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
+            time.sleep(1)  # Wait 1 sec to prevent filename collision
 
     return L1_fits_files
 
@@ -298,6 +301,7 @@ def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas,
         L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
         L1_fits_files.append(L1_fitsname)
         png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
+        time.sleep(1)  # Wait 1 sec to prevent filename collision
 
     for filter_name, optics in optics_config_dict.items():
         if filter_name == '3D':
@@ -338,6 +342,7 @@ def create_star_slitless_prism_sims(outdir, Vmag, sptype, fsm_source_offset_mas,
             L1_fitsname = os.path.join(outdir, sim.image_on_detector[0].header['FILENAME'])
             L1_fits_files.append(L1_fitsname)
             png_fname = write_png_from_sceneobj(sim, outdir, loc_x, loc_y, output_dim)
+            time.sleep(1)  # Wait 1 sec to prevent filename collision
 
     return L1_fits_files
 
@@ -466,6 +471,7 @@ def create_dithered_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fs
         L1_fitsname = os.path.join(outdir, sim_cfam3F_slitless.image_on_detector[0].header['FILENAME'])
         L1_fits_files.append(L1_fitsname)
         png_fname = write_png_from_sceneobj(sim_cfam3F_slitless, outdir, loc_x, loc_y, output_dim)
+        time.sleep(1)  # Wait 1 sec to prevent filename collision
 
     # FSM-dithered prism images with slit
     fsm_offset_3F_optics_list = list() 
@@ -537,6 +543,7 @@ def create_dithered_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fs
             L1_fitsname = os.path.join(outdir, sim_cfam3D.image_on_detector[0].header['FILENAME'])
             L1_fits_files.append(L1_fitsname)
             png_fname = write_png_from_sceneobj(sim_cfam3D, outdir, loc_x, loc_y, output_dim)
+            time.sleep(1)  # Wait 1 sec to prevent filename collision
 
         # noisy image
         # detector.generate_detector_image(sim_cfam3D, short_exptime, full_frame=False)
@@ -580,5 +587,6 @@ def create_dithered_prism_sims(outdir, Vmag, sptype, slit_name, slit_pos_mas, fs
             L1_fitsname = os.path.join(outdir, sim_cfam3F.image_on_detector[0].header['FILENAME'])
             L1_fits_files.append(L1_fitsname)
             png_fname = write_png_from_sceneobj(sim_cfam3F, outdir, loc_x, loc_y, output_dim)
+            time.sleep(1)  # Wait 1 sec to prevent filename collision
 
     return L1_fits_files
