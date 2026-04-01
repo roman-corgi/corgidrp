@@ -88,10 +88,6 @@ from corgidrp.photon_counting import get_pc_mean
 from corgidrp.darks import build_synthesized_dark
 import corgidrp.detector as detector
 import corgidrp.fluxcal as fluxcal
-
-thisfile_dir = os.path.dirname(__file__)
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -292,7 +288,7 @@ def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
         l1_datadir, processed_cal_path, calibrations_dir)
 
     # ------------------------------------------------------------------
-    # 2. Prepare L1 input files
+    # 2. Prepare L1 input files (only 5 of the faint star without ND filter)
     # ------------------------------------------------------------------
     l1_filelist = sorted(
         os.path.join(l1_datadir, f)
@@ -305,107 +301,17 @@ def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
     print(f"Found {len(l1_filelist)} L1 input files.")
 
     # ------------------------------------------------------------------ 
-    # 3. L1 -> L2a                                                        
+    # 3. L1 ->SpecFluxCal                                                        
     # ------------------------------------------------------------------ 
-    print("Running L1 -> L2a …")
+    print("Running L1 -> SpecFluxCal")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l1_filelist, "", outputdir,
-                             template="l1_to_l2a_basic.json")
+        walker.walk_corgidrp(l1_filelist, "", outputdir)
 
-    l2a_filelist = sorted(
-        os.path.join(outputdir, f)
-        for f in os.listdir(outputdir) if f.endswith('_l2a.fits')
-    )
-    print(f"L1 -> L2a complete: {len(l2a_filelist)} L2a files produced.")
-
-    # PC dark (only needed for photon-counted data)
-    if is_pc_data and l2a_filelist:
-        num_dark = max(len(l2a_filelist), 10)
-        _, dark_l1_ds, _, _ = mocks.create_photon_countable_frames(
-            Nbrights=1, Ndarks=num_dark)
-        dark_l1_dir = os.path.join(outputdir, 'pc_dark_l1')
-        os.makedirs(dark_l1_dir, exist_ok=True)
-        dark_l1_ds.save(filedir=dark_l1_dir)
-        dark_l1_files = sorted(
-            os.path.join(dark_l1_dir, f)
-            for f in os.listdir(dark_l1_dir) if f.endswith('_l1_.fits')
-        )
-        dark_l2a_dir = os.path.join(outputdir, 'pc_dark_l2a')
-        os.makedirs(dark_l2a_dir, exist_ok=True)
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=UserWarning)
-            walker.walk_corgidrp(dark_l1_files, "", dark_l2a_dir)
-        dark_l2a_files = sorted(
-            os.path.join(dark_l2a_dir, f)
-            for f in os.listdir(dark_l2a_dir) if f.endswith('_l2a.fits')
-        )
-        pc_dark = get_pc_mean(data.Dataset(dark_l2a_files), inputmode='darks')
-        mocks.rename_files_to_cgi_format([pc_dark], calibrations_dir, "drk_cal")
-        this_caldb.create_entry(pc_dark)
-        print("PC dark created.")
-
-    # ------------------------------------------------------------------ #
-    # 4. L2a -> L2b (spectroscopy recipe)                                 #
-    # ------------------------------------------------------------------ #
-    print("Running L2a → L2b (spec) …")
-    if is_pc_data:
-        # get_pc_mean requires a single VISTYPE per run.  Split by VISTYPE
-        # (CGIVST_CAL_ABSFLUX_FAINT / CGIVST_CAL_ABSFLUX_BRIGHT) and run
-        # the three PC spec recipes independently for each group.
-        l2a_dataset = data.Dataset(l2a_filelist, no_data=True, no_err=True, no_dq=True)
-        vistype_groups, _ = l2a_dataset.split_dataset(prihdr_keywords=['VISTYPE'])
-        for group in vistype_groups:
-            group_files = [f.filepath for f in group.frames]
-            vt = group.frames[0].pri_hdr['VISTYPE']
-            group_ispc = int(group.frames[0].ext_hdr.get('ISPC', 1))
-            print(f"  L2a→L2b: VISTYPE={vt}, ISPC={group_ispc} ({len(group_files)} files)")
-            if group_ispc == 1:
-                # Photon-counting path (dim star, ISPC=1)
-                recipe = walker.autogen_recipe(group_files, outputdir)
-                with warnings.catch_warnings():
-                    warnings.filterwarnings('ignore', category=UserWarning)
-                    out1 = walker.run_recipe(recipe[0], save_recipe_file=True)
-                recipe[1]['inputs'] = out1
-                with warnings.catch_warnings():
-                    warnings.filterwarnings('ignore', category=UserWarning)
-                    out2 = walker.run_recipe(recipe[1], save_recipe_file=True)
-                recipe[2]['inputs'] = out2
-                with warnings.catch_warnings():
-                    warnings.filterwarnings('ignore', category=UserWarning)
-                    walker.run_recipe(recipe[2], save_recipe_file=True)
-            else:
-                # Analog path (bright star through ND filter, ISPC=0)
-                with warnings.catch_warnings():
-                    warnings.filterwarnings('ignore', category=UserWarning)
-                    walker.walk_corgidrp(group_files, "", outputdir)
-    else:
-        # Split by EXPTIME so each group is paired with its matching dark.
-        # Dim-star and bright-star frames may use different exposure times.
-        l2a_ds = data.Dataset(l2a_filelist, no_data=True, no_err=True, no_dq=True)
-        exptime_groups, _ = l2a_ds.split_dataset(exthdr_keywords=['EXPTIME'])
-        for group in exptime_groups:
-            group_files = [f.filepath for f in group.frames]
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', category=UserWarning)
-                walker.walk_corgidrp(group_files, "", outputdir)
-
-    l2b_filelist = sorted(
-        os.path.join(outputdir, f)
-        for f in os.listdir(outputdir) if f.endswith('_l2b.fits')
-    )
-    print(f"L2a -> L2b complete: {len(l2b_filelist)} L2b files produced.")
+    print(f"L1 -> SpecFluxCal complete.")
 
     # ------------------------------------------------------------------ 
-    # 5. L2b -> SpecFluxCal calibration product                                                 
-    # ------------------------------------------------------------------ 
-    print("Running L2b -> SpecFluxCal …")
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l2b_filelist, "", outputdir)
-
-    # ------------------------------------------------------------------ 
-    # 6. Find and load the SpecFluxCal (sfl) product                      
+    # 4. Find and load the SpecFluxCal (sfl) product                      
     # ------------------------------------------------------------------ 
     spec_flux_files = sorted(
         os.path.join(outputdir, f)
@@ -421,7 +327,7 @@ def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
     print(f"SpecFluxCal product loaded: {spec_flux_files[0]}")
 
     # ------------------------------------------------------------------ 
-    # 7. Validation                                                       
+    # 5. Validation                                                       
     # ------------------------------------------------------------------ 
     print("Validating SpecFluxCal product")
 
@@ -450,12 +356,17 @@ def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
     assert np.all(specflux_err > 0), f"spectrum fluxcal errors contains non-positive values (min={specflux_err.min():.3f})."
     
     #estimate flux cal factor from one l2b image
+    l2b_filelist = sorted(
+        os.path.join(outputdir, f)
+        for f in os.listdir(outputdir) if f.endswith('_l2b.fits')
+    )
     l2b_image = data.Image(l2b_filelist[2])
     target = l2b_image.pri_hdr["TARGET"]
     exptime = l2b_image.ext_hdr["EXPTIME"]
     calspec_filepath, _ = fluxcal.get_calspec_file(target)
     flux_ref = fluxcal.read_cal_spec(calspec_filepath,spec_wave * 10.)
-    spec = np.sum(np.mean(l2b_image.data[503:521, 510:514],0))/exptime
+    center = 512
+    spec = np.sum(np.mean(l2b_image.data[center - 9:center +9, center -2:center +2],0))/exptime
     est_fluxfac = np.mean(flux_ref)/spec
     dev = (est_fluxfac - np.mean(specflux))/est_fluxfac
 
@@ -494,7 +405,7 @@ def test_spec_fluxcal_e2e(e2edata_path, e2eoutput_path):
     """
     l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "L1")
     processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
-    outputdir = os.path.join(e2eoutput_path, "nd_filter_spec_e2e")
+    outputdir = os.path.join(e2eoutput_path, "l1_to_spec_fluxcal_e2e")
 
     if os.path.exists(outputdir):
         shutil.rmtree(outputdir)
@@ -508,6 +419,9 @@ def test_spec_fluxcal_e2e(e2edata_path, e2eoutput_path):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    e2edata_dir = '/home/schreiber/DataCopy/E2E_Test_Data'
+    thisfile_dir = os.path.dirname(__file__)
+    outputdir = thisfile_dir
     ap = argparse.ArgumentParser(
         description="Spectroscopy flux calibration E2E test (L1 -> SpecFluxCal)"
     )
@@ -523,12 +437,4 @@ if __name__ == "__main__":
     )
     args = ap.parse_args()
 
-    l1_datadir         = os.path.join(args.e2edata_dir, "ND_SPEC", "L1")
-    processed_cal_path = os.path.join(args.e2edata_dir, "ND_SPEC", "Cals")
-    outputdir = os.path.join(args.outputdir, "l1_to_spec_fluxcal_e2e")
-
-    if os.path.exists(outputdir):
-        shutil.rmtree(outputdir)
-    os.makedirs(outputdir)
-
-    run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir)
+    test_spec_fluxcal_e2e(e2edata_dir, outputdir)

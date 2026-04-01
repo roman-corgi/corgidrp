@@ -346,9 +346,13 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             is_spec_mode = image.ext_hdr.get('DPAMNAME', '').startswith('PRISM')
             has_nd_filter = any(img.ext_hdr.get('FPAMNAME', '').startswith('ND') for img in dataset)
-            if is_spec_mode and has_nd_filter:
-                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", "l2b_to_nd_filter_spec.json"]
-                chained = True
+            if is_spec_mode:
+                if has_nd_filter:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", "l2b_to_nd_filter_spec.json"]
+                    chained = True
+                else:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", "l2b_to_spec_flux.json"]
+                    chained = True
             else:
                 _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
                 if len(fsm_unique) > 1:
