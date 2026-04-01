@@ -594,7 +594,8 @@ def run_recipe(recipe, save_recipe_file=True):
                     frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
         # execute each pipeline step
         print('Executing recipe: {0}'.format(recipe['name']))
-        print('number of frames: ', len(filelist))
+        if isinstance(filelist, list):
+            print('number of frames: ', len(filelist))
         if ram_increment_bool and len(filelist_chunks) > 1:
             print('Processing frames in chunks of {0} frames'.format(corgidrp.chunk_size))
         if ram_heavy_bool:
