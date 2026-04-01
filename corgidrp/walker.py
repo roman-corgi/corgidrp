@@ -516,11 +516,11 @@ def run_recipe(recipe, save_recipe_file=True):
 
     # configure pipeline as needed
     # these settings should only apply to this recipe, so we will restore old settings later
-    old_settings = {} 
-    for setting in recipe['drpconfig']:
-        # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
-        setattr(corgidrp, setting, recipe['drpconfig'][setting])
-        old_settings[setting] = recipe['drpconfig'][setting]
+    old_settings = {}
+    for setting in recipe.get("drpconfig", {}):
+        # capture previous value before overriding
+        old_settings[setting] = getattr(corgidrp, setting, None)
+        setattr(corgidrp, setting, recipe["drpconfig"][setting])
 
     # save recipe before running recipe
     if save_recipe_file:
@@ -557,125 +557,104 @@ def run_recipe(recipe, save_recipe_file=True):
         else:
             filelist_chunks = [filelist]
 
-    tot_steps = len(recipe["steps"])
-    save_step = False
-    output_filepaths = []
-    for filelist in filelist_chunks:
-        if recipe["inputs"]:
+    try:
+        tot_steps = len(recipe["steps"])
+        save_step = False
+        output_filepaths = []
+        for filelist in filelist_chunks:
+            if recipe["inputs"]:
+                if ram_heavy_bool:
+                    curr_dataset = data.Dataset(filelist, no_data=True)
+                    recipe_temp = recipe.copy()
+                    # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
+                    recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
+                else:
+                    curr_dataset = data.Dataset(filelist)
+                    recipe_temp = recipe
+                # write the recipe into the image extension header
+                curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
+                if len(curr_dataset) > 1:
+                    for frame in curr_dataset[:-1]:
+                        frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+            # execute each pipeline step
+            print('Executing recipe: {0}'.format(recipe['name']))
+            if ram_increment_bool and len(filelist_chunks) > 1:
+                print('Processing frames in chunks of {0} frames'.format(corgidrp.chunk_size))
             if ram_heavy_bool:
-                curr_dataset = data.Dataset(filelist, no_data=True)
-                recipe_temp = recipe.copy()
-                # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
-                recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
-            else:
-                curr_dataset = data.Dataset(filelist)
-                recipe_temp = recipe
-            # write the recipe into the image extension header
-            curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-            if len(curr_dataset) > 1:
-                for frame in curr_dataset[:-1]:
-                    frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
-        # execute each pipeline step
-        print('Executing recipe: {0}'.format(recipe['name']))
-        if ram_increment_bool and len(filelist_chunks) > 1:
-            print('Processing frames in chunks of {0} frames'.format(corgidrp.chunk_size))
-        if ram_heavy_bool:
-            print('Processing frames in RAM-heavy mode (data not loaded into memory until necessary, one frame at a time)')
-        for i, step in enumerate(recipe["steps"]):
-            print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
-            if step["name"].lower() == "save":
-                # special save instruction
-                
-                # see if suffix is specified as a keyword
-                if "keywords" in step and "suffix" in step["keywords"]:
-                    suffix =  step["keywords"]["suffix"]
+                print('Processing frames in RAM-heavy mode (data not loaded into memory until necessary, one frame at a time)')
+            for i, step in enumerate(recipe["steps"]):
+                print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
+                if step["name"].lower() == "save":
+                    # special save instruction
+                    if "keywords" in step and "suffix" in step["keywords"]:
+                        suffix =  step["keywords"]["suffix"]
+                    else:
+                        suffix = ''
+                    save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
+                    if isinstance(curr_dataset, data.Dataset):
+                        output_filepaths += [frame.filepath for frame in curr_dataset]
+                    else:
+                        output_filepaths += [curr_dataset.filepath]
+                    save_step = True
                 else:
-                    suffix = ''
-                
-                save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
-                if isinstance(curr_dataset, data.Dataset):
-                    output_filepaths += [frame.filepath for frame in curr_dataset]
-                else:
-                    output_filepaths += [curr_dataset.filepath] 
-                save_step = True
-
-            else:
-                step_func = all_steps[step["name"]]
-
-                # edge case if this step has been specified to be skipped
-                if "skip" in step and step["skip"]:
-                    continue
-
-                other_args = ()
-                if "calibs" in step:
-                    # if JIT calibration resolving is toggled, figure out the calibrations here
-                    # by default, this is false
-                    if (corgidrp.jit_calib_id and ("jit_calib_id" not in recipe['drpconfig'])) or (("jit_calib_id" in recipe['drpconfig']) and recipe['drpconfig']["jit_calib_id"]) :
-                        this_caldb = caldb.CalDB()
-                        # dataset may have turned into a single image. handle this case. 
-                        if isinstance(curr_dataset, data.Dataset):
-                            ref_image = curr_dataset[0]
-                            list_of_frames = curr_dataset
-                        else:
-                            ref_image = curr_dataset
-                            list_of_frames = [curr_dataset]
-                        if ram_heavy_bool:
-                            ref_image = data.Image(ref_image.filepath) #load in data for calibration matching
-                        _fill_in_calib_files(step, this_caldb, ref_image)
-
-                        # also update the recipe we used in the headers
-                        if ram_heavy_bool:
-                            recipe_temp = recipe.copy()
-                            # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
-                            recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
-                        else: 
-                            recipe_temp = recipe
-                        list_of_frames[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                        if len(list_of_frames) > 1:
-                            for frame in list_of_frames[:-1]:
-                                frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
-
-
-                    # load the calibration files in from disk
-                    for calib in step["calibs"]:
-                        if step["calibs"][calib] is not None:
-                            # special case for pol flat because it has multiple files
-                            if calib == "FlatFieldPOL0" or calib == "FlatFieldPOL45":
-                                calib_dtype = data.datatypes['FlatField']
-                            else: 
-                                calib_dtype = data.datatypes[calib]
-                            cal_file = calib_dtype(step["calibs"][calib])
-                        else:
-                            cal_file = None
-                        other_args += (cal_file,)
-
-
-                if "keywords" in step:
-                    kwargs = step["keywords"]
-                else:
-                    kwargs = {}
-
-                # run the step!
-                curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
-
-                # make sure RECIPE header is propagated to output
-                if isinstance(curr_dataset, data.Dataset):
-                    for frame in curr_dataset:
-                        if "RECIPE" not in frame.ext_hdr:
-                            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
-                elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
-                    curr_dataset.ext_hdr["RECIPE"] = json.dumps(recipe)
-
-    if not save_step:
-        output_filepaths = None
-
-    # restore old pipeline settings that this recipe overwrote
-    for setting in old_settings:
-        # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
-        setattr(corgidrp, setting, old_settings[setting])
-
-    
-    return output_filepaths
+                    step_func = all_steps[step["name"]]
+                    # edge case if this step has been specified to be skipped
+                    if "skip" in step and step["skip"]:
+                        continue
+                    other_args = ()
+                    if "calibs" in step:
+                        # if JIT calibration resolving is toggled, figure out the calibrations here
+                        if (corgidrp.jit_calib_id and ("jit_calib_id" not in recipe['drpconfig'])) or (("jit_calib_id" in recipe['drpconfig']) and recipe['drpconfig']["jit_calib_id"]) :
+                            this_caldb = caldb.CalDB()
+                            # dataset may have turned into a single image. handle this case.
+                            if isinstance(curr_dataset, data.Dataset):
+                                ref_image = curr_dataset[0]
+                                list_of_frames = curr_dataset
+                            else:
+                                ref_image = curr_dataset
+                                list_of_frames = [curr_dataset]
+                            if ram_heavy_bool:
+                                ref_image = data.Image(ref_image.filepath) #load in data for calibration matching
+                            _fill_in_calib_files(step, this_caldb, ref_image)
+                            # also update the recipe we used in the headers
+                            if ram_heavy_bool:
+                                recipe_temp = recipe.copy()
+                                recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
+                            else:
+                                recipe_temp = recipe
+                            list_of_frames[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
+                            if len(list_of_frames) > 1:
+                                for frame in list_of_frames[:-1]:
+                                    frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                        # load the calibration files in from disk
+                        for calib in step["calibs"]:
+                            if step["calibs"][calib] is not None:
+                                # special case for pol flat because it has multiple files
+                                if calib == "FlatFieldPOL0" or calib == "FlatFieldPOL45":
+                                    calib_dtype = data.datatypes['FlatField']
+                                else:
+                                    calib_dtype = data.datatypes[calib]
+                                cal_file = calib_dtype(step["calibs"][calib])
+                            else:
+                                cal_file = None
+                            other_args += (cal_file,)
+                    kwargs = step.get("keywords", {})
+                    # run the step!
+                    curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
+                    # make sure RECIPE header is propagated to output
+                    if isinstance(curr_dataset, data.Dataset):
+                        for frame in curr_dataset:
+                            if "RECIPE" not in frame.ext_hdr:
+                                frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+                    elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
+                        curr_dataset.ext_hdr["RECIPE"] = json.dumps(recipe)
+        if not save_step:
+            output_filepaths = None
+        return output_filepaths
+    finally:
+        # restore old pipeline settings that this recipe overwrote
+        for setting, old_val in old_settings.items():
+            setattr(corgidrp, setting, old_val)
 
 
 def _get_satellite_spot_info_from_xml(xml_tree):

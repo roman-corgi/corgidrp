@@ -2,6 +2,7 @@
 Calibration tracking system. Modified from kpicdrp caldb implmentation (Copyright (c) 2024, KPIC Team)
 """
 import os
+import glob
 import numpy as np
 import pandas as pd
 import corgidrp
@@ -408,9 +409,10 @@ class CalDB:
                                 '4A': '4F', '4B': '4F', '4C': '4F'}
             ones_flat_cfams = spectroscopy_cfams | {'CLEAR'}
             if frame_dict['DPAMNAME'] not in ['IMAGING', 'POL0', 'POL45'] or frame_dict['CFAMNAME'] in ones_flat_cfams:
-                options = calibdf[calibdf["Filepath"].str.endswith("ones_flat.fits")]
+                # Use an all-ones flat file identified with FPAMNAME='ONES'
+                options = calibdf[calibdf["FPAMNAME"] == "ONES"]
                 if len(options) == 0:
-                    raise ValueError("No ones_flat.fits found in caldb at {0}".format(self.filepath))
+                    raise ValueError("No ones-flat FlatField calibration found in caldb at {0}".format(self.filepath))
                 result_index = options["MJD"].argmax()
             elif frame_dict['CFAMNAME'] not in imaging_cfams:
                 raise ValueError(
@@ -614,12 +616,27 @@ def initialize():
         disp_model.save(output_dir, disp_model.filename)
         rescan_needed = True
 
-    # Add default ones_flat.fits calibration file
-    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "ones_flat.fits")):
+    # Add default ones-flat FlatField calibration file
+    ones_flat_exists = False
+    try:
+        for p in glob.glob(os.path.join(corgidrp.default_cal_dir, "*.fits")):
+            try:
+                exth = fits.getheader(p, ext=1)
+            except Exception:
+                continue
+            if exth.get("DATATYPE") == "FlatField" and exth.get("FPAMNAME") == "ONES":
+                ones_flat_exists = True
+                break
+    except Exception:
+        ones_flat_exists = False
+
+    if not ones_flat_exists:
         ones_flat_dataset = mocks.create_flatfield_dummy(numfiles=1)
         ones_flat_dataset[0].data[:] = 1.0
         ones_flat = flat.create_flatfield(ones_flat_dataset)
-        ones_flat.save(filedir=corgidrp.default_cal_dir, filename="ones_flat.fits")
+        ones_flat.ext_hdr["FPAMNAME"] = "ONES"
+        # write CGI-formatted file
+        mocks.rename_files_to_cgi_format(list_of_fits=[ones_flat], output_dir=corgidrp.default_cal_dir, level_suffix="flt_cal")
         rescan_needed = True
 
     if rescan_needed:

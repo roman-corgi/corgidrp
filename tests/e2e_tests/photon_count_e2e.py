@@ -141,6 +141,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    flat.ext_hdr['FPAMNAME'] = 'OPEN_12'
+    flat.ext_hdr['CFAMNAME'] = '1F'
+    flat.ext_hdr['DPAMNAME'] = 'IMAGING'
     mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     #fix_str_for_tvac([flat.filepath])
     this_caldb.create_entry(flat)
@@ -148,7 +151,18 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    # Make sure BPM includes a dark(-like) frame
+    bp_dark_pri, bp_dark_ext, _, _ = mocks.create_default_calibration_product_headers()
+    bp_dark_ext['EXPTIME'] = float(mock_input_dataset.frames[0].ext_hdr.get('EXPTIME', 0.0))
+    bp_dark_ext['EMGAIN_C'] = float(mock_input_dataset.frames[0].ext_hdr.get('EMGAIN_C', 1.0))
+    bp_dark_ext['DRPNFILE'] = 1
+    bp_dark = data.Dark(np.zeros_like(bp_dat, dtype=float), pri_hdr=bp_dark_pri, ext_hdr=bp_dark_ext,
+                        input_dataset=mock_input_dataset,
+                        err=np.zeros((1,) + bp_dat.shape, dtype=float),
+                        dq=np.zeros(bp_dat.shape, dtype='uint16'),
+                        err_hdr=fits.Header())
+    bp_map_inputs = data.Dataset([bp_dark, mock_input_dataset[-1]])
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     #fix_str_for_tvac([bp_map.filepath])
     this_caldb.create_entry(bp_map)
@@ -181,13 +195,15 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         walker.walk_corgidrp(l1_data_ill_filelist, '', output_l2a_dir)
 
     # grab L2a files to go to L2b
-    l2a_files = []
-    for filepath in l1_data_ill_filelist:
-        # emulate naming change behaviors
-        new_filename = filepath.split(os.path.sep)[-1].replace("_l1_", "_l2a")
-        # loook in new dir
-        new_filepath = os.path.join(output_l2a_dir, new_filename)
-        l2a_files.append(new_filepath)
+    l2a_files = sorted(
+        os.path.join(output_l2a_dir, f)
+        for f in os.listdir(output_l2a_dir)
+        if f.endswith("_l2a.fits")
+    )
+    if not l2a_files:
+        raise FileNotFoundError(
+            f"No L2a FITS files in output dir {output_l2a_dir}. "
+        )
     
     recipe = walker.autogen_recipe(l2a_files, l2a_to_l2b_output_dir)
     ### Modify they keywords of some of the steps
@@ -395,7 +411,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

@@ -1619,8 +1619,25 @@ class BadPixelMap(Image):
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         if input_dataset is not None:
+            # Use the dark frame for the base header set
+            try:
+                dark_frames = [
+                    f for f in input_dataset
+                    if getattr(f, "ext_hdr", {}).get("DATATYPE") in ("Dark", "MasterDark")
+                    or "_drk" in str(getattr(f, "filename", "")).lower()
+                ]
+                if not dark_frames:
+                    raise ValueError(
+                        "BadPixelMap input_dataset must contain at least one dark(-like) frame "
+                        "(DATATYPE='Dark'/'MasterDark' or filename containing '_drk'). "
+                        "Typically provide a dataset containing the master dark (and optionally the master flat)."
+                    )
+                base_dataset = Dataset(dark_frames)
+            except Exception:
+                raise
+
             pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
-                input_dataset,
+                base_dataset,
                 any_true_keywords=typical_bool_keywords,
                 invalid_keywords=typical_cal_invalid_keywords
             )
