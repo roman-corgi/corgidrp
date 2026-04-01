@@ -42,7 +42,7 @@ def create_flatfield(flat_dataset):
     flat_field.err=flat_field.err.reshape((1,)+flat_field.err.shape) # Get it into the right dimension
 
 
-    # Make sure FlatField products have consistents header, including synthetic ones-flats
+    # Make sure FlatField products have consistent headers, including synthetic ones-flats
     header_defaults = {
         # Image header (HDU 1)
         "FRMSEL01": -999.0,
@@ -55,8 +55,8 @@ def create_flatfield(flat_dataset):
         "FWC_PP_E": -999.0,
         "SAT_DN": -999.0,
         "RN": -999.0,
-        "RN_ERR": 0.0,
-        "KGAIN_ER": 0.0,
+        "RN_ERR": -999.0,
+        "KGAIN_ER": -999.0,
         "DESMEAR": False,
         "NUM_FR": -999,
     }

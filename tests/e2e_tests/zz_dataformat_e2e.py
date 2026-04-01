@@ -308,8 +308,7 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                     if skip_hdu_structure_check:
                         if 'NAXIS' in name.upper():
                             continue
-                    # Skip provenance keywords that vary with processing history
-                    # (both FILE0/FILE1... and FILE_1/FILE_2... styles).
+                    # Skip keywords that vary with processing history
                     if name.startswith("FILE") and len(name) > 4 and name[4:].isdigit():
                         continue
                     if name.startswith("FILE_") and len(name) > 5 and name[5:].isdigit():

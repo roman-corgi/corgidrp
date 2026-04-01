@@ -247,7 +247,7 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
     mocks.rename_files_to_cgi_format([flat], calibrations_dir, "flt_cal")
     this_caldb.create_entry(flat)
 
-    # Bad pixel map requires provenance a dark(-like) frame
+    # Bad pixel map requires a dark(-like) frame
     if not is_pc_data:
         dark_cals = []
         for f in os.listdir(calibrations_dir):
