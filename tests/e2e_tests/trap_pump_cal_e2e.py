@@ -29,7 +29,8 @@ except:
     pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
-metadata_path = os.path.join(thisfile_dir, '..', 'test_data', "metadata_eng.yaml")
+# TPUMP data will now be SCI, not ENG
+metadata_path = os.path.join(thisfile_dir, '..', 'test_data', "metadata.yaml")
 #metadata_path = os.path.join(os.path.abspath(os.path.dirname(__name__)), 'tests', 'test_data', "metadata_test.yaml")
 
 def fix_headers_for_tvac(
@@ -95,7 +96,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     np.random.seed(39)
     e2e = True
     # Generate mock trap pump data with standard filenames
-    mocks.generate_mock_pump_trap_data(trap_pump_datadir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='ENG')
+    mocks.generate_mock_pump_trap_data(trap_pump_datadir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='SCI')
     
     # Organize the generated files into temperature/scheme directories for tpump_analysis
     all_files = [f for f in os.listdir(trap_pump_datadir) if f.endswith('.fits') and f.startswith('cgi_')]
@@ -289,15 +290,17 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
         walker.run_recipe(recipe)
     if e2e:
         #template = json.load(open(os.path.join(thisfile_dir,"trap_pump_cal_e2e.json"), 'r'))
-        template_path = template = os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'recipe_templates', "trap_pump_cal.json")
-        template = json.load(open(template_path, 'r'))
-        recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir, template=template)
-        ### Modify they keywords of some of the steps
-        for step in recipe['steps']:
+        #template_path = os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'recipe_templates', "trap_pump_cal_1.json")
+        #template = json.load(open(template_path, 'r'))
+        recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir)#, template=template)
+        ### Modify they keywords of some of the steps to match what's used in the II&T code above
+        for step in recipe[1]['steps']:
             if step['name'] == "calibrate_trap_pump":
                 step['keywords'] = {}
                 step['keywords']['bin_size'] = None
-        walker.run_recipe(recipe)
+        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+        recipe[1]['inputs'] = output_filepaths
+        walker.run_recipe(recipe[1], save_recipe_file=True) 
 
     # find cal file (naming convention for data.TrapCalibration class)
     for f in os.listdir(trap_pump_outputdir):
