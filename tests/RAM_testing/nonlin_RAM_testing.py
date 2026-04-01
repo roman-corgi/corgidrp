@@ -71,7 +71,6 @@ def set_vistype_for_tvac(
         fits_file.writeto(file, overwrite=True)
 
 @profile
-@pytest.mark.e2e
 def test_nonlin_cal_e2e(
     e2edata_path,
     e2eoutput_path,

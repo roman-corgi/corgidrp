@@ -167,18 +167,14 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     print('Running walker')
     #walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
     
-    #recipe = walker.autogen_recipe(ordered_filelist, kgain_outputdir)
-    recipe_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'corgidrp', 'recipe_templates')
-    recipe_filepath1 = os.path.join(recipe_dir, "l1_to_kgain_1.json")
-    recipe1 = walker.autogen_recipe(ordered_filelist, kgain_outputdir, template=json.load(open(recipe_filepath1, 'r')))
-    output_filepaths1 = walker.run_recipe(recipe1, save_recipe_file=True)
-    recipe_filepath2 = os.path.join(recipe_dir, "l1_to_kgain_2.json")
-    recipe2 = walker.autogen_recipe(output_filepaths1, kgain_outputdir, template=json.load(open(recipe_filepath2, 'r')))
+    recipe = walker.autogen_recipe(ordered_filelist, kgain_outputdir)
     ### Modify they keywords of some of the steps
-    for step in recipe2['steps']:
+    for step in recipe[1][1]['steps']:
         if step['name'] == "calibrate_kgain":
             step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-    walker.run_recipe(recipe2, save_recipe_file=True)
+    output_filepaths = walker.run_recipe(recipe[1][0], save_recipe_file=True)
+    recipe[1][1]['inputs'] = output_filepaths
+    walker.run_recipe(recipe[1][1], save_recipe_file=True)    
 
     ####### Load in the output data. It should be the latest kgain file produced.
     possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_krn_cal*.fits'))

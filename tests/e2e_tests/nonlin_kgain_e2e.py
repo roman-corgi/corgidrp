@@ -132,30 +132,25 @@ def test_nonlin_and_kgain_e2e(
 
     # Run the walker on some test_data
     print('Running walker')
-    # for kgain
-    recipe_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'corgidrp', 'recipe_templates')
-    recipe_filepath1 = os.path.join(recipe_dir, "l1_to_kgain_1.json")
-    recipe1 = walker.autogen_recipe(pupilimg_l1_list, e2eoutput_path, template=json.load(open(recipe_filepath1, 'r')))
-    output_filepaths1 = walker.run_recipe(recipe1, save_recipe_file=True)
-    recipe_filepath2 = os.path.join(recipe_dir, "l1_to_kgain_2.json")
-    recipe2 = walker.autogen_recipe(output_filepaths1, e2eoutput_path, template=json.load(open(recipe_filepath2, 'r')))
-    ### Modify they keywords of some of the steps
-    for step in recipe2['steps']:
-        if step['name'] == "calibrate_kgain":
-            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-    walker.run_recipe(recipe2, save_recipe_file=True)
-    # for nonlin
+    #walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)
     recipe = walker.autogen_recipe(pupilimg_l1_list, e2eoutput_path)
     ### Modify they keywords of some of the steps
-    for step in recipe[2]['steps']:
+    for step in recipe[1][1]['steps']:
+        if step['name'] == "calibrate_kgain":
+            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
+    output_filepaths = walker.run_recipe(recipe[1][0], save_recipe_file=True)
+    recipe[1][1]['inputs'] = output_filepaths
+    walker.run_recipe(recipe[1][1], save_recipe_file=True)
+
+    for step in recipe[0][2]['steps']:
         if step['name'] == "calibrate_nonlin":
-            step['keywords']['apply_dq'] = False # do not apply the cosmics in e2e test
+            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
             step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
-    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
-    recipe[1]['inputs'] = output_filepaths
-    output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
-    recipe[2]['inputs'] = output_filepaths1
-    walker.run_recipe(recipe[2], save_recipe_file=True)
+    output_filepaths = walker.run_recipe(recipe[0][0], save_recipe_file=True)
+    recipe[0][1]['inputs'] = output_filepaths
+    output_filepaths1 = walker.run_recipe(recipe[0][1], save_recipe_file=True)
+    recipe[0][2]['inputs'] = output_filepaths1
+    walker.run_recipe(recipe[0][2], save_recipe_file=True)
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests
     # NL from CORGIDRP

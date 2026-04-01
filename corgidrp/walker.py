@@ -123,41 +123,50 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
 
     if not isinstance(recipes, list):
         recipes = [recipes]
+    # accommodate a list of chains
+    if not isinstance(recipes[0], list):
+        list_of_recipe_chains = [recipes]
+    else:
+        list_of_recipe_chains = recipes
 
-    # process recipes
-    output_filelist = None
-    for i, recipe in enumerate(recipes):
-        # check for recipe chaining
-        if i > 0: 
-            recipe["inputs"] = []
-            for filename in output_filelist:
-                recipe["inputs"].append(filename)
-        
-        # check for functions that require CPGS XML info
-        for step in recipe['steps']:
-            if step['name'].lower() == 'find_spec_star':
-                if not 'keywords' in step:
-                    read_cpgs = True
-                    step['keywords'] = {}
-                elif "r_lamD" not in step['keywords']:
-                    read_cpgs = True
-                else:
-                    read_cpgs = False
+    for recipes in list_of_recipe_chains:
+        # process recipes
+        output_filelist = None
+        for i, recipe in enumerate(recipes):
+            # check for recipe chaining
+            if i > 0 and  len(recipe['inputs']) == 0:
+                recipe["inputs"] = []
+                for filename in output_filelist:
+                    recipe["inputs"].append(filename)
+            
+            # check for functions that require CPGS XML info
+            for step in recipe['steps']:
+                if step['name'].lower() == 'find_spec_star':
+                    if not 'keywords' in step:
+                        read_cpgs = True
+                        step['keywords'] = {}
+                    elif "r_lamD" not in step['keywords']:
+                        read_cpgs = True
+                    else:
+                        read_cpgs = False
 
-                if read_cpgs: # if not already specified.
-                    # need to populate satellite spot info from XML
-                    cpgs_xml = ET.parse(CPGS_XML_filepath)
-                    sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
-                    step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
-                    step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
-        
-        output_filelist = run_recipe(recipe)
+                    if read_cpgs: # if not already specified.
+                        # need to populate satellite spot info from XML
+                        cpgs_xml = ET.parse(CPGS_XML_filepath)
+                        sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
+                        step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
+                        step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
+            
+            output_filelist = run_recipe(recipe)
 
     # return just the recipe if there was only one
-    if len(recipes) == 1:
-        return recipes[0]
+    if len(list_of_recipe_chains) == 1:
+        if len(list_of_recipe_chains[0]) == 1:
+            return list_of_recipe_chains[0][0]
+        else:
+            return list_of_recipe_chains[0]
     else:
-        return recipes
+        return list_of_recipe_chains
 
 def autogen_recipe(filelist, outputdir, template=None):
     """
@@ -187,62 +196,80 @@ def autogen_recipe(filelist, outputdir, template=None):
     if template is None:
         recipe_filename, chained = guess_template(dataset)
 
-        # handle it as a list moving forward
+        # handle it as a list of lists moving forward
         if isinstance(recipe_filename, list):
             recipe_filename_list = recipe_filename
         else:
             recipe_filename_list = [recipe_filename]
-
-        recipe_template_list = []
-        for recipe_filename in recipe_filename_list:
-            # load the template recipe
-            recipe_filepath = os.path.join(recipe_dir, recipe_filename)
-            template = json.load(open(recipe_filepath, 'r'))
-            recipe_template_list.append(template)
+        if not isinstance(recipe_filename_list[0], list):
+            recipe_filename_list_list = [recipe_filename_list]
+        else:
+            recipe_filename_list_list = recipe_filename_list
+        for l in recipe_filename_list_list:
+            if not isinstance(l, list):
+                raise TypeError("Each element of recipe_filename_list should be a list, but got {0}".format(type(l)))
+        
+        recipe_template_list_list = []
+        for recipe_filename_list in recipe_filename_list_list:
+            recipe_template_list = []
+            for recipe_filename in recipe_filename_list:
+                # load the template recipe
+                recipe_filepath = os.path.join(recipe_dir, recipe_filename)
+                template = json.load(open(recipe_filepath, 'r'))
+                recipe_template_list.append(template)
+            recipe_template_list_list.append(recipe_template_list)
     else:
         # user passed in a single template
         recipe_template_list = [template]
+        recipe_template_list_list = [recipe_template_list]
         chained = False
 
-    recipe_list = []
-    for i, template in enumerate(recipe_template_list):
-        # create the personalized recipe
-        recipe = template.copy()
-        recipe["template"] = False
+    recipe_list_list = []
+    for recipe_template_list in recipe_template_list_list:
+        recipe_list = []
+        for i, template in enumerate(recipe_template_list):
+            # create the personalized recipe
+            recipe = template.copy()
+            recipe["template"] = False
 
-        # for chained recipes, don't put the input in yet since we don't know it
-        if i > 0 and chained:
-            pass
-        else:
-            for filename in filelist:
-                recipe["inputs"].append(filename)
+            # for chained recipes, don't put the input in yet since we don't know it
+            if i > 0 and chained:
+                pass
+            else:
+                for filename in filelist:
+                    recipe["inputs"].append(filename)
 
 
-        recipe["outputdir"] = outputdir
+            recipe["outputdir"] = outputdir
 
-        ## Populate default values
-        ## This includes calibration files that need to be automatically determined
-        ## This also includes the dark subtraction outputdir for synthetic darks
-        this_caldb = caldb.CalDB()
-        for step in recipe["steps"]:
-            # by default, identify all the calibration files needed, unless jit setting is turned on
-            # two cases where we should be identifying the calibration recipes now
-            if "jit_calib_id" in recipe['drpconfig'] and (not recipe['drpconfig']["jit_calib_id"]):
-                _fill_in_calib_files(step, this_caldb, first_frame)
-            elif ("jit_calib_id" not in recipe['drpconfig']) and (not corgidrp.jit_calib_id):
-                _fill_in_calib_files(step, this_caldb, first_frame)
+            ## Populate default values
+            ## This includes calibration files that need to be automatically determined
+            ## This also includes the dark subtraction outputdir for synthetic darks
+            this_caldb = caldb.CalDB()
+            for step in recipe["steps"]:
+                # by default, identify all the calibration files needed, unless jit setting is turned on
+                # two cases where we should be identifying the calibration recipes now
+                if "jit_calib_id" in recipe['drpconfig'] and (not recipe['drpconfig']["jit_calib_id"]):
+                    _fill_in_calib_files(step, this_caldb, first_frame)
+                elif ("jit_calib_id" not in recipe['drpconfig']) and (not corgidrp.jit_calib_id):
+                    _fill_in_calib_files(step, this_caldb, first_frame)
 
-            if step["name"].lower() == "dark_subtraction":
-                if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
-                    step["keywords"]["outputdir"] = recipe["outputdir"]
+                if step["name"].lower() == "dark_subtraction":
+                    if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
+                        step["keywords"]["outputdir"] = recipe["outputdir"]
 
-        recipe_list.append(recipe)
+            recipe_list.append(recipe)
+        recipe_list_list.append(recipe_list)
 
-    # if only a single recipe, return the recipe. otherwise return list
-    if len(recipe_list) > 1:
-        return recipe_list
+    # if list of chains, return that.  If single list, return that.  If single
+    # recipe, return that. 
+    if len(recipe_list_list) > 1: # list of chains
+        return recipe_list_list
     else:
-        return recipe_list[0]
+        if len(recipe_list_list[0]) > 1: # single list 
+            return recipe_list_list[0]
+        else: #single recipe 
+            return recipe_list_list[0][0]
 
 def _fill_in_calib_files(step, this_caldb, ref_frame):
     """
@@ -299,7 +326,7 @@ def guess_template(dataset):
         dataset (corgidrp.data.Dataset): a Dataset to process
 
     Returns:
-        str or list: the best template filename or a list of multiple template filenames
+        str or list: the best template filename, a list of multiple template filenames, or a list of template chains
         bool: whether multiple recipes are chained together. If True, the output of the first recipe
               should be used as the input to the second recipe. If False, the same input should be used
               for all recipes. This keyworkd is irrelevant if only a single recipe is returned.
@@ -338,7 +365,9 @@ def guess_template(dataset):
                 recipe_filename = ["build_trad_dark_image_1.json", "build_trad_dark_image_2.json"] #"build_trad_dark_image.json"
                 chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
-            recipe_filename = ["l1_to_l2a_nonlin_1.json", "l1_to_l2a_nonlin_2.json", "l1_to_l2a_nonlin_3.json"] # "l1_to_kgain.json"] is another viable choice. #["l1_to_l2a_nonlin.json"
+            recipe_filename = [["l1_to_l2a_nonlin_1.json", "l1_to_l2a_nonlin_2.json", "l1_to_l2a_nonlin_3.json"],
+                               ["l1_to_kgain_1.json", "l1_to_kgain_2.json"]] # ["l1_to_l2a_nonlin.json","l1_to_kgain.json"] 
+            chained = True # in this case, each sub-list is chained
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
             if len(fsm_unique) > 1:
@@ -565,8 +594,7 @@ def run_recipe(recipe, save_recipe_file=True):
                     frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
         # execute each pipeline step
         print('Executing recipe: {0}'.format(recipe['name']))
-        if type(filelist) == list:
-            print('number of frames: ', len(filelist))
+        print('number of frames: ', len(filelist))
         if ram_increment_bool and len(filelist_chunks) > 1:
             print('Processing frames in chunks of {0} frames'.format(corgidrp.chunk_size))
         if ram_heavy_bool:

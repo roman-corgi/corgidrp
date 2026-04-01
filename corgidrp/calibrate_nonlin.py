@@ -247,7 +247,7 @@ def calibrate_nonlin(dataset_nl,
     if ram_heavy:
         cal_arr = np.array(cal_list)[datetimes_sort_inds]
     else:
-        cal_arr = np.vstack(cal_list)[datetimes_sort_inds]
+        cal_arr = np.vstack(cal_list)[datetimes_sort_inds] 
     mean_frame_arr = np.stack(mean_frame_list)
     # Get relevant constants
     rowroi1 = nonlin_params['rowroi1']
@@ -1023,7 +1023,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
                 if ram_heavy:
                     sub = [dset.frames[0].filepath for dset in exptime_dset_list[:smallest_set_length]]
                 else:
-                    sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]])
+                    sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]]) 
                 for exptime_dset in exptime_dset_list[:smallest_set_length]:
                     frame = exptime_dset.frames[0]
                     if not (frame.pri_hdr['OBSNAME'] == 'KGAIN' or 
@@ -1053,8 +1053,9 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
                 if ram_heavy:
                     stack_cp += sub
                 else:
-                    stack_cp.append(sub)
-                len_cal_frames += len(sub)
+                    stack_cp.append(sub) 
+                len_cal_frames += len(sub) 
+
             # Length of substack must be at least 1
             if len(stack_cp) == 0:
                 raise Exception('Substacks must have at least one element')
@@ -1062,7 +1063,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
                 if ram_heavy:
                     stack += stack_cp
                 else:
-                    stack.append(np.vstack(stack_cp))
+                    stack.append(np.vstack(stack_cp)) 
                 len_sstack.append(len_cal_frames)
     
     # All elements of datetimes must be unique

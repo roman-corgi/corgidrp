@@ -153,15 +153,15 @@ def test_nonlin_cal_e2e(
     print('Running walker')
     recipe = walker.autogen_recipe(nonlin_l1_list, e2eoutput_path)
     ### Modify they keywords of some of the steps
-    for step in recipe[2]['steps']:
+    for step in recipe[0][2]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
             step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
-    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
-    recipe[1]['inputs'] = output_filepaths
-    output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
-    recipe[2]['inputs'] = output_filepaths1
-    walker.run_recipe(recipe[2], save_recipe_file=True)
+    output_filepaths = walker.run_recipe(recipe[0][0], save_recipe_file=True)
+    recipe[0][1]['inputs'] = output_filepaths
+    output_filepaths1 = walker.run_recipe(recipe[0][1], save_recipe_file=True)
+    recipe[0][2]['inputs'] = output_filepaths1
+    walker.run_recipe(recipe[0][2], save_recipe_file=True)
 
     # Compare results
     print('Comparing the results with TVAC')
