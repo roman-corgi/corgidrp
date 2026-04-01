@@ -247,11 +247,24 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
     mocks.rename_files_to_cgi_format([flat], calibrations_dir, "flt_cal")
     this_caldb.create_entry(flat)
 
-    # Bad pixel map
+    # Bad pixel map requires provenance a dark(-like) frame
+    if not is_pc_data:
+        dark_cals = []
+        for f in os.listdir(calibrations_dir):
+            if f.endswith('_drk_cal.fits'):
+                dark_cals.append(os.path.join(calibrations_dir, f))
+        if dark_cals:
+            bp_dark = data.Dark(dark_cals[0])
+        else:
+            bp_dark = build_synthesized_dark(data.Dataset([flat]), noise_map)
+    else:
+        bp_dark = build_synthesized_dark(data.Dataset([flat]), noise_map)
+
+    bp_map_inputs = data.Dataset([bp_dark, flat])
     bp_map = data.BadPixelMap(
         fits.getdata(bp_path),
         pri_hdr=pri_hdr, ext_hdr=ext_hdr,
-        input_dataset=mock_input_dataset)
+        input_dataset=bp_map_inputs)
     mocks.rename_files_to_cgi_format([bp_map], calibrations_dir, "bpm_cal")
     this_caldb.create_entry(bp_map)
 

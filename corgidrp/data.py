@@ -602,11 +602,21 @@ class Image():
         parent_filenames = set()
         # go through filenames and also check each frames parents
         for img in input_dataset:
-            parent_filenames.add(img.filename)
+            # Some synthetic products may not have a filename yet, prefer `filename`, fall back to `filepath'
+            if getattr(img, "filename", None):
+                parent_filenames.add(img.filename)
+            elif getattr(img, "filepath", None):
+                parent_filenames.add(img.filepath)
             # also check if this frame has parent frames. keep trakc of them too
             if 'DRPNFILE' in img.ext_hdr:
                 for j in range(img.ext_hdr['DRPNFILE']):
-                    parent_filenames.add(img.ext_hdr['FILE{0}'.format(j)])
+                    # Support FILE0- and FILE1- conventions, and deal with missing cards (for synthetic calibration products)
+                    key0 = f"FILE{j}"
+                    key1 = f"FILE{j+1}"
+                    if key0 in img.ext_hdr:
+                        parent_filenames.add(img.ext_hdr[key0])
+                    elif key1 in img.ext_hdr:
+                        parent_filenames.add(img.ext_hdr[key1])
         
         for i, filename in enumerate(parent_filenames):
             if len(str(i)) > 4:
@@ -1630,7 +1640,6 @@ class BadPixelMap(Image):
                     raise ValueError(
                         "BadPixelMap input_dataset must contain at least one dark(-like) frame "
                         "(DATATYPE='Dark'/'MasterDark' or filename containing '_drk'). "
-                        "Typically provide a dataset containing the master dark (and optionally the master flat)."
                     )
                 base_dataset = Dataset(dark_frames)
             except Exception:

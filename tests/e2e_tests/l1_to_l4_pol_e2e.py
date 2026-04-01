@@ -51,7 +51,8 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         os.makedirs(calibrations_dir)
 
     # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    # Use a test-specific caldb filepath
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_l1_to_l4_pol_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
@@ -415,6 +416,8 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     ##############################################
     # Step 1/2 b: Do the stap spot data. 
     logger.info('Running L1 to L2a on the polarimetry satspots...')
+    # Ensure subsequent walker calls use this test's CalDB
+    corgidrp.caldb_filepath = tmp_caldb_csv
     input_satspots_filenames = os.listdir(os.path.join(l1_datadir,"sat_spots"))
     input_files = np.array(sorted([os.path.join(l1_datadir, "sat_spots", f) for f in input_satspots_filenames if f.endswith('l1_.fits')]))
     logger.info(f'Found {len(input_files)} sat spot files in input directory: {l1_datadir}/sat_spots')
@@ -563,8 +566,9 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f"Total output L4 images validated: {len(new_l4_filenames)}")
     logger.info('')
     
-    # remove temporary caldb file
-    os.remove(tmp_caldb_csv)
+    # remove temporary caldb file if exists
+    if os.path.exists(tmp_caldb_csv):
+        os.remove(tmp_caldb_csv)
 
     return new_l4_filenames
 
