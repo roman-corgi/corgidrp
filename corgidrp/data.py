@@ -1653,6 +1653,8 @@ class BadPixelMap(Image):
 
             ## TODO: we shouldn't need to do this manually, and should be done in merge header
             # but haven't figured out the bug, so we're hard coding it
+            if "DESMEAR" not in err_hdr:
+                err_hdr["DESMEAR"] = bool(ext_hdr.get("DESMEAR", False))
             if 'DESMEAR' in err_hdr:
                 if type(err_hdr['DESMEAR']) == int:
                     err_hdr['DESMEAR'] = bool(err_hdr['DESMEAR'])

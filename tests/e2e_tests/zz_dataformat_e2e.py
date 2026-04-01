@@ -308,6 +308,16 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                     if skip_hdu_structure_check:
                         if 'NAXIS' in name.upper():
                             continue
+                    # Skip provenance keywords that vary with processing history
+                    # (both FILE0/FILE1... and FILE_1/FILE_2... styles).
+                    if name.startswith("FILE") and len(name) > 4 and name[4:].isdigit():
+                        continue
+                    if name.startswith("FILE_") and len(name) > 5 and name[5:].isdigit():
+                        continue
+                    if name.startswith("HIERARCH FILE") and len(name) > 13 and name[13:].isdigit():
+                        continue
+                    if name.startswith("HIERARCH FILE_") and len(name) > 14 and name[14:].isdigit():
+                        continue
                     # Skip table header/delimiter rows
                     if name and dtype and name != 'Keyword' and name != '=' * len(name) and name != '-' * len(name) and not name.isdigit():
                         # Store keyword name, datatype, and HDU
@@ -1472,6 +1482,9 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
                     # Skip FILE* keywords (FILE0, FILE1, etc.)
                     if keyword.startswith('FILE') and len(keyword) > 4 and keyword[4:].isdigit():
                         continue
+                    # Also skip underscore keywords (FILE_1, FILE_2, etc.)
+                    if keyword.startswith('FILE_') and keyword[5:].isdigit():
+                        continue
                     # case of a file number greater than 9999 (possible for noisemap cal)
                     if keyword.startswith('HIERARCH FILE') and len(keyword) > 13 and keyword[13:].isdigit():
                         continue
@@ -1591,7 +1604,7 @@ if __name__ == "__main__":
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
     # e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2' #'/Users/kevinludwick/Documents/ssc_tvac_test/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

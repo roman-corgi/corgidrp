@@ -80,7 +80,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     l1_data_dark_filelist = check.fix_hdrs_for_tvac(l1_data_dark_filelist, output_dark_dir)
 
     # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_photon_count_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
@@ -140,10 +140,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
-    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    flat.ext_hdr['FPAMNAME'] = 'OPEN_12'
-    flat.ext_hdr['CFAMNAME'] = '1F'
-    flat.ext_hdr['DPAMNAME'] = 'IMAGING'
+    mock_dataset_flat = data.Dataset([frame.copy() for frame in mock_input_dataset])
+    for frame in mock_dataset_flat:
+        frame.ext_hdr['FPAMNAME'] = 'OPEN_12'
+        frame.ext_hdr['CFAMNAME'] = '1F'
+        frame.ext_hdr['DPAMNAME'] = 'IMAGING'
+    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_dataset_flat)
     mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     #fix_str_for_tvac([flat.filepath])
     this_caldb.create_entry(flat)
@@ -161,7 +163,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
                         err=np.zeros((1,) + bp_dat.shape, dtype=float),
                         dq=np.zeros(bp_dat.shape, dtype='uint16'),
                         err_hdr=fits.Header())
-    bp_map_inputs = data.Dataset([bp_dark, mock_input_dataset[-1]])
+    bp_map_inputs = data.Dataset([bp_dark, flat])
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     #fix_str_for_tvac([bp_map.filepath])
@@ -264,7 +266,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #__________________________________________________
     # now test that the pipeline works fine if we start with a synthesized master dark instead
     # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_photon_count_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
@@ -338,7 +340,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     
     #___________________________________________________
     # now test that the pipeline works if we use an analog traditional master dark (most likely will not be used in practice)
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_photon_count_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
