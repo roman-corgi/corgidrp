@@ -258,11 +258,8 @@ def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
 
     1. Build a temporary CalDB from detector files + corgidrp default
        spectroscopy calibrations 
-    2. L1 -> L2a  via walker 
-    3. Optionally build a PC dark from L2a frames (photon-counting only)
-    4. L2a -> L2b  via walker
-    5. L2b -> SpecFluxCal  via walker 
-    6. Validate the output SpecfluxCal product (shape, wavelength range,
+    2. L1 -> SpecFluxCal  via walker 
+    3. Validate the output SpecfluxCal product (shape, wavelength range,
        values, header keywords)
 
     Args:
