@@ -75,6 +75,7 @@ all_steps = {
     "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
     "create_ct_map": corgidrp.corethroughput.create_ct_map,
     "create_nd_filter_cal": corgidrp.nd_filter_calibration.create_nd_filter_cal,
+    "create_nd_filter_cal_spec": corgidrp.nd_filter_calibration.create_nd_filter_cal_spec,
     "compute_psf_centroid": corgidrp.spec.compute_psf_centroid,
     "calibrate_dispersion_model": corgidrp.spec.calibrate_dispersion_model,
     "fit_line_spread_function": corgidrp.spec.fit_line_spread_function,
@@ -85,7 +86,8 @@ all_steps = {
     "combine_polarization_states": corgidrp.l3_to_l4.combine_polarization_states,
     "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization,
     "align_2d_frames": corgidrp.l3_to_l4.align_2d_frames,
-    "combine_spec": corgidrp.l3_to_l4.combine_spec
+    "combine_spec": corgidrp.l3_to_l4.combine_spec,
+    "spec_fluxcal": corgidrp.spec.spec_fluxcal
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -258,6 +260,10 @@ def autogen_recipe(filelist, outputdir, template=None):
                     if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
                         step["keywords"]["outputdir"] = recipe["outputdir"]
 
+                if step["name"].lower() == "create_nd_filter_cal_spec":
+                    if "keywords" in step and step["keywords"].get("outputdir", "").upper() == "AUTOMATIC":
+                        step["keywords"]["outputdir"] = recipe["outputdir"]
+                        
             recipe_list.append(recipe)
         recipe_list_list.append(recipe_list)
 
@@ -369,13 +375,23 @@ def guess_template(dataset):
                                ["l1_to_kgain_1.json", "l1_to_kgain_2.json"]] # ["l1_to_l2a_nonlin.json","l1_to_kgain.json"] 
             chained = True # in this case, each sub-list is chained
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
-            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-            if len(fsm_unique) > 1:
-                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
-                chained = True
+            is_spec_mode = image.ext_hdr.get('DPAMNAME', '').startswith('PRISM')
+            has_nd_filter = any(img.ext_hdr.get('FPAMNAME', '').startswith('ND') for img in dataset)
+            if is_spec_mode:
+                if has_nd_filter:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", "l2b_to_nd_filter_spec.json"]
+                    chained = True
+                else:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", "l2b_to_spec_flux.json"]
+                    chained = True
             else:
-                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
-                chained = True
+                _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
+                if len(fsm_unique) > 1:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
+                    chained = True
+                else:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+                    chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
             chained = True
@@ -388,6 +404,9 @@ def guess_template(dataset):
                 chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TGTREF_PHOT' and image.ext_hdr['DPAMNAME'] not in ['POL0','POL45']:
             recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b.json","l2b_to_l3.json","l3_to_l4_nopsfsub.json"]
+            chained = True
+        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TPUMP':
+            recipe_filename = ['trap_pump_cal_1.json', 'trap_pump_cal_2.json']
             chained = True
         else:
             recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
@@ -430,14 +449,22 @@ def guess_template(dataset):
     # L2b -> L3 data processing
     elif image.ext_hdr['DATALVL'] == "L2b":
         if image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
-            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-            if len(fsm_unique) > 1:
-                recipe_filename = "l2b_to_nd_filter.json"
-            else:
-                if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
-                    recipe_filename = 'l2b_to_fluxcal_factor_pol.json'
+            is_spec_mode = image.ext_hdr.get('DPAMNAME', '').startswith('PRISM')
+            has_nd_filter = any(img.ext_hdr.get('FPAMNAME', '').startswith('ND') for img in dataset)
+            if is_spec_mode:
+                if has_nd_filter:
+                    recipe_filename = "l2b_to_nd_filter_spec.json"
                 else:
-                    recipe_filename = "l2b_to_fluxcal_factor.json"
+                    recipe_filename = "l2b_to_spec_flux.json"
+            else:
+                _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
+                if len(fsm_unique) > 1:
+                    recipe_filename = "l2b_to_nd_filter.json"
+                else:
+                    if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+                        recipe_filename = 'l2b_to_fluxcal_factor_pol.json'
+                    else:
+                        recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":

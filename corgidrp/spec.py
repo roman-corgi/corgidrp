@@ -12,7 +12,6 @@ import astropy.modeling.models as models
 import astropy.modeling.fitting as fitting
 import corgidrp
 from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve, get_calspec_file
-import corgidrp
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     """

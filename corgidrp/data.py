@@ -2330,7 +2330,7 @@ class SpecFluxCal(Image):
             # use the start date for the filename by default
             self.filedir = "."
             # slight hack for old mocks not in the standard filename format
-            self.filename = "{0}_spfl_cal.fits".format(orig_input_filename)
+            self.filename = "{0}_sfl_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
@@ -3760,6 +3760,123 @@ class NDFilterSweetSpotDataset(Image):
 
         return interpolator(x, y)
 
+class NDSpectroscopy(Image):
+    """
+    ND filter calibration product for spectroscopy.
+
+    For spectroscopy observations (DPAMNAME=PRISM*) - stores OD(lambda), 
+    the optical depth of the ND filter as a function of wavelength. 
+    Unlike the imaging mode ND filter calibration product, spectroscopy mode
+    ND filter calibration product is only measured at a single detector location.
+
+    Data shape: (2, M)
+        row 0: wavelengths in nm
+        row 1: OD(lambda) values (dimensionless)
+
+    Error shape: (1, 2, M)
+        err[0, 0, :]: wavelength uncertainties (nm)
+        err[0, 1, :]: OD uncertainties
+
+    Args:
+        data_or_filepath (str or np.array): filepath to an existing NDSpectroscopy
+            FITS file, or a (2, M) numpy array of [wavelengths, OD].
+        err (np.array): (1, 2, M) error array.
+        dq (np.array): (2, M) data-quality array.
+        pri_hdr (fits.Header): primary header (required if raw array passed in).
+        ext_hdr (fits.Header): extension header (required if raw array passed in).
+        err_hdr (fits.Header): error extension header.
+        input_dataset (corgidrp.data.Dataset): input frames used to create this
+            product (required if raw array passed in without DRPNFILE in ext_hdr).
+
+    Attributes:
+        wavelengths (np.array): length-M wavelength array in nm.
+        od_spectrum (np.array): length-M OD(lambda) array.
+        od_err (np.array): length-M OD uncertainty array.
+        wave_err (np.array): length-M wavelength uncertainty array.
+    """
+
+    def __init__(self, data_or_filepath, err=None, dq=None,
+                 pri_hdr=None, ext_hdr=None, err_hdr=None, input_dataset=None):
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                invalid_keywords=[
+                    # Primary header keywords
+                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    # Extension header keywords
+                    'BITPIX', 'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'STATUS', 'HVCBIAS', 'OPMODE',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR',
+                    'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
+                    'PROXET',
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP',
+                    '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'DATETIME', 'FTIMEUTC', 'DATATYPE',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                ],
+            )
+        else:
+            dq_hdr = None
+
+        super().__init__(
+            data_or_filepath,
+            pri_hdr=pri_hdr,
+            ext_hdr=ext_hdr,
+            err=err,
+            dq=dq,
+            err_hdr=err_hdr,
+            dq_hdr=dq_hdr,
+        )
+
+        # Shape validation - expect (2, M)
+        if self.data.ndim != 2 or self.data.shape[0] != 2:
+            raise ValueError(
+                "NDSpectroscopy data must be a 2D array of shape (2, M). "
+                f"Received shape {self.data.shape}."
+            )
+
+        # Class attributes
+        self.wavelengths = self.data[0, :]
+        self.od_spectrum = self.data[1, :]
+        if self.err is not None and self.err.shape == (1, 2, self.data.shape[1]):
+            self.wave_err = self.err[0, 0, :]
+            self.od_err   = self.err[0, 1, :]
+        else:
+            self.wave_err = np.zeros_like(self.wavelengths)
+            self.od_err   = np.zeros_like(self.od_spectrum)
+
+        # Bookkeeping info for new files
+        if ext_hdr is not None:
+            if input_dataset is not None:
+                self._record_parent_filenames(input_dataset)
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+                self.filename = "{0}_nds_cal.fits".format(orig_input_filename)
+                self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.ext_hdr['DATATYPE'] = 'NDSpectroscopy'
+            self.ext_hdr['BUNIT']    = ''        # dimensionless OD
+            self.ext_hdr['DATALVL'] = 'CAL'
+            self.ext_hdr['HISTORY'] = "NDSpectroscopy OD(lambda) calibration created"
+            self.pri_hdr['FILENAME'] = self.filename
+
+        # Validate DATATYPE when loading from file
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDSpectroscopy':
+            raise ValueError("File that was loaded is not labeled as an NDSpectroscopy file.")
+
+
 class MuellerMatrix(Image):
     """
     Class for a Mueller matrix dataset product.
@@ -3976,6 +4093,7 @@ datatypes = { "Image" : Image,
               "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
+              "NDSpectroscopy": NDSpectroscopy,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel,
               "LineSpread": LineSpread,

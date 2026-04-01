@@ -1,0 +1,36 @@
+{
+    "name": "l2b_nd_spec_cal",
+    "template": true,
+    "drpconfig": { "track_individual_errors": false },
+    "inputs": [],
+    "outputdir": "",
+    "steps": [
+      {
+        "name": "divide_by_exptime"
+      },
+      {
+        "name": "determine_wave_zeropoint",
+        "calibs": {
+          "SpecFilterOffset": "AUTOMATIC"
+        }
+      },
+      {
+        "name": "add_wavelength_map",
+        "calibs": {
+          "DispersionModel": "AUTOMATIC"
+        }
+      },
+      {
+        "name": "extract_spec"
+      },
+      {
+        "name": "create_nd_filter_cal_spec",
+        "keywords": {
+          "outputdir": "AUTOMATIC"
+        }
+      },
+      {
+        "name": "save"
+      }
+    ]
+  }
