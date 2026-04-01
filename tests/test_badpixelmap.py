@@ -6,6 +6,7 @@ import corgidrp.detector as detector
 import corgidrp.flat as flat
 from corgidrp.bad_pixel_calibration import create_bad_pixel_map
 from corgidrp.darks import build_trad_dark
+from astropy.io import fits
 import re
 
 np.random.seed(456)
