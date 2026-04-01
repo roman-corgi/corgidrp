@@ -636,13 +636,19 @@ def initialize():
     except Exception:
         ones_flat_exists = False
 
-    if not ones_flat_exists:
+    fixed_ones_flat_filename = "cgi_0000000000000000000_20000101t0000000_flt_cal.fits"
+    fixed_ones_flat_filepath = os.path.join(corgidrp.default_cal_dir, fixed_ones_flat_filename)
+
+    # Make sure the fixed filename exists even if an older ones-flat is already present
+    if (not ones_flat_exists) or (not os.path.exists(fixed_ones_flat_filepath)):
         ones_flat_dataset = mocks.create_flatfield_dummy(numfiles=1)
         ones_flat_dataset[0].data[:] = 1.0
         ones_flat = flat.create_flatfield(ones_flat_dataset)
         ones_flat.ext_hdr["FPAMNAME"] = "ONES"
-        # write CGI-formatted file
-        mocks.rename_files_to_cgi_format(list_of_fits=[ones_flat], output_dir=corgidrp.default_cal_dir, level_suffix="flt_cal")
+        # Write to a fixed CGI-formatted filename so there's no need to search for the latest ones-flat
+        ones_flat.filename = fixed_ones_flat_filename
+        ones_flat.pri_hdr["FILENAME"] = fixed_ones_flat_filename
+        ones_flat.save(filedir=corgidrp.default_cal_dir, filename=fixed_ones_flat_filename)
         rescan_needed = True
 
     if rescan_needed:
