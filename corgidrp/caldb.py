@@ -376,7 +376,12 @@ class CalDB:
                 # analog frame: do not select a matching PC master dark
                 options = options[options['PC_STAT'] != 'photon-counted master dark']
                 if len(options) == 0:
-                    raise ValueError("No valid analog Dark calibration in caldb located at {0}".format(self.filepath))
+                    raise ValueError(
+                        "No valid analog Dark calibration found in caldb located at {0} "
+                        "(no analog master darks with EXPTIME={1} and EMGAIN_C={2}).".format(
+                            self.filepath, frame_dict["EXPTIME"], frame_dict["EMGAIN_C"]
+                        )
+                    )
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -413,6 +418,7 @@ class CalDB:
                 options = calibdf[calibdf["FPAMNAME"] == "ONES"]
                 if len(options) == 0:
                     raise ValueError("No ones-flat FlatField calibration found in caldb at {0}".format(self.filepath))
+                # Any ones-flat is equivalent, choose the most recently created
                 result_index = options["MJD"].argmax()
             elif frame_dict['CFAMNAME'] not in imaging_cfams:
                 raise ValueError(
