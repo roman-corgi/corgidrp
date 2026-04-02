@@ -1,6 +1,7 @@
 {
-    "name" : "build_trad_dark_image",
+    "name" : "trap_pump_cal_1",
     "template" : true,
+    "process_in_chunks" : true,
     "drpconfig" : {
         "track_individual_errors" : false
     },
@@ -10,28 +11,16 @@
         {
             "name" : "prescan_biassub",
             "calibs" : {
-                "DetectorNoiseMaps" : "AUTOMATIC"
+                "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
             },
             "keywords" : {
-                "return_full_frame" : true,
-                "dataset_copy" : false
+                "use_imaging_area" : true
             }
         },
         {
             "name" : "discard_setup_frames",
             "keywords" : {
                 "keywords_to_check" : ["ISACQ"]
-            }
-        },
-        {
-            "name" : "detect_cosmic_rays",
-            "calibs" : {
-                "DetectorParams" : "AUTOMATIC",
-                "KGain" : "AUTOMATIC, OPTIONAL"
-            },
-            "keywords" : {
-                "mode" : "full",
-                "dataset_copy" : false
             }
         },
         {
@@ -44,19 +33,7 @@
             "name" : "update_to_l2a"
         },
         {
-            "name" : "convert_to_electrons",
-            "calibs" : {
-                "KGain" : "AUTOMATIC"
-            }
-        },
-        {
             "name" : "em_gain_division"
-        },
-        {
-            "name" : "build_trad_dark",
-            "calibs" : {
-                "DetectorParams" : "AUTOMATIC"
-            }
         },
         {
             "name" : "save"

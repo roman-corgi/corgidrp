@@ -1108,6 +1108,34 @@ def test_ndfilter_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
         compare_docs(ref_doc_contents, doc_contents, data_product_name="ND Filter Spectroscopy")
 
 @pytest.mark.e2e
+def test_specfluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing Spectroscopy Flux Calibration ===")
+    sfl_data_files = glob.glob(os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "*_sfl_cal.fits"))
+    sfl_data_file = max(sfl_data_files, key=os.path.getmtime)
+
+    validate_cgi_filename(sfl_data_file, 'sfl_cal')
+
+    generate_fits_excel_documentation(sfl_data_file, os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "sfl_cal_documentation.xlsx"))
+
+    doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(sfl_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "fluxcal_spec.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "fluxcal_spec.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Spectroscopy Flux Calibration")
+
+@pytest.mark.e2e
 def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Noise Maps ===")
     noisemaps_data_files = glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits"))    
@@ -1614,7 +1642,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-
+    
     test_header_crossreference_e2e(e2edata_dir, outputdir)
     test_astrom_dataformat_e2e(e2edata_dir, outputdir)
     test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
@@ -1624,6 +1652,7 @@ if __name__ == "__main__":
     test_polflat_dataformat_e2e(e2edata_dir, outputdir)
     test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
     test_fluxcal_pol_dataformat_e2e(e2edata_dir, outputdir)
+    test_specfluxcal_dataformat_e2e(e2edata_dir, outputdir)
     test_kgain_dataformat_e2e(e2edata_dir, outputdir)
     test_l2a_dataformat_e2e(e2edata_dir, outputdir)
     test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)

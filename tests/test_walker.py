@@ -566,8 +566,10 @@ def test_generate_multiple_recipes():
     filelist = [frame.filepath for frame in dataset]
 
     recipes = walker.autogen_recipe(filelist, outputdir)
-
-    assert len(recipes) == 2
+    # list of recipe chains
+    assert len(recipes) == 2 # 1 chain for nonlin, 1 chain for k gain
+    assert len(recipes[0]) == 3 # nonlin chain in 3 parts
+    assert len(recipes[1]) == 2 # kgain chain in 2 parts
 
 def test_cpgs_satspots():
     """

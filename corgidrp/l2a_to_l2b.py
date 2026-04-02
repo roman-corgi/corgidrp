@@ -10,11 +10,13 @@ from corgidrp.detector import detector_areas, ENF
 
 def add_shot_noise_to_err(input_dataset, kgain, detector_params):
     """
-    Propagate the Poisson/shot noise determined from the image signal to the error map. 
+    Propagate the Poisson/shot noise determined from the image signal to the error map. Also 
+    includes the effect of read noise.
     Estimation of photon/poisson/shot noise by interpolation of the photon transfer curve,
     added excess noise in case of em_gain > 1.
     Especially useful when a dataset has very few frames so that the shot noise is not
-    accurately obtained by averaging the frames.
+    accurately obtained by averaging the frames, nor is the read noise effectively mitigated through 
+    averaging.
 
     Args:
        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
