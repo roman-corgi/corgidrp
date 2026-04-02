@@ -256,7 +256,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     #### Generate a flux calibration file ####
     ##########################################
 
-    #Create a mock flux calibration file
+    #Create a mock flux calibration file (POL0)
     fluxcal_factor = 2e-12
     fluxcal_factor_error = 1e-14
     prhd, exthd, errhd, dqhd = mocks.create_default_L3_headers()
@@ -269,6 +269,17 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
 
     mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
+
+    # POL45 absolute flux cal
+    prhd_pol45 = prhd.copy()
+    prhd_pol45['VISITID'] = str(int(prhd['VISITID']) + 1)
+    exthd_pol45 = exthd.copy()
+    exthd_pol45['DPAMNAME'] = 'POL45'
+    fluxcal_fac_pol45 = data.FluxcalFactor(
+        fluxcal_factor, err=fluxcal_factor_error, pri_hdr=prhd_pol45, ext_hdr=exthd_pol45, err_hdr=errhd.copy()
+    )
+    mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac_pol45], output_dir=calibrations_dir, level_suffix="abf_cal")
+    this_caldb.create_entry(fluxcal_fac_pol45)
 
     #################################################
     ########### Create Mueller Matrix cals ##########
@@ -318,7 +329,8 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f"  - BadPixelMap: {bp_map.filename}")
     logger.info(f"  - AstrometricCalibration: {astrom_cal.filename}")
     logger.info(f"  - CTM Calibration: {ct_cal_tmp.filename}")
-    logger.info(f"  - Flux Calibration Factor: {fluxcal_fac.filename}")
+    logger.info(f"  - Flux Calibration Factor (POL0): {fluxcal_fac.filename}")
+    logger.info(f"  - Flux Calibration Factor (POL45): {fluxcal_fac_pol45.filename}")
     logger.info(f"  - System Mueller Matrix: {system_mm_cal.filename}")
     logger.info(f"  - ND Mueller Matrix: {nd_mm_cal.filename}")
     logger.info('')
