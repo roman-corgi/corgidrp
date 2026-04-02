@@ -42,6 +42,39 @@ def create_flatfield(flat_dataset):
     flat_field.err=flat_field.err.reshape((1,)+flat_field.err.shape) # Get it into the right dimension
 
 
+    # Make sure FlatField products have consistent headers, including synthetic ones-flats
+    header_defaults = {
+        # Image header (HDU 1)
+        "FRMSEL01": -999.0,
+        "FRMSEL02": False,
+        "FRMSEL03": -999.0,
+        "FRMSEL04": -999.0,
+        "FRMSEL05": -999.0,
+        "FRMSEL06": -999.0,
+        "FWC_EM_E": -999.0,
+        "FWC_PP_E": -999.0,
+        "SAT_DN": -999.0,
+        "RN": -999.0,
+        "RN_ERR": -999.0,
+        "KGAIN_ER": -999.0,
+        "DESMEAR": False,
+        "NUM_FR": -999,
+    }
+
+    for k, v in header_defaults.items():
+        if k not in flat_field.ext_hdr:
+            flat_field.ext_hdr[k] = v
+
+    # ERR headers
+    if getattr(flat_field, "err_hdr", None) is not None:
+        if "BUNIT" not in flat_field.err_hdr:
+            flat_field.err_hdr["BUNIT"] = "photoelectron"
+        for k in ("KGAIN_ER", "RN_ERR", "DESMEAR"):
+            if k in flat_field.ext_hdr and k not in flat_field.err_hdr:
+                flat_field.err_hdr[k] = flat_field.ext_hdr[k]
+        if "LAYER_1" not in flat_field.err_hdr:
+            flat_field.err_hdr["LAYER_1"] = "combined_error"
+
     return flat_field
 
 def raster_kernel(width, image, hard=True):

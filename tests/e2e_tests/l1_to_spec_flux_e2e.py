@@ -204,29 +204,23 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
     mocks.rename_files_to_cgi_format([noise_map], calibrations_dir, "dnm_cal")
     this_caldb.create_entry(noise_map)
 
-    # Dark (analog only. PC dark is created later from L2a frames)
+    # Synthesized dark: caldb drk entry only for analog. PC pipeline dark
+    # comes from L2a, but we still need a drk FITS for BadPixelMap input_dataset.
+    fname0 = all_l1[0]
+    h0 = fits.getheader(os.path.join(l1_datadir, fname0), ext=1)
+    exptime = float(h0['EXPTIME'])
+    emgain_c = float(h0['EMGAIN_C'])
+    src = os.path.join(l1_datadir, fname0)
+    tmp_f = shutil.copy2(
+        src, os.path.join(mock_cal_dir, os.path.basename(src)))
+    tmp_ds = data.Dataset([tmp_f])
+    tmp_ds.frames[0].ext_hdr['EXPTIME'] = exptime
+    tmp_ds.frames[0].ext_hdr['EMGAIN_C'] = emgain_c
+    dark_cal = build_synthesized_dark(tmp_ds, noise_map)
+    mocks.rename_files_to_cgi_format([dark_cal], calibrations_dir, "drk_cal")
     if not is_pc_data:
-        # Build one synthesized dark per unique (EXPTIME, EMGAIN_C) so that
-        # dim-star and bright-star frames can use different exposure times.
-        seen_configs = {}
-        for fname in all_l1:
-            h = fits.getheader(os.path.join(l1_datadir, fname), ext=1)
-            key = (float(h['EXPTIME']), float(h['EMGAIN_C']))
-            if key not in seen_configs:
-                seen_configs[key] = fname
-        for (exptime, emgain_c), fname in seen_configs.items():
-            src = os.path.join(l1_datadir, fname)
-            tmp_f = shutil.copy2(
-                src, os.path.join(mock_cal_dir, os.path.basename(src)))
-            tmp_ds = data.Dataset([tmp_f])
-            tmp_ds.frames[0].ext_hdr['EXPTIME']  = exptime
-            tmp_ds.frames[0].ext_hdr['EMGAIN_C'] = emgain_c
-            dark_cal = build_synthesized_dark(tmp_ds, noise_map)
-            mocks.rename_files_to_cgi_format([dark_cal], calibrations_dir, "drk_cal")
-            this_caldb.create_entry(dark_cal)
-            print(f"Analog dark created: EXPTIME={exptime}s, EMGAIN_C={emgain_c}.")
-    else:
-        print("PC dark will be created from L2a frames.")
+        this_caldb.create_entry(dark_cal)
+    bpm_drk_input_path = dark_cal.filepath
 
     # Flat field
     flat = data.FlatField(
@@ -240,7 +234,7 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
     bp_map = data.BadPixelMap(
         fits.getdata(bp_path),
         pri_hdr=pri_hdr, ext_hdr=ext_hdr,
-        input_dataset=mock_input_dataset)
+        input_dataset=data.Dataset([bpm_drk_input_path]))
     mocks.rename_files_to_cgi_format([bp_map], calibrations_dir, "bpm_cal")
     this_caldb.create_entry(bp_map)
 
@@ -416,7 +410,7 @@ def test_spec_fluxcal_e2e(e2edata_path, e2eoutput_path):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    e2edata_dir = '/home/schreiber/DataCopy/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
     ap = argparse.ArgumentParser(

@@ -6,6 +6,7 @@ import corgidrp.detector as detector
 import corgidrp.flat as flat
 from corgidrp.bad_pixel_calibration import create_bad_pixel_map
 from corgidrp.darks import build_trad_dark
+from astropy.io import fits
 import re
 
 np.random.seed(456)
@@ -153,7 +154,22 @@ def test_output_filename_convention():
     input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     fake_input_image = data.Image(bp_fake_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
     fake_input_image.filename = f"cgi_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l2b.fits"
-    fake_input_dataset = data.Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
+    # Include a dark(-like) frame in the dataset per BadPixelMap requirements,
+    # but keep the last frame as the science image to preserve the filename test logic.
+    dark_prihdr, dark_exthdr, _, _ = mocks.create_default_calibration_product_headers()
+    dark_exthdr['EXPTIME'] = float(input_exthdr.get('EXPTIME', 0.0))
+    dark_exthdr['EMGAIN_C'] = float(input_exthdr.get('EMGAIN_C', 1.0))
+    dark_exthdr['DRPNFILE'] = 1
+    fake_dark = data.Dark(
+        np.zeros_like(bp_fake_data, dtype=float),
+        pri_hdr=dark_prihdr,
+        ext_hdr=dark_exthdr,
+        input_dataset=data.Dataset(frames_or_filepaths=[fake_input_image]),
+        err=np.zeros((1,) + bp_fake_data.shape, dtype=float),
+        dq=np.zeros(bp_fake_data.shape, dtype='uint16'),
+        err_hdr=fits.Header(),
+    )
+    fake_input_dataset = data.Dataset(frames_or_filepaths=[fake_dark, fake_input_image])
 
     bpcal_prihdr, bpcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     

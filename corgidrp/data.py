@@ -617,11 +617,21 @@ class Image():
         parent_filenames = set()
         # go through filenames and also check each frames parents
         for img in input_dataset:
-            parent_filenames.add(img.filename)
+            # Some synthetic products may not have a filename yet, prefer `filename`, fall back to `filepath'
+            if getattr(img, "filename", None):
+                parent_filenames.add(img.filename)
+            elif getattr(img, "filepath", None):
+                parent_filenames.add(img.filepath)
             # also check if this frame has parent frames. keep trakc of them too
             if 'DRPNFILE' in img.ext_hdr:
                 for j in range(img.ext_hdr['DRPNFILE']):
-                    parent_filenames.add(img.ext_hdr['FILE{0}'.format(j)])
+                    # Support FILE0- and FILE1- conventions, and deal with missing cards (for synthetic calibration products)
+                    key0 = f"FILE{j}"
+                    key1 = f"FILE{j+1}"
+                    if key0 in img.ext_hdr:
+                        parent_filenames.add(img.ext_hdr[key0])
+                    elif key1 in img.ext_hdr:
+                        parent_filenames.add(img.ext_hdr[key1])
         
         for i, filename in enumerate(parent_filenames):
             if len(str(i)) > 4:
@@ -1634,14 +1644,29 @@ class BadPixelMap(Image):
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         if input_dataset is not None:
+            # Use the dark frame for the base header set
+            dark_frames = [
+                f for f in input_dataset
+                if getattr(f, "ext_hdr", {}).get("DATATYPE") in ("Dark", "MasterDark")
+                or "_drk" in str(getattr(f, "filename", "")).lower()
+            ]
+            if not dark_frames:
+                raise ValueError(
+                    "BadPixelMap input_dataset must contain at least one dark(-like) frame "
+                    "(DATATYPE='Dark'/'MasterDark' or filename containing '_drk'). "
+                )
+            base_dataset = Dataset(dark_frames)
+
             pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
-                input_dataset,
+                base_dataset,
                 any_true_keywords=typical_bool_keywords,
                 invalid_keywords=typical_cal_invalid_keywords
             )
 
             ## TODO: we shouldn't need to do this manually, and should be done in merge header
             # but haven't figured out the bug, so we're hard coding it
+            if "DESMEAR" not in err_hdr:
+                err_hdr["DESMEAR"] = bool(ext_hdr.get("DESMEAR", False))
             if 'DESMEAR' in err_hdr:
                 if type(err_hdr['DESMEAR']) == int:
                     err_hdr['DESMEAR'] = bool(err_hdr['DESMEAR'])
@@ -2215,7 +2240,7 @@ class FluxcalFactor(Image):
                 # give it a default filename using the first input file as the base
                 # strip off everything starting at .fits
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-  
+
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
             # JM: moved the below to fluxcal.py since it varies depending on the method
             #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
@@ -2229,8 +2254,11 @@ class FluxcalFactor(Image):
             # use the start date for the filename by default
             self.filedir = "."
             # slight hack for old mocks not in the standard filename format
-            self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            if input_dataset is not None:
+                self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
+                self.filename = re.sub('_l[0-9].', '', self.filename)
+            else:
+                self.filename = re.sub(r'\.fits$', '_abf_cal.fits', self.pri_hdr['FILENAME'])
             self.pri_hdr['FILENAME'] = self.filename
 
 class SpecFluxCal(Image):

@@ -51,7 +51,8 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         os.makedirs(calibrations_dir)
 
     # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    # Use a test-specific caldb filepath
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_l1_to_l4_pol_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
@@ -159,16 +160,21 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     # Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
-    #Mock up some important header things
-    ext_hdr_flat0 = ext_hdr.copy()
-    ext_hdr_flat0['DPAMNAME'] = 'POL0'
+    # Pol flats are taken with an open FP mask (OPEN_12 for band 1)
+    # Create separate input datasets for each pol flat with the correct DPAMNAME and FPAMNAME
+    mock_dataset_flat0 = data.Dataset([frame.copy() for frame in mock_input_dataset])
+    for frame in mock_dataset_flat0:
+        frame.ext_hdr['DPAMNAME'] = 'POL0'
+        frame.ext_hdr['FPAMNAME'] = 'OPEN_12'
     pri_hdr_flat45 = pri_hdr.copy()
     pri_hdr_visitID = str(int(pri_hdr['VISITID']) + 1)  #Change the visit id so the filename will be different
     pri_hdr_flat45['VISITID'] = pri_hdr_visitID
-    ext_hdr_flat45 = ext_hdr.copy()
-    ext_hdr_flat45['DPAMNAME'] = 'POL45'
-    flat0 = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    flat45 = data.FlatField(flat_dat, pri_hdr=pri_hdr_flat45, ext_hdr=ext_hdr_flat45, input_dataset=mock_input_dataset)
+    mock_dataset_flat45 = data.Dataset([frame.copy() for frame in mock_input_dataset])
+    for frame in mock_dataset_flat45:
+        frame.ext_hdr['DPAMNAME'] = 'POL45'
+        frame.ext_hdr['FPAMNAME'] = 'OPEN_12'
+    flat0 = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_dataset_flat0)
+    flat45 = data.FlatField(flat_dat, pri_hdr=pri_hdr_flat45, ext_hdr=ext_hdr, input_dataset=mock_dataset_flat45)
     mocks.rename_files_to_cgi_format(list_of_fits=[flat0, flat45], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat0)
     this_caldb.create_entry(flat45)
@@ -177,7 +183,9 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     # Bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    # Make sure BPM includes a dark(-like) frame
+    bp_map_inputs = data.Dataset([dark_cal, flat0])
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     this_caldb.create_entry(bp_map)
 
@@ -248,7 +256,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     #### Generate a flux calibration file ####
     ##########################################
 
-    #Create a mock flux calibration file
+    #Create a mock flux calibration file (POL0)
     fluxcal_factor = 2e-12
     fluxcal_factor_error = 1e-14
     prhd, exthd, errhd, dqhd = mocks.create_default_L3_headers()
@@ -256,10 +264,22 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     exthd['CFAMNAME'] = '1F'
     exthd['DPAMNAME'] = 'POL0'
     exthd['FPAMNAME'] = 'HLC12_C2R1'
-    fluxcal_fac = data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = distortion_dataset_base)
+    exthd['DRPNFILE'] = 0  # mock calibration, no input files
+    fluxcal_fac = data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd)
 
     mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
+
+    # POL45 absolute flux cal
+    prhd_pol45 = prhd.copy()
+    prhd_pol45['VISITID'] = str(int(prhd['VISITID']) + 1)
+    exthd_pol45 = exthd.copy()
+    exthd_pol45['DPAMNAME'] = 'POL45'
+    fluxcal_fac_pol45 = data.FluxcalFactor(
+        fluxcal_factor, err=fluxcal_factor_error, pri_hdr=prhd_pol45, ext_hdr=exthd_pol45, err_hdr=errhd.copy()
+    )
+    mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac_pol45], output_dir=calibrations_dir, level_suffix="abf_cal")
+    this_caldb.create_entry(fluxcal_fac_pol45)
 
     #################################################
     ########### Create Mueller Matrix cals ##########
@@ -289,7 +309,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     system_mm_cal = data.MuellerMatrix(system_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset)
     nd_exthdr = mm_exthdr.copy()
     for dataset in input_dataset.frames:
-        dataset.ext_hdr['FPAMNAME'] = 'ND225'
+        dataset.ext_hdr['FPAMNAME'] = 'ND475'
     nd_mm_cal = data.NDMuellerMatrix(nd_mueller_matrix, pri_hdr=mm_prihdr.copy(), ext_hdr=nd_exthdr, input_dataset=input_dataset)
 
     mocks.rename_files_to_cgi_format(list_of_fits=[system_mm_cal], output_dir=calibrations_dir, level_suffix="mmx_cal")
@@ -309,7 +329,8 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f"  - BadPixelMap: {bp_map.filename}")
     logger.info(f"  - AstrometricCalibration: {astrom_cal.filename}")
     logger.info(f"  - CTM Calibration: {ct_cal_tmp.filename}")
-    logger.info(f"  - Flux Calibration Factor: {fluxcal_fac.filename}")
+    logger.info(f"  - Flux Calibration Factor (POL0): {fluxcal_fac.filename}")
+    logger.info(f"  - Flux Calibration Factor (POL45): {fluxcal_fac_pol45.filename}")
     logger.info(f"  - System Mueller Matrix: {system_mm_cal.filename}")
     logger.info(f"  - ND Mueller Matrix: {nd_mm_cal.filename}")
     logger.info('')
@@ -555,8 +576,9 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f"Total output L4 images validated: {len(new_l4_filenames)}")
     logger.info('')
     
-    # remove temporary caldb file
-    os.remove(tmp_caldb_csv)
+    # remove temporary caldb file if exists
+    if os.path.exists(tmp_caldb_csv):
+        os.remove(tmp_caldb_csv)
 
     return new_l4_filenames
 
@@ -666,8 +688,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/maxmb/Data/corgi/E2E_Test_Data/'
-    outputdir = '/Users/maxmb/Data/corgi/e2e_output/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    outputdir = '/Users/jmilton/Github/corgidrp/tests/e2e_tests'
 
     ap = argparse.ArgumentParser(description="run the l1->l4 polarimetry end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
