@@ -237,14 +237,17 @@ def calibrate_nonlin(dataset_nl,
         nonlin_params = nonlin_params_default
         
     check_nonlin_params(nonlin_params)
-
-    # dataset_nl.all_data must be 3-D 
-    if np.ndim(dataset_nl.all_data) != 3:
-        raise Exception('dataset_nl.all_data must be 3-D')
+    if dataset_nl[0].data is None:
+        ram_heavy = True
+    else:
+        ram_heavy = False
     # cast dataset objects into np arrays and retrieve aux information
     cal_list, mean_frame_list, exp_arr, datetime_arr, len_list, actual_gain_arr, datetimes_sort_inds, _ = \
         nonlin_kgain_dataset_2_stack(dataset_nl, apply_dq = apply_dq, cal_type='nonlin')
-    cal_arr = np.vstack(cal_list)[datetimes_sort_inds]
+    if ram_heavy:
+        cal_arr = np.array(cal_list)[datetimes_sort_inds]
+    else:
+        cal_arr = np.vstack(cal_list)[datetimes_sort_inds] 
     mean_frame_arr = np.stack(mean_frame_list)
     # Get relevant constants
     rowroi1 = nonlin_params['rowroi1']
@@ -266,8 +269,9 @@ def calibrate_nonlin(dataset_nl,
 
     if type(cal_arr) != np.ndarray:
         raise TypeError('cal_arr must be an ndarray.')
-    if np.ndim(cal_arr) != 3:
-        raise CalNonlinException('cal_arr must be 3-D')
+    if not ram_heavy: # if RAM-heavy, this is a set of filepaths, not a 3-D array
+        if np.ndim(cal_arr) != 3:
+            raise CalNonlinException('cal_arr must be 3-D')
     if len(len_list) < 1:
         raise CalNonlinException('Number of elements in len_list must '
                 'be greater than or equal to 1.')
@@ -293,9 +297,10 @@ def calibrate_nonlin(dataset_nl,
                     'in increasing time order for each EM gain value.')
     if type(mean_frame_arr) != np.ndarray:
         raise TypeError('mean_frame_arr must be an ndarray.')
-    if np.ndim(mean_frame_arr) != 3:
-        raise CalNonlinException('mean_frame_arr must be 3-D (i.e., a stack of '
-                '2-D sub-stacks')
+    if not ram_heavy: # if RAM-heavy, this is a set of filepaths, not a 3-D array
+        if np.ndim(mean_frame_arr) != 3:
+            raise CalNonlinException('mean_frame_arr must be 3-D (i.e., a stack of '
+                    '2-D sub-stacks')
     # mean_frame_arr must have at least 30 frames
     if len(mean_frame_arr) < n_mean:
         raise CalNonlinException(f'Number of frames in mean_frame_arr must '
@@ -400,26 +405,38 @@ def calibrate_nonlin(dataset_nl,
     
     ####################### create good_mean_frame ###################
     
-    nrow = len(mean_frame_arr[0])
-    ncol = len(mean_frame_arr[0][0])
-    
-    good_mean_frame = np.zeros((nrow, ncol))
-    nFrames = len(mean_frame_arr)
+    if ram_heavy:
+        temp_frame = data.Image(mean_frame_arr[0]) # just to get shape
+        frame_shape = temp_frame.data.shape
+        good_mean_frame = np.zeros(frame_shape)
+        for filepath in mean_frame_arr:
+            temp_frame = data.Image(filepath)
+            if apply_dq:
+                bad = np.where(temp_frame.dq > 0)
+                temp_frame.data[bad] = np.nan
+            good_mean_frame += temp_frame.data
+        good_mean_frame = good_mean_frame / len(mean_frame_arr)
+    else:
+        nrow = len(mean_frame_arr[0])
+        ncol = len(mean_frame_arr[0][0])
+        
+        good_mean_frame = np.zeros((nrow, ncol))
+        nFrames = len(mean_frame_arr)
 
-    good_mean_frame = good_mean_frame / nFrames
-    
-    mean_frame_index = 0
-    # Loop over the mean_frame_arr frames
-    for i in range(nFrames):
-        frame = mean_frame_arr[i]
-    
-        # Add this frame to the cumulative good_mean_frame
-        good_mean_frame += frame
-        mean_frame_index += 1
+        good_mean_frame = good_mean_frame / nFrames
+        
+        mean_frame_index = 0
+        # Loop over the mean_frame_arr frames
+        for i in range(nFrames):
+            frame = mean_frame_arr[i]
+        
+            # Add this frame to the cumulative good_mean_frame
+            good_mean_frame += frame
+            mean_frame_index += 1
 
-    # Calculate the average of the frames if required
-    if mean_frame_index > 0:
-        good_mean_frame /= mean_frame_index 
+        # Calculate the average of the frames if required
+        if mean_frame_index > 0:
+            good_mean_frame /= mean_frame_index 
     
     # plot, if requested
     if make_plot:
@@ -584,8 +601,14 @@ def calibrate_nonlin(dataset_nl,
                 frame_mean = []
                 if not repeat_flag:
                     for iframe in range(len(selected_files)):
-                        
-                        frame_1 = selected_files[iframe]
+                        if ram_heavy:
+                            image_1 = data.Image(selected_files[iframe])
+                            frame_1 = image_1.data
+                            if apply_dq: # in ram_heavy case, this hasn't been applied yet
+                                bad = np.where(image_1.dq > 0)
+                                frame_1[bad] = np.nan
+                        else:
+                            frame_1 = selected_files[iframe]
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
@@ -617,8 +640,14 @@ def calibrate_nonlin(dataset_nl,
                     # is what the TVAC code has), but for more general case, use repeated_lens[gain_index] instead for the number of frames in the 2nd (repeated) set
                     first_half = len(selected_files) // 2
                     for i in range(first_half):
-
-                        frame_1 = selected_files[i]
+                        if ram_heavy:
+                            image_1 = data.Image(selected_files[i])
+                            frame_1 = image_1.data
+                            if apply_dq: # in ram_heavy case, this hasn't been applied yet
+                                bad = np.where(image_1.dq > 0)
+                                frame_1[bad] = np.nan
+                        else:
+                            frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
@@ -648,8 +677,14 @@ def calibrate_nonlin(dataset_nl,
                     
                     second_half = len(selected_files)
                     for i in range(first_half + 1, second_half):
-                       
-                        frame_1 = selected_files[i]
+                        if ram_heavy:
+                            image_1 = data.Image(selected_files[i])
+                            frame_1 = image_1.data
+                            if apply_dq: # in ram_heavy case, this hasn't been applied yet
+                                bad = np.where(image_1.dq > 0)
+                                frame_1[bad] = np.nan
+                        else:
+                            frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
@@ -871,7 +906,7 @@ def calibrate_nonlin(dataset_nl,
     
     return nonlin
 
-def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
+def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', dataset_copy=True):
     """
     Casts the CORGIDRP Dataset object for non-linearity calibration into a stack
     of numpy arrays sharing the same commanded gain value. It also returns the list of
@@ -885,10 +920,14 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
         apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
         cal_type (str): If 'kgain', then sets of frames with the same exposure time for a given EM gain 
             are truncated so that each has the same number of frames.  Otherwise (for the 'nonlin' case), there is no truncation.
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  
+            If False, the output dataset will be the input dataset modified, and 
+            the input and output datasets will be identical.  This is useful when 
+            handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
 
     Returns:
-        list of data arrays associated with each frame
-        list of mean frames
+        list of data arrays associated with each frame (just the filepaths if data is None for input dataset)
+        list of mean frames (just the filepaths if data is None for input dataset)
         array of exposure times associated with each frame
         array of datetimes associated with each frame
         list with the number of frames with same EM gain
@@ -898,13 +937,21 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
 
     """
     # Split Dataset
-    dataset_cp = dataset.copy()
+    if dataset[0].data is None: #RAM-heavy mode
+        ram_heavy = True
+        dataset_cp = dataset
+    else:
+        if dataset_copy:
+            dataset_cp = dataset.copy()
+        else:
+            dataset_cp = dataset
+        ram_heavy = False
     split = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
     
     # Calibration data
     stack = []
     # Mean frame data
-    mean_frame_stack = []
+    mean_frame_list = []
     record_exp_time = True
     # Exposure times
     exp_times = []
@@ -915,6 +962,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
     # Record measured gain of each substack of calibration frames
     gains = []
     smallest_set_len = None
+
     for idx_set, data_set in enumerate(split[0]):
         obsname_dsets, obsname_vals = data_set.split_dataset(prihdr_keywords=['OBSNAME'])
         cal_dsets = []
@@ -931,8 +979,11 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
         if mnframe_ind is not None:
             for frame in obsname_dsets[mnframe_ind]:
                 if apply_dq:
-                    bad = np.where(frame.dq > 0)
-                    frame.data[bad] = np.nan
+                    if ram_heavy:
+                        pass # don't apply yet; apply later when loading in data
+                    else:
+                        bad = np.where(frame.dq > 0)
+                        frame.data[bad] = np.nan
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
                     record_exp_time = False
@@ -940,7 +991,10 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
                     raise Exception('Frames used to build the mean frame must have the same exposure time')
                 if frame.ext_hdr['EMGAIN_C'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
-                mean_frame_stack.append(frame.data)
+                if ram_heavy:
+                    mean_frame_list.append(frame.filepath)
+                else:
+                    mean_frame_list.append(frame.data)
         for cal_dset in cal_dsets:
             # each of dsets has just one frame in it
             dsets, vals = cal_dset.split_dataset(exthdr_keywords=['DATETIME','EXPTIME'])
@@ -966,7 +1020,10 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
             if cal_type == 'nonlin':
                 smallest_set_length = None # for nonlin, don't need to truncate exptime sets to be same length for a given EM gain
             for i, exptime_dset_list in enumerate(exptime_dsets):
-                sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]])
+                if ram_heavy:
+                    sub = [dset.frames[0].filepath for dset in exptime_dset_list[:smallest_set_length]]
+                else:
+                    sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]]) 
                 for exptime_dset in exptime_dset_list[:smallest_set_length]:
                     frame = exptime_dset.frames[0]
                     if not (frame.pri_hdr['OBSNAME'] == 'KGAIN' or 
@@ -993,13 +1050,20 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
                             record_gain = False
                     if gains[-1] == 1:
                         smallest_set_len = smallest_set_length
-                stack_cp.append(sub)
-                len_cal_frames += len(sub)
+                if ram_heavy:
+                    stack_cp += sub
+                else:
+                    stack_cp.append(sub) 
+                len_cal_frames += len(sub) 
+
             # Length of substack must be at least 1
             if len(stack_cp) == 0:
                 raise Exception('Substacks must have at least one element')
             else:
-                stack.append(np.vstack(stack_cp))
+                if ram_heavy:
+                    stack += stack_cp
+                else:
+                    stack.append(np.vstack(stack_cp)) 
                 len_sstack.append(len_cal_frames)
     
     # All elements of datetimes must be unique
@@ -1013,5 +1077,5 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
     
     # sort frames by time stamp for drift correction later
     datetimes_sort_inds = np.argsort(datetimes)
-    return (stack, mean_frame_stack, np.array(exp_times)[datetimes_sort_inds],
+    return (stack, mean_frame_list, np.array(exp_times)[datetimes_sort_inds],
         np.array(datetimes)[datetimes_sort_inds], len_sstack, np.array(gains), datetimes_sort_inds, smallest_set_len)

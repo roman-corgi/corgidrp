@@ -1,18 +1,13 @@
 {
-    "name" : "l1_to_l2a_nonlin",
+    "name" : "l1_to_l2a_nonlin_2",
     "template" : true,
-    "ram_heavy" : true,
+    "process_in_chunks" : true,
     "drpconfig" : {
         "track_individual_errors" : false
     },
     "inputs" : [],
     "outputdir" : "",
     "steps" : [
-        {   "name" : "sort_pupilimg_frames",
-              "keywords" : {
-                "cal_type" : "non-lin"
-              }
-        },
         {
             "name" : "prescan_biassub",
               "keywords" : {
@@ -53,10 +48,6 @@
             "keywords" : {
                 "dataset_copy" : false
             }
-        },
-        {
-            "name" : "calibrate_nonlin",
-              "keywords": {"n_cal":20}
         },
         {
             "name" : "save"

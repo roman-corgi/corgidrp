@@ -13,7 +13,8 @@
                 "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
             },
             "keywords" : {
-                "use_imaging_area" : true
+                "use_imaging_area" : true,
+                "dataset_copy" : false
             }
         },
         {

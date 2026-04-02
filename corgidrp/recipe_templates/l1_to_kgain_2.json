@@ -1,19 +1,13 @@
 
 {
-    "name" : "l1_to_kgain",
+    "name" : "l1_to_kgain_2",
     "template" : true,
-	"ram_heavy" : true,
     "drpconfig" : {
         "track_individual_errors" : false
     },
     "inputs" : [],
     "outputdir" : "",
     "steps" : [
-        {   "name" : "sort_pupilimg_frames",
-              "keywords" : {
-                "cal_type" : "k-gain"
-              }
-        },
         {
             "name" : "prescan_biassub",
             "keywords" : {
@@ -39,12 +33,12 @@
 		}
             }
         },
-        {
+	{
             "name" : "discard_setup_frames",
             "keywords" : {
                 "keywords_to_check" : ["ISACQ"]
             }
-        },
+	},
 	{
 	    "name" : "detect_cosmic_rays",
 	    "calibs" : {
@@ -75,7 +69,8 @@
 			    "r0c0": [99, 799]
 			}
 		    }
-	        }
+	        },
+			"dataset_copy" : false
 	    }		
 	},
         {

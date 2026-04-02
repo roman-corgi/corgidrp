@@ -1,0 +1,24 @@
+
+{
+    "name" : "l1_to_kgain_1",
+    "template" : true,
+	"ram_heavy" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {   "name" : "sort_pupilimg_frames",
+              "keywords" : {
+                "cal_type" : "k-gain"
+              }
+        },
+        {
+            "name" : "save",
+			"keywords" : {
+                "ram_heavy_save" : true
+            }
+        }
+    ]
+}

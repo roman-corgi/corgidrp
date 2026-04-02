@@ -15,6 +15,7 @@ from corgidrp import walker
 from corgidrp import caldb
 from corgidrp import check
 import shutil
+import json
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
@@ -134,15 +135,22 @@ def test_nonlin_and_kgain_e2e(
     #walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)
     recipe = walker.autogen_recipe(pupilimg_l1_list, e2eoutput_path)
     ### Modify they keywords of some of the steps
-    for step in recipe[1]['steps']:
+    for step in recipe[1][1]['steps']:
         if step['name'] == "calibrate_kgain":
             step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-    walker.run_recipe(recipe[1], save_recipe_file=True)
-    for step in recipe[0]['steps']:
+    output_filepaths = walker.run_recipe(recipe[1][0], save_recipe_file=True)
+    recipe[1][1]['inputs'] = output_filepaths
+    walker.run_recipe(recipe[1][1], save_recipe_file=True)
+
+    for step in recipe[0][2]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
             step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
-    walker.run_recipe(recipe[0], save_recipe_file=True)
+    output_filepaths = walker.run_recipe(recipe[0][0], save_recipe_file=True)
+    recipe[0][1]['inputs'] = output_filepaths
+    output_filepaths1 = walker.run_recipe(recipe[0][1], save_recipe_file=True)
+    recipe[0][2]['inputs'] = output_filepaths1
+    walker.run_recipe(recipe[0][2], save_recipe_file=True)
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests
     # NL from CORGIDRP

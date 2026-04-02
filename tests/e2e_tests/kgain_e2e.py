@@ -13,6 +13,7 @@ import corgidrp.caldb as caldb
 import corgidrp.check as check
 from corgidrp.sorting import sort_pupilimg_frames
 from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
+import json
 
 import warnings
 
@@ -165,12 +166,15 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     ####### Run the DRP walker
     print('Running walker')
     #walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
+    
     recipe = walker.autogen_recipe(ordered_filelist, kgain_outputdir)
     ### Modify they keywords of some of the steps
-    for step in recipe[1]['steps']:
+    for step in recipe[1][1]['steps']:
         if step['name'] == "calibrate_kgain":
             step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-    walker.run_recipe(recipe[1], save_recipe_file=True)
+    output_filepaths = walker.run_recipe(recipe[1][0], save_recipe_file=True)
+    recipe[1][1]['inputs'] = output_filepaths
+    walker.run_recipe(recipe[1][1], save_recipe_file=True)    
 
     ####### Load in the output data. It should be the latest kgain file produced.
     possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_krn_cal*.fits'))

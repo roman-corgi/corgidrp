@@ -280,7 +280,8 @@ def calibrate_kgain(dataset_kgain,
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
                     make_plot=False,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
-                    verbose=False, detector_regions=None, kgain_params=None, apply_dq = True):
+                    verbose=False, detector_regions=None, kgain_params=None, apply_dq = True,
+                    dataset_copy=True):
     """
     kgain (e-/DN) is calculated from the means and variances
     within the defined minimum and maximum mean values. A photon transfer curve
@@ -361,6 +362,11 @@ def calibrate_kgain(dataset_kgain,
         'signal_bins_N': number of bins in the signal variables of PTC curve
         Defaults to kgain_params_default included in this file.
       apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
+      dataset_copy (bool): flag indicating whether the input dataset will be 
+        preserved after this function is executed or not.  If False, the output 
+        dataset will be the input dataset modified, and the input and output datasets 
+        will be identical.  This is useful when handling a large dataset and when 
+        the input dataset is not needed afterwards. Defaults to True.
     
     Returns:
       corgidrp.data.KGain: kgain estimate from the least-squares fit to the photon
@@ -377,9 +383,9 @@ def calibrate_kgain(dataset_kgain,
 
     # cast dataset objects into np arrays for convenience
     #cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain, apply_dq = apply_dq)
-    cal_list, mean_frame_list, _, _, _, actual_gains, _, truncated_set_len = nonlin_kgain_dataset_2_stack(dataset_kgain, apply_dq = apply_dq, cal_type='kgain')
+    cal_list, mean_frame_list, _, _, _, actual_gains, _, truncated_set_len = nonlin_kgain_dataset_2_stack(dataset_kgain, apply_dq = apply_dq, cal_type='kgain', dataset_copy=dataset_copy)
     split_arr = np.arange(0,len(cal_list[0]), truncated_set_len)[1:]
-    cal_list = np.split(cal_list[0], split_arr)
+    cal_list = np.array(np.split(cal_list[0], split_arr))
     actual_gain = np.nanmean(actual_gains)
     # check number of frames, unique EM value, exposure times and datetimes
     tmp = cal_list[0]
