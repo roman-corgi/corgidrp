@@ -2,7 +2,6 @@
 Calibration tracking system. Modified from kpicdrp caldb implmentation (Copyright (c) 2024, KPIC Team)
 """
 import os
-import glob
 import numpy as np
 import pandas as pd
 import corgidrp
@@ -12,7 +11,6 @@ import corgidrp.spec as spec
 import corgidrp.flat as flat
 
 import astropy.time as time
-from astropy.io import fits
 from astropy.table import Table
 import datetime
 
@@ -623,24 +621,10 @@ def initialize():
         rescan_needed = True
 
     # Add default ones-flat FlatField calibration file
-    ones_flat_exists = False
-    try:
-        for p in glob.glob(os.path.join(corgidrp.default_cal_dir, "*.fits")):
-            try:
-                exth = fits.getheader(p, ext=1)
-            except Exception:
-                continue
-            if exth.get("DATATYPE") == "FlatField" and exth.get("FPAMNAME") == "ONES":
-                ones_flat_exists = True
-                break
-    except Exception:
-        ones_flat_exists = False
-
     fixed_ones_flat_filename = "cgi_0000000000000000000_20000101t0000000_flt_cal.fits"
     fixed_ones_flat_filepath = os.path.join(corgidrp.default_cal_dir, fixed_ones_flat_filename)
 
-    # Make sure the fixed filename exists even if an older ones-flat is already present
-    if (not ones_flat_exists) or (not os.path.exists(fixed_ones_flat_filepath)):
+    if not os.path.exists(fixed_ones_flat_filepath):
         ones_flat_dataset = mocks.create_flatfield_dummy(numfiles=1)
         ones_flat_dataset[0].data[:] = 1.0
         ones_flat = flat.create_flatfield(ones_flat_dataset)
