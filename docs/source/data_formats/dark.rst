@@ -7,7 +7,11 @@ Dark Data Product
 FITS HDU Structure
 ------------------
 
-
+Image HDU array: If analog master dark, (r,c), where this is (1024,1024) for image area or (1200,2200) for full frame.  
+If photon-counted master dark, (N,1024,1024), where N is 1 or larger if frame binning is used.
+ERR HDU array: (1,r,c) or (1,N,1024,1024)
+DQ HDU array: (r,c) or (N,1024,1024)
+Below is an example.
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+
