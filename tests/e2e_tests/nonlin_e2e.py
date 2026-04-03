@@ -30,7 +30,10 @@ def test_nonlin_cal_e2e(
         frames per EM gain, but the CORGI DRP does, and the default number is 20.  
         For this e2e test, we use 3 EM gains, and for one of those EM gains, there 
         are only 14 frames in the e2e test data.  So, we set the keyword n_cal=14 below 
-        before running the steps through the walker.
+        before running the steps through the walker.  Also, the II&T code did not correct for cosmic rays, 
+        but the CORGI DRP does by default.  So, we set the keyword apply_dq=False 
+        below before running the steps through the walker in order to be able to 
+        compare the results with the II&T code.
 
         Args:
         e2edata_path (str): Location of L1 data used to generate the non-linearity
@@ -156,7 +159,6 @@ def test_nonlin_cal_e2e(
     for step in recipe[0][2]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
-            step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
     output_filepaths = walker.run_recipe(recipe[0][0], save_recipe_file=True)
     recipe[0][1]['inputs'] = output_filepaths
     output_filepaths1 = walker.run_recipe(recipe[0][1], save_recipe_file=True)
