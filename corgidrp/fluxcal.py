@@ -20,7 +20,7 @@ from urllib.request import Request, urlopen, urlretrieve
 calspec_names= {
 # bright standards
 '109 vir': '109vir_stis_005.fits',
-'vega': 'alpha_lyr_stis_011.fits',
+'vega': 'alpha_lyr_stis_012.fits',
 'eta uma': 'etauma_stis_008.fits',
 'lam lep': 'lamlep_stis_008.fits',
 'ksi2 ceti': 'ksi2ceti_stis_008.fits',

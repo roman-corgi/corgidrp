@@ -1504,14 +1504,14 @@ def test_spec_flux_cal():
     assert np.array_equal(specflux_load.specflux_dq, spec_dq[0])  # DQ is integer, use exact
     
     #test the absolute spectral flux calibration
-    calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
+    calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_012.fits")
     spec_fluxcal = steps.spec_fluxcal(spec_dataset, calspec_file = calspec_filepath)
     assert len(spec_fluxcal.specflux) == len(spec)
     assert spec_fluxcal.ext_hdr['BUNIT'] == "erg/(s * cm^2 * AA)/(photoelectron/s/bin)"
     assert np.array_equal(spec_fluxcal.wavelength, spec_wave)
     assert np.array_equal(spec_fluxcal.wave_err, wave_err)
     assert np.array_equal(spec_fluxcal.specflux_dq, spec_dq[0])
-    assert 'alpha_lyr_stis_011.fits' in str (spec_fluxcal.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis_012.fits' in str (spec_fluxcal.ext_hdr['HISTORY'])
 
     #test the flux cal values, should be the same as flux since we choose spec = 1
     filter_file = get_filter_name(image)
