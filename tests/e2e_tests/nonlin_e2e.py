@@ -30,7 +30,10 @@ def test_nonlin_cal_e2e(
         frames per EM gain, but the CORGI DRP does, and the default number is 20.  
         For this e2e test, we use 3 EM gains, and for one of those EM gains, there 
         are only 14 frames in the e2e test data.  So, we set the keyword n_cal=14 below 
-        before running the steps through the walker.
+        before running the steps through the walker.  Also, the II&T code did not correct for cosmic rays, 
+        but the CORGI DRP does by default.  So, we set the keyword apply_dq=False 
+        below before running the steps through the walker in order to be able to 
+        compare the results with the II&T code.
 
         Args:
         e2edata_path (str): Location of L1 data used to generate the non-linearity
@@ -86,6 +89,12 @@ def test_nonlin_cal_e2e(
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
+    # leave out the files not used in creating the reference II&T cal
+    new_files = ['cgi_0089001001001001027_20240308t0549477_l1_.fits','cgi_0089001001001001027_20240308t0549478_l1_.fits','cgi_0089001001001001027_20240308t0549479_l1_.fits','cgi_0089001001001001027_20240308t0549480_l1_.fits','cgi_0089001001001001027_20240308t0549481_l1_.fits','cgi_0089001001001001027_20240308t0549482_l1_.fits']
+    for f in nonlin_l1_list:
+        for new_f in new_files:
+            if f.endswith(new_f):
+                nonlin_l1_list.remove(f)
     nonlin_l1_list.sort()
     kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
     kgain_l1_list.sort()
@@ -156,7 +165,7 @@ def test_nonlin_cal_e2e(
     for step in recipe[0][2]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
-            step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
+            step['keywords']['n_cal'] = 14 # set n_cal to 14 to match the number of frames used to produce the II&T result (so we can compare results)
     output_filepaths = walker.run_recipe(recipe[0][0], save_recipe_file=True)
     recipe[0][1]['inputs'] = output_filepaths
     output_filepaths1 = walker.run_recipe(recipe[0][1], save_recipe_file=True)

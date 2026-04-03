@@ -56,11 +56,6 @@ def test_nonlin_and_kgain_e2e(
     """ 
     Performs the e2e test to generate both nonlin and kgain calibrations from the same
     L1 pupilimg dataset.
-    NOTE:  The original II&T code for nonlin calibration did not have a restriction on the number of
-        frames per EM gain, but the CORGI DRP does, and the default number is 20.  
-        For this e2e test, we use 3 EM gains, and for one of those EM gains, there 
-        are only 14 frames in the e2e test data.  So, we set the keyword n_cal=14 below 
-        before running the steps through the walker.
 
     Args:
         e2edata_path (str): Location of L1 data. Folders for both kgain and nonlin
@@ -132,25 +127,7 @@ def test_nonlin_and_kgain_e2e(
 
     # Run the walker on some test_data
     print('Running walker')
-    #walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)
-    recipe = walker.autogen_recipe(pupilimg_l1_list, e2eoutput_path)
-    ### Modify they keywords of some of the steps
-    for step in recipe[1][1]['steps']:
-        if step['name'] == "calibrate_kgain":
-            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-    output_filepaths = walker.run_recipe(recipe[1][0], save_recipe_file=True)
-    recipe[1][1]['inputs'] = output_filepaths
-    walker.run_recipe(recipe[1][1], save_recipe_file=True)
-
-    for step in recipe[0][2]['steps']:
-        if step['name'] == "calibrate_nonlin":
-            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-            step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
-    output_filepaths = walker.run_recipe(recipe[0][0], save_recipe_file=True)
-    recipe[0][1]['inputs'] = output_filepaths
-    output_filepaths1 = walker.run_recipe(recipe[0][1], save_recipe_file=True)
-    recipe[0][2]['inputs'] = output_filepaths1
-    walker.run_recipe(recipe[0][2], save_recipe_file=True)
+    walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests
     # NL from CORGIDRP
