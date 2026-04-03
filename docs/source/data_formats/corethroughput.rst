@@ -12,6 +12,7 @@ ERR HDU array: (1,f,r,c)
 DQ HDU array: (f,r,c)
 CTEXCAM HDU array: (3,f) 
 Below is an example.
+
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+

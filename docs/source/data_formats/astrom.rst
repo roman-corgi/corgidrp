@@ -14,6 +14,7 @@ Image HDU 3D array for (frames,row,col):  (f=varies with number of input images,
 ERR HDU array: (1,c)
 DQ HDU array: (c)
 Below is an example.
+
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+

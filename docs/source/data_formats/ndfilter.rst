@@ -11,6 +11,7 @@ Image HDU array: (N,3); Nx3 array where each row contains [OD, x, y].
 ERR HDU array: (1,N,3)
 DQ HDU array: (N,3)
 Below is an example.
+
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+

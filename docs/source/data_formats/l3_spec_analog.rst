@@ -11,6 +11,7 @@ Image HDU array: (r,c), where r and c depend on cropping.
 ERR HDU array: (1,r,c)
 DQ HDU array: (r,c) 
 Below is an example.
+
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+

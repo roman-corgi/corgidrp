@@ -11,6 +11,7 @@ Image HDU 2D array: (3,M); M sets of (x, y, core throughput estimated)
 ERR HDU array: (1,3,M)
 DQ HDU array: (3,M)
 Below is an example.
+
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+

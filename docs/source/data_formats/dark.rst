@@ -12,6 +12,7 @@ If photon-counted master dark, (N,1024,1024), where N is 1 or larger if frame bi
 ERR HDU array: (1,r,c) or (1,N,1024,1024)
 DQ HDU array: (r,c) or (N,1024,1024)
 Below is an example.
+
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+

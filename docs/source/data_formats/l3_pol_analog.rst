@@ -12,6 +12,7 @@ ERR HDU array: (1,2,r,c)
 DQ HDU array: (2,r,c) 
 BIAS HDU array: (1024)
 Below is an example.
+
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+

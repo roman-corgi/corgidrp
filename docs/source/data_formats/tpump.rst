@@ -12,6 +12,7 @@ ERR HDU array: (1,n,10)
 DQ HDU array: (n,10)
 TRAP_DENSITIES HDU array: (m,3) where m is the number of bins.
 Below is an example.
+
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+
