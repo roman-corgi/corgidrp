@@ -89,6 +89,12 @@ def test_nonlin_cal_e2e(
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
+    # leave out the files not used in creating the reference II&T cal
+    new_files = ['cgi_0089001001001001027_20240308t0549477_l1_.fits','cgi_0089001001001001027_20240308t0549478_l1_.fits','cgi_0089001001001001027_20240308t0549479_l1_.fits','cgi_0089001001001001027_20240308t0549480_l1_.fits','cgi_0089001001001001027_20240308t0549481_l1_.fits','.fits']
+    for f in nonlin_l1_list:
+        for new_f in new_files:
+            if f.endswith(new_f):
+                nonlin_l1_list.remove(f)
     nonlin_l1_list.sort()
     kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
     kgain_l1_list.sort()
