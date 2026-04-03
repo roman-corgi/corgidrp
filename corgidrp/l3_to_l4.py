@@ -1867,3 +1867,41 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     updated_dataset.update_after_processing_step(history_msg)
 
     return updated_dataset
+
+def update_to_l4_pol(input_dataset, corethroughput_cal, flux_cal_pol0, flux_cal_pol45):
+    """
+    Updates the data level to L4 for polarimetry data. Only works on L3 data.
+
+    Records both POL0 and POL45 absolute flux calibration filenames in the headers.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        corethroughput_cal (corgidrp.data.CoreThroughputCalibration): a CoreThroughputCalibration calibration file. Can be None
+        flux_cal_pol0 (corgidrp.data.FluxcalFactor): the POL0 FluxcalFactor calibration file
+        flux_cal_pol45 (corgidrp.data.FluxcalFactor): the POL45 FluxcalFactor calibration file
+
+    Returns:
+        corgidrp.data.Dataset: same dataset now at L4-level
+    """
+    for orig_frame in input_dataset:
+        if orig_frame.ext_hdr['DATALVL'] != "L3":
+            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
+            raise ValueError(err_msg)
+
+    updated_dataset = input_dataset.copy(copy_data=False)
+
+    for frame in updated_dataset:
+        frame.ext_hdr['DATALVL'] = "L4"
+        if corethroughput_cal is not None:
+            frame.ext_hdr['CTCALFN'] = corethroughput_cal.filename.split("/")[-1]
+        else:
+            frame.ext_hdr['CTCALFN'] = ''
+        frame.ext_hdr['FLXCALF0'] = flux_cal_pol0.filename.split("/")[-1]
+        frame.ext_hdr['FLXCALF1'] = flux_cal_pol45.filename.split("/")[-1]
+        frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
+        frame.pri_hdr['FILENAME'] = frame.filename
+
+    history_msg = "Updated Data Level to L4"
+    updated_dataset.update_after_processing_step(history_msg)
+
+    return updated_dataset
