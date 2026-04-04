@@ -3934,9 +3934,9 @@ class MuellerMatrix(Image):
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
             ]
         )
-            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
         else:
-            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
 
         # if this is a new Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
@@ -4005,9 +4005,9 @@ class NDMuellerMatrix(Image):
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
             ]
         )
-            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
         else:
-            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
 
         # if this is a new ND Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix

@@ -240,12 +240,14 @@ def generate_mueller_matrix_cal(input_dataset,
     
     The pol reference file should contain the known polarization properties of the targets in the dataset.
     It should be a csv file with the following columns:
-    TARGET, P, P_err, PA_err
-    where TARGET is the name of the target, P is the degree of polarization in percent, P_err is the error 
-    in the degree of polarization in percent, and PA_err is the error in the polarization angle in degrees
+    TARGET, P, P_err, PA, PA_err
+    where TARGET is the name of the target, P is the degree of polarization in percent, P_err is the error
+    in the degree of polarization in percent, PA is the polarization angle in degrees, and PA_err is the
+    error in the polarization angle in degrees.
 
-    The current error calculation takes into consideration the errors on the normalized differences only, 
-    and does not propagate the errors from the reference polarization values. This could be improved in future versions.
+    The error calculation propagates both the photometric measurement noise on the observed Stokes vectors
+    and the uncertainties in the reference star polarization fraction and angle (P_err, PA_err from the
+    reference file), combined in quadrature.
 
     Args: 
         input_dataset (corgidrp.data.Dataset): A CorgiDRP dataset consisting of stokes vectors.
@@ -305,12 +307,26 @@ def generate_mueller_matrix_cal(input_dataset,
         pol_row = pol_ref[pol_ref["TARGET"] == target]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
         PA = pol_row["PA"].values[0] + rotation_angles[i] # in degrees
+        P_err = pol_row["P_err"].values[0] / 100.0 # convert from percent to fraction
+        PA_err_rad = pol_row["PA_err"].values[0] * np.pi / 180.0 # convert deg to rad
+        PA_rad = np.radians(PA)
 
         # calculate the Stokes parameters Q and U from P and PA
         Q, U = get_qu_from_p_theta(P, PA)
 
         stokes_matrix[2*i,:] = [1, Q, U, 0, 0, 0]
-        stokes_matrix[2*i+1,:] = [0, 0, 0, 1, Q, U] 
+        stokes_matrix[2*i+1,:] = [0, 0, 0, 1, Q, U]
+
+        # propagate reference star polarization uncertainties into stokes_vector_errs
+        # Q = P*cos(2*PA), U = P*sin(2*PA)
+        Q_ref_err = np.sqrt((np.cos(2*PA_rad) * P_err)**2 +
+                            (2 * P * np.sin(2*PA_rad) * PA_err_rad)**2)
+        U_ref_err = np.sqrt((np.sin(2*PA_rad) * P_err)**2 +
+                            (2 * P * np.cos(2*PA_rad) * PA_err_rad)**2)
+
+        # combine with existing measurement noise in quadrature
+        stokes_vector_errs[2*i] = np.sqrt(stokes_vector_errs[2*i]**2 + Q_ref_err**2)
+        stokes_vector_errs[2*i+1] = np.sqrt(stokes_vector_errs[2*i+1]**2 + U_ref_err**2)
 
     # invert the stokes matrix using SVD and multiply the the normalized differences to get the mueller matrix elements
     u,s,v=np.linalg.svd(stokes_matrix)
@@ -347,10 +363,12 @@ def generate_mueller_matrix_cal(input_dataset,
 
     if is_nd:
         mueller_matrix_obj = NDMuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
-                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset)
+                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset,
+                         err=mueller_matrix_err)
     else:
         mueller_matrix_obj = MuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
-                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset)
+                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset,
+                         err=mueller_matrix_err)
 
     return mueller_matrix_obj
 
