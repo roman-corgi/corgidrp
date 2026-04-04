@@ -33,6 +33,7 @@ Data Formats
    polflt.rst
    fluxcal.rst
    fluxcal_pol.rst
+   fluxcal_spec.rst
    kgain.rst
    lsf_cal.rst
    mmx_cal.rst

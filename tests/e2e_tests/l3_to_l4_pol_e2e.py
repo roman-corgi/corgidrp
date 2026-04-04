@@ -157,7 +157,8 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     exthd['CFAMNAME'] = '1F'
     exthd['DPAMNAME'] = 'POL0'
     exthd['FPAMNAME'] = 'HLC12_C2R1'
-    fluxcal_fac = data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = distortion_dataset_base)
+    exthd['DRPNFILE'] = 0  # mock calibration, no input files
+    fluxcal_fac = data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd)
 
     mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
@@ -284,6 +285,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                     stellar_sys_wp_img.pri_hdr['TARGET'] = targetname
                     stellar_sys_wp_img.ext_hdr['DPAMNAME'] = wollaston
                     stellar_sys_wp_img.pri_hdr['PA_APER'] = rotation_angle
+                    stellar_sys_wp_img.ext_hdr['NORTHANG'] = astrom_cal.northangle-(rotation_angle-astrom_cal.pri_hdr['PA_APER'])
                     stellar_sys_wp_img.ext_hdr['FSMPRFL'] = 'NFOV'
 
                     # wcs_header = generate_wcs(rotation_angles[i], 
@@ -328,6 +330,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                     split_frame.pri_hdr['TARGET'] = targetname
                     split_frame.ext_hdr['DPAMNAME'] = wollaston
                     split_frame.pri_hdr['PA_APER'] = rotation_angle
+                    split_frame.ext_hdr['NORTHANG'] = astrom_cal.northangle-(rotation_angle-astrom_cal.pri_hdr['PA_APER'])
                     split_frame.ext_hdr['SATSPOTS'] = True
 
                     input_image_list.append(split_frame)
@@ -365,6 +368,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                 stellar_nd_wp_img.ext_hdr['DPAMNAME'] = wollaston
                 stellar_nd_wp_img.ext_hdr['FPAMNAME'] = "ND225"
                 stellar_nd_wp_img.pri_hdr['PA_APER'] = rotation_angle
+                stellar_nd_wp_img.ext_hdr['NORTHANG'] = astrom_cal.northangle-(rotation_angle-astrom_cal.pri_hdr['PA_APER'])
                 stellar_nd_wp_img.ext_hdr['FSMPRFL'] = 'NFOV'
 
                 input_image_list.append(stellar_nd_wp_img)
@@ -465,7 +469,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

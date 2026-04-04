@@ -83,14 +83,9 @@ class Dataset():
                 fr = Image(filepath)
                 if no_data:
                     fr.data = None
-                    if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_err:
-                        #in this case, the frames are L1 and don't yet
-                        # have err and dq, so don't set those
-                        # to None so that each frame is given
-                        # the default starting err and dq for further
-                        # pipeline processes
+                    if no_err:
                         fr.err = None
-                    if fr.ext_hdr['DATALVL'].upper() != 'L1' or no_dq:
+                    if no_dq:
                         fr.dq = None
                 self.frames.append(fr)
         else:
@@ -132,13 +127,16 @@ class Dataset():
     def __len__(self):
         return len(self.frames)
 
-    def save(self, filedir=None, filenames=None):
+    def save(self, filedir=None, filenames=None, ram_heavy_save=False):
         """
         Save each file of data in this dataset into directory
 
         Args:
             filedir (str): directory to save the files. Default: the existing filedir for each file
             filenames (list): a list of output filenames for each file. Default: unchanged filenames
+            ram_heavy_save (bool):  If True, the input is assumed to have no data loaded into memory. (Only metadata was 
+            manipulated in step leading up to save_data.) The data is loaded from the filepath frame by frame, and 
+            each Image is saved to outputdir.  Defaults to False.
 
         """
         # if filenames are not passed, use the default ones
@@ -149,18 +147,31 @@ class Dataset():
                 filenames.append(frame.filename)
 
         for filename, frame in zip(filenames, self.frames):
+            if ram_heavy_save: 
+                temp_frame = Image(frame.filepath)
+                if frame.data is None:
+                    frame.data = temp_frame.data
+                if frame.err is None:
+                    frame.err = temp_frame.err
+                if frame.dq is None:
+                    frame.dq = temp_frame.dq
+                for name in frame.hdu_names: # by construction hdus other than the usual err and dq
+                    if len(frame.hdu_list) > 0:
+                        if frame.hdu_list[name] is None: 
+                            frame.hdu_list[name].data = temp_frame.hdu_list[name].data
             ##redoing the change to the FILENAME keyword to cover our bases
             frame.pri_hdr['FILENAME'] = frame.filename
             frame.save(filename=filename, filedir=filedir)
 
-        # relink frames with all_data
-        self.all_data = np.array([frame.data for frame in self.frames])
-        self.all_err = np.array([frame.err for frame in self.frames])
-        self.all_dq = np.array([frame.dq for frame in self.frames])
-        for i, frame in enumerate(self.frames):
-            frame.data = self.all_data[i]
-            frame.err = self.all_err[i]
-            frame.dq = self.all_dq[i]
+        if not ram_heavy_save:
+            # relink frames with all_data
+            self.all_data = np.array([frame.data for frame in self.frames])
+            self.all_err = np.array([frame.err for frame in self.frames])
+            self.all_dq = np.array([frame.dq for frame in self.frames])
+            for i, frame in enumerate(self.frames):
+                frame.data = self.all_data[i]
+                frame.err = self.all_err[i]
+                frame.dq = self.all_dq[i]
 
     def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None,
                                      update_err_header=True):
@@ -602,11 +613,21 @@ class Image():
         parent_filenames = set()
         # go through filenames and also check each frames parents
         for img in input_dataset:
-            parent_filenames.add(img.filename)
+            # Some synthetic products may not have a filename yet, prefer `filename`, fall back to `filepath'
+            if getattr(img, "filename", None):
+                parent_filenames.add(img.filename)
+            elif getattr(img, "filepath", None):
+                parent_filenames.add(img.filepath)
             # also check if this frame has parent frames. keep trakc of them too
             if 'DRPNFILE' in img.ext_hdr:
                 for j in range(img.ext_hdr['DRPNFILE']):
-                    parent_filenames.add(img.ext_hdr['FILE{0}'.format(j)])
+                    # Support FILE0- and FILE1- conventions, and deal with missing cards (for synthetic calibration products)
+                    key0 = f"FILE{j}"
+                    key1 = f"FILE{j+1}"
+                    if key0 in img.ext_hdr:
+                        parent_filenames.add(img.ext_hdr[key0])
+                    elif key1 in img.ext_hdr:
+                        parent_filenames.add(img.ext_hdr[key1])
         
         for i, filename in enumerate(parent_filenames):
             if len(str(i)) > 4:
@@ -1619,14 +1640,29 @@ class BadPixelMap(Image):
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         if input_dataset is not None:
+            # Use the dark frame for the base header set
+            dark_frames = [
+                f for f in input_dataset
+                if getattr(f, "ext_hdr", {}).get("DATATYPE") in ("Dark", "MasterDark")
+                or "_drk" in str(getattr(f, "filename", "")).lower()
+            ]
+            if not dark_frames:
+                raise ValueError(
+                    "BadPixelMap input_dataset must contain at least one dark(-like) frame "
+                    "(DATATYPE='Dark'/'MasterDark' or filename containing '_drk'). "
+                )
+            base_dataset = Dataset(dark_frames)
+
             pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
-                input_dataset,
+                base_dataset,
                 any_true_keywords=typical_bool_keywords,
                 invalid_keywords=typical_cal_invalid_keywords
             )
 
             ## TODO: we shouldn't need to do this manually, and should be done in merge header
             # but haven't figured out the bug, so we're hard coding it
+            if "DESMEAR" not in err_hdr:
+                err_hdr["DESMEAR"] = bool(ext_hdr.get("DESMEAR", False))
             if 'DESMEAR' in err_hdr:
                 if type(err_hdr['DESMEAR']) == int:
                     err_hdr['DESMEAR'] = bool(err_hdr['DESMEAR'])
@@ -1952,7 +1988,7 @@ class AstrometricCalibration(Image):
                 invalid_keywords=['VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
                     'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
                     'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
-                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', #'PA_APER',
                     'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
                     'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
                     'STAR1','STAR2','STAR3','STAR4','STAR5'] + ['STAR{0}'.format(i) for i in range(6, 1000)],
@@ -2200,7 +2236,7 @@ class FluxcalFactor(Image):
                 # give it a default filename using the first input file as the base
                 # strip off everything starting at .fits
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-  
+
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
             # JM: moved the below to fluxcal.py since it varies depending on the method
             #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
@@ -2214,8 +2250,11 @@ class FluxcalFactor(Image):
             # use the start date for the filename by default
             self.filedir = "."
             # slight hack for old mocks not in the standard filename format
-            self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            if input_dataset is not None:
+                self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
+                self.filename = re.sub('_l[0-9].', '', self.filename)
+            else:
+                self.filename = re.sub(r'\.fits$', '_abf_cal.fits', self.pri_hdr['FILENAME'])
             self.pri_hdr['FILENAME'] = self.filename
 
 class SpecFluxCal(Image):
@@ -2315,7 +2354,7 @@ class SpecFluxCal(Image):
             # use the start date for the filename by default
             self.filedir = "."
             # slight hack for old mocks not in the standard filename format
-            self.filename = "{0}_spfl_cal.fits".format(orig_input_filename)
+            self.filename = "{0}_sfl_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
@@ -3412,7 +3451,7 @@ class PyKLIPDataset(pyKLIP_Data):
             input_all += [data]
             centers_all += [centers]
             filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
-            PAs_all += [phead['PA_APER']] * NINTS
+            PAs_all += [shead['NORTHANG']] * NINTS   ##we quietly change PAs_all to use NORTHANG
 
             # Get center wavelengths
             try:
@@ -3745,6 +3784,123 @@ class NDFilterSweetSpotDataset(Image):
 
         return interpolator(x, y)
 
+class NDSpectroscopy(Image):
+    """
+    ND filter calibration product for spectroscopy.
+
+    For spectroscopy observations (DPAMNAME=PRISM*) - stores OD(lambda), 
+    the optical depth of the ND filter as a function of wavelength. 
+    Unlike the imaging mode ND filter calibration product, spectroscopy mode
+    ND filter calibration product is only measured at a single detector location.
+
+    Data shape: (2, M)
+        row 0: wavelengths in nm
+        row 1: OD(lambda) values (dimensionless)
+
+    Error shape: (1, 2, M)
+        err[0, 0, :]: wavelength uncertainties (nm)
+        err[0, 1, :]: OD uncertainties
+
+    Args:
+        data_or_filepath (str or np.array): filepath to an existing NDSpectroscopy
+            FITS file, or a (2, M) numpy array of [wavelengths, OD].
+        err (np.array): (1, 2, M) error array.
+        dq (np.array): (2, M) data-quality array.
+        pri_hdr (fits.Header): primary header (required if raw array passed in).
+        ext_hdr (fits.Header): extension header (required if raw array passed in).
+        err_hdr (fits.Header): error extension header.
+        input_dataset (corgidrp.data.Dataset): input frames used to create this
+            product (required if raw array passed in without DRPNFILE in ext_hdr).
+
+    Attributes:
+        wavelengths (np.array): length-M wavelength array in nm.
+        od_spectrum (np.array): length-M OD(lambda) array.
+        od_err (np.array): length-M OD uncertainty array.
+        wave_err (np.array): length-M wavelength uncertainty array.
+    """
+
+    def __init__(self, data_or_filepath, err=None, dq=None,
+                 pri_hdr=None, ext_hdr=None, err_hdr=None, input_dataset=None):
+        if input_dataset is not None:
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
+                input_dataset,
+                invalid_keywords=[
+                    # Primary header keywords
+                    'VISITID', 'FILETIME', 'PROGNUM', 'EXECNUM', 'CAMPAIGN',
+                    'SEGMENT', 'OBSNUM', 'VISNUM', 'CPGSFILE', 'AUXFILE',
+                    'VISTYPE', 'TARGET', 'RA', 'DEC', 'RAPM', 'DECPM',
+                    'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER',
+                    'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 'PITCH', 'YAW',
+                    'FILENAME', 'OBSNAME', 'WBJ_1', 'WBJ_2', 'WBJ_3',
+                    # Extension header keywords
+                    'BITPIX', 'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
+                    'STATUS', 'HVCBIAS', 'OPMODE',
+                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR',
+                    'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
+                    'PROXET',
+                    'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
+                    'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'DMZLOOP',
+                    '1SVALID', 'Z2AVG', 'Z2RES', 'Z2VAR', 'Z3AVG', 'Z3RES', 'Z3VAR',
+                    '10SVALID', 'Z4AVG', 'Z4RES', 'Z5AVG', 'Z5RES',
+                    'Z6AVG', 'Z6RES', 'Z7AVG', 'Z7RES', 'Z8AVG', 'Z8RES',
+                    'Z9AVG', 'Z9RES', 'Z10AVG', 'Z10RES', 'Z11AVG', 'Z11RES',
+                    'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'FPAM_H', 'FPAM_V', 'FPAMNAME', 'FPAMSP_H', 'FPAMSP_V',
+                    'DATETIME', 'FTIMEUTC', 'DATATYPE',
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
+                    'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                ],
+            )
+        else:
+            dq_hdr = None
+
+        super().__init__(
+            data_or_filepath,
+            pri_hdr=pri_hdr,
+            ext_hdr=ext_hdr,
+            err=err,
+            dq=dq,
+            err_hdr=err_hdr,
+            dq_hdr=dq_hdr,
+        )
+
+        # Shape validation - expect (2, M)
+        if self.data.ndim != 2 or self.data.shape[0] != 2:
+            raise ValueError(
+                "NDSpectroscopy data must be a 2D array of shape (2, M). "
+                f"Received shape {self.data.shape}."
+            )
+
+        # Class attributes
+        self.wavelengths = self.data[0, :]
+        self.od_spectrum = self.data[1, :]
+        if self.err is not None and self.err.shape == (1, 2, self.data.shape[1]):
+            self.wave_err = self.err[0, 0, :]
+            self.od_err   = self.err[0, 1, :]
+        else:
+            self.wave_err = np.zeros_like(self.wavelengths)
+            self.od_err   = np.zeros_like(self.od_spectrum)
+
+        # Bookkeeping info for new files
+        if ext_hdr is not None:
+            if input_dataset is not None:
+                self._record_parent_filenames(input_dataset)
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+                self.filename = "{0}_nds_cal.fits".format(orig_input_filename)
+                self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.ext_hdr['DATATYPE'] = 'NDSpectroscopy'
+            self.ext_hdr['BUNIT']    = ''        # dimensionless OD
+            self.ext_hdr['DATALVL'] = 'CAL'
+            self.ext_hdr['HISTORY'] = "NDSpectroscopy OD(lambda) calibration created"
+            self.pri_hdr['FILENAME'] = self.filename
+
+        # Validate DATATYPE when loading from file
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDSpectroscopy':
+            raise ValueError("File that was loaded is not labeled as an NDSpectroscopy file.")
+
+
 class MuellerMatrix(Image):
     """
     Class for a Mueller matrix dataset product.
@@ -3936,6 +4092,14 @@ def format_ftimeutc(ftime_str):
     return formatted_time
 
 
+class FlatFieldPOL0:
+    def __init__(self, ref: FlatField):
+        self.ref = ref
+
+class FlatFieldPOL45:
+    def __init__(self, ref: FlatField):
+        self.ref = ref
+
 datatypes = { "Image" : Image,
               "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -3943,6 +4107,8 @@ datatypes = { "Image" : Image,
               "BadPixelMap" : BadPixelMap,
               "DetectorNoiseMaps": DetectorNoiseMaps,
               "FlatField" : FlatField,
+              "FlatFieldPOL0" : FlatFieldPOL0,
+              "FlatFieldPOL45" : FlatFieldPOL45,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration" : TrapCalibration,
@@ -3951,6 +4117,7 @@ datatypes = { "Image" : Image,
               "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
+              "NDSpectroscopy": NDSpectroscopy,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel,
               "LineSpread": LineSpread,

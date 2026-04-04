@@ -295,7 +295,7 @@ def setup_module():
     # Values for mean frame
     cmdgain_mean_frame, exptime_mean_frame = get_cmdgain_exptime_mean_frame(
         exptime_sec=EXPTIME_MEAN_FRAME,
-        nframes=NFRAMES_MEAN_FRAME,
+        nframes=NFRAMES_MEAN_FRAME
         )
     
     if len(cmdgain_mean_frame) != len(exptime_mean_frame):
@@ -306,7 +306,7 @@ def setup_module():
     # Values for K-gain
     cmdgain_kgain, exptime_kgain = get_cmdgain_exptime_kgain(
         exptime_sec=EXPTIME_KGAIN,
-        nframes=NFRAMES_KGAIN,
+        nframes=NFRAMES_KGAIN
         )
     if len(cmdgain_kgain) != len(exptime_kgain):
         raise Exception('Inconsistent lengths in k-gain')
@@ -317,7 +317,7 @@ def setup_module():
     cmdgain_nonlin_wo_change, exptime_nonlin_wo_change = get_cmdgain_exptime_nonlin(
         exptime_sec=EXPTIME_NONLIN,
         nonunity_em=CMDGAIN_NONLIN,
-        change_exptime=False,
+        change_exptime=False
         )
     if len(cmdgain_nonlin_wo_change) != len(exptime_nonlin_wo_change):
         raise Exception('Inconsistent lengths in non-linearity')
@@ -327,7 +327,7 @@ def setup_module():
     cmdgain_nonlin_w_change, exptime_nonlin_w_change = get_cmdgain_exptime_nonlin(
         exptime_sec=EXPTIME_NONLIN,
         nonunity_em=CMDGAIN_NONLIN,
-        change_exptime=True,
+        change_exptime=True
         )
     if len(cmdgain_nonlin_w_change) != len(exptime_nonlin_w_change):
         raise Exception('Inconsistent lengths in non-linearity')
@@ -338,7 +338,7 @@ def setup_module():
     cmdgain_emgain, exptime_emgain = get_cmdgain_exptime_emgain(
         em_emgain = EM_EMGAIN,
         exptime_emgain_sec = EXPTIME_EMGAIN_SEC,
-        nframes = NFRAMES_EMGAIN,
+        nframes = NFRAMES_EMGAIN
         )
     if len(cmdgain_emgain) != len(exptime_emgain):
         raise Exception(f'Inconsistent lengths in em-gain vs dac')
@@ -369,7 +369,8 @@ def setup_module():
             exptime_sec=exptime_mean_frame[i_f],
             frameid=idx_frame,
             previous_exptime=0 if i_f == 0 else exptime_mean_frame[i_f-1],
-            previous_timestamp=previous_timestamp
+            previous_timestamp=previous_timestamp,
+            auxfile='KGAIN'
             )
         previous_timestamp = fits.getheader(filename, 1)['DATETIME']
         timestamps += [previous_timestamp]
@@ -384,7 +385,8 @@ def setup_module():
             exptime_sec=exptime_kgain[i_f],
             frameid=idx_frame,
             previous_exptime=exptime_mean_frame[-1] if i_f == 0 else exptime_kgain[i_f-1],
-            previous_timestamp=previous_timestamp
+            previous_timestamp=previous_timestamp,
+            auxfile='KGAIN'
             )
         previous_timestamp = fits.getheader(filename, 1)['DATETIME']
         timestamps += [previous_timestamp]
@@ -399,7 +401,8 @@ def setup_module():
             exptime_sec=exptime_emgain[i_f],
             frameid=idx_frame,
             previous_exptime=exptime_kgain[-1] if i_f == 0 else exptime_emgain[i_f-1],
-            previous_timestamp=previous_timestamp
+            previous_timestamp=previous_timestamp,
+            auxfile='EMGAIN'
             )
         previous_timestamp = fits.getheader(filename, 1)['DATETIME']
         timestamps += [previous_timestamp]
@@ -432,7 +435,8 @@ def setup_module():
             exptime_sec=exptime_nonlin_wo_change[i_f],
             frameid=idx_frame,
             previous_exptime=exptime_emgain[-1] if i_f == 0 else exptime_nonlin_wo_change[i_f-1],
-            previous_timestamp=previous_timestamp
+            previous_timestamp=previous_timestamp,
+            auxfile='NONLIN'
             )
         previous_timestamp = fits.getheader(filename, 1)['DATETIME']
         timestamps += [previous_timestamp]
@@ -447,7 +451,8 @@ def setup_module():
             exptime_sec=exptime_nonlin_w_change[i_f],
             frameid=idx_frame,
             previous_exptime=exptime_emgain[-1] if i_f == 0 else exptime_nonlin_w_change[i_f-1],
-            previous_timestamp=previous_timestamp
+            previous_timestamp=previous_timestamp,
+            auxfile='NONLIN'
             )
         previous_timestamp = fits.getheader(filename, 1)['DATETIME']
         timestamps += [previous_timestamp]
@@ -652,7 +657,6 @@ def test_no_data():
     for i in range(len(dataset_out_wo_change)):
         frame_no_data = dataset_out_no_data[i]
         frame_wo_change = dataset_out_wo_change[i]
-        assert np.array_equal(frame_wo_change.data, frame_no_data.data)
         # check that changed pri_hdr values are consistent
         assert frame_wo_change.pri_hdr == frame_no_data.pri_hdr
 

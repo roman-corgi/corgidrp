@@ -13,7 +13,14 @@
                 "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
             },
             "keywords" : {
-                "use_imaging_area" : true
+                "use_imaging_area" : true,
+                "dataset_copy" : false
+            }
+        },
+        {
+            "name" : "discard_setup_frames",
+            "keywords" : {
+                "keywords_to_check" : ["ISACQ"]
             }
         },
         {

@@ -8,6 +8,7 @@ from corgidrp.mocks import create_default_calibration_product_headers
 from corgidrp.l2a_to_l2b import correct_bad_pixels
 from corgidrp.data import Image, Dataset, BadPixelMap
 from corgidrp.l3_to_l4 import replace_bad_pixels
+from astropy.io import fits
 
 old_err_tracking = corgidrp.track_individual_errors
 
@@ -55,8 +56,27 @@ def test_bad_pixels():
     row_bp_test = [546, 89, 123, 243, 447, 675]
     bp_mask = mocks.create_badpixelmap_files(filedir=datadir,
                                              col_bp=col_bp_test, row_bp=row_bp_test)
-    new_bp_mask = BadPixelMap(bp_mask.all_data[0], pri_hdr=bp_mask[0].pri_hdr.copy(),
-                              ext_hdr=bp_mask[0].ext_hdr.copy(), input_dataset=bp_mask)
+    # BadPixelMap requires a dark(-like) frame
+    dark_pri, dark_ext, _, _ = create_default_calibration_product_headers()
+    dark_ext['EXPTIME'] = float(exthd.get('EXPTIME', 0.0))
+    dark_ext['EMGAIN_C'] = float(exthd.get('EMGAIN_C', 1.0))
+    dark_ext['DRPNFILE'] = 1
+    bp_dark = corgidrp.data.Dark(
+        np.zeros_like(bp_mask.all_data[0], dtype=float),
+        pri_hdr=dark_pri,
+        ext_hdr=dark_ext,
+        input_dataset=Dataset([bp_mask[0]]),
+        err=np.zeros((1,) + bp_mask.all_data[0].shape, dtype=float),
+        dq=np.zeros(bp_mask.all_data[0].shape, dtype='uint16'),
+        err_hdr=fits.Header(),
+    )
+    bp_inputs = Dataset([bp_dark, bp_mask[0]])
+    new_bp_mask = BadPixelMap(
+        bp_mask.all_data[0],
+        pri_hdr=bp_mask[0].pri_hdr.copy(),
+        ext_hdr=bp_mask[0].ext_hdr.copy(),
+        input_dataset=bp_inputs,
+    )
 
     assert type(new_bp_mask) == corgidrp.data.BadPixelMap
 
