@@ -302,6 +302,9 @@ def generate_mueller_matrix_cal(input_dataset,
 
     # generate the matrix of meausurements six columns [1 q_star, u_star, 0,0,0] for q_measured
     # and [0,0,0, 1, q_star, u_star] for u_measured #Where Q and U have been rotated by the PA_APER angle: 
+    Q_ref_err_sq = np.zeros(len(targets))
+    U_ref_err_sq = np.zeros(len(targets))
+    cov_QU_ref = np.zeros(len(targets))
     stokes_matrix = np.zeros((2*len(dataset), 6))
     for i, target in enumerate(targets):
         pol_row = pol_ref[pol_ref["TARGET"] == target]
@@ -317,16 +320,17 @@ def generate_mueller_matrix_cal(input_dataset,
         stokes_matrix[2*i,:] = [1, Q, U, 0, 0, 0]
         stokes_matrix[2*i+1,:] = [0, 0, 0, 1, Q, U]
 
-        # propagate reference star polarization uncertainties into stokes_vector_errs
-        # Q = P*cos(2*PA), U = P*sin(2*PA)
-        Q_ref_err = np.sqrt((np.cos(2*PA_rad) * P_err)**2 +
-                            (2 * P * np.sin(2*PA_rad) * PA_err_rad)**2)
-        U_ref_err = np.sqrt((np.sin(2*PA_rad) * P_err)**2 +
-                            (2 * P * np.cos(2*PA_rad) * PA_err_rad)**2)
-
-        # combine with existing measurement noise in quadrature
-        stokes_vector_errs[2*i] = np.sqrt(stokes_vector_errs[2*i]**2 + Q_ref_err**2)
-        stokes_vector_errs[2*i+1] = np.sqrt(stokes_vector_errs[2*i+1]**2 + U_ref_err**2)
+        # Store reference star polarization uncertainties for post-SVD error propagation.
+        # Q = P*cos(2*PA), U = P*sin(2*PA), so by first-order error propagation:
+        #   Var(Q) = (dQ/dP)^2 * sigma_P^2 + (dQ/dPA)^2 * sigma_PA^2
+        #          = cos^2(2*PA) * sigma_P^2 + (2*P*sin(2*PA))^2 * sigma_PA^2
+        #   Var(U) = sin^2(2*PA) * sigma_P^2 + (2*P*cos(2*PA))^2 * sigma_PA^2
+        # Q and U from the same star are correlated through shared P and PA:
+        #   Cov(Q,U) = (dQ/dP)(dU/dP) * sigma_P^2 + (dQ/dPA)(dU/dPA) * sigma_PA^2
+        #            = cos(2*PA)*sin(2*PA) * (sigma_P^2 - 4*P^2*sigma_PA^2)
+        Q_ref_err_sq[i] = (np.cos(2*PA_rad) * P_err)**2 + (2 * P * np.sin(2*PA_rad) * PA_err_rad)**2
+        U_ref_err_sq[i] = (np.sin(2*PA_rad) * P_err)**2 + (2 * P * np.cos(2*PA_rad) * PA_err_rad)**2
+        cov_QU_ref[i] = np.cos(2*PA_rad) * np.sin(2*PA_rad) * (P_err**2 - 4 * P**2 * PA_err_rad**2)
 
     # invert the stokes matrix using SVD and multiply the the normalized differences to get the mueller matrix elements
     u,s,v=np.linalg.svd(stokes_matrix)
@@ -340,7 +344,31 @@ def generate_mueller_matrix_cal(input_dataset,
     mueller_elements = np.dot(stokes_matrix_inv, np.array(stokes_vectors))
     mueller_elements_covar = np.matmul(stokes_matrix_inv,stokes_matrix_inv.T)
     mueller_elements_covar[mueller_elements_covar <0] = 0
-    mueller_elements_err = np.diag(np.matmul(stokes_matrix_inv.T,stokes_matrix_inv)*(stokes_vector_errs**2))**0.5
+
+    # Propagate reference star pol uncertainties through design matrix A.
+    # Note: this must run after mueller_elements is computed above, since ref_var depends on m.
+    # The model is m = A^+ b, where A is built from reference Q,U and b is observed Q,U.
+    # For a perturbation dA, the first-order shift is dm = -A^+(dA)m (Golub & Van Loan).
+    # A perturbation dQ_ref on star i affects A[2i,1] and A[2i+1,4] (both equal Q_ref),
+    # so the sensitivity of MM element k to dQ_ref is:
+    #   dm_k/dQ_ref = -(A^+[k,2i]*m[1] + A^+[k,2i+1]*m[4])
+    # and similarly for dU_ref (columns 2 and 5, elements m[2] and m[5]).
+    # The variance contribution is then:
+    #   Var(m_k) += c_Q^2 * Var(Q_ref) + 2*c_Q*c_U * Cov(Q_ref,U_ref) + c_U^2 * Var(U_ref)
+    # where c_Q = A^+[k,2i]*m[1] + A^+[k,2i+1]*m[4], c_U = A^+[k,2i]*m[2] + A^+[k,2i+1]*m[5].
+    ref_var = np.zeros(6)
+    for i in range(len(targets)):
+        c_Q = (stokes_matrix_inv[:, 2*i]   * mueller_elements[1] +
+               stokes_matrix_inv[:, 2*i+1] * mueller_elements[4])
+        c_U = (stokes_matrix_inv[:, 2*i]   * mueller_elements[2] +
+               stokes_matrix_inv[:, 2*i+1] * mueller_elements[5])
+        ref_var += (c_Q**2 * Q_ref_err_sq[i]
+                    + 2 * c_Q * c_U * cov_QU_ref[i]
+                    + c_U**2 * U_ref_err_sq[i])
+
+    # combine measurement noise and reference star uncertainty
+    meas_var = np.diag(stokes_matrix_inv @ np.diag(stokes_vector_errs**2) @ stokes_matrix_inv.T)
+    mueller_elements_err = np.sqrt(meas_var + ref_var)
 
     #Fill in the mueller matrix
     mueller_matrix = np.zeros((4,4))
