@@ -24,6 +24,7 @@ except:
 
 this_file_dir = os.path.dirname(__file__) # this file's folder
 
+
 def create_and_clean_folder(folder_name):
     # Create the folder if it does not exist
     if not os.path.exists(folder_name):
@@ -31,7 +32,7 @@ def create_and_clean_folder(folder_name):
     # Clean up the folder by removing any old files
     for file in os.listdir(folder_name):
         os.remove(os.path.join(folder_name,file))
-        
+                
 @pytest.mark.e2e
 def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2eoutput_path):
     '''
@@ -191,25 +192,38 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     #--------------------------------------------------------------------------
     # Run the walker to process from L1 to L2a
     # Note that the reference star images must be processed separately from the
-    # target star images.
+    # target star images. We will also separate out the images with the satspots.
     ref_star_images = [f for f in l1_data_filelist if f[-27]=='1']
     walker.walk_corgidrp(ref_star_images,"",l2a_outputdir)
+    ref_star_images_spots = [f for f in l1_data_filelist if f[-27]=='2']
+    walker.walk_corgidrp(ref_star_images_spots,"",l2a_outputdir)
     
-    target_star_images_roll15 = [f for f in l1_data_filelist if f[-27]=='2']
-    target_star_images_rollm15 = [f for f in l1_data_filelist if f[-27]=='3']
+    target_star_images_roll15_spots = [f for f in l1_data_filelist if f[-27]=='3']
+    target_star_images_roll15 = [f for f in l1_data_filelist if f[-27]=='4']
+    target_star_images_rollm15_spots = [f for f in l1_data_filelist if f[-27]=='5']
+    target_star_images_rollm15 = [f for f in l1_data_filelist if f[-27]=='6']
     walker.walk_corgidrp(target_star_images_roll15,"",l2a_outputdir)
+    walker.walk_corgidrp(target_star_images_roll15_spots,"",l2a_outputdir)
     walker.walk_corgidrp(target_star_images_rollm15,"",l2a_outputdir)
+    walker.walk_corgidrp(target_star_images_rollm15_spots,"",l2a_outputdir)
     
     new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')] #[os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
     # Run the walker to process from L2a to L2b
-    # Again, the reference and target star images must be processed separately
+    # Again, the reference and target star images must be processed separately.
+    # The images with and without spots must also be separated.
     ref_star_images = [f for f in new_l2a_filenames if f[-27]=='1']
     walker.walk_corgidrp(ref_star_images, "", l2b_outputdir)
+    ref_star_images_spots = [f for f in new_l2a_filenames if f[-27]=='2']
+    walker.walk_corgidrp(ref_star_images_spots, "", l2b_outputdir)
     
-    target_star_images_roll15 = [f for f in new_l2a_filenames if f[-27]=='2']
-    target_star_images_rollm15 = [f for f in new_l2a_filenames if f[-27]=='3']
+    target_star_images_roll15_spots = [f for f in new_l2a_filenames if f[-27]=='3']
+    target_star_images_roll15 = [f for f in new_l2a_filenames if f[-27]=='4']
+    target_star_images_rollm15_spots = [f for f in new_l2a_filenames if f[-27]=='5']
+    target_star_images_rollm15 = [f for f in new_l2a_filenames if f[-27]=='6']
+    walker.walk_corgidrp(target_star_images_roll15_spots, "", l2b_outputdir)
     walker.walk_corgidrp(target_star_images_roll15, "", l2b_outputdir)
+    walker.walk_corgidrp(target_star_images_rollm15_spots, "", l2b_outputdir)
     walker.walk_corgidrp(target_star_images_rollm15, "", l2b_outputdir)
 
     new_l2b_filenames = [os.path.join(l2b_outputdir, f) for f in os.listdir(l2b_outputdir) if f.endswith('l2b.fits') ]
