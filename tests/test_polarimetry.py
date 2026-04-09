@@ -1373,8 +1373,8 @@ def test_update_to_l4_pol():
     out_frame = result[0]
     assert out_frame.ext_hdr['DATALVL'] == 'L4'
     assert out_frame.ext_hdr['CTCALFN'] == 'mock_ct_cal.fits'
-    assert out_frame.ext_hdr['FLXCALF0'] == 'mock_abf_cal_pol0.fits'
-    assert out_frame.ext_hdr['FLXCALF1'] == 'mock_abf_cal_pol45.fits'
+    assert out_frame.ext_hdr['FLXCLF0'] == 'mock_abf_cal_pol0.fits'
+    assert out_frame.ext_hdr['FLXCLF45'] == 'mock_abf_cal_pol45.fits'
     assert '_l4_' in out_frame.filename
 
     # test with corethroughput_cal=None (need fresh L3 frame since headers were modified)

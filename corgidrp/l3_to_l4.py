@@ -1873,7 +1873,7 @@ def update_to_l4_pol(input_dataset, corethroughput_cal, flux_cal_pol0, flux_cal_
     Updates the data level to L4 for polarimetry data. Only works on L3 data.
 
     Calls update_to_l4 for shared logic, then replaces the single FLXCALFN header
-    with separate FLXCALF0 (POL0) and FLXCALF1 (POL45) headers.
+    with separate FLXCLF0 (POL0) and FLXCLF45 (POL45) headers.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
@@ -1888,7 +1888,7 @@ def update_to_l4_pol(input_dataset, corethroughput_cal, flux_cal_pol0, flux_cal_
 
     for frame in updated_dataset:
         del frame.ext_hdr['FLXCALFN']
-        frame.ext_hdr['FLXCALF0'] = flux_cal_pol0.filename.split("/")[-1]
-        frame.ext_hdr['FLXCALF1'] = flux_cal_pol45.filename.split("/")[-1]
+        frame.ext_hdr['FLXCLF0'] = flux_cal_pol0.filename.split("/")[-1]
+        frame.ext_hdr['FLXCLF45'] = flux_cal_pol45.filename.split("/")[-1]
 
     return updated_dataset

@@ -471,7 +471,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
         logger.info(f"{frame_info}: Expected Stokes datacube (4, N, N), got {img.data.shape}. FAIL")
 
     #Check that core throughput and flux calibration products have been linked. 
-    verify_header_keywords(img.ext_hdr, ['CTCALFN', 'FLXCALF0', 'FLXCALF1', 'STARLOCX','STARLOCY'], frame_info, logger)
+    verify_header_keywords(img.ext_hdr, ['CTCALFN', 'FLXCLF0', 'FLXCLF45', 'STARLOCX','STARLOCY'], frame_info, logger)
 
     #Check that the stellar polarization is report: 
     if "stellar Q value: " in str(img.ext_hdr['HISTORY']) and "stellar U value: " in str(img.ext_hdr['HISTORY']):
