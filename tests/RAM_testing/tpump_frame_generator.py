@@ -41,37 +41,37 @@ from emccd_detect.emccd_detect import EMCCDDetect
 from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
 from scipy.interpolate import interp1d
 
-e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
+e2edata_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3'#'/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
 nonlin_path = os.path.join(e2edata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
 
-def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50, 
-                                 read_noise = 125, eperdn = None, e2emode=True, 
-                                 nonlin_path=nonlin_path, arrtype='SCI', 
+def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
+                                 read_noise = 125, eperdn = None, e2emode=True,
+                                 nonlin_path=nonlin_path, arrtype='SCI',
                                  temperatures=[168,178,188,193],cycles_per_injection=1600,
                                  num_cycles={1: 640, 2: 640, 3: 337, 4: 337}, num_frames_per_config=3):
     """
     Generate mock pump trap data, save it to the output_directory.  Using https://collaboration.ipac.caltech.edu/pages/viewpage.action?pageId=136122677&spaceKey=romancoronagraph&title=7%2BCTI
     as a reference.  The default parameters are for the case of EM gain as specified at the link.
-    
+
     Args:
         output_dir (str): output directory
         meta_path (str): metadata path
         EMgain (float): desired EM gain for frames
-        read_noise (float): desired read noise for frames (in e-). 
+        read_noise (float): desired read noise for frames (in e-).
         eperdn (float):  desired k gain (e-/DN conversion factor).  If None, uses value from DetectorParams.
-        e2emode (bool):  If True, e2e simulated data made instead of data for the unit test.  
-            Difference b/w the two: 
+        e2emode (bool):  If True, e2e simulated data made instead of data for the unit test.
+            Difference b/w the two:
             This e2emode data differs from the data generated when e2emode is False in the following ways:
             -The bright pixel of each trap is simulated in a more realistic way (i.e., at every phase time frame).
-            -Simulated readout is more realistic (read noise, EM gain, k gain, nonlinearity, bias invoked after traps simulated).  
-            In the other dataset (when e2emode is False), readout was simulated before traps were added, and no nonlinearity was applied.  
+            -Simulated readout is more realistic (read noise, EM gain, k gain, nonlinearity, bias invoked after traps simulated).
+            In the other dataset (when e2emode is False), readout was simulated before traps were added, and no nonlinearity was applied.
             Also, the number of electrons in the dark pixels of the dipoles can no longer be negative, and this condition is enforced.
-            -The number of pumps and injected charge are much higher in these frames so that traps stand out above the read noise.  
+            -The number of pumps and injected charge are much higher in these frames so that traps stand out above the read noise.
             This was not an issue in the other dataset since read noise was added to frames that were EM-gained before charge was injected, which suppressed the effective read noise.
-            -The EM gain used is 1.5.  For a large injected charge amount, the EM gain cannot be very high because of the risk of saturation.  
+            -The EM gain used is 1.5.  For a large injected charge amount, the EM gain cannot be very high because of the risk of saturation.
             -The number of phase times is 10 per scheme, to reduce the dataset size (compared to 100 when e2emode is False).
-        nonlin_path (str): Path of nonlinearity correction file to use.  
-            The inverse is applied, implementing rather than correcting nonlinearity.  
+        nonlin_path (str): Path of nonlinearity correction file to use.
+            The inverse is applied, implementing rather than correcting nonlinearity.
             If None, no nonlinearity is applied.  Defaults to None.
         arrtype (str): array type (for this function, choice of 'SCI' or 'ENG')
         temperatures (list): list of temperatures to simulate (in K)
@@ -96,15 +96,15 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
     nrows, ncols, _ = meta._unpack_geom('image')
     #EM gain
     g = EMgain
-    cic = 0.02 #200  
-    rn = read_noise 
+    cic = 0.02 #200
+    rn = read_noise
     dc = {180: 0.163, 190: 0.243, 200: 0.323, 210: 0.403,
           220: 0.483}
     # Interpolate dark current as a function of temperature
     dc_temps = np.array(list(dc.keys())) #in K
     dc_values = np.array(list(dc.values()))
     dc_interp = interp1d(dc_temps, dc_values, kind='linear', fill_value='extrapolate')
-    
+
     temp_data = np.array(temperatures)
     # Update dc dict with interpolated values for all temperatures
     for temp in temp_data:
@@ -114,7 +114,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
     det_params = DetectorParams({})
     if eperdn is None:
         eperdn = det_params.params['KGAINPAR']
-    bias = 1000 
+    bias = 1000
     #inj_charge = 500 # 0
     inj_charge = 0.13668 * cycles_per_injection - 1.48 #best fit curve from link in doc strings
     # full_well_image=50000.  # e-
@@ -127,7 +127,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
     frametime = 1
     # set these to have no effect, then use these with their input values at the end
     later_eperdn = eperdn
-    if e2emode: 
+    if e2emode:
         eperdn = 1
         cic = 0.02
         num_pumps = 50000 #120000#90000#15000#5000
@@ -141,7 +141,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
         phase_times = 10
     bias_dn = bias/eperdn
     nbits = 14 #1
-    
+
     def _ENF(g, Nem):
         """
         Returns the ENF.
@@ -213,7 +213,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
                 numel_gain_register=604,
                 meta_path=meta_path
             )
-   
+
     #when tauc is 3e-3, that gives a mean e- field of 2090 e-
     tauc = 1e-8 #3e-3
     tauc2 = 1.2e-8 # 3e-3
@@ -242,7 +242,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
     cs4 = 4 # in 1e-19 m^2
     #temp_data = np.array([170, 180, 190, 200, 210, 220])
     #temp_data = np.array([180, 190, 195, 200, 210, 220])
-    
+
     #temp_data = np.array([180])
     taus = {}
     taus2 = {}
@@ -256,7 +256,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
     #tau = 7.5e-3
     #tau2 = 8.8e-3
     if e2emode:
-        time_data = (np.logspace(-6, -2, phase_times))*10**6 # in us 
+        time_data = (np.logspace(-6, -2, phase_times))*10**6 # in us
     else:
         time_data = (np.logspace(-6, -1.39794, 100))*10**6 # in us; this is 100 points log-spaced b/w 1 and 40,000 us
     #time_data = (np.linspace(1e-6, 1e-2, 50))*10**6 # in us
@@ -325,12 +325,12 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
         dipole is of the probability function prob (which can be 1, 2, 3,
         'sp', '1b', '3b', 'mf1', or 'mf2').
         The temperature is specified by temp (in K).
-        
-        When e2emode is True, the amount subtracted from the dark pixel and added to the bright 
-        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons. 
+
+        When e2emode is True, the amount subtracted from the dark pixel and added to the bright
+        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons.
         See doc string of generate_mock_pump_trap_data for full e2emode details.
 
-        Args: 
+        Args:
             img_stack (np.array): image stack
             row (int): row
             col (int): col
@@ -382,13 +382,13 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
         prob.  Valid values for prob are 11, 12, 22, 23, and 33.
         The temperature is specified by temp (in K).
 
-        When e2emode is True, the amount subtracted from the dark pixel and added to the bright 
-        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons. 
-        Also, start2:end2 should not overlap with start1:end1, and the ranges should 
-        cover the whole 0:10 frames.  This condition allows for the simulation of the probability 
+        When e2emode is True, the amount subtracted from the dark pixel and added to the bright
+        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons.
+        Also, start2:end2 should not overlap with start1:end1, and the ranges should
+        cover the whole 0:10 frames.  This condition allows for the simulation of the probability
         distribution across all phase times.
         See doc string of generate_mock_pump_trap_data for full e2emode details.
-        
+
         Args:
             img_stack (np.array): image stack
             row (int): row
@@ -399,11 +399,11 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
             start1 (int): start 1
             end1 (int): end 1
             start2 (int): start 2
-            end2 (int): end 2  
+            end2 (int): end 2
             temp (int): temperature
 
         Returns:
-            np.array: image stack    
+            np.array: image stack
         """
         # length limit controlled by how 'long' deficit pixel is since
         #threshold should be met for all frames for bright pixel
@@ -413,7 +413,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
             #img_stack[start1:end1,r0c0[0]+row+1,r0c0[1]+col] = offset_l
         if ori1 == 'below':
             #img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col] = offset_l
-            region1 = img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col] 
+            region1 = img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col]
             region1_c = img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col].copy()
         if ori2 == 'above':
             #img_stack[start2:end2,r0c0[0]+row+1,r0c0[1]+col] = offset_l
@@ -422,8 +422,8 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
         if ori2 == 'below':
             region2 = img_stack[start2:end2,r0c0[0]+row-1,r0c0[1]+col]
             region2_c = img_stack[start2:end2,r0c0[0]+row-1,r0c0[1]+col].copy()
-        # technically, should subtract 1 prob distribution at at time (amps_1_trap), but I'm just subtracting 
-        # a bit more than I'm supposed to, and doesn't matter too much since these 
+        # technically, should subtract 1 prob distribution at at time (amps_1_trap), but I'm just subtracting
+        # a bit more than I'm supposed to, and doesn't matter too much since these
         # are the deficit pixels (or pixel) next to the bright pixel, which is what counts for doing fits
         region1 -= amps_2_trap[prob][temp][start1:end1]
         region2 -= amps_2_trap[prob][temp][start2:end2]
@@ -437,7 +437,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
             region1[neg_inds1] = 0
             img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][good_inds1[0]] += amps_2_trap[prob][temp][start1:end1][good_inds1[0]]
             img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][neg_inds1[0]] += region1_c[neg_inds1[0]]
-        
+
             # can't draw more e- than what's there
             neg_inds2 = np.where(region2 < 0)
             if neg_inds2[0].size > 0:
@@ -447,7 +447,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
             region2[neg_inds2] = 0
             img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][good_inds2[0]] += amps_2_trap[prob][temp][start2:end2][good_inds2[0]]
             img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][neg_inds2[0]] += region2_c[neg_inds2[0]]
-        
+
         else:
             img_stack[:,r0c0[0]+row,r0c0[1]+col] += amps_2_trap[prob][temp][:]
         # technically, if there is overlap b/w start1:end1 and start2:end2,
@@ -500,23 +500,23 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
         improbable; even a cosmic ray hit, which could have this signature for
         perhaps 1 phase time, is very unlikely to hit the same region while
         data for each phase time is being taken.
-        
-        When e2emode is True, the amount subtracted from the dark pixel and added to the bright 
-        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons. 
-        This condition allows for the simulation of the probability 
+
+        When e2emode is True, the amount subtracted from the dark pixel and added to the bright
+        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons.
+        This condition allows for the simulation of the probability
         distribution across all phase times.
         See doc string of generate_mock_pump_trap_data for full e2emode details.
 
-        Args: 
+        Args:
             sch_imgs (np.array): scheme images
             prob (int): probability
             ori (str): orientation
             temp (int): temperature
 
-            
+
         Returns:
             np.array: scheme images
-            
+
         """
         # area with defect (high above mean),
         # but no dipole that stands out enough without ill_corr = True
@@ -528,10 +528,10 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
         # threshold around frame mean; would be detected only after
         # illumination correction
         if ori == 'above':
-            region = sch_imgs[:,r0c0[0]+13+1, r0c0[1]+21] 
+            region = sch_imgs[:,r0c0[0]+13+1, r0c0[1]+21]
             region_c = region.copy()
         if ori == 'below':
-            region = sch_imgs[:,r0c0[0]+13-1, r0c0[1]+21] 
+            region = sch_imgs[:,r0c0[0]+13-1, r0c0[1]+21]
             region_c = region.copy()
                 # 2*offset_u - fit_thresh*std_dev/eperdn
         region -= amps_1_trap[prob][temp][:]
@@ -547,15 +547,18 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
             sch_imgs[:,r0c0[0]+13, r0c0[1]+21] += amps_1_trap[prob][temp][:]
 
         return sch_imgs
-    
+
     #initializing
     sch = {1: None, 2: None, 3: None, 4: None}
     #temps = {170: sch, 180: sch, 190: sch, 200: sch, 210: sch, 220: sch}
-    # change from last iteration: make copies of sch below b/c make_scheme_frames() below was changing sch present in 
-    # EVERY temp for every iteration in the temps for loop; however, no actual change in the output since 
+    # change from last iteration: make copies of sch below b/c make_scheme_frames() below was changing sch present in
+    # EVERY temp for every iteration in the temps for loop; however, no actual change in the output since
     # the output .fits files were saved before the next iteration's make_scheme_frames() is called. So, Max's
-    # unit test is unchanged. 
-    temps = {180: sch, 190: sch.copy(), 200: sch.copy(), 210: sch.copy(), 220: sch.copy()}
+    # unit test is unchanged.
+    temps = {}
+    for temp in temp_data:
+        temps[temp] = sch.copy()
+    #temps = {180: sch, 190: sch.copy(), 200: sch.copy(), 210: sch.copy(), 220: sch.copy()}
     #temps = {180: sch}
 
     # first, get rid of files already existing in the folders where I'll put
@@ -780,13 +783,13 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
                     if e2emode:
                         if temps[temp][sc][i].any() >= full_well_image:
                             raise Exception('Saturated before EM gain applied.')
-                        # Now apply readout things for e2e mode 
+                        # Now apply readout things for e2e mode
                         gain_counts = np.reshape(readout_emccd._gain_register_elements(temps[temp][sc][i].ravel()),temps[temp][sc][i].shape)
                         if gain_counts.any() >= full_well_serial:
                             raise Exception('Saturated after EM gain applied.')
                         output_dn = readout_emccd.readout(gain_counts)
                     else:
-                        if fr == 0: # save the first one as a bona fide trap-pump; the rest are junk 
+                        if fr == 0: # save the first one as a bona fide trap-pump; the rest are junk
                             output_dn = temps[temp][sc][i]
                         else:
                             output_dn = np.zeros_like(temps[temp][sc][i])
@@ -807,7 +810,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
                         else:
                             hdul[1].header['TPSCHEM' + str(j)] = 0
                     hdul[1].header['TPTAU'] = time_data[i]
-                    
+
                     t = time_data[i]
                     # curr_sch_dir = Path(here, 'test_data_sub_frame_noise', str(temp)+'K',
                     # 'Scheme_'+str(sch))
@@ -817,10 +820,11 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
                     #     hdul.writeto(Path(output_dir,
                     #     str(temp)+'K'+'Scheme_'+str(sch)+'TPUMP_Npumps_10000_gain'+str(g)+'_phasetime'+
                     #     str(t)+'_2.fits'), overwrite = True)
-                    # else: 
+                    # else:
                     # Note: have to use old filename format for now and overwrite later because setting
                     # the filename affects data generation
                     mult_counter = 0
+                    #print(mult_counter)
                     filename = Path(output_dir,
                         str(temp)+'K'+'Scheme_'+str(sc)+'TPUMP_Npumps_'+str(int(num_cycles[sc]))+'_gain'+str(EMgain)+'_phasetime'+str(t)+'.fits')
                     if os.path.exists(filename):
@@ -828,12 +832,14 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
                         hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
                     else:
                         hdul.writeto(filename, overwrite = True)
-    
+
     # After all data generation is complete, rename files to CGI format, because changing the filename
     # in the function above somehow affects the content of the file
     rename_files_to_cgi_format(pattern=os.path.join(output_dir, "*K*Scheme_*TPUMP*.fits"), level_suffix="l1")
 
 if __name__ == "__main__":
-    generate_car_pump_trap_data(temperatures=[168]) #just do one temp for testing 
-    generate_car_pump_trap_data(EMgain=1.,temperatures=[228],cycles_per_injection=7200,
-                                 num_cycles={1: 3200, 2: 3200, 3: 1684, 4: 1684}, num_frames_per_config=2) #just do one temp for testing 
+    output_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3\TPUMP_RAM_TEST'
+    metadata_path = os.path.join('c:\\Users\\SensorLab\\Documents\\GitHub\\corgidrp\\tests', 'test_data', "metadata.yaml")
+    generate_car_pump_trap_data(output_dir=output_dir,meta_path=metadata_path,temperatures=[168]) #just do one temp for testing
+    generate_car_pump_trap_data(output_dir=output_dir, meta_path=metadata_path, EMgain=1.,temperatures=[228],cycles_per_injection=7200,
+                                 num_cycles={1: 3200, 2: 3200, 3: 1684, 4: 1684}, num_frames_per_config=2) #just do one temp for testing
