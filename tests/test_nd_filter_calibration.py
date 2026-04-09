@@ -40,7 +40,7 @@ DIM_STARS = ['TYC 4424-1286-1',
 #DIM_STARS = ['TYC 4433-1800-1', 'TYC 4205-1677-1', 'TYC 4212-455-1', 'TYC 4209-1396-1',
 #            'TYC 4413-304-1', 'UCAC3 313-62260', 'BPS BS 17447-0067', 'TYC 4424-1286-1',
 #             'GSC 02581-02323', 'TYC 4207-219-1']
-calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
+calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_012.fits")
 
 DIM_EXPTIME = 10.0
 BRIGHT_EXPTIME = 5.0

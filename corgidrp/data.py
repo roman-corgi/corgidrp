@@ -84,11 +84,6 @@ class Dataset():
                 if no_data:
                     fr.data = None
                     if no_err:
-                        #in this case, the frames are L1 and don't yet
-                        # have err and dq, so don't set those
-                        # to None so that each frame is given
-                        # the default starting err and dq for further
-                        # pipeline processes
                         fr.err = None
                     if no_dq:
                         fr.dq = None
@@ -161,8 +156,9 @@ class Dataset():
                 if frame.dq is None:
                     frame.dq = temp_frame.dq
                 for name in frame.hdu_names: # by construction hdus other than the usual err and dq
-                    if frame.hdu_list[name] is None: 
-                        frame.hdu_list[name].data = temp_frame.hdu_list[name].data
+                    if len(frame.hdu_list) > 0:
+                        if frame.hdu_list[name] is None: 
+                            frame.hdu_list[name].data = temp_frame.hdu_list[name].data
             ##redoing the change to the FILENAME keyword to cover our bases
             frame.pri_hdr['FILENAME'] = frame.filename
             frame.save(filename=filename, filedir=filedir)

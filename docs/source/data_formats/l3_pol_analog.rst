@@ -7,6 +7,11 @@ L3 Polarimetry Analog Data Product
 FITS HDU Structure
 ------------------
 
+Image HDU array: (2,r,c), where r and c depend on cropping.
+ERR HDU array: (1,2,r,c)
+DQ HDU array: (2,r,c) 
+BIAS HDU array: (1024)
+Below is an example.
 
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |

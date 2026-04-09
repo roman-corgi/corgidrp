@@ -127,14 +127,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     input_non_linearity_filename = "nonlin_table_TVAC.txt"
     input_non_linearity_path = os.path.join(tests_dir, "test_data", input_non_linearity_filename)
     test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
-    nonlin_fits_filepath = os.path.join(tests_dir, "test_data", test_non_linearity_filename)
+    nonlin_fits_filepath = os.path.join(calibrations_dir, test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
     pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
-    new_nonlinearity.pri_hdr = pri_hdr
-    new_nonlinearity.ext_hdr = ext_hdr
+    mocks.rename_files_to_cgi_format(list_of_fits=[new_nonlinearity], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(new_nonlinearity)
 
     ## Flat field
@@ -413,7 +412,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

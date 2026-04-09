@@ -264,7 +264,7 @@ def autogen_recipe(filelist, outputdir, template=None):
                 if step["name"].lower() == "create_nd_filter_cal_spec":
                     if "keywords" in step and step["keywords"].get("outputdir", "").upper() == "AUTOMATIC":
                         step["keywords"]["outputdir"] = recipe["outputdir"]
-                        
+
             recipe_list.append(recipe)
         recipe_list_list.append(recipe_list)
 
@@ -609,7 +609,7 @@ def run_recipe(recipe, save_recipe_file=True):
         for filelist in filelist_chunks:
             if recipe["inputs"]:
                 if ram_heavy_bool:
-                    curr_dataset = data.Dataset(filelist, no_data=True)
+                    curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
                     recipe_temp = recipe.copy()
                     # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
                     recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
