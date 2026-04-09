@@ -174,6 +174,14 @@ def run_spec_l4_to_tda_vap_test(e2edata_path, e2eoutput_path):
                     f"    SPEC BUNIT before flux calibration: {spec_bunit_input}. PASS."
                 )
 
+            # Updating VISTYPE since they are needed for CTCOR check in convert_spec_to_flux()
+            if is_coron:
+                img.pri_hdr['VISTYPE'] = 'CGIVST_TDD_OBS'
+                logger.info(f"VISTYPE is {img.pri_hdr['VISTYPE']}")
+            else:
+                img.pri_hdr['VISTYPE'] = 'CGIVST_CAL_SPEC_TGTREF'
+                logger.info(f"VISTYPE is {img.pri_hdr['VISTYPE']}")
+                
             # PSF-subtracted images: core throughput + CT_THRU grid + CTCOR 
             if is_coron:
                 try:

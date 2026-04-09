@@ -80,7 +80,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     l1_data_dark_filelist = check.fix_hdrs_for_tvac(l1_data_dark_filelist, output_dark_dir)
 
     # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_photon_count_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
@@ -127,20 +127,24 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     input_non_linearity_filename = "nonlin_table_TVAC.txt"
     input_non_linearity_path = os.path.join(tests_dir, "test_data", input_non_linearity_filename)
     test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
-    nonlin_fits_filepath = os.path.join(tests_dir, "test_data", test_non_linearity_filename)
+    nonlin_fits_filepath = os.path.join(calibrations_dir, test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
     pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
-    new_nonlinearity.pri_hdr = pri_hdr
-    new_nonlinearity.ext_hdr = ext_hdr
+    mocks.rename_files_to_cgi_format(list_of_fits=[new_nonlinearity], output_dir=calibrations_dir, level_suffix="nln_cal")
     this_caldb.create_entry(new_nonlinearity)
 
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
-    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    mock_dataset_flat = data.Dataset([frame.copy() for frame in mock_input_dataset])
+    for frame in mock_dataset_flat:
+        frame.ext_hdr['FPAMNAME'] = 'OPEN_12'
+        frame.ext_hdr['CFAMNAME'] = '1F'
+        frame.ext_hdr['DPAMNAME'] = 'IMAGING'
+    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_dataset_flat)
     mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     #fix_str_for_tvac([flat.filepath])
     this_caldb.create_entry(flat)
@@ -148,7 +152,18 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    # Make sure BPM includes a dark(-like) frame
+    bp_dark_pri, bp_dark_ext, _, _ = mocks.create_default_calibration_product_headers()
+    bp_dark_ext['EXPTIME'] = float(mock_input_dataset.frames[0].ext_hdr.get('EXPTIME', 0.0))
+    bp_dark_ext['EMGAIN_C'] = float(mock_input_dataset.frames[0].ext_hdr.get('EMGAIN_C', 1.0))
+    bp_dark_ext['DRPNFILE'] = 1
+    bp_dark = data.Dark(np.zeros_like(bp_dat, dtype=float), pri_hdr=bp_dark_pri, ext_hdr=bp_dark_ext,
+                        input_dataset=mock_input_dataset,
+                        err=np.zeros((1,) + bp_dat.shape, dtype=float),
+                        dq=np.zeros(bp_dat.shape, dtype='uint16'),
+                        err_hdr=fits.Header())
+    bp_map_inputs = data.Dataset([bp_dark, flat])
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     #fix_str_for_tvac([bp_map.filepath])
     this_caldb.create_entry(bp_map)
@@ -181,13 +196,15 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         walker.walk_corgidrp(l1_data_ill_filelist, '', output_l2a_dir)
 
     # grab L2a files to go to L2b
-    l2a_files = []
-    for filepath in l1_data_ill_filelist:
-        # emulate naming change behaviors
-        new_filename = filepath.split(os.path.sep)[-1].replace("_l1_", "_l2a")
-        # loook in new dir
-        new_filepath = os.path.join(output_l2a_dir, new_filename)
-        l2a_files.append(new_filepath)
+    l2a_files = sorted(
+        os.path.join(output_l2a_dir, f)
+        for f in os.listdir(output_l2a_dir)
+        if f.endswith("_l2a.fits")
+    )
+    if not l2a_files:
+        raise FileNotFoundError(
+            f"No L2a FITS files in output dir {output_l2a_dir}. "
+        )
     
     recipe = walker.autogen_recipe(l2a_files, l2a_to_l2b_output_dir)
     ### Modify they keywords of some of the steps
@@ -248,7 +265,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #__________________________________________________
     # now test that the pipeline works fine if we start with a synthesized master dark instead
     # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_photon_count_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
@@ -322,7 +339,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     
     #___________________________________________________
     # now test that the pipeline works if we use an analog traditional master dark (most likely will not be used in practice)
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_photon_count_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):

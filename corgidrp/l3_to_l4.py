@@ -56,8 +56,10 @@ def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
             im_err[f][e] = np.where(im_dq_bool[f], np.nan,im_err[f][e])
 
     # Interpolate over the bad pixels using nanmedian
-    im_filtered = generic_filter(im_data,np.nanmedian,size=kernelsize,axes=[-1,-2])
-    err_filtered = generic_filter(im_err,np.nanmedian,size=kernelsize,axes=[-1,-2])
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=RuntimeWarning) #suppress warnings about all-NaN slices in the median filter
+        im_filtered = generic_filter(im_data,np.nanmedian,size=kernelsize,axes=[-1,-2])
+        err_filtered = generic_filter(im_err,np.nanmedian,size=kernelsize,axes=[-1,-2])
     
     # Replace the bad pixels with the interpolated pixels
     im_replaced = np.where(np.isnan(im_data),im_filtered,im_data)
@@ -189,7 +191,9 @@ def find_star(input_dataset,
               star_coordinate_guess=None,
               thetaOffsetGuess=0,
               satellite_spot_parameters=None,
-              drop_satspots_frames=True):
+              drop_satspots_frames=True,
+              pri_split_keywords = None,
+              ext_split_keywords = None):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that 
     contain satellite spots (indicated by ``SATSPOTS=True`` in the image header). The 
@@ -271,6 +275,14 @@ def find_star(input_dataset,
         drop_satspots_frames (bool, optional):
             If True, frames with satellite spots (``SATSPOTS=True``) will be removed from 
             the returned dataset. Defaults to True.
+        pri_split_keywords (list of str, optional): 
+            List of primary header keywords to use for splitting the dataset into subsets.
+            If None, defaults to ['VISITID']. Defaults to None.
+        ext_split_keywords (list of str, optional):
+            List of extension header keywords to use for splitting the dataset into subsets.
+            If None, defaults to ['DPAMNAME']. Defaults to None.
+
+
 
     Returns:
         corgidrp.data.Dataset:
@@ -302,9 +314,14 @@ def find_star(input_dataset,
 
     satellite_spot_parameters_defaults = star_center.satellite_spot_parameters_defaults
 
+    if pri_split_keywords is None:
+        pri_split_keywords = ['VISITID']
+    
+    if ext_split_keywords is None:
+        ext_split_keywords = ['DPAMNAME']
 
     # Separate the dataset into frames with and without satellite spots
-    split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+    split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=pri_split_keywords, exthdr_keywords=ext_split_keywords)
     out_frames = []
     for val, split_dataset in  zip(unique_vals, split_datasets):
         observing_mode = []
@@ -321,7 +338,7 @@ def find_star(input_dataset,
             else:
                 raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
 
-        assert all(mode == observing_mode[0] for mode in observing_mode), \
+        assert all([mode == observing_mode[0] for mode in observing_mode]), \
             "All frames should have the same observing mode."
 
         observing_mode = observing_mode[0]
@@ -334,11 +351,11 @@ def find_star(input_dataset,
         if satellite_spot_parameters is not None:
             tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
         # Compute median images
-        img_ref = np.median(sci_dataset.all_data, axis=0)
-        img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
+        img_ref = np.nanmedian(sci_dataset.all_data, axis=0)
+        img_sat_spot = np.nanmedian(sat_spot_dataset.all_data, axis=0)
 
         # if polarimetry
-        if val  == 'POL0' or val == 'POL45': 
+        if 'POL0' in val  or 'POL45' in val: 
             # Compute median images and find star on both slices
             star_xy_list = []
             for i in [0,1]: #for i in range(0, len(unique_vals))
@@ -371,8 +388,6 @@ def find_star(input_dataset,
                                 )
 
                     out_frames.append(frame)
-            processed_dataset = data.Dataset(out_frames)
-
         else :
 
             # Default star_coordinate_guess to center of img_sat_spot if None
@@ -390,19 +405,18 @@ def find_star(input_dataset,
             if drop_satspots_frames:
                 processed_dataset = sci_dataset
 
-            # Add star location to frame headers
-            header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
+            for frame in split_dataset:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
+                    frame.ext_hdr['STARLOCX'] =star_xy[0]
+                    frame.ext_hdr['STARLOCY'] =star_xy[1]
+                    frame.ext_hdr['HISTORY'] = (
+                                    f"Satellite spots analyzed. Star location at x={star_xy[0]} "
+                                    f"and y={star_xy[1]}."
+                                )
 
-            history_msg = (
-                f"Satellite spots analyzed. Star location at x={star_xy[0]} "
-                f"and y={star_xy[1]}."
-            )
+                    out_frames.append(frame)
 
-            processed_dataset.update_after_processing_step(
-                history_msg,
-                header_entries=header_entries,
-                update_err_header=False)
-
+    processed_dataset = data.Dataset(out_frames)
     return processed_dataset
 
 
@@ -1103,7 +1117,7 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
             algo_thru_cutout = np.ones(image_cutout.shape[0])
         bad_ind = np.where(dq_cutout > 0)
         image_cutout[bad_ind] = np.nan
-        err_cutout[bad_ind] = np.nan
+        err_cutout[:, bad_ind[0], bad_ind[1]] = np.nan
         wave = np.mean(wave_cal_map_cutout, axis=1)
         wave_err = np.mean(wave_err_cutout, axis=1)
         err = np.sqrt(np.nansum(np.square(err_cutout), axis=2))
@@ -1248,7 +1262,6 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
     Returns:
         corgidrp.data.Dataset: The input data with stellar polarization removed, excluding the unocculted observations
     """
-    
     # check that the data is at the L3 level, and only polarimetric observations are inputted
     dataset = input_dataset.copy()
     for frame in dataset:
@@ -1270,7 +1283,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         unocculted_pol45_frames = []
         target_name = target_dataset.frames[0].pri_hdr['TARGET']
         for frame in target_dataset:
-            if frame.ext_hdr['FPAMNAME'] == 'ND225':
+            if frame.ext_hdr['FPAMNAME'] == 'ND225' or frame.ext_hdr['FPAMNAME'] == 'ND475':
                 # unocculted observations, separate by wollaston
                 if frame.ext_hdr['DPAMNAME'] == 'POL0':
                     unocculted_pol0_frames.append(frame)
@@ -1286,8 +1299,8 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
         if len(unocculted_pol45_frames) == 0:
             raise ValueError(f"Input dataset must contain unocculted POL45 frame(s) for target {target_name}")
         
-        unocculted_pol0_img = unocculted_pol0_frames[0]
-        unocculted_pol45_img = unocculted_pol45_frames[0]
+        unocculted_pol0_img = combine_subexposures(data.Dataset(unocculted_pol0_frames), collapse="median")[0]
+        unocculted_pol45_img = combine_subexposures(data.Dataset(unocculted_pol45_frames), collapse="median")[0]
 
         # construct image for each polarization to pass into aper_phot function in order to obtain flux
         I_0_img = data.Image(unocculted_pol0_img.data[0], 
@@ -1505,6 +1518,7 @@ def combine_polarization_states(input_dataset,
                                          err_hdr=frame.err_hdr.copy(),
                                          dq=total_intensity_dq,
                                          dq_hdr=frame.dq_hdr.copy())
+        total_intensity_img.filename = frame.pri_hdr['FILENAME']
         total_intensity_frames.append(total_intensity_img)
     # add reference star dataset to total intensity dataset as well for psf subtraction
     if reference_star_dataset is not None:
@@ -1526,6 +1540,7 @@ def combine_polarization_states(input_dataset,
                                                 err_hdr=frame.err_hdr.copy(),
                                                 dq=total_intensity_dq,
                                                 dq_hdr=frame.dq_hdr.copy())
+                total_intensity_img.filename = frame.pri_hdr['FILENAME']
                 total_intensity_frames.append(total_intensity_img)
             else:
                 total_intensity_frames.append(frame)
@@ -1555,6 +1570,7 @@ def combine_polarization_states(input_dataset,
         # suppress astropy warnings
         warnings.filterwarnings('ignore', category=VerifyWarning)
         warnings.filterwarnings('ignore', category=FITSFixedWarning)
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
         psf_subtracted_dataset = do_psf_subtraction(total_intensity_dataset,
                                                     ct_calibration=ct_calibration,
                                                     measure_klip_thrupt=measure_klip_thrupt,

@@ -121,10 +121,12 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         frame_info = f"L3 Frame {i}"
         #simulation seems to be done without coronagraph
         frame.ext_hdr['FSMLOS'] = "1"
+        frame.pri_hdr['VISTYPE'] = 'CGIVST_TDD_OBS'
         check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l3_.fits', frame_info, logger, data_level = 'l3_')
         check_dimensions(frame.data, (125, 125), frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DPAMNAME', 'CFAMNAME', 'FSAMNAME'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L3', 'FSMLOS' : "1"}, frame_info, logger)
+        verify_header_keywords(frame.pri_hdr, {'VISTYPE' : 'CGIVST_TDD_OBS'}, frame_info, logger)
         verify_header_keywords(frame.pri_hdr, {'PSFREF'}, frame_info, logger)
         verify_header_keywords(frame.ext_hdr, {'SATSPOTS'}, frame_info, logger)
         logger.info("")
@@ -154,7 +156,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     fluxcal_factor_error = 1e-14
     prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
     # Set consistent header values for flux calibration factor
-    exthd['CFAMNAME'] = '3'
+    exthd['CFAMNAME'] = '3F'
     exthd['DPAMNAME'] = 'PRISM3'
     exthd['FSAMNAME'] = 'R1C2'
     fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = l3_dataset)
@@ -177,8 +179,9 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     exthd['LSAMNAME'] = 'OPEN'
     exthd['FSAMNAME'] = 'OPEN'
     exthd['FPAMNAME'] = 'OPEN_12'
+    exthd['CFAMNAME'] = '3F'
 
-    data_psf, psf_loc_in, half_psf = create_ct_psfs(50, cfam_name='3', n_psfs=10)
+    data_psf, psf_loc_in, half_psf = create_ct_psfs(50, cfam_name='3F', n_psfs=10)
     
     err = np.ones([1024,1024]) 
     data_ct_interp = [Image(pupil_image,pri_hdr = prhd,
@@ -469,7 +472,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

@@ -19,10 +19,19 @@
             }
         },
         {
+            "name" : "discard_setup_frames",
+            "keywords" : {
+                "keywords_to_check" : ["ISACQ"]
+            }
+        },
+        {
             "name" : "detect_cosmic_rays",
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC",
                 "KGain" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "dataset_copy" : false
             }
         },
         {

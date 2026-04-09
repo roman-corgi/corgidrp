@@ -2,10 +2,10 @@
 
 import argparse
 import os, shutil
+import warnings
 import glob
 import pytest
 import numpy as np
-from datetime import datetime
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -16,10 +16,6 @@ from corgidrp import check
 import astropy.time as time
 import astropy.io.fits as fits
 from corgidrp.darks import build_synthesized_dark
-
-#This function just sets the vistype header correctly in check.fix_hdrs_for_tvac()
-def header_template():
-    return mocks.create_default_L1_headers(vistype = "CGIVST_CAL_SPEC_LINESPREAD")
 
 
 def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
@@ -201,12 +197,13 @@ def test_l1_to_linespread(e2edata_path, e2eoutput_path):
     for file in os.listdir(l2b_outputdir):
         os.remove(os.path.join(l2b_outputdir, file))
     
-    this_caldb, is_pc_data = setup_caldb(
+    this_caldb, _ = setup_caldb(
         l1_datadir, processed_cal_path, calibrations_dir)    
     # define the raw science data to process, only faint star in filter 3D
     l1_filelist = ["cgi_0200001001001001001_20260319t1108000_l1_.fits", "cgi_0200001001001001001_20260319t1108010_l1_.fits"]
     l1_data_filelist=[os.path.join(l1_datadir, file) for file in l1_filelist]
  
+    # since it is taken from ND simulations the vistype has to be changed
     for file in l1_data_filelist:
         with fits.open(file) as hdul:
             pri_hdr = hdul[0].header.copy()
@@ -218,8 +215,11 @@ def test_l1_to_linespread(e2edata_path, e2eoutput_path):
     
     saved_l1_files = [os.path.join(l1_inputdir, file) for file in l1_filelist]
     assert len(saved_l1_files) == 2, f'wrong saved L1 files found in {l1_inputdir}!'
+    
     ####### Run the walker on some test_data
-    walker.walk_corgidrp(saved_l1_files, "", l2b_outputdir)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=UserWarning)
+        walker.walk_corgidrp(saved_l1_files, "", l2b_outputdir)
 
     ####### Load in the output data. It should be the latest line spread calibration file produced.
     linespreadcal_file = glob.glob(os.path.join(l2b_outputdir, '*lsf_cal*.fits'))[0]

@@ -15,13 +15,16 @@ from corgidrp import walker
 from corgidrp import caldb
 from corgidrp import check
 import shutil
+import json
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
 def set_vistype_for_tvac(
     list_of_fits,
     ):
-    """ Adds proper values to VISTYPE for non-linearity calibration.
+    """ Adds proper values to VISTYPE for non-linearity calibration.  Also 
+    Adjusts AUXFILE appropriately for as expected from the CAR so that the 
+    sorting function gets metadata as it expects.
 
     This function is unnecessary with future data because data will have
     the proper values in VISTYPE. Hence, the "tvac" string in its name.
@@ -36,10 +39,11 @@ def set_vistype_for_tvac(
         # Adjust VISTYPE
         if prihdr['VISTYPE'] == 'N/A':
             prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
-            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
         exthdr = fits_file[1].header
         if exthdr['EMGAIN_A'] == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        if exthdr['EMGAIN_C'] == 1.0:
+            prihdr['AUXFILE'] = 'KGAIN' # something to differentiate the default
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -52,11 +56,6 @@ def test_nonlin_and_kgain_e2e(
     """ 
     Performs the e2e test to generate both nonlin and kgain calibrations from the same
     L1 pupilimg dataset.
-    NOTE:  The original II&T code for nonlin calibration did not have a restriction on the number of
-        frames per EM gain, but the CORGI DRP does, and the default number is 20.  
-        For this e2e test, we use 3 EM gains, and for one of those EM gains, there 
-        are only 14 frames in the e2e test data.  So, we set the keyword n_cal=14 below 
-        before running the steps through the walker.
 
     Args:
         e2edata_path (str): Location of L1 data. Folders for both kgain and nonlin
@@ -118,6 +117,7 @@ def test_nonlin_and_kgain_e2e(
     pupilimg_l1_list = check.fix_hdrs_for_tvac(pupilimg_l1_list, input_data_dir)
 
     # Set TVAC data to have VISTYPE=CGIVST_CAL_PUPIL_IMAGING (flight data should have these values)
+    # Also set AUXFILE appropriately
     set_vistype_for_tvac(pupilimg_l1_list)
 
    # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -127,18 +127,7 @@ def test_nonlin_and_kgain_e2e(
 
     # Run the walker on some test_data
     print('Running walker')
-    #walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)
-    recipe = walker.autogen_recipe(pupilimg_l1_list, e2eoutput_path)
-    ### Modify they keywords of some of the steps
-    for step in recipe[1]['steps']:
-        if step['name'] == "calibrate_kgain":
-            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-    walker.run_recipe(recipe[1], save_recipe_file=True)
-    for step in recipe[0]['steps']:
-        if step['name'] == "calibrate_nonlin":
-            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-            step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
-    walker.run_recipe(recipe[0], save_recipe_file=True)
+    walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests
     # NL from CORGIDRP
@@ -168,7 +157,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     OUTPUT_DIR = thisfile_dir
 

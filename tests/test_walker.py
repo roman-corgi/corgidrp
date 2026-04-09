@@ -184,7 +184,18 @@ def test_auto_template_identification():
 
     # bad pixel map
     bp_dat = np.zeros((1024, 1024), dtype=int)
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    # Ensure BPM includes a dark(-like) frame.
+    dark_pri, dark_ext, _, _ = mocks.create_default_calibration_product_headers()
+    dark_ext['EXPTIME'] = float(mock_input_dataset.frames[0].ext_hdr.get('EXPTIME', 0.0))
+    dark_ext['EMGAIN_C'] = float(mock_input_dataset.frames[0].ext_hdr.get('EMGAIN_C', 1.0))
+    dark_ext['DRPNFILE'] = 1
+    bp_dark = data.Dark(np.zeros_like(bp_dat, dtype=float), pri_hdr=dark_pri, ext_hdr=dark_ext,
+                        input_dataset=mock_input_dataset,
+                        err=np.zeros((1,) + bp_dat.shape, dtype=float),
+                        dq=np.zeros(bp_dat.shape, dtype='uint16'),
+                        err_hdr=fits.Header())
+    bp_map_inputs = data.Dataset([bp_dark, flat])
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
     bp_map.save(filedir=outputdir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
@@ -326,12 +337,12 @@ def test_skip_missing_calib():
     assert recipe['name'] == 'l1_to_l2b'
     assert recipe['template'] == False
 
-    assert recipe['steps'][0]['skip'] # prescan bias sub    
-    assert recipe['steps'][2]['skip'] # nonlinearity
-    assert recipe['steps'][6]['skip'] # kgain
-    
-    # cut down to recipe to just the first 5 steps (to the first save)
-    recipe['steps'] = recipe['steps'][:5]
+    assert recipe['steps'][0]['skip'] # prescan bias sub
+    assert recipe['steps'][3]['skip'] # nonlinearity
+    assert recipe['steps'][7]['skip'] # kgain
+
+    # cut down to recipe to just the first 6 steps (to the first save)
+    recipe['steps'] = recipe['steps'][:6]
 
     # run with all the ksips
     walker.run_recipe(recipe, save_recipe_file=False)
@@ -398,7 +409,7 @@ def test_skip_missing_optional_calib():
     assert recipe['steps'][0]['calibs']['DetectorNoiseMaps'] is None
 
     # assert nonlinearity is indeed skipped
-    assert recipe['steps'][2]['skip'] # nonlinearity
+    assert recipe['steps'][3]['skip'] # nonlinearity
 
     corgidrp.skip_missing_cal_steps = old_setting
     corgidrp.caldb_filepath = old_caldb_filepath
@@ -469,7 +480,7 @@ def test_jit_calibs():
     template_recipe = json.load(open(template_filepath, "r"))
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
 
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC'
 
     walker.run_recipe(recipe)
 
@@ -481,7 +492,7 @@ def test_jit_calibs():
     
     # check that the recipe is saved into the header with specified calibrations
     new_recipe = json.loads(output_dataset[0].ext_hdr['RECIPE'])
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC'
 
 
     #### Test cases where JIT should be enabled or not
@@ -491,35 +502,35 @@ def test_jit_calibs():
     corgidrp.jit_calib_id = False
     template_recipe = json.load(open(template_filepath, "r"))
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
 
     # pipeline setting false, but recipe says JIT. Should keep automatic calibration
     corgidrp.jit_calib_id = False
     template_recipe = json.load(open(template_filepath, "r"))
     template_recipe['drpconfig']['jit_calib_id'] = True
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
 
     # pipeline setting false, and recipe says no JIT. Should define calibrations
     corgidrp.jit_calib_id = False
     template_recipe = json.load(open(template_filepath, "r"))
     template_recipe['drpconfig']['jit_calib_id'] = False
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
 
     # pipeline setting True, and recipe says no JIT. Should define calibrations
     corgidrp.jit_calib_id = True
     template_recipe = json.load(open(template_filepath, "r"))
     template_recipe['drpconfig']['jit_calib_id'] = False
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
 
     # pipeline setting True, and recipe says JIT. Should keep automatic calibration
     corgidrp.jit_calib_id = True
     template_recipe = json.load(open(template_filepath, "r"))
     template_recipe['drpconfig']['jit_calib_id'] = True
     recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
-    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
+    assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
 
 
     # clean up
@@ -555,8 +566,10 @@ def test_generate_multiple_recipes():
     filelist = [frame.filepath for frame in dataset]
 
     recipes = walker.autogen_recipe(filelist, outputdir)
-
-    assert len(recipes) == 2
+    # list of recipe chains
+    assert len(recipes) == 2 # 1 chain for nonlin, 1 chain for k gain
+    assert len(recipes[0]) == 3 # nonlin chain in 3 parts
+    assert len(recipes[1]) == 2 # kgain chain in 2 parts
 
 def test_cpgs_satspots():
     """
