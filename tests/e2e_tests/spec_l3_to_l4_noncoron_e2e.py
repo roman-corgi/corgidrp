@@ -49,14 +49,14 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
  
     # Check if input folder already contains the expected files
-    existing_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l3_.fits')))
+    existing_files = sorted(glob.glob(os.path.join(e2eoutput_path, 'cgi_*_l3_.fits')))
     
     if existing_files:
-        logger.info(f"Found {len(existing_files)} existing L3 files in {e2edata_path}")
+        logger.info(f"Found {len(existing_files)} existing L3 files in {e2eoutput_path}")
         logger.info("Using existing input files (skipping generation)")
         saved_files = fix_hdrs_for_tvac(
             existing_files,
-            e2edata_path,
+            e2eoutput_path,
             header_template=create_default_L3_headers,
         )
         # Fix dtypes
@@ -107,7 +107,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
                 err=np.zeros_like(noisy_data_array[i]),
                 dq=np.zeros_like(noisy_data_array[i], dtype=int)
             )
-            image.ext_hdr["CFAMNAME"] = "3"
+            image.ext_hdr["CFAMNAME"] = "3F"
             psf_images.append(image)
         psf_images.append(image_spot)
         
@@ -120,7 +120,7 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
         basetime = datetime.now()
         for i, img in enumerate(psf_images):
             fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l3_")
-            fpath = os.path.join(e2edata_path, fname)
+            fpath = os.path.join(e2eoutput_path, fname)
             
             # Save as FITS
             primary_hdu = fits.PrimaryHDU(header=img.pri_hdr)
@@ -130,8 +130,8 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
                 fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
 
         # Load saved files back into dataset
-        saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l3_.fits')))
-        assert len(saved_files) > 0, f'No saved L3 files found in {e2edata_path}!'
+        saved_files = sorted(glob.glob(os.path.join(e2eoutput_path, 'cgi_*_l3_.fits')))
+        assert len(saved_files) > 0, f'No saved L3 files found in {e2eoutput_path}!'
 
         l3_dataset_with_filenames = Dataset(saved_files)
         logger.info(f"Generated and saved {len(saved_files)} new input files")
@@ -175,10 +175,12 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
     fluxcal_factor_error = 1e-14
     prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
     # Set consistent header values for flux calibration factor
-    exthd['CFAMNAME'] = '3'
+    exthd['CFAMNAME'] = '3F'
     exthd['DPAMNAME'] = 'PRISM3'
     exthd['FSAMNAME'] = 'R1C2'
-    fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = l3_dataset_with_filenames)
+    # Use only the science frames (CFAMNAME='3F') for FluxcalFactor, not the spot frame (CFAMNAME='3D')
+    science_dataset = Dataset([f for f in l3_dataset_with_filenames if f.ext_hdr.get('CFAMNAME') == '3F'])
+    fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = science_dataset)
 
     rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
@@ -446,7 +448,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'# '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

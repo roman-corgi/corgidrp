@@ -7,6 +7,13 @@ AstrometricCalibration Data Product
 FITS HDU Structure
 ------------------
 
+Image HDU 1D array: (c); c is an array of calibration measurements of the following lengths: (boresight: length 2 (RA, DEC), 
+plate scale: length 1 (float), north angle: length 1 (float), average offset: length 2 (floats) of average boresight offset in RA/DEC [deg],
+distortion coeffs: length dependent on order of polynomial fit but the last value should be an int describing the polynomial order).
+Image HDU 3D array for (frames,row,col):  (f=varies with number of input images, r=varies with CFAM, c=varies with CFAM) 
+ERR HDU array: (1,c)
+DQ HDU array: (c)
+Below is an example.
 
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |

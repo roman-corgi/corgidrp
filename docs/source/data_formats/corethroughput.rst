@@ -7,6 +7,11 @@ CoreThroughputCalibration Data Product
 FITS HDU Structure
 ------------------
 
+Image HDU 3D array: (frames,row,col);  f=varies with number of input images, r=varies with CFAM, c=varies with CFAM
+ERR HDU array: (1,f,r,c)
+DQ HDU array: (f,r,c)
+CTEXCAM HDU array: (3,f) 
+Below is an example.
 
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |

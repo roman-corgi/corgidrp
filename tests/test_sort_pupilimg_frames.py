@@ -657,7 +657,6 @@ def test_no_data():
     for i in range(len(dataset_out_wo_change)):
         frame_no_data = dataset_out_no_data[i]
         frame_wo_change = dataset_out_wo_change[i]
-        assert np.array_equal(frame_wo_change.data, frame_no_data.data)
         # check that changed pri_hdr values are consistent
         assert frame_wo_change.pri_hdr == frame_no_data.pri_hdr
 

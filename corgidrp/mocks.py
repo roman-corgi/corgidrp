@@ -305,7 +305,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     
     # Override some values that should be dynamic
     prihdr['FILETIME'] = dt_str
-    prihdr['VISTYPE'] = 'TPUMP'  # Trap pump specific
+    prihdr['VISTYPE'] = 'CGIVST_CAL_TPUMP'  # Trap pump specific
     
     # Parse image header values  
     image_values = parse_csv_table(csv_file_path, "Image Header (HDU 1)")
@@ -2682,6 +2682,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 hdul[1].header['EXCAMT']  = temp
                 hdul[1].header['EMGAIN_C'] = EMgain
                 hdul[1].header['ARRTYPE'] = arrtype
+                hdul[1].header['OPMODE'] = 'TRAP_PUMPING'
+                hdul[1].header['FRMTYPE'] = 'NUM'
                 for j in range(1, 5):
                     if sc == j:
                         hdul[1].header['TPSCHEM' + str(j)] = num_pumps

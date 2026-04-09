@@ -13,6 +13,7 @@ import corgidrp.caldb as caldb
 import corgidrp.check as check
 from corgidrp.sorting import sort_pupilimg_frames
 from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
+import json
 
 import warnings
 
@@ -33,12 +34,55 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
 def test_l1_to_kgain(e2edata_path, e2eoutput_path):
+    """ Performs the e2e test to generate a k gain calibration object
+        from raw L1 data and compares with the existing TVAC correction for the
+        same data.  
+        NOTE:  The II&T code did not correct for cosmic rays, 
+        but the CORGI DRP does by default.  So, we set the keyword apply_dq=False 
+        below before running the steps through the walker in order to be able to 
+        compare the results with the II&T code.
 
+        Args:
+        e2edata_path (str): Location of L1 data used to generate the non-linearity
+            calibration.
+        e2eoutput_path (str): Location of the output products: recipe, non-linearity
+            calibration FITS file and summary figure with a comparison of the NL
+            coefficients for different values of DN and EM is stored.
+
+    """
     # sort and prepare raw files to run through both II&T and DRP
     default_config_file = os.path.join(cal.lib_dir, 'kgain', 'config_files', 'kgain_parms.yaml')
     stack_arr2_f = []
     stack_arr_f = []
     box_data = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain') 
+    
+    #generated extra frames based on the SSC frames and added them to the Sharepoint data using this script block.
+    # Did this so that the keyword n_cal wouldn't have to be changed for the walker run below
+    if False: 
+        nonlin_folder = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'nonlin')
+        file_list = []
+        for f in os.listdir(nonlin_folder):
+            file = os.path.join(nonlin_folder, f)
+            if not file.lower().endswith('.fits'):
+                continue
+            file_list.append(file)
+        file_dataset = data.Dataset(file_list)
+        dsets, vals = file_dataset.split_dataset(exthdr_keywords=['EMGAIN_C'])
+        exp, expvals = dsets[1].split_dataset(exthdr_keywords=['exptime'])
+        fr = exp[-1][0].copy()
+        for i in range(6):
+            fr = fr.copy()
+            exptime = fr.ext_hdr['exptime']
+            fr.data = fr.data*(exptime+.5)/exptime
+            fr.ext_hdr['exptime'] = exptime+.5
+            dtime = fr.ext_hdr['datetime']
+            fr.ext_hdr['datetime'] = fr.ext_hdr['datetime'][:-5]+str(int(dtime[-5])+1)+fr.ext_hdr['datetime'][-4:]
+            fr.filename = fr.filename[:-11]+str(int(fr.filename[-11:-9])+1)+fr.filename[-9:]
+            new_filepath = fr.filepath[:-11]+str(int(fr.filepath[-11:-9])+1)+fr.filename[-9:]
+            fr.save()
+
+    extra_frames = []
+    
     # for f in os.listdir(box_data):
     #     file = os.path.join(box_data, f)
     #     if not file.endswith('.fits'):
@@ -165,12 +209,15 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     ####### Run the DRP walker
     print('Running walker')
     #walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
+    
     recipe = walker.autogen_recipe(ordered_filelist, kgain_outputdir)
     ### Modify they keywords of some of the steps
-    for step in recipe[1]['steps']:
+    for step in recipe[1][1]['steps']:
         if step['name'] == "calibrate_kgain":
             step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
-    walker.run_recipe(recipe[1], save_recipe_file=True)
+    output_filepaths = walker.run_recipe(recipe[1][0], save_recipe_file=True)
+    recipe[1][1]['inputs'] = output_filepaths
+    walker.run_recipe(recipe[1][1], save_recipe_file=True)    
 
     ####### Load in the output data. It should be the latest kgain file produced.
     possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_krn_cal*.fits'))

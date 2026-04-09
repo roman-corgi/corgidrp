@@ -184,7 +184,18 @@ def test_auto_template_identification():
 
     # bad pixel map
     bp_dat = np.zeros((1024, 1024), dtype=int)
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    # Ensure BPM includes a dark(-like) frame.
+    dark_pri, dark_ext, _, _ = mocks.create_default_calibration_product_headers()
+    dark_ext['EXPTIME'] = float(mock_input_dataset.frames[0].ext_hdr.get('EXPTIME', 0.0))
+    dark_ext['EMGAIN_C'] = float(mock_input_dataset.frames[0].ext_hdr.get('EMGAIN_C', 1.0))
+    dark_ext['DRPNFILE'] = 1
+    bp_dark = data.Dark(np.zeros_like(bp_dat, dtype=float), pri_hdr=dark_pri, ext_hdr=dark_ext,
+                        input_dataset=mock_input_dataset,
+                        err=np.zeros((1,) + bp_dat.shape, dtype=float),
+                        dq=np.zeros(bp_dat.shape, dtype='uint16'),
+                        err_hdr=fits.Header())
+    bp_map_inputs = data.Dataset([bp_dark, flat])
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
     bp_map.save(filedir=outputdir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
@@ -555,8 +566,10 @@ def test_generate_multiple_recipes():
     filelist = [frame.filepath for frame in dataset]
 
     recipes = walker.autogen_recipe(filelist, outputdir)
-
-    assert len(recipes) == 2
+    # list of recipe chains
+    assert len(recipes) == 2 # 1 chain for nonlin, 1 chain for k gain
+    assert len(recipes[0]) == 3 # nonlin chain in 3 parts
+    assert len(recipes[1]) == 2 # kgain chain in 2 parts
 
 def test_cpgs_satspots():
     """

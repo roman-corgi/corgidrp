@@ -47,7 +47,7 @@ image2 = image1.copy()
 image1.filename = "cgi_0000000000000090526_20240101t1200000_l4_.fits"
 image2.filename = "cgi_0000000000000090527_20240101t1201000_l4_.fits"
 dataset=Dataset([image1, image2])
-calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
+calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_012.fits")
 
 
 def print_fail():
@@ -139,11 +139,11 @@ def test_calspec_download():
     
     filepath, filename = fluxcal.get_calspec_file('Vega')
     assert os.path.exists(filepath)
-    assert filename == 'alpha_lyr_stis_011.fits'
+    assert filename == 'alpha_lyr_stis_012.fits'
     
     calspec_dir = os.path.join(os.path.dirname(corgidrp.config_filepath), "calspec_data")
     names_file = os.path.join(calspec_dir, "calspec_names.json")
-    fits_file = os.path.join(calspec_dir, 'alpha_lyr_stis_011.fits')
+    fits_file = os.path.join(calspec_dir, 'alpha_lyr_stis_012.fits')
     assert os.path.exists(names_file)
     assert os.path.exists(fits_file)
     assert fits_file == filepath
@@ -154,7 +154,7 @@ def test_calspec_download():
     
     filepath, filename = fluxcal.get_calspec_file('Vega')
     assert os.path.exists(filepath)
-    assert filename == 'alpha_lyr_stis_011.fits'
+    assert filename == 'alpha_lyr_stis_012.fits'
     os.remove(filepath)
     
     with pytest.raises(ValueError):
@@ -179,7 +179,7 @@ def test_app_mag():
     assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(0.+-2.5*np.log10(0.5), 0.03)
     output_dataset = l4_to_tda.determine_app_mag(dataset, '109 Vir')
     assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(3.72, 0.05)
-    assert 'alpha_lyr_stis_011.fits' in str(output_dataset[0].ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis' in str(output_dataset[0].ext_hdr['HISTORY'])
     assert '109vir_stis_005.fits' in str(output_dataset[0].ext_hdr['HISTORY'])
     
 def test_fluxcal_file():
@@ -612,7 +612,7 @@ def test_abs_fluxcal():
     fluxcal_factor = fluxcal.calibrate_fluxcal_aper(dataset, flux_or_irr = 'flux', phot_kwargs=None)
     assert fluxcal_factor.filter == '3C'
     # band_flux/200 was the input calibration factor cal_factor of the
-    # simulated mock image "alpha_lyr_stis_011.fits"
+    # simulated mock image "alpha_lyr_stis_012.fits"
     test_result = fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor, rel=rel_tol_flux)
     assert test_result
     # Print out the result
@@ -713,19 +713,19 @@ def test_abs_fluxcal():
     fluxcal_factor_back = fluxcal.calibrate_fluxcal_aper(flux_image_back, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
     assert fluxcal_factor_back.fluxcal_fac == pytest.approx(fluxcal_factor.fluxcal_fac)
     assert fluxcal_factor_back.ext_hdr["LOCBACK"] == back
-    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis' in str (fluxcal_factor_back.ext_hdr['HISTORY'])
     fluxcal_factor_back_gauss = fluxcal.calibrate_fluxcal_gauss2d(flux_image_back, flux_or_irr = 'flux', phot_kwargs=gauss_kwargs)
     assert fluxcal_factor_back_gauss.fluxcal_fac == pytest.approx(fluxcal_factor_gauss.fluxcal_fac)
     assert fluxcal_factor_back_gauss.ext_hdr["LOCBACK"] == back
-    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_gauss.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis' in str (fluxcal_factor_back_gauss.ext_hdr['HISTORY'])
     
     #test the direct input of the calspec fits file
     fluxcal_factor_back = fluxcal.calibrate_fluxcal_aper(flux_image_back, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
     assert fluxcal_factor_back.fluxcal_fac == pytest.approx(fluxcal_factor.fluxcal_fac)
-    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis' in str (fluxcal_factor_back.ext_hdr['HISTORY'])
     fluxcal_factor_back_gauss = fluxcal.calibrate_fluxcal_gauss2d(flux_image_back, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=gauss_kwargs)
     assert fluxcal_factor_back_gauss.fluxcal_fac == pytest.approx(fluxcal_factor_gauss.fluxcal_fac)
-    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_gauss.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis' in str (fluxcal_factor_back_gauss.ext_hdr['HISTORY'])
     
     # test l4_to_tda.determine_flux
     input_dataset = Dataset([flux_image_back, flux_image_back])
@@ -845,7 +845,7 @@ def test_pol_abs_fluxcal():
     assert fluxcal_factor_WP1.filter == '3C'
     assert fluxcal_factor_WP2.filter == '3C'
     # band_flux/400 was the input calibration factor cal_factor of the
-    # simulated mock image "alpha_lyr_stis_011.fits"
+    # simulated mock image "alpha_lyr_stis_012.fits"
     test_result_WP1 = fluxcal_factor_WP1.fluxcal_fac == pytest.approx(cal_factor, rel=rel_tol_flux)
     test_result_WP2 = fluxcal_factor_WP2.fluxcal_fac == pytest.approx(cal_factor, rel=rel_tol_flux)
     assert test_result_WP1
@@ -916,16 +916,16 @@ def test_pol_abs_fluxcal():
     assert fluxcal_factor_back_WP2.fluxcal_fac == pytest.approx(fluxcal_factor_WP2.fluxcal_fac)
     assert fluxcal_factor_back_WP1.ext_hdr["LOCBACK"] == 0.5 * (back_pol0 + back_pol90)
     assert fluxcal_factor_back_WP2.ext_hdr["LOCBACK"] == 0.5 * (back_pol45 + back_pol135)
-    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP1.ext_hdr['HISTORY'])
-    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP2.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis' in str (fluxcal_factor_back_WP1.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis' in str (fluxcal_factor_back_WP2.ext_hdr['HISTORY'])
 
     #test the direct input of the calspec fits file
     fluxcal_factor_back_WP1 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP1, 512, 512, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
     fluxcal_factor_back_WP2 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP2, 512, 512, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
     assert fluxcal_factor_back_WP1.fluxcal_fac == pytest.approx(fluxcal_factor_WP1.fluxcal_fac)
     assert fluxcal_factor_back_WP2.fluxcal_fac == pytest.approx(fluxcal_factor_WP2.fluxcal_fac)
-    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP1.ext_hdr['HISTORY'])
-    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP2.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis' in str (fluxcal_factor_back_WP1.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis' in str (fluxcal_factor_back_WP2.ext_hdr['HISTORY'])
     
 
 def test_l4_companion_photometry():

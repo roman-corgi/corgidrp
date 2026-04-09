@@ -30,7 +30,10 @@ def test_nonlin_cal_e2e(
         frames per EM gain, but the CORGI DRP does, and the default number is 20.  
         For this e2e test, we use 3 EM gains, and for one of those EM gains, there 
         are only 14 frames in the e2e test data.  So, we set the keyword n_cal=14 below 
-        before running the steps through the walker.
+        before running the steps through the walker.  Also, the II&T code did not correct for cosmic rays, 
+        but the CORGI DRP does by default.  So, we set the keyword apply_dq=False 
+        below before running the steps through the walker in order to be able to 
+        compare the results with the II&T code.
 
         Args:
         e2edata_path (str): Location of L1 data used to generate the non-linearity
@@ -86,12 +89,18 @@ def test_nonlin_cal_e2e(
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
+    # leave out the files not used in creating the reference II&T cal
+    new_files = ['cgi_0089001001001001027_20240308t0549477_l1_.fits','cgi_0089001001001001027_20240308t0549478_l1_.fits','cgi_0089001001001001027_20240308t0549479_l1_.fits','cgi_0089001001001001027_20240308t0549480_l1_.fits','cgi_0089001001001001027_20240308t0549481_l1_.fits','cgi_0089001001001001027_20240308t0549482_l1_.fits']
+    for f in nonlin_l1_list:
+        for new_f in new_files:
+            if f.endswith(new_f):
+                nonlin_l1_list.remove(f)
     nonlin_l1_list.sort()
     kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
     kgain_l1_list.sort()
     nonlin_l1_list = nonlin_l1_list + kgain_l1_list
 
-    # Copy files to input_data directory and update file list
+    #Copy files to input_data directory and update file list
     nonlin_l1_list = [
         shutil.copy2(file_path, os.path.join(input_data_dir, os.path.basename(file_path)))
         for file_path in nonlin_l1_list
@@ -124,7 +133,7 @@ def test_nonlin_cal_e2e(
     pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
-    mock_input_dataset = data.Dataset(nonlin_l1_list)
+    mock_input_dataset = data.Dataset(nonlin_l1_list[:3])
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat,
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
@@ -151,14 +160,18 @@ def test_nonlin_cal_e2e(
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     # Run the walker on some test_data
     print('Running walker')
-    #walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path, "l1_to_l2a_nonlin.json")
     recipe = walker.autogen_recipe(nonlin_l1_list, e2eoutput_path)
     ### Modify they keywords of some of the steps
-    for step in recipe[0]['steps']:
+    for step in recipe[0][2]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
-            step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
-    walker.run_recipe(recipe[0], save_recipe_file=True)
+            step['keywords']['n_cal'] = 14 # set n_cal to 14 to match the number of frames used to produce the II&T result (so we can compare results)
+    output_filepaths = walker.run_recipe(recipe[0][0], save_recipe_file=True)
+    recipe[0][1]['inputs'] = output_filepaths
+    output_filepaths1 = walker.run_recipe(recipe[0][1], save_recipe_file=True)
+    recipe[0][2]['inputs'] = output_filepaths1
+    walker.run_recipe(recipe[0][2], save_recipe_file=True)
+
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
@@ -187,21 +200,22 @@ def test_nonlin_cal_e2e(
     rel_out_tvac_perc = 100*(nonlin_out_table[1:,1:]/nonlin_tvac_table[1:,1:]-1)
 
     # Summary figure
-    plt.figure(figsize=(10,6))
-    em_list = nonlin_out_table[0,1:]
-    for i_em, em_val in enumerate(em_list):
-        plt.plot(nonlin_out_table[1:,0], rel_out_tvac_perc[:,i_em], label=f'EM={em_val:.1f}')
-    plt.xlabel('DN value', fontsize=14)
-    plt.ylabel('Relative difference (%)', fontsize=14)
-    plt.title('Comparison of ENG/CORGI DRP NL table for a given DN and EM value',
-        fontsize=14)
-    plt.legend()
-    plt.grid()
-    plt.savefig(os.path.join(e2eoutput_path,nonlin_drp_filename[:-5]+".png"))
-    print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
-        f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
-        f'rms={np.std(rel_out_tvac_perc):1.1e} %')
-    print(f'Figure saved: {os.path.join(e2eoutput_path,nonlin_drp_filename[:-5])}.png')
+    if False: 
+        plt.figure(figsize=(10,6))
+        em_list = nonlin_out_table[0,1:]
+        for i_em, em_val in enumerate(em_list):
+            plt.plot(nonlin_out_table[1:,0], rel_out_tvac_perc[:,i_em], label=f'EM={em_val:.1f}')
+        plt.xlabel('DN value', fontsize=14)
+        plt.ylabel('Relative difference (%)', fontsize=14)
+        plt.title('Comparison of ENG/CORGI DRP NL table for a given DN and EM value',
+            fontsize=14)
+        plt.legend()
+        plt.grid()
+        plt.savefig(os.path.join(e2eoutput_path,nonlin_drp_filename[:-5]+".png"))
+        print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
+            f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
+            f'rms={np.std(rel_out_tvac_perc):1.1e} %')
+        print(f'Figure saved: {os.path.join(e2eoutput_path,nonlin_drp_filename[:-5])}.png')
 
     # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
@@ -224,6 +238,9 @@ if __name__ == "__main__":
     e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'# '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
+
+    OUTPUT_DIR = thisfile_dir #r'E:\E2E_tests'#thisfile_dir
+    e2edata_dir =  '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data' #r'E:\E2E_Test_Data3\E2E_Test_Data3'
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

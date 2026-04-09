@@ -7,6 +7,12 @@ L4 Data Product
 FITS HDU Structure
 ------------------
 
+Image HDU array: (4,r,c), where r and c depend on cropping.
+ERR HDU array: (1,4,r,c)
+DQ HDU array: (4,r,c)
+KL_THRU HDU array: (2,2,2)
+CT_THRU HDU array: (2,2) 
+Below is an example.
 
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
