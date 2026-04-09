@@ -163,6 +163,29 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
 
+    # Create a POL45 flux calibration file
+    prhd_pol45 = prhd.copy()
+    # offset FILETIME by 1 second to avoid filename collision
+    from datetime import datetime, timedelta
+    ft_str = prhd_pol45['FILETIME']
+    try:
+        ft = datetime.strptime(ft_str, '%Y-%m-%dT%H:%M:%S.%f')
+    except ValueError:
+        ft = datetime.strptime(ft_str, '%Y-%m-%dT%H:%M:%S')
+    prhd_pol45['FILETIME'] = (ft + timedelta(seconds=1)).isoformat()
+    exthd_pol45 = exthd.copy()
+    exthd_pol45['DPAMNAME'] = 'POL45'
+    fluxcal_fac_pol45 = data.FluxcalFactor(
+        fluxcal_factor, err=fluxcal_factor_error,
+        pri_hdr=prhd_pol45, ext_hdr=exthd_pol45, err_hdr=errhd
+    )
+    mocks.rename_files_to_cgi_format(
+        list_of_fits=[fluxcal_fac_pol45],
+        output_dir=calibrations_dir,
+        level_suffix="abf_cal"
+    )
+    this_caldb.create_entry(fluxcal_fac_pol45)
+
     #################################################
     ########### Create Mueller Matrix cals ##########
     #################################################
@@ -448,7 +471,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
         logger.info(f"{frame_info}: Expected Stokes datacube (4, N, N), got {img.data.shape}. FAIL")
 
     #Check that core throughput and flux calibration products have been linked. 
-    verify_header_keywords(img.ext_hdr, ['CTCALFN', 'FLXCALFN', 'STARLOCX','STARLOCY'], frame_info, logger)
+    verify_header_keywords(img.ext_hdr, ['CTCALFN', 'FLXCLF0', 'FLXCLF45', 'STARLOCX','STARLOCY'], frame_info, logger)
 
     #Check that the stellar polarization is report: 
     if "stellar Q value: " in str(img.ext_hdr['HISTORY']) and "stellar U value: " in str(img.ext_hdr['HISTORY']):

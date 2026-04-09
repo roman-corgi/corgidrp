@@ -4100,6 +4100,14 @@ class FlatFieldPOL45:
     def __init__(self, ref: FlatField):
         self.ref = ref
 
+class FluxcalFactorPOL0:
+    def __init__(self, ref: FluxcalFactor):
+        self.ref = ref
+
+class FluxcalFactorPOL45:
+    def __init__(self, ref: FluxcalFactor):
+        self.ref = ref
+
 datatypes = { "Image" : Image,
               "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -4113,6 +4121,8 @@ datatypes = { "Image" : Image,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration" : TrapCalibration,
               "FluxcalFactor" : FluxcalFactor,
+              "FluxcalFactorPOL0" : FluxcalFactorPOL0,
+              "FluxcalFactorPOL45" : FluxcalFactorPOL45,
               "FpamFsamCal" : FpamFsamCal,
               "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,
