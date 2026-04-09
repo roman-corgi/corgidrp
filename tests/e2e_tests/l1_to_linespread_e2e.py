@@ -225,15 +225,37 @@ def test_l1_to_linespread(e2edata_path, e2eoutput_path):
     linespreadcal_file = glob.glob(os.path.join(l2b_outputdir, '*lsf_cal*.fits'))[0]
     linespread = data.LineSpread(linespreadcal_file)
     
-    print(f"wavelengths: {linespread.wavlens} nm")
-    print(f"flux profile: {linespread.flux_profile}")
+    ### validate LineSpread product 
+    check.compare_to_mocks_hdrs(linespreadcal_file)
+    assert linespread.ext_hdr["DATATYPE"] == "LineSpread"
+    assert linespread.ext_hdr["DATALVL"] == "CAL"
+    # Data shape: (2, M)
+    assert linespread.data.ndim == 2 and linespread.data.shape[0] == 2, \
+        f"Unexpected data shape: {linespread.data.shape}"
+    M = linespread.data.shape[1]
+    assert len(linespread.wavlens) == len(linespread.flux_profile) == M
+    print(f"  Data shape: (2, {M})  PASSED")
+    
+    # Wavelengths should be in the band 3 range
+    wave = linespread.wavlens
+    sort_idx = np.argsort(wave)
+    spec_wave  = wave[sort_idx]
+    assert np.all(np.diff(spec_wave) > 0), "Wavelength grid is not monotonically increasing."
+    assert spec_wave[0] > 500 and spec_wave[-1] < 1100, \
+        f"Wavelengths {spec_wave[0]:.1f}–{spec_wave[-1]:.1f} nm outside expected range."
+    print(f"  Wavelength range: {spec_wave[0]:.1f}–{spec_wave[-1]:.1f} nm PASSED")
+    #flux profile is normalized
+    assert np.all(np.isfinite(linespread.flux_profile)), "spectrum fluxcal contains non-finite values."
+    assert np.max(linespread.flux_profile) < 1., "maximum normalized flux profile is greater than 1"
+
     print(f"Gaussian fit parameters:") 
     print(f"amplitude: {linespread.amplitude} +- {linespread.amp_err}")
     print(f"mean_wave: {linespread.mean_wave} +- {linespread.wave_err} nm")
     print(f"fwhm: {linespread.fwhm} +- {linespread.fwhm_err} nm")
-
-    check.compare_to_mocks_hdrs(linespreadcal_file)
-
+    
+    assert linespread.mean_wave > spec_wave[0] and linespread.mean_wave < spec_wave[-1]
+    assert (linespread.amplitude - np.max(linespread.flux_profile)) < 2. * linespread.amp_err, "deviation of fitted amplitude to max flux is too big" 
+    
     # Remove temporary CalDB
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_spec_flux_e2e_caldb.csv')
     if os.path.exists(tmp_caldb_csv):
