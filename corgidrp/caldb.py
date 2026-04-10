@@ -57,6 +57,8 @@ labels = {data.Dark: "Dark",
           data.AstrometricCalibration : "AstrometricCalibration",
           data.TrapCalibration : "TrapCalibration",
           data.FluxcalFactor : "FluxcalFactor",
+          data.FluxcalFactorPOL0 : "FluxcalFactor",
+          data.FluxcalFactorPOL45 : "FluxcalFactor",
           data.FpamFsamCal : "FpamFsamCal",
           data.CoreThroughputCalibration: "CoreThroughputCalibration",
           data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
@@ -386,12 +388,21 @@ class CalDB:
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['FluxcalFactor']:
             # filter by color filter and DPAM
+            # FluxcalFactorPOL0/FluxcalFactorPOL45 force the DPAMNAME for lookup
+            if dtype == data.FluxcalFactorPOL0:
+                dpamname = "POL0"
+            elif dtype == data.FluxcalFactorPOL45:
+                dpamname = "POL45"
+            else:
+                dpamname = frame_dict['DPAMNAME']
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "DPAMNAME", dpamname, err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
+            # FluxcalFactorPOL0/FluxcalFactorPOL45 are looked up as FluxcalFactor entries on disk
+            dtype = data.FluxcalFactor
         elif dtype_label in ['CoreThroughputCalibration']:
             # filter by focal plane mask
             options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
