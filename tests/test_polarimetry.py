@@ -1421,6 +1421,53 @@ def test_compute_QphiUPhi():
     logger.info('='*80)
 
 
+def test_update_to_l4_pol():
+    """
+    Tests that update_to_l4_pol writes both POL0 and POL45 flux calibration filenames
+    into the L4 headers.
+    """
+    # create a mock L3 frame (single Stokes datacube, as produced by combine_polarization_states)
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = mocks.create_default_L3_headers()
+    ext_hdr['DATALVL'] = 'L3'
+    mock_data = np.zeros((4, 100, 100))
+    frame = data.Image(mock_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                       err=np.zeros((4, 100, 100)), dq=np.zeros((4, 100, 100), dtype=int),
+                       err_hdr=err_hdr, dq_hdr=dq_hdr)
+    frame.filename = "cgi_0200001001001001001_20250101t0000000_l3_.fits"
+    frame.pri_hdr['FILENAME'] = frame.filename
+    input_dataset = Dataset([frame])
+
+    # create mock flux cal objects for POL0 and POL45
+    flux_cal_pol0 = mocks.make_mock_fluxcal_factor(1.0, dpam_name='POL0')
+    flux_cal_pol0.filename = "mock_abf_cal_pol0.fits"
+    flux_cal_pol45 = mocks.make_mock_fluxcal_factor(1.0, dpam_name='POL45')
+    flux_cal_pol45.filename = "mock_abf_cal_pol45.fits"
+
+    # create mock core throughput cal
+    ct_cal = mocks.create_ct_cal(3)
+    ct_cal.filename = "mock_ct_cal.fits"
+
+    result = l3_to_l4.update_to_l4_pol(input_dataset, ct_cal, flux_cal_pol0, flux_cal_pol45)
+
+    assert len(result) == 1
+    out_frame = result[0]
+    assert out_frame.ext_hdr['DATALVL'] == 'L4'
+    assert out_frame.ext_hdr['CTCALFN'] == 'mock_ct_cal.fits'
+    assert out_frame.ext_hdr['FLXCLF0'] == 'mock_abf_cal_pol0.fits'
+    assert out_frame.ext_hdr['FLXCLF45'] == 'mock_abf_cal_pol45.fits'
+    assert '_l4_' in out_frame.filename
+
+    # test with corethroughput_cal=None (need fresh L3 frame since headers were modified)
+    frame2 = data.Image(mock_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                        err=np.zeros((4, 100, 100)), dq=np.zeros((4, 100, 100), dtype=int),
+                        err_hdr=err_hdr.copy(), dq_hdr=dq_hdr.copy())
+    frame2.filename = "cgi_0200001001001001001_20250101t0000000_l3_.fits"
+    frame2.pri_hdr['FILENAME'] = frame2.filename
+    frame2.ext_hdr['DATALVL'] = 'L3'
+    result2 = l3_to_l4.update_to_l4_pol(Dataset([frame2]), None, flux_cal_pol0, flux_cal_pol45)
+    assert result2[0].ext_hdr['CTCALFN'] == ''
+
+
 if __name__ == "__main__":
     test_image_splitting()
     test_calc_pol_p_and_pa_image()
@@ -1430,3 +1477,4 @@ if __name__ == "__main__":
     test_align_frames()
     test_calc_stokes_unocculted()
     test_compute_QphiUPhi()
+    test_update_to_l4_pol()
