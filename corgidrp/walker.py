@@ -25,6 +25,10 @@ import corgidrp.sorting
 import corgidrp.fluxcal
 import corgidrp.spec
 
+import psutil
+import tracemalloc
+from datetime import date
+from memory_profiler import profile
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -140,7 +144,7 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                 recipe["inputs"] = []
                 for filename in output_filelist:
                     recipe["inputs"].append(filename)
-            
+
             # check for functions that require CPGS XML info
             for step in recipe['steps']:
                 if step['name'].lower() == 'find_spec_star':
@@ -158,7 +162,7 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                         sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
                         step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
                         step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
-            
+
             output_filelist = run_recipe(recipe)
 
     # return just the recipe if there was only one
@@ -210,7 +214,7 @@ def autogen_recipe(filelist, outputdir, template=None):
         for l in recipe_filename_list_list:
             if not isinstance(l, list):
                 raise TypeError("Each element of recipe_filename_list should be a list, but got {0}".format(type(l)))
-        
+
         recipe_template_list_list = []
         for recipe_filename_list in recipe_filename_list_list:
             recipe_template_list = []
@@ -268,13 +272,13 @@ def autogen_recipe(filelist, outputdir, template=None):
         recipe_list_list.append(recipe_list)
 
     # if list of chains, return that.  If single list, return that.  If single
-    # recipe, return that. 
+    # recipe, return that.
     if len(recipe_list_list) > 1: # list of chains
         return recipe_list_list
     else:
-        if len(recipe_list_list[0]) > 1: # single list 
+        if len(recipe_list_list[0]) > 1: # single list
             return recipe_list_list[0]
-        else: #single recipe 
+        else: #single recipe
             return recipe_list_list[0][0]
 
 def _fill_in_calib_files(step, this_caldb, ref_frame):
@@ -372,7 +376,7 @@ def guess_template(dataset):
                 chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
             recipe_filename = [["l1_to_l2a_nonlin_1.json", "l1_to_l2a_nonlin_2.json", "l1_to_l2a_nonlin_3.json"],
-                               ["l1_to_kgain_1.json", "l1_to_kgain_2.json"]] # ["l1_to_l2a_nonlin.json","l1_to_kgain.json"] 
+                               ["l1_to_kgain_1.json", "l1_to_kgain_2.json"]] # ["l1_to_l2a_nonlin.json","l1_to_kgain.json"]
             chained = True # in this case, each sub-list is chained
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             is_spec_mode = image.ext_hdr.get('DPAMNAME', '').startswith('PRISM')
@@ -426,7 +430,7 @@ def guess_template(dataset):
         else:
             # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
             is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
-            
+
             is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']
 
             if is_spectroscopy:
@@ -438,11 +442,11 @@ def guess_template(dataset):
                 if image.ext_hdr['ISPC'] == 1:
                     recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pol_pc_3.json"] #"l2a_to_l2b_pc_pol.json"
                     chained = True
-                else: 
+                else:
                     recipe_filename = "l2a_to_l2b_pol.json"
             else:
                 if image.ext_hdr['ISPC'] == 1:
-                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
+                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json
                     chained = True
                 else:
                     recipe_filename = "l2a_to_l2b.json"  # science data and all else
@@ -486,7 +490,7 @@ def guess_template(dataset):
                 recipe_filename = "l3_to_l4_psfsub_spec.json"
             else:
                 # noncoronagraphic spec obs - no PSF subtraction
-                recipe_filename = "l3_to_l4_noncoron_spec.json" 
+                recipe_filename = "l3_to_l4_noncoron_spec.json"
         else:
             if image.pri_hdr['VISTYPE'] != 'CGIVST_CAL_TGTREF_PHOT':
                 # coronagraphic obs - PSF subtraction
@@ -508,15 +512,15 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
         outputdir (str): path to directory where files should be saved
         suffix (str): optional suffix to tack onto the filename.
                       E.g.: `test.fits` with `suffix="dark"` becomes `test_dark.fits`
-        ram_heavy_save (bool):  If True, the input is assumed to have no data loaded into memory. (Only metadata was 
-            manipulated in step leading up to save_data.) The data is loaded from the filepath frame by frame, and 
+        ram_heavy_save (bool):  If True, the input is assumed to have no data loaded into memory. (Only metadata was
+            manipulated in step leading up to save_data.) The data is loaded from the filepath frame by frame, and
             each Image is saved to outputdir.  Defaults to False.
     """
     # convert everything to dataset to make life easier
     if isinstance(dataset_or_image, data.Image):
         dataset = data.Dataset([dataset_or_image])
     else:
-        dataset = dataset_or_image        
+        dataset = dataset_or_image
 
     # add suffix to ending if necessary
     if len(suffix) > 0:
@@ -542,7 +546,7 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
             this_caldb = caldb.CalDB()
             this_caldb.create_entry(image)
 
-
+@profile
 def run_recipe(recipe, save_recipe_file=True):
     """
     Run the specified recipe
@@ -721,13 +725,15 @@ def run_recipe(recipe, save_recipe_file=True):
             setattr(corgidrp, setting, old_val)
 
 
+
+
 def _get_satellite_spot_info_from_xml(xml_tree):
     """
     Extracts satellite spot information from the CPGS XML file
 
     Args:
         xml_tree (ElementTree): loaded in CPGS XML file
-        
+
     Returns:
         dict: dictionary with satellite spot information
             "num_spots": int, number of satellite spots

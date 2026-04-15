@@ -7,9 +7,9 @@ J. of Astronomical Telescopes, Instruments, and Systems, 7(1), 016003 (2021).
 https://doi.org/10.1117/1.JATIS.7.1.016003
 - Kevin Ludwick, UAH, 6/2022
 
-- MMB Changes for corgi-drp: 
+- MMB Changes for corgi-drp:
     - Removed everything meta and replaced with functions from detector.py
-    - Replaced II&T get_relgains function with corgidrp function -> Now 
+    - Replaced II&T get_relgains function with corgidrp function -> Now
     requires a NonLinearityCorrection object to work. Defaults to None
     - Removed image slicing
     - Removed non-linearity correction
@@ -24,7 +24,8 @@ from scipy.optimize import curve_fit
 
 import corgidrp.check as check
 from corgidrp.data import TrapCalibration, typical_bool_keywords, typical_cal_invalid_keywords
-
+from datetime import date
+from memory_profiler import profile
 class TPumpAnException(Exception):
     """Exception class for tpumpanalysis."""
 
@@ -184,24 +185,26 @@ def P2_P3(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
     return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
         np.exp(-3*time_data/tau))+ \
         num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
+
+@profile
 def illumination_correction(img, binsize, ill_corr):
     """Performs non-uniform illumination correction by taking sections of the
     image and performing local illumination subtraction.
 
-    This function was copied and pasted from trip_id.py in the II&T pipeline. 
-    
+    This function was copied and pasted from trip_id.py in the II&T pipeline.
+
     Args:
         img (2-D array): Image to be corrected.
-        binsize (int): Number of pixels over which to average for subtraction. If None, 
+        binsize (int): Number of pixels over which to average for subtraction. If None,
             acts as if ill_corr is False.
-        ill_corr (bool): If True, subtracts the local median of the square region of 
-            side length equal to binsize from each pixel. If False, simply subtracts 
+        ill_corr (bool): If True, subtracts the local median of the square region of
+            side length equal to binsize from each pixel. If False, simply subtracts
             from each pixel the median of the whole image region.
-    
+
     Returns:
         tuple: A tuple containing:
             corrected_img (2-D array): Corrected image.
-            local_ill (2-D array): Frame with pixel values equal to the amount 
+            local_ill (2-D array): Frame with pixel values equal to the amount
             that was subtracted from each.
     """
 
@@ -260,21 +263,21 @@ def illumination_correction(img, binsize, ill_corr):
     return corrected_img, local_ill
 
 def tau_temp(temp_data, E, cs):
-    """Calculates the release time constant (tau) based on the input temperature, 
+    """Calculates the release time constant (tau) based on the input temperature,
     energy level, and capture cross section for holes.
 
     This function was copied and pasted from the trip_fitting.py in the II&T pipeline.
-    
-    This function computes the release time constant (tau, in seconds) using the 
-    input temperature data, energy level, and capture cross section for holes. 
+
+    This function computes the release time constant (tau, in seconds) using the
+    input temperature data, energy level, and capture cross section for holes.
     For more details, refer to the Appendix in "2020 Bush et al.pdf".
-    
+
     Args:
         temp_data (float): Temperature in Kelvin.
         E (float): Energy level in electron volts (eV).
-        cs (float): Capture cross section for holes, either in units of 
+        cs (float): Capture cross section for holes, either in units of
             1e-19 m^2 or 1e-15 cm^2.
-    
+
     Returns:
         float: The release time constant (tau) in seconds.
     """
@@ -294,22 +297,22 @@ def tau_temp(temp_data, E, cs):
 
 def sig_tau_temp(temp_data, E, cs, sig_E, sig_cs):
     """Calculates the standard deviation of the release time constant via error propagation.
-    
-    This function computes the standard deviation of the release time constant (sig_tau, in seconds) 
-    through error propagation, based on the input temperature, energy level, capture cross section 
-    for holes, and their respective standard deviations. For more details, refer to the Appendix in 
+
+    This function computes the standard deviation of the release time constant (sig_tau, in seconds)
+    through error propagation, based on the input temperature, energy level, capture cross section
+    for holes, and their respective standard deviations. For more details, refer to the Appendix in
     "2020 Bush et al.pdf".
 
     This function was copied and pasted from the trip_fitting.py in the II&T pipeline.
-    
+
     Args:
         temp_data (float): Temperature in Kelvin.
         E (float): Energy level in electron volts (eV).
-        cs (float): Capture cross section for holes, either in units of 
+        cs (float): Capture cross section for holes, either in units of
             1e-19 m^2 or 1e-15 cm^2.
         sig_E (float): Standard deviation of the energy level (eV).
         sig_cs (float): Standard deviation of the capture cross section for holes.
-    
+
     Returns:
         float: The standard deviation of the release time constant (sig_tau) in seconds.
     """
@@ -331,43 +334,44 @@ def sig_tau_temp(temp_data, E, cs, sig_E, sig_cs):
     sig_tau = np.sqrt((dtau_dcs*sig_cs*1e-19)**2 + (dtau_dE*sig_E)**2)
     return sig_tau
 
+@profile
 def trap_id(cor_img_stack, ill_corr_min, ill_corr_max, timings, thresh_factor,
             length_limit):
     """
     Identifies dipoles in an image stack based on threshold amplitude and categorizes them.
-    
-    This function analyzes a stack of trap-pumped images taken at different phase times 
-    to identify dipoles by detecting adjacent pixels that exceed a threshold amplitude 
-    above and below the mean. The threshold must be met at a sufficient number of phase 
-    times. The function then categorizes the bright pixel of each dipole into one of three 
+
+    This function analyzes a stack of trap-pumped images taken at different phase times
+    to identify dipoles by detecting adjacent pixels that exceed a threshold amplitude
+    above and below the mean. The threshold must be met at a sufficient number of phase
+    times. The function then categorizes the bright pixel of each dipole into one of three
     categories: 'above', 'below', or 'both'.
 
     The function was copied and pasted from trap_id.py in the II&T pipeline.
-    
+
     Args:
-        cor_img_stack (3-D array): Stack of trap-pumped images taken at different phase 
-            times. Each frame should have the same dimensions. Units can be in electrons 
-            (e-) or digital numbers (DN), but they are input as electrons when this function 
+        cor_img_stack (3-D array): Stack of trap-pumped images taken at different phase
+            times. Each frame should have the same dimensions. Units can be in electrons
+            (e-) or digital numbers (DN), but they are input as electrons when this function
             is called in `tpump_analysis()`.
-        ill_corr_min (2-D array): Frame with pixel values equal to the minimum median 
-            taken over phase times that was subtracted during `illumination_correction()`. 
-            If `ill_corr` was False, the median was global over the whole image region. 
-            If `ill_corr` was True, the median was over a local square of side length 
+        ill_corr_min (2-D array): Frame with pixel values equal to the minimum median
+            taken over phase times that was subtracted during `illumination_correction()`.
+            If `ill_corr` was False, the median was global over the whole image region.
+            If `ill_corr` was True, the median was over a local square of side length
             `binsize` pixels in `illumination_correction()`.
-        ill_corr_max (2-D array): Frame with pixel values equal to the maximum median 
-            taken over phase times that was subtracted during `illumination_correction()`. 
+        ill_corr_max (2-D array): Frame with pixel values equal to the maximum median
+            taken over phase times that was subtracted during `illumination_correction()`.
             The conditions are the same as described for `ill_corr_min`.
-        timings (array-like): Array of the phase times corresponding to the ordering of 
+        timings (array-like): Array of the phase times corresponding to the ordering of
             the frames in `cor_img_stack`. Units are in seconds.
-        thresh_factor (float): Number of standard deviations from the mean that a dipole 
-            must exceed to be considered for a trap. If too high, dipoles with increasing 
-            amplitude over time are identified, which is not characteristic of an actual trap. 
+        thresh_factor (float): Number of standard deviations from the mean that a dipole
+            must exceed to be considered for a trap. If too high, dipoles with increasing
+            amplitude over time are identified, which is not characteristic of an actual trap.
             If too low, the resulting dipoles may have amplitudes that are too noisy or low.
-        length_limit (int): Minimum number of frames in which a dipole must meet the 
+        length_limit (int): Minimum number of frames in which a dipole must meet the
             threshold to be considered a true trap.
-    
+
     Returns:
-        rc_above (dict): A dictionary with keys for each bright pixel of an 'above' dipole, 
+        rc_above (dict): A dictionary with keys for each bright pixel of an 'above' dipole,
             formatted as:
             {
                 (row, col): {
@@ -377,14 +381,14 @@ def trap_id(cor_img_stack, ill_corr_min, ill_corr_max, timings, thresh_factor,
                 },
                 ...
             }
-            'amps_above' is an array of amplitudes in the same order as the phase time 
-            order in `timings`. 'loc_med_min' and 'loc_med_max' are the minimum and maximum 
+            'amps_above' is an array of amplitudes in the same order as the phase time
+            order in `timings`. 'loc_med_min' and 'loc_med_max' are the minimum and maximum
             bias values over all phase times, respectively.
-        
-        rc_below (dict): A dictionary with keys for each bright pixel of a 'below' dipole, 
+
+        rc_below (dict): A dictionary with keys for each bright pixel of a 'below' dipole,
             formatted similarly to `rc_above`.
-        
-        rc_both (dict): A dictionary with keys for each bright pixel that is both an 'above' 
+
+        rc_both (dict): A dictionary with keys for each bright pixel that is both an 'above'
             and 'below' dipole, formatted as:
             {
                 (row, col): {
@@ -402,8 +406,8 @@ def trap_id(cor_img_stack, ill_corr_min, ill_corr_max, timings, thresh_factor,
                 },
                 ...
             }
-            'amps' and 't' under 'above' and 'below' are arrays identified specifically with 
-            their respective dipoles. 'amps_both' contains all amplitudes for that pixel 
+            'amps' and 't' under 'above' and 'below' are arrays identified specifically with
+            their respective dipoles. 'amps_both' contains all amplitudes for that pixel
             in the same order as `timings`.
     """
 
@@ -455,7 +459,7 @@ def trap_id(cor_img_stack, ill_corr_min, ill_corr_max, timings, thresh_factor,
         IS_DIPOLE_UPPER.append((frame > (np.median(frame) +
                 np.std(frame)*thresh_factor)).astype(int))
         IS_DIPOLE_LOWER.append((frame < (np.median(frame) -
-                np.std(frame)*thresh_factor)).astype(int))  
+                np.std(frame)*thresh_factor)).astype(int))
         # IS_DIPOLE_UPPER.append((frame > (np.percentile(frame, 100-thresh_factor))).astype(int))
         # IS_DIPOLE_LOWER.append((frame < (np.percentile(frame, thresh_factor))).astype(int))
     IS_DIPOLE_UPPER = np.stack(IS_DIPOLE_UPPER)
@@ -564,31 +568,31 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
     The function was copied and pasted from trap_fitting.py in the II&T pipeline.
 
     Args:
-        scheme (int): The scheme under consideration. Only certain probability 
+        scheme (int): The scheme under consideration. Only certain probability
             functions are valid for different schemes. Values: {1, 2, 3, 4}.
         amps (array): Amplitudes of bright pixel of the dipole. Units: e-.
         times (array): Phase times in the same order as amps. Units: seconds.
         num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
-        fit_thresh (float): Minimum value required for adjusted coefficient of 
-            determination (adjusted R^2) for curve fitting for the release time 
-            constant (tau) using data for dipole amplitude vs phase time. The closer 
+        fit_thresh (float): Minimum value required for adjusted coefficient of
+            determination (adjusted R^2) for curve fitting for the release time
+            constant (tau) using data for dipole amplitude vs phase time. The closer
             to 1, the better the fit. Must be between 0 and 1.
-        tau_min (float): Lower bound value for tau (release time constant) for 
+        tau_min (float): Lower bound value for tau (release time constant) for
             curve fitting. Units: seconds. Must be greater than or equal to 0.
-        tau_max (float): Upper bound value for tau (release time constant) for 
+        tau_max (float): Upper bound value for tau (release time constant) for
             curve fitting. Units: seconds. Must be greater than tau_min.
-        tauc_min (float): Lower bound value for tauc (capture time constant) for 
+        tauc_min (float): Lower bound value for tauc (capture time constant) for
             curve fitting. Units: e-. Must be greater than or equal to 0.
-        tauc_max (float): Upper bound value for tauc (capture time constant) for 
+        tauc_max (float): Upper bound value for tauc (capture time constant) for
             curve fitting. Units: e-. Must be greater than tauc_min.
-        offset_min (float): Lower bound value for the offset in the fitting of data 
+        offset_min (float): Lower bound value for the offset in the fitting of data
             for amplitude vs phase time. Acts as a nuisance parameter. Units: e-.
-        offset_max (float): Upper bound value for the offset in the fitting of data 
-            for amplitude vs phase time. Acts as a nuisance parameter. Units: e-. 
+        offset_max (float): Upper bound value for the offset in the fitting of data
+            for amplitude vs phase time. Acts as a nuisance parameter. Units: e-.
             Must be greater than offset_min.
-        both_a (dict, optional): Use None if fitting for a dipole that is of the 
-            'above' or 'below' kind. Use the dictionary corresponding to 
-            rc_both[(row,col)]['above'] if fitting for a dipole that is of the 
+        both_a (dict, optional): Use None if fitting for a dipole that is of the
+            'above' or 'below' kind. Use the dictionary corresponding to
+            rc_both[(row,col)]['above'] if fitting for a dipole that is of the
             'both' kind. Defaults to None.
 
     Returns:
@@ -1212,31 +1216,31 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
     The function was copied and pasted from trap_fitting.py in the II&T pipeline.
 
     Args:
-        scheme (int): The scheme under consideration. Only certain probability 
+        scheme (int): The scheme under consideration. Only certain probability
             functions are valid for different schemes. Values: {1, 2, 3, 4}.
         amps (array): Amplitudes of bright pixel of the dipole. Units: e-.
         times (array): Phase times in the same order as amps. Units: seconds.
         num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
-        fit_thresh (float): Minimum value required for adjusted coefficient of 
-            determination (adjusted R^2) for curve fitting for the release time 
-            constant (tau) using data for dipole amplitude vs phase time. The closer 
+        fit_thresh (float): Minimum value required for adjusted coefficient of
+            determination (adjusted R^2) for curve fitting for the release time
+            constant (tau) using data for dipole amplitude vs phase time. The closer
             to 1, the better the fit. Must be between 0 and 1.
-        tau_min (float): Lower bound value for tau (release time constant) for 
+        tau_min (float): Lower bound value for tau (release time constant) for
             curve fitting. Units: seconds. Must be greater than or equal to 0.
-        tau_max (float): Upper bound value for tau (release time constant) for 
+        tau_max (float): Upper bound value for tau (release time constant) for
             curve fitting. Units: seconds. Must be greater than tau_min.
-        pc_min (float): Lower bound value for pc (capture probability) for 
+        pc_min (float): Lower bound value for pc (capture probability) for
             curve fitting. Units: e-. Must be greater than or equal to 0.
-        pc_max (float): Upper bound value for pc (capture probability) for 
+        pc_max (float): Upper bound value for pc (capture probability) for
             curve fitting. Units: e-. Must be greater than pc_min.
-        offset_min (float): Lower bound value for the offset in the fitting of 
+        offset_min (float): Lower bound value for the offset in the fitting of
             data for amplitude vs phase time. Acts as a nuisance parameter. Units: e-.
-        offset_max (float): Upper bound value for the offset in the fitting of 
-            data for amplitude vs phase time. Acts as a nuisance parameter. Units: e-. 
+        offset_max (float): Upper bound value for the offset in the fitting of
+            data for amplitude vs phase time. Acts as a nuisance parameter. Units: e-.
             Must be greater than offset_min.
-        both_a (dict, optional): Use None if fitting for a dipole that is of the 
-            'above' or 'below' kind. Use the dictionary corresponding to 
-            rc_both[(row,col)]['above'] if fitting for a dipole that is of the 
+        both_a (dict, optional): Use None if fitting for a dipole that is of the
+            'above' or 'below' kind. Use the dictionary corresponding to
+            rc_both[(row,col)]['above'] if fitting for a dipole that is of the
             'both' kind. Defaults to None.
 
     Returns:
@@ -1997,23 +2001,23 @@ def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
 
     Args:
         taus (array): Array of tau values (in seconds).
-        tau_errs (array): Array of tau uncertainty values (in seconds), with elements 
+        tau_errs (array): Array of tau uncertainty values (in seconds), with elements
             in the same order as that of taus.
-        temps (array): Array of temperatures (in Kelvin), with elements in the same 
+        temps (array): Array of temperatures (in Kelvin), with elements in the same
             order as that of taus.
-        cs_fit_thresh (float): The minimum value required for adjusted coefficient of 
-            determination (adjusted R^2) for curve fitting for the capture cross section 
-            for holes (cs) using data for tau vs temperature. The closer to 1, the better 
+        cs_fit_thresh (float): The minimum value required for adjusted coefficient of
+            determination (adjusted R^2) for curve fitting for the capture cross section
+            for holes (cs) using data for tau vs temperature. The closer to 1, the better
             the fit. Must be between 0 and 1.
-        E_min (float): Lower bound for E (energy level in release time constant) for curve 
+        E_min (float): Lower bound for E (energy level in release time constant) for curve
             fitting, in eV. Must be greater than or equal to 0.
-        E_max (float): Upper bound for E (energy level in release time constant) for curve 
+        E_max (float): Upper bound for E (energy level in release time constant) for curve
             fitting, in eV. Must be greater than E_min.
-        cs_min (float): Lower bound for cs (capture cross section for holes in release time 
+        cs_min (float): Lower bound for cs (capture cross section for holes in release time
             constant) for curve fitting, in 1e-19 m^2. Must be greater than or equal to 0.
-        cs_max (float): Upper bound for cs (capture cross section for holes in release time 
+        cs_max (float): Upper bound for cs (capture cross section for holes in release time
             constant) for curve fitting, in 1e-19 m^2. Must be greater than cs_min.
-        input_T (float): Temperature of Roman EMCCD at which to calculate the release time 
+        input_T (float): Temperature of Roman EMCCD at which to calculate the release time
             constant (in units of Kelvin). Must be greater than 0.
 
     Returns:
@@ -2022,10 +2026,10 @@ def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
         cs (float): Cross section for holes, in cm^2.
         sig_cs (float): Standard deviation error of cross section for holes, in cm^2.
         Rsq (float): Adjusted R^2 for the tau vs temperature fit that was done to obtain cs.
-        tau_input_T (float): Tau evaluated at desired temperature of Roman EMCCD, input_T, 
+        tau_input_T (float): Tau evaluated at desired temperature of Roman EMCCD, input_T,
             in seconds.
-        sig_tau_input_T (float): Standard deviation error of tau at desired temperature of 
-            Roman EMCCD, input_T. Found by propagating error by utilizing sig_cs and sig_E, 
+        sig_tau_input_T (float): Standard deviation error of tau at desired temperature of
+            Roman EMCCD, input_T. Found by propagating error by utilizing sig_cs and sig_E,
             in seconds.
     """
 
@@ -2118,8 +2122,8 @@ def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
 
     return (E, sig_E, cs, sig_cs, Rsq, tau_input_T, sig_tau_input_T)
 
-
-def tpump_analysis(input_dataset, time_head = 'TPTAU', 
+@profile
+def tpump_analysis(input_dataset, time_head = 'TPTAU',
                    mean_field = None, length_lim = 5,
     thresh_factor = 1.5, k_prob = 1, ill_corr = True, tfit_const = True,
     tau_fit_thresh = 0.8, tau_min = 0.7e-6, tau_max = 1.3e-2, tauc_min = 0,
@@ -2144,12 +2148,12 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     that point.
 
     The frames in the input_dataset should be SCI full frames that:
-    - have had their bias subtracted 
+    - have had their bias subtracted
     - have been corrected for nonlinearity
     - have been divided by EMGAIN
 
     The following parameters from the II&T Trap pumping code are stored in the
-    object calibration file: 
+    object calibration file:
     trap_densities : list
         A list of lists, where a list is provided for each type of trap.
         The trap density for a trap type is the # of traps in a given 2-D bin
@@ -2172,7 +2176,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
         temperatures.
     unused_fit_data : int or None
         Number of times traps were identified that were not matched up for
-        sub-electrode location determination. 
+        sub-electrode location determination.
     unused_temp_fit_data : int
         Number of times traps were identified that did not get used in
         identifying release time constant values across all temperatures
@@ -2210,14 +2214,14 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
         input_T (float, optional): Temperature of Roman EMCCD at which to calculate the release time constant (in units of Kelvin). Defaults to 180.
         sample_data (bool, optional): Whether to run the sample data on Alfresco. Defaults to False.
         verbose (bool, optional): Whether to print out additional information. Defaults to False.
-        bin_size (int, optional): Side length of the square of pixels to consider for binning in illumination_correction(). If None, the square root of the smaller dimension (the smaller of the number of rows and number of cols) is used. Defaults to 10. 
-            If a value bigger than the smaller dimension is input, then the size of the smaller dimension is used instead.  The optimal value for bin_size depends on the trap density, which is unknown, so in principle, 
+        bin_size (int, optional): Side length of the square of pixels to consider for binning in illumination_correction(). If None, the square root of the smaller dimension (the smaller of the number of rows and number of cols) is used. Defaults to 10.
+            If a value bigger than the smaller dimension is input, then the size of the smaller dimension is used instead.  The optimal value for bin_size depends on the trap density, which is unknown, so in principle,
             this function could be run several times with decreasing bin size until the maximum number of traps have been detected.
-    
+
     Returns:
         corgidrp.data.TrapCalibration: An object containing the results of the trap calibration. The trap densities are appended as an extension HDU, and several other parameters are stored as header keywords in the ext_hdr header.
     """
-    
+
     # Make a copy of the input dataset to operate on
     working_dataset = input_dataset.copy()
 
@@ -2237,7 +2241,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     # overwrite working_dataset
     working_dataset = data.Dataset(frames_to_keep)
 
-    
+
 
     if type(sample_data) != bool:
         raise TypeError('sample_data should be True or False')
@@ -2301,15 +2305,15 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     # count # times emit time constant > 1e-2 or < 1e-6. Relevant only if
     # tau_min and tau_max are outside of 1e-6 to 1e-2.
     tau_outside = 0
-    
+
     temps = {}
 
     #First we'll sort the input dataset by temperature
     dataset_list, dataset_temperatures = working_dataset.split_dataset(exthdr_keywords = ['EXCAMT'])
-    
+
     # for dir in os.listdir(base_dir):
     for i,dataset in enumerate(dataset_list):
-  
+
         curr_temp = dataset_temperatures[i]
         schemes = {}
         # initializing eperdn here; used if scheme is 1
@@ -2317,7 +2321,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
 
         scheme_header_keywords = ['TPSCHEM1','TPSCHEM2', 'TPSCHEM3','TPSCHEM4']
         scheme_datasets, scheme_list = dataset.split_dataset(exthdr_keywords = scheme_header_keywords)
-        
+
         sch_list = []
         scheme_num_pumps = [] #the number of pumps for each scheme
 
@@ -2331,7 +2335,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             this_scheme = int(np.where(this_num_pumps != 0)[0].item()) + 1
             sch_list.append(this_scheme)
 
-            #Grab the number of pumps from the first dataset. 
+            #Grab the number of pumps from the first dataset.
             scheme_num_pumps.append(this_num_pumps[this_scheme-1])
 
         #Sort the things so that Scheme 1 is first
@@ -2347,7 +2351,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             raise TPumpAnException('Scheme 1 files must run first for'
                     ' an accurate eperdn estimation')
 
-        for curr_sch in sch_list: 
+        for curr_sch in sch_list:
             # scheme_path = os.path.abspath(Path(sch_dir_path, sch_dir))
             # if os.path.isfile(scheme_path): # just want directories
                 # continue
@@ -2360,9 +2364,9 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             cor_frames = []
             timings = []
 
-            #Grab the number of pumps associated with this scheme. 
+            #Grab the number of pumps associated with this scheme.
             num_pumps = scheme_num_pumps[(sch_list == curr_sch)][0]
-            
+
             # Get the dataset for this scheme (scheme_datasets is now a list, not numpy array)
             scheme_idx = np.where(sch_list == curr_sch)[0][0]
             for frame in scheme_datasets[scheme_idx]:
@@ -2378,8 +2382,8 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
                     frame_data = frame.data
                 # ignore legacy frames, which are 0 except for rows 1027 through 1037 in imaging area (rows 0-1037, cols 1088-2144)
                 if np.abs(frame_data[0:1027]).max()==0:
-                    continue 
-                timings.append(phase_time)   
+                    continue
+                timings.append(phase_time)
                 frames.append(frame_data)
 
             # no need for cosmic ray removal since we do ill. correction
@@ -2421,7 +2425,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             small = min(nrows, ncols)
             if bin_size is not None:
                 binsize = min(small, bin_size)
-            else: 
+            else:
                 binsize = int(np.sqrt(small))
             for frame in frames:
                 img, local_ill = illumination_correction(frame,
@@ -2714,7 +2718,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             for no_fit_coord in del_bo_list:
                 rc_both.__delitem__(no_fit_coord)
 
-            if verbose: 
+            if verbose:
                 print('temperature: ', curr_temp, ', scheme: ', curr_sch,
                     ', number of two-trap pixels (before sub-electrode '
                     'location): ', two_trap_count, ', number of one-trap '
@@ -2724,7 +2728,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
                 print('below traps found: ', rc_below.keys())
                 print('both traps found: ', rc_both.keys())
                 print('bad fit counter: ', bad_fit_counter, '_____________')
-                
+
             if curr_sch == 1 and \
                 (fit_a_count + fit_b_count + fit_bo_count -
                 (no_prob1a + no_prob1b + no_prob1bo)) == 0:
@@ -2763,13 +2767,13 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             and sch2) with orientations or1 and or2 at a
             given temperature.
             For the purpose of sub-electrode location.
-            
+
             Args:
                 sch1 (int): The first scheme number.
                 or1 (str): The orientation of the first scheme.
                 sch2 (int): The second scheme number.
                 or2 (str): The orientation of the second scheme.
-                
+
                 Returns:
                     list: The coordinates of the dipoles shared across the two schemes.
             """
@@ -2783,7 +2787,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             sch2, and sch3) with orientations or1 and or2 and or3 at a
             given temperature.
             For the purpose of sub-electrode location.
-            
+
             Args:
                 sch1 (int): The first scheme number.
                 or1 (str): The orientation of the first scheme.
@@ -2791,7 +2795,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
                 or2 (str): The orientation of the second scheme.
                 sch3 (int): The third scheme number.
                 or3 (str): The orientation of the third scheme.
-                
+
                 Returns:
                     list: The coordinates of the dipoles shared across the three schemes.
             """
@@ -3072,7 +3076,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
                 unused_fit_data += len(coord['fit_data_below'])
 
         temps[curr_temp] = traps
- 
+
     # initializing
     trap_list = []
     for temp in temps.values():
@@ -3187,7 +3191,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
                         (E_edges[i+1] + E_edges[i])/2,
                         (cs_edges[j+1] + cs_edges[j])/2])
 
-    
+
     trapcal = create_TrapCalibration_from_trap_dict(trap_dict, input_dataset)
 
     #Add all of the old default outputs as header keywords or extensions
@@ -3198,7 +3202,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     trapcal.ext_hdr['untempfd'] = (unused_temp_fit_data, 'unused_temp_fit_data')
     trapcal.ext_hdr['twoorles'] = (two_or_less_count, 'two_or_less_count')
     trapcal.ext_hdr['noncontc'] = (noncontinuous_count, 'noncontinuous_count')
-    
+
     return trapcal
 
     # return (trap_dict, trap_densities, bad_fit_counter, pre_sub_el_count,
@@ -3209,7 +3213,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
 def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
     '''
     A function that converts a trap dictionary into a corgidrp.data.TrapCalibration
-    file. 
+    file.
 
     The trap dictionary is defined as follows: A dictionary with a key for each trap for which acceptable fits for
     the release time constant (tau) for all schemes could be made.  It has
@@ -3258,30 +3262,30 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
         temperature of Roman EMCCD, input_T.  Found by propagating error by
         utilizing 'sig_cs' and 'sig_E'.
 
-    We will recode the string parts of that dictionary specifying the 
-    sub-electrode location for a given pixel to a number code. An example of such 
-    a string is 'RHSel2', which denotes the right-hand side of electrode 2. It can 
-    be 'RHS', 'LHS', or 'CEN' for electrodes 1 through 4. So that can be 
-    converted to a number code (1: 'LHS', 2: 'CEN', 3: 'RHS'), so that 'RHSel2' 
-    would be 32. 
+    We will recode the string parts of that dictionary specifying the
+    sub-electrode location for a given pixel to a number code. An example of such
+    a string is 'RHSel2', which denotes the right-hand side of electrode 2. It can
+    be 'RHS', 'LHS', or 'CEN' for electrodes 1 through 4. So that can be
+    converted to a number code (1: 'LHS', 2: 'CEN', 3: 'RHS'), so that 'RHSel2'
+    would be 32.
 
-    Args: 
+    Args:
         trap_dict (dict): A dictionary output by tpump_analysis
         input_dataset (list): A list of corgidrp.data.TPumpData objects.
-    
-    Returns: 
-        trap_cal (corgidrp.data.TrapCalibration): A trap calibration file. 
+
+    Returns:
+        trap_cal (corgidrp.data.TrapCalibration): A trap calibration file.
     '''
-    
+
     n_traps = len(trap_dict)
 
-    electrode_dict = {"LHS": 10, 
+    electrode_dict = {"LHS": 10,
                       "CEN": 20,
                       "RHS": 30}
 
     #Create the main array of traps and their properties, and fill it in
     trap_cal_array = np.zeros([n_traps,10])
-    for i,key in enumerate(trap_dict.keys()): 
+    for i,key in enumerate(trap_dict.keys()):
         key_list = list(key)
 
         #The first two elements should be the row and column of the trap
@@ -3293,14 +3297,14 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
         trap_cal_array[i,2] = electrode_dict[split_electrode_str[0]] + \
                                 int(split_electrode_str[1])
 
-        #Which trap is this at this location? 
+        #Which trap is this at this location?
         trap_cal_array[i,3] = key_list[2]
-        
-        #Now extract the dictionary entry: 
+
+        #Now extract the dictionary entry:
         dict_entry = trap_dict[key]
 
-        #Grab the first time constant 
-        #TODO: It seems like there could be three of these. How do we choose which one? 
+        #Grab the first time constant
+        #TODO: It seems like there could be three of these. How do we choose which one?
         trap_cal_array[i,4] = dict_entry['cap'][0][0]
 
         #The maximum amplitude of the dipole
@@ -3328,9 +3332,9 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
     exthdr['BUNIT'] = ""
 
     trapcal = TrapCalibration(trap_cal_array, pri_hdr = prhdr,
-                    ext_hdr = exthdr, 
+                    ext_hdr = exthdr,
                     input_dataset=input_dataset)
-    
+
     return trapcal
 
 def rebuild_dict(trap_pump_array):
@@ -3339,28 +3343,28 @@ def rebuild_dict(trap_pump_array):
 
         Args:
             trap_pump_array: array of trap_pump objects
-        
+
         Returns:
             trap_dict: dictionary of trap_pump objects
 
         '''
         trap_dict = {}
 
-        electrode_dict = {"LHS": 10, 
+        electrode_dict = {"LHS": 10,
                         "CEN": 20,
                         "RHS": 30}
-        
+
         electrode_dict_inverse = {10: "LHS",
                                 20: "CEN",
                                 30: "RHS"}
-        
-        
+
+
         for trap_pump in trap_pump_array:
             electrode_key = int(((trap_pump[2] // 10) % 10)*10)
             electrode_number = int(trap_pump[2] % 10)
             electrode_string = electrode_dict_inverse[electrode_key]+"el"+str(electrode_number)
             key = ((trap_pump[0],trap_pump[1]), electrode_string, int(trap_pump[3]))
-            
+
             trap_dict[key] = {}
             trap_dict[key]['cap']  = [trap_pump[4], 0, trap_pump[5]] #Add the error in to keep the expected dimensions
             trap_dict[key]['E'] = trap_pump[6]

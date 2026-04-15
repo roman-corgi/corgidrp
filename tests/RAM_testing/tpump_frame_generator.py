@@ -804,6 +804,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
                     hdul[1].header['ARRTYPE'] = arrtype
                     hdul[1].header['OPMODE'] = 'TRAP_PUMPING'
                     hdul[1].header['FRMTYPE'] = 'NUM'
+                    hdul[0].header['VISTYPE'] = 'CGIVST_CAL_TPUMP'
                     for j in range(1, 5):
                         if sc == j:
                             hdul[1].header['TPSCHEM' + str(j)] = num_cycles[j]
