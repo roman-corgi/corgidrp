@@ -354,7 +354,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
                     'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
-                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V'
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V', 'DATETIME', 'FTIMEUTC'
                 ]
         )
     if initial_cent is None:
