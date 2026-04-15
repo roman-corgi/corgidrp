@@ -842,6 +842,6 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50.,
 if __name__ == "__main__":
     output_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3\TPUMP_RAM_TEST'
     metadata_path = os.path.join('c:\\Users\\SensorLab\\Documents\\GitHub\\corgidrp\\tests', 'test_data', "metadata.yaml")
-    generate_car_pump_trap_data(output_dir=output_dir,meta_path=metadata_path,temperatures=[168]) #just do one temp for testing
-    generate_car_pump_trap_data(output_dir=output_dir, meta_path=metadata_path, EMgain=1.,temperatures=[228],cycles_per_injection=7200,
+    generate_car_pump_trap_data(output_dir=output_dir,meta_path=metadata_path) 
+    generate_car_pump_trap_data(output_dir=output_dir, meta_path=metadata_path, EMgain=1.,temperatures=[228,233,238],cycles_per_injection=7200,
                                  num_cycles={1: 3200, 2: 3200, 3: 1684, 4: 1684}, num_frames_per_config=2, num_phase_times=100) #just do one temp for testing
