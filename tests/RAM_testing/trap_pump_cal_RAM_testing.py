@@ -263,7 +263,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     else:
         peak_memory = mem.rss / (1024 ** 2)  # convert to MB
     print(f"noisemap_cal_e2e peak memory usage:  {peak_memory:.2f} MB")
-    logging.basicConfig(filename=os.path.join(os.path.dirname(__file__), "noisemap_cal_e2e_memory_usage.log"), level=logging.INFO)
+    logging.basicConfig(filename=os.path.join(os.path.dirname(__file__), "tpump_cal_e2e_memory_usage.log"), level=logging.INFO)
     todays_date = date.today()
     logging.info(todays_date.strftime("%Y-%m-%d"))
     logging.info(f"psutil noisemap_cal_e2e peak memory usage:  {peak_memory} MB")
