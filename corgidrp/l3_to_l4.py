@@ -934,9 +934,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     dpamname = dataset.frames[0].ext_hdr["DPAMNAME"]
     if not dpamname.startswith("PRISM"):
         raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
-    slit = dataset.frames[0].ext_hdr['FSAMNAME']
-    if not slit.startswith("R"):
-        raise AttributeError("not a slit observation")
+
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
     band = np.array([s.upper() for s in band])
