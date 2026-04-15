@@ -12,6 +12,8 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.check as check
+import logging
+from datetime import date
 import shutil
 try:
     from corgidrp.pump_trap_calibration import rebuild_dict
@@ -253,6 +255,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
                 step['keywords']['bin_size'] = None
         output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
         recipe[1]['inputs'] = output_filepaths
+        #only run the trap-pump step, part 2 of recipe chain, simply for RAM testing, not accuracy of results
         walker.run_recipe(recipe[1], save_recipe_file=True)
 
 

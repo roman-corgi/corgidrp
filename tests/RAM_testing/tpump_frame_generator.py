@@ -44,11 +44,11 @@ from scipy.interpolate import interp1d
 e2edata_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3'#'/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
 nonlin_path = os.path.join(e2edata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
 
-def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
-                                 read_noise = 125, eperdn = None, e2emode=True,
+def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50.,
+                                 read_noise = 125, eperdn = None, e2emode=False,
                                  nonlin_path=nonlin_path, arrtype='SCI',
                                  temperatures=[168,178,188,193],cycles_per_injection=1600,
-                                 num_cycles={1: 640, 2: 640, 3: 337, 4: 337}, num_frames_per_config=3):
+                                 num_cycles={1: 640, 2: 640, 3: 337, 4: 337}, num_frames_per_config=3, num_phase_times=150):
     """
     Generate mock pump trap data, save it to the output_directory.  Using https://collaboration.ipac.caltech.edu/pages/viewpage.action?pageId=136122677&spaceKey=romancoronagraph&title=7%2BCTI
     as a reference.  The default parameters are for the case of EM gain as specified at the link.
@@ -78,6 +78,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
         cycles_per_injection (int): number of cycles per injection for trap pumping.
         num_cycles (dict): dictionary with keys 1, 2, 3, and 4 for the 4 trap schemes, and values corresponding to the number of cycles to simulate for each scheme.
         num_frames_per_config (int): number of frames to generate per configuration (i.e., per unique combination of trap scheme, temperature, EM gain, and probability function).
+        num_phase_times (int): number of phase times to simulate per trap scheme.  The phase times are the same for all trap schemes, and are log spaced between 1 us and 40 ms (or 10 ms when e2emode is True).
     """
 
     #If output_dir doesn't exist then make it
@@ -258,7 +259,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50,
     if e2emode:
         time_data = (np.logspace(-6, -2, phase_times))*10**6 # in us
     else:
-        time_data = (np.logspace(-6, -1.39794, 100))*10**6 # in us; this is 100 points log-spaced b/w 1 and 40,000 us
+        time_data = (np.logspace(-6, -1.39794, num_phase_times))*10**6 # in us; this is num_phase_times points log-spaced b/w 1 and 40,000 us
     #time_data = (np.linspace(1e-6, 1e-2, 50))*10**6 # in us
     time_data = time_data.astype(float)
     time_data = np.array(time_data.tolist()*num_frames_per_config)
@@ -843,4 +844,4 @@ if __name__ == "__main__":
     metadata_path = os.path.join('c:\\Users\\SensorLab\\Documents\\GitHub\\corgidrp\\tests', 'test_data', "metadata.yaml")
     generate_car_pump_trap_data(output_dir=output_dir,meta_path=metadata_path,temperatures=[168]) #just do one temp for testing
     generate_car_pump_trap_data(output_dir=output_dir, meta_path=metadata_path, EMgain=1.,temperatures=[228],cycles_per_injection=7200,
-                                 num_cycles={1: 3200, 2: 3200, 3: 1684, 4: 1684}, num_frames_per_config=2) #just do one temp for testing
+                                 num_cycles={1: 3200, 2: 3200, 3: 1684, 4: 1684}, num_frames_per_config=2, num_phase_times=100) #just do one temp for testing
