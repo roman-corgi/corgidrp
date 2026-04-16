@@ -152,33 +152,25 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     #Create a mock flux calibration file
     fluxcal_factor = 2e-12
     fluxcal_factor_error = 1e-14
-    prhd, exthd, errhd, dqhd = mocks.create_default_L3_headers()
+    fluxcal_fac = mocks.make_mock_fluxcal_factor(fluxcal_factor, err = fluxcal_factor_error, cfam_name = '1F', dpam_name = 'POL0')
     # Set consistent header values for flux calibration factor
-    exthd['CFAMNAME'] = '1F'
-    exthd['DPAMNAME'] = 'POL0'
-    exthd['FPAMNAME'] = 'HLC12_C2R1'
-    exthd['DRPNFILE'] = 0  # mock calibration, no input files
-    fluxcal_fac = data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd)
-
+    fluxcal_fac.ext_hdr['FPAMNAME'] = 'HLC12_C2R1'
+  
     mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
-
+    
     # Create a POL45 flux calibration file
-    prhd_pol45 = prhd.copy()
+    fluxcal_fac_pol45 = mocks.make_mock_fluxcal_factor(fluxcal_factor, err = fluxcal_factor_error, cfam_name = '1F', dpam_name = 'POL45')
+    fluxcal_fac_pol45.ext_hdr['FPAMNAME'] = 'HLC12_C2R1'
     # offset FILETIME by 1 second to avoid filename collision
     from datetime import datetime, timedelta
-    ft_str = prhd_pol45['FILETIME']
+    ft_str = fluxcal_fac_pol45.pri_hdr['FILETIME'].split("+")[0]
     try:
         ft = datetime.strptime(ft_str, '%Y-%m-%dT%H:%M:%S.%f')
     except ValueError:
         ft = datetime.strptime(ft_str, '%Y-%m-%dT%H:%M:%S')
-    prhd_pol45['FILETIME'] = (ft + timedelta(seconds=1)).isoformat()
-    exthd_pol45 = exthd.copy()
-    exthd_pol45['DPAMNAME'] = 'POL45'
-    fluxcal_fac_pol45 = data.FluxcalFactor(
-        fluxcal_factor, err=fluxcal_factor_error,
-        pri_hdr=prhd_pol45, ext_hdr=exthd_pol45, err_hdr=errhd
-    )
+    fluxcal_fac_pol45.pri_hdr['FILETIME'] = (ft + timedelta(seconds=1)).isoformat()
+
     mocks.rename_files_to_cgi_format(
         list_of_fits=[fluxcal_fac_pol45],
         output_dir=calibrations_dir,
@@ -492,7 +484,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/home/schreiber/DataCopy/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")
