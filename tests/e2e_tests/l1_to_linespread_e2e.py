@@ -172,7 +172,7 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
 @pytest.mark.e2e
 def test_l1_to_linespread(e2edata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
-    l1_datadir = os.path.join(e2edata_path, "ND_SPEC", "L1")
+    l1_datadir = os.path.join(e2edata_path, "dip_test/SPEC-NOM_linespreadfunc_cal")
     processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
 
     # make output directory if needed
@@ -200,26 +200,13 @@ def test_l1_to_linespread(e2edata_path, e2eoutput_path):
     this_caldb, _ = setup_caldb(
         l1_datadir, processed_cal_path, calibrations_dir)    
     # define the raw science data to process, only faint star in filter 3D
-    l1_filelist = ["cgi_0200001001001001001_20260319t1108000_l1_.fits", "cgi_0200001001001001001_20260319t1108010_l1_.fits"]
+    l1_filelist = ["cgi_0200001001001001001_20260331T1543360_l1_.fits", "cgi_0200001001001001001_20260331T1543370_l1_.fits", "cgi_0200001001001001001_20260331T1543390_l1_.fits"]
     l1_data_filelist=[os.path.join(l1_datadir, file) for file in l1_filelist]
- 
-    # since it is taken from ND simulations the vistype has to be changed
-    for file in l1_data_filelist:
-        with fits.open(file) as hdul:
-            pri_hdr = hdul[0].header.copy()
-            pri_hdr["VISTYPE"] = "CGIVST_CAL_SPEC_LINESPREAD"
-            hdul[0].header = pri_hdr
-            
-            output_path = os.path.join(l1_inputdir, os.path.basename(file))
-            hdul.writeto(output_path, overwrite=True)
-    
-    saved_l1_files = [os.path.join(l1_inputdir, file) for file in l1_filelist]
-    assert len(saved_l1_files) == 2, f'wrong saved L1 files found in {l1_inputdir}!'
     
     ####### Run the walker on some test_data
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(saved_l1_files, "", l2b_outputdir)
+        walker.walk_corgidrp(l1_data_filelist, "", l2b_outputdir)
 
     ####### Load in the output data. It should be the latest line spread calibration file produced.
     linespreadcal_file = glob.glob(os.path.join(l2b_outputdir, '*lsf_cal*.fits'))[0]
