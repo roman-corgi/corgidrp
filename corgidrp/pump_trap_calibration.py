@@ -2380,7 +2380,8 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
                 # Check if mean of a central 300x300 region is 0 (since read noise has mean of 0 and bias has already been subtracted).  If so, reject since it's a legacy frame.
                 # Don't reject it at beginning of recipe, though, since they may be used once TPUMP CAR is finalized.
                 #if np.abs(frame_data[0:1027]).max()==0:
-                central_mean_value = np.mean(frame_data[frame_data.shape[0]/2-150:frame_data.shape[0]/2+150, frame_data.shape[1]/2-150:frame_data.shape[1]/2+150])
+                halfway_row, halfway_col = int(frame_data.shape[0]/2), int(frame_data.shape[1]/2)
+                central_mean_value = np.mean(frame_data[halfway_row-150:halfway_row+150, halfway_col-150:halfway_col+150])
                 if np.abs(central_mean_value) < 10: 
                     continue #skip these frames; even if some legacy ones made it through, they wouldn't actually have any dipoles in them to find
                 timings.append(phase_time)   
