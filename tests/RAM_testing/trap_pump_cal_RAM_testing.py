@@ -253,8 +253,8 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
             if step['name'] == "calibrate_trap_pump":
                 step['keywords'] = {}
                 step['keywords']['bin_size'] = None
-        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
-        recipe[1]['inputs'] = output_filepaths
+        # output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+        recipe[1]['inputs'] = recipe[0]['inputs'] #output_filepaths XXX
         #only run the trap-pump step, part 2 of recipe chain, simply for RAM testing, not accuracy of results
         walker.run_recipe(recipe[1], save_recipe_file=True)
 
