@@ -259,6 +259,10 @@ def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
+    # Calculate MJD times dynamically from the timestamp
+    mjd_start = Time(dt_str).mjd
+    exthdr['MJDSRT'] = mjd_start
+    exthdr['MJDEND'] = mjd_start + exthdr['EXPTIME'] / 86400.0
     prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
 
     return prihdr, exthdr
@@ -320,6 +324,10 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
+    # Calculate MJD times dynamically from the timestamp
+    mjd_start = Time(dt_str).mjd
+    exthdr['MJDSRT'] = mjd_start
+    exthdr['MJDEND'] = mjd_start + exthdr['EXPTIME'] / 86400.0
 
     prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
     
