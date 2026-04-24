@@ -268,6 +268,9 @@ class CalDB:
             entry (corgidrp.data.Image subclass): calibration frame to add to the database
             to_disk (bool): True by default, will update DB from disk before adding entry and saving it back to disk
         """
+        if not os.path.exists(entry.filepath):
+            raise FileNotFoundError("Calibration file {0} does not exist on disk; save it before calling create_entry.".format(entry.filepath))
+
         new_row, row_dict = self._get_values_from_entry(entry)
 
         # update database from disk in case anything changed

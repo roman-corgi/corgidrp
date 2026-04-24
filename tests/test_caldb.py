@@ -150,6 +150,25 @@ def test_get_calib():
 
 
 
+def test_create_entry_file_not_on_disk():
+    """
+    Tests that create_entry raises FileNotFoundError when the file does not exist on disk.
+    """
+    if os.path.exists(testcaldb_filepath):
+        os.remove(testcaldb_filepath)
+    testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
+
+    # Point the dark at a path that doesn't exist
+    fake_dark = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
+    fake_dark.filedir = calibdir
+    fake_dark.filename = "nonexistent_dark.fits"
+
+    with pytest.raises(FileNotFoundError):
+        testcaldb.create_entry(fake_dark)
+
+    os.remove(testcaldb_filepath)
+
+
 def test_get_calib_missing_file():
     """
     Tests that get_calib falls back to the next best calibration when the
