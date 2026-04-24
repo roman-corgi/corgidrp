@@ -159,7 +159,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image', detector_regions=None, pct_oversat_lim=20):
+                       mode='image', detector_regions=None, pct_oversat_lim=20, dataset_copy=True):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -202,6 +202,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
             and will be discarded. Frame saturations equal to this argument are not discarded.
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+            the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
 
     Returns:
         corgidrp.data.Dataset:
@@ -213,8 +215,10 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     if detector_regions is None:
         detector_regions = detector_areas
 
-    # you should make a copy the dataset to start
-    initial_dataset = input_dataset.copy()
+    if dataset_copy:
+        # you should make a copy the dataset to start
+        initial_dataset = input_dataset.copy()
+    else: initial_dataset = input_dataset
 
     # Calculate the full well capacity for every frame in the dataset
     if k_gain is None:
@@ -248,7 +252,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         frame.ext_hdr['SAT_DN'] = initial_sat_fwcs[i]
 
     # Remove images that are too saturated to remove cosmics in a timely manner
-    crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim)
+    crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim, dataset_copy=dataset_copy)
     crmasked_cube = crmasked_dataset.all_data
 
     sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])
@@ -335,7 +339,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
 
     return linearized_dataset
 
-def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20):
+def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20, dataset_copy=True):
     """
     Discards images from the dataset that have more than a frac_frame_sat_limit fraction of values
     over the sat_thresh limit. Also removes corresponding fwc elements from sat_fwc array.
@@ -349,12 +353,17 @@ def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20):
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
             and will be discarded, Frame saturations equal to this argument are not discarded.
-
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+            the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
+    
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
         pruned_sat_fwcs (list): input sat_fwcs with corresponding saturated frame fwcs removed
     """
-    pruned_dataset = input_dataset.copy()
+    if dataset_copy:
+        pruned_dataset = input_dataset.copy()
+    else:
+        pruned_dataset = input_dataset
     reject_flag = np.zeros(len(input_dataset))
     reject_reason = {}
 
@@ -411,7 +420,7 @@ def update_to_l2a(input_dataset):
     for frame in updated_dataset:
         # Merge_headers is called here to delete a subset of keywords that should not be carried past L1
         
-        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(data.Dataset([frame]))
+        pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(data.Dataset([frame]), invalid_keywords=[])
         frame.pri_hdr = pri_hdr
         frame.ext_hdr = ext_hdr
         frame.err_hdr = err_hdr
@@ -427,3 +436,64 @@ def update_to_l2a(input_dataset):
     updated_dataset.update_after_processing_step(history_msg)
 
     return updated_dataset
+
+def discard_setup_frames(input_dataset, keywords_to_check=None):
+    """
+    Discard frames that are setup/engineering frames based on header keywords.
+
+    Checks each frame's extension header for the specified keywords. If any
+    keyword has a value of 1, the frame is considered a setup frame and is
+    discarded. This is used to filter out acquisition frames (ISACQ),
+    speckle balance frames (SPBAL), and HOWFSC frames (ISHOWFSC).
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images
+        keywords_to_check (list of str): FITS header keywords to check.
+            Frames where any of these keywords equals 1 will be discarded.
+            If None or empty, no frames are discarded.
+
+    Returns:
+        corgidrp.data.Dataset: dataset with setup frames removed
+    """
+    pruned_dataset = input_dataset.copy()
+
+    if not keywords_to_check:
+        history_msg = "No setup frame keywords to check; all frames kept"
+        pruned_dataset.update_after_processing_step(history_msg)
+        return pruned_dataset
+
+    discard_indices = []
+    discard_reasons = {}
+
+    for i, frame in enumerate(pruned_dataset.frames):
+        matched_keywords = []
+        for kw in keywords_to_check:
+            if frame.ext_hdr.get(kw, 0) == 1:
+                matched_keywords.append(kw)
+        if matched_keywords:
+            discard_indices.append(i)
+            discard_reasons[i] = ", ".join(matched_keywords)
+
+    if len(discard_indices) == len(pruned_dataset):
+        raise ValueError("All frames are setup frames. Unable to continue.")
+
+    if len(discard_indices) == 0:
+        history_msg = "Checked for setup frames ({0}); none found".format(
+            ", ".join(keywords_to_check))
+        pruned_dataset.update_after_processing_step(history_msg)
+        return pruned_dataset
+
+    keep_indices = [i for i in range(len(pruned_dataset)) if i not in discard_indices]
+    kept_frames = pruned_dataset.frames[keep_indices]
+    pruned_dataset = data.Dataset(kept_frames)
+
+    history_msg = "Discarded {0} setup frames (checked: {1}):".format(
+        len(discard_indices), ", ".join(keywords_to_check))
+    for idx in discard_indices:
+        history_msg += " {0} ({1}),".format(
+            input_dataset.frames[idx].filename, discard_reasons[idx])
+    history_msg = history_msg[:-1]  # remove trailing comma
+
+    pruned_dataset.update_after_processing_step(history_msg)
+
+    return pruned_dataset

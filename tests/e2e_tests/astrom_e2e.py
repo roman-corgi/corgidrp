@@ -223,7 +223,18 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    # Make sure BPM includes a dark(-like) frame
+    bp_dark_pri, bp_dark_ext, _, _ = mocks.create_default_calibration_product_headers()
+    bp_dark_ext['EXPTIME'] = float(mock_input_dataset.frames[0].ext_hdr.get('EXPTIME', 0.0))
+    bp_dark_ext['EMGAIN_C'] = float(mock_input_dataset.frames[0].ext_hdr.get('EMGAIN_C', 1.0))
+    bp_dark_ext['DRPNFILE'] = 1
+    bp_dark = data.Dark(np.zeros_like(bp_dat, dtype=float), pri_hdr=bp_dark_pri, ext_hdr=bp_dark_ext,
+                        input_dataset=mock_input_dataset,
+                        err=np.zeros((1,) + bp_dat.shape, dtype=float),
+                        dq=np.zeros(bp_dat.shape, dtype='uint16'),
+                        err_hdr=fits.Header())
+    bp_map_inputs = data.Dataset([bp_dark, flat])
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     this_caldb.create_entry(bp_map)
 
@@ -307,7 +318,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

@@ -1,0 +1,33 @@
+{
+    "name": "l2b_spec_flux",
+    "template": true,
+    "drpconfig": { "track_individual_errors": false },
+    "inputs": [],
+    "outputdir": "",
+    "steps": [
+      {
+        "name": "divide_by_exptime"
+      },
+      {
+        "name": "determine_wave_zeropoint",
+        "calibs": {
+          "SpecFilterOffset": "AUTOMATIC"
+        }
+      },
+      {
+        "name": "add_wavelength_map",
+        "calibs": {
+          "DispersionModel": "AUTOMATIC"
+        }
+      },
+      {
+        "name": "extract_spec"
+      },
+      {
+        "name": "spec_fluxcal"
+      },
+      {
+        "name": "save"
+      }
+    ]
+  }

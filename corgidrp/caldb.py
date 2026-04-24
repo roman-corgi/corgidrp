@@ -8,9 +8,9 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.spec as spec
+import corgidrp.flat as flat
 
 import astropy.time as time
-from astropy.io import fits
 from astropy.table import Table
 import datetime
 
@@ -31,7 +31,10 @@ column_dtypes = {
     "EXCAMT": float,
     "CFAMNAME": str,
     "DPAMNAME": str,
-    "FPAMNAME": str
+    "FPAMNAME": str,
+    "FSAMNAME": str,
+    "SPAMNAME": str,
+    "PC_STAT": str
 }
 
 default_values = {
@@ -48,20 +51,26 @@ labels = {data.Dark: "Dark",
           data.BadPixelMap: "BadPixelMap",
           data.DetectorNoiseMaps: "DetectorNoiseMaps",
           data.FlatField : "FlatField",
+          data.FlatFieldPOL0 : "FlatField",
+          data.FlatFieldPOL45 : "FlatField",
           data.DetectorParams : "DetectorParams",
           data.AstrometricCalibration : "AstrometricCalibration",
           data.TrapCalibration : "TrapCalibration",
           data.FluxcalFactor : "FluxcalFactor",
+          data.FluxcalFactorPOL0 : "FluxcalFactor",
+          data.FluxcalFactorPOL45 : "FluxcalFactor",
           data.FpamFsamCal : "FpamFsamCal",
           data.CoreThroughputCalibration: "CoreThroughputCalibration",
           data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
+          data.NDSpectroscopy: "NDSpectroscopy",
           data.SpectroscopyCentroidPSF: "SpectroscopyCentroidPSF",
           data.DispersionModel: "DispersionModel",
           data.MuellerMatrix: "MuellerMatrix",
           data.NDMuellerMatrix: "NDMuellerMatrix",
           data.SpecFilterOffset: "SpecFilterOffset",
           data.SpecFluxCal: "SpecFluxCal",
-          data.SlitTransmission: "SlitTransmission"
+          data.SlitTransmission: "SlitTransmission",
+          data.LineSpread: "LineSpread"
           }
 
 class CalDB:
@@ -107,11 +116,15 @@ class CalDB:
         """
         Load/update db from filepath
         """
-        self._db = pd.read_csv(self.filepath, dtype=column_dtypes)
+        self._db = pd.read_csv(self.filepath)
         # Scan the database for any columns that might be missing, fill in missing columns with default values if necessary
         for col in column_names:
             if col not in self._db.columns:
                 self._db[col] = default_values[column_dtypes[col]]
+        # fill any NA values with defaults and enforce column types
+        for col, dtype in column_dtypes.items():
+            if col in self._db.columns:
+                self._db[col] = self._db[col].fillna(default_values[dtype]).astype(dtype)
 
     def save(self):
         """
@@ -348,41 +361,121 @@ class CalDB:
             calib_filepath = options.iloc[result_index, 0]
 
         elif dtype_label in ["Dark"]:
-            # general selection criteria for 2D image frames. Can use different selection criteria for different dtypes
+            # match on exposure time and EM gain
             options = self.filter_calib(calibdf, "EXPTIME", frame_dict["EXPTIME"], err_if_none=True)
+            options = self.filter_calib(options, "EMGAIN_C", frame_dict["EMGAIN_C"], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
-        elif dtype_label in ['NDFilterSweetSpot']:
-            # filter by color filter
-            # filter_calib() is configured to not throw an error if no matches are found, so that
-            # no existing e2e tests breaks, if in the future we want to strictly only use the calibration
-            # files with matching headers, then set err_if_none to True
-            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
+            # for analog frames, exclude PC master darks. for PC frames, prefer them
+            is_pc = frame.ext_hdr.get('ISPC', 0)
+            if is_pc:
+                # prefer PC master dark if available, otherwise fall back to any matching dark
+                pc_options = options[options['PC_STAT'] == 'photon-counted master dark']
+                if len(pc_options) > 0:
+                    options = pc_options
+            else:
+                # analog frame: do not select a matching PC master dark
+                options = options[options['PC_STAT'] != 'photon-counted master dark']
+                if len(options) == 0:
+                    raise ValueError(
+                        "No valid analog Dark calibration found in caldb located at {0} "
+                        "(no analog master darks with EXPTIME={1} and EMGAIN_C={2}).".format(
+                            self.filepath, frame_dict["EXPTIME"], frame_dict["EMGAIN_C"]
+                        )
+                    )
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['FluxcalFactor']:
             # filter by color filter and DPAM
-            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
-            if frame_dict['DPAMNAME'] in ['POL0', 'POL45']:
-                options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
+            # FluxcalFactorPOL0/FluxcalFactorPOL45 force the DPAMNAME for lookup
+            if dtype == data.FluxcalFactorPOL0:
+                dpamname = "POL0"
+            elif dtype == data.FluxcalFactorPOL45:
+                dpamname = "POL45"
+            else:
+                dpamname = frame_dict['DPAMNAME']
+            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "DPAMNAME", dpamname, err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
+            # FluxcalFactorPOL0/FluxcalFactorPOL45 are looked up as FluxcalFactor entries on disk
+            dtype = data.FluxcalFactor
         elif dtype_label in ['CoreThroughputCalibration']:
             # filter by focal plane mask
-            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=False)
+            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
-        elif dtype_label in ['FlatField'] and frame_dict['DPAMNAME'] in ['POL0', 'POL45']:
-            # filter by DPAM
-            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
+        elif dtype_label in ['FlatField']:
+            # DPAM: IMAGING, POL0, or POL45 only. All other DPAM settings, including PUPIL, use flat = ones
+            # CFAM: spectroscopy bands (2F/3F and their sub-filters) and CLEAR use flat = ones
+            #       all other non-imaging CFAM positions should use a custom recipe, not auto-selection
+            # Sub-bands 1A/1B/1C and 4A/4B/4C are mapped to their corresponding broadband (1F, 4F)
+            # FPAM: FPM-in data uses the open-substrate flat for the appropriate band pair (OPEN_12 or OPEN_34)
+            spectroscopy_cfams = {'2F', '3F', '2A', '2B', '2C', '3A', '3B', '3C', '3D', '3E', '3G'}
+            imaging_cfams = {'1F', '1A', '1B', '1C', '4F', '4A', '4B', '4C'}
+            cfam_subband_map = {'1A': '1F', '1B': '1F', '1C': '1F',
+                                '4A': '4F', '4B': '4F', '4C': '4F'}
+            ones_flat_cfams = spectroscopy_cfams | {'CLEAR'}
+            if frame_dict['DPAMNAME'] not in ['IMAGING', 'POL0', 'POL45'] or frame_dict['CFAMNAME'] in ones_flat_cfams:
+                # Use an all-ones flat file identified with FPAMNAME='ONES'
+                options = calibdf[calibdf["FPAMNAME"] == "ONES"]
+                if len(options) == 0:
+                    raise ValueError("No ones-flat FlatField calibration found in caldb at {0}".format(self.filepath))
+                # Any ones-flat is equivalent, choose the most recently created
+                result_index = options["MJD"].argmax()
+            elif frame_dict['CFAMNAME'] not in imaging_cfams:
+                raise ValueError(
+                    "No flat defined for CFAMNAME={0}, use a custom recipe".format(frame_dict['CFAMNAME'])
+                )
+            else:
+                # sub-bands map to their corresponding broadband flat
+                cfam_lookup = cfam_subband_map.get(frame_dict['CFAMNAME'], frame_dict['CFAMNAME'])
+                options = self.filter_calib(calibdf, "CFAMNAME", cfam_lookup, err_if_none=True)
+                options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+
+                # FPAM should be either OPEN_12 for bands 1&2, or OPEN_34 for bands 3&4
+                options = options[options["FPAMNAME"].str.startswith("OPEN")]
+                if len(options) == 0:
+                    raise ValueError("No FlatField with OPEN FPAM found in caldb at {0} for CFAMNAME={1}, DPAMNAME={2}".format(
+                        self.filepath, cfam_lookup, frame_dict['DPAMNAME']))
+                result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+            # FlatFieldPOL0/FlatFieldPOL45 are looked up as FlatField entries on disk
+            dtype = data.FlatField
+        elif dtype_label in ['MuellerMatrix']:
+            # filter by color filter
+            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['SlitTransmission']:
+            # filter by slit mask (FSAM), prism (DPAM), and color filter (CFAM)
+            options = self.filter_calib(calibdf, "FSAMNAME", frame_dict['FSAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['LineSpread']:
+            # filter by prism (DPAM) and color filter (CFAM)
+            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['SpectroscopyCentroidPSF']:
+            # filter by prism (DPAM) and color filter (CFAM)
+            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -414,7 +507,10 @@ class CalDB:
                     continue
 
                 filepath = os.path.join(dirpath, filename)
-                frame = data.autoload(filepath)
+                try:
+                    frame = data.autoload(filepath)
+                except Exception:
+                    continue
 
                 # check what class it has been loaded as. only save frames that fall into calibration classes
                 if frame.__class__ in labels:
@@ -429,7 +525,7 @@ class CalDB:
         for calib_frame in calib_frames:
             self.create_entry(calib_frame, to_disk=to_disk)
 
-    def filter_calib(self, calibdf, col_name, value, err_if_none=False):
+    def filter_calib(self, calibdf, col_name, value, err_if_none=True):
         '''
         Takes in a calibration dataframe, filters them so that
         only the files with matching header values are returned. If none is found,
@@ -503,7 +599,7 @@ def initialize():
         dt = dt_time.to_datetime()
         dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
         ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-        disp_filename = f"cgi_{prihdr['VISITID']}_{ftime}_l2b.fits"
+        disp_filename = f"cgi_{prihdr['VISITID']}_{ftime}_dpm_cal.fits"
         prihdr['FILETIME'] = dt_str
         prihdr['FILENAME'] = disp_filename
         exthdr['DATETIME'] = dt_str
@@ -533,6 +629,21 @@ def initialize():
         
         disp_model = data.DispersionModel(disp_dict, pri_hdr = prihdr, ext_hdr = exthdr)
         disp_model.save(output_dir, disp_model.filename)
+        rescan_needed = True
+
+    # Add default ones-flat FlatField calibration file
+    fixed_ones_flat_filename = "cgi_0000000000000000000_20000101t0000000_flt_cal.fits"
+    fixed_ones_flat_filepath = os.path.join(corgidrp.default_cal_dir, fixed_ones_flat_filename)
+
+    if not os.path.exists(fixed_ones_flat_filepath):
+        ones_flat_dataset = mocks.create_flatfield_dummy(numfiles=1)
+        ones_flat_dataset[0].data[:] = 1.0
+        ones_flat = flat.create_flatfield(ones_flat_dataset)
+        ones_flat.ext_hdr["FPAMNAME"] = "ONES"
+        # Write to a fixed CGI-formatted filename so there's no need to search for the latest ones-flat
+        ones_flat.filename = fixed_ones_flat_filename
+        ones_flat.pri_hdr["FILENAME"] = fixed_ones_flat_filename
+        ones_flat.save(filedir=corgidrp.default_cal_dir, filename=fixed_ones_flat_filename)
         rescan_needed = True
 
     if rescan_needed:

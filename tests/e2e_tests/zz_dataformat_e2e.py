@@ -308,6 +308,15 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                     if skip_hdu_structure_check:
                         if 'NAXIS' in name.upper():
                             continue
+                    # Skip keywords that vary with processing history
+                    if name.startswith("FILE") and len(name) > 4 and name[4:].isdigit():
+                        continue
+                    if name.startswith("FILE_") and len(name) > 5 and name[5:].isdigit():
+                        continue
+                    if name.startswith("HIERARCH FILE") and len(name) > 13 and name[13:].isdigit():
+                        continue
+                    if name.startswith("HIERARCH FILE_") and len(name) > 14 and name[14:].isdigit():
+                        continue
                     # Skip table header/delimiter rows
                     if name and dtype and name != 'Keyword' and name != '=' * len(name) and name != '-' * len(name) and not name.isdigit():
                         # Store keyword name, datatype, and HDU
@@ -950,12 +959,14 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Flux Calibration ===")
-    fluxcal_data_files = glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits"))
+    fluxcal_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_fluxcal_e2e", "l2b_results", "*_abf_cal.fits"))
+    #fluxcal_data_files = glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits"))
     fluxcal_data_file = max(fluxcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(fluxcal_data_file, 'abf_cal')
     
-    generate_fits_excel_documentation(fluxcal_data_file, os.path.join(e2eoutput_path, "flux_cal_e2e", "abf_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(fluxcal_data_file, os.path.join(e2eoutput_path, "l1_to_fluxcal_e2e", "l2b_results", "abf_cal_documentation.xlsx"))
+    #generate_fits_excel_documentation(fluxcal_data_file, os.path.join(e2eoutput_path, "flux_cal_e2e", "abf_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1067,6 +1078,62 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         compare_docs(ref_doc_contents, doc_contents, data_product_name="ND Filter")
+
+@pytest.mark.e2e
+def test_ndfilter_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing ND Filter Spectroscopy ===")
+    nds_data_files = glob.glob(os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "*_nds_cal.fits"))
+    nds_data_file = max(nds_data_files, key=os.path.getmtime)
+
+    validate_cgi_filename(nds_data_file, 'nds_cal')
+
+    generate_fits_excel_documentation(nds_data_file, os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "nds_cal_documentation.xlsx"))
+
+    doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(nds_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "ndfilter_spec.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "ndfilter_spec.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="ND Filter Spectroscopy")
+
+@pytest.mark.e2e
+def test_specfluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing Spectroscopy Flux Calibration ===")
+    sfl_data_files = glob.glob(os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "*_sfl_cal.fits"))
+    sfl_data_file = max(sfl_data_files, key=os.path.getmtime)
+
+    validate_cgi_filename(sfl_data_file, 'sfl_cal')
+
+    generate_fits_excel_documentation(sfl_data_file, os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "sfl_cal_documentation.xlsx"))
+
+    doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(sfl_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "fluxcal_spec.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "fluxcal_spec.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Spectroscopy Flux Calibration")
 
 @pytest.mark.e2e
 def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -1442,6 +1509,9 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
                     # Skip FILE* keywords (FILE0, FILE1, etc.)
                     if keyword.startswith('FILE') and len(keyword) > 4 and keyword[4:].isdigit():
                         continue
+                    # Also skip underscore keywords (FILE_1, FILE_2, etc.)
+                    if keyword.startswith('FILE_') and keyword[5:].isdigit():
+                        continue
                     # case of a file number greater than 9999 (possible for noisemap cal)
                     if keyword.startswith('HIERARCH FILE') and len(keyword) > 13 and keyword[13:].isdigit():
                         continue
@@ -1561,7 +1631,7 @@ if __name__ == "__main__":
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
     # e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2' #'/Users/kevinludwick/Documents/ssc_tvac_test/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP E2E Test Files v2/E2E_Test_Data'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
@@ -1572,7 +1642,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-
+    
     test_header_crossreference_e2e(e2edata_dir, outputdir)
     test_astrom_dataformat_e2e(e2edata_dir, outputdir)
     test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
@@ -1582,6 +1652,7 @@ if __name__ == "__main__":
     test_polflat_dataformat_e2e(e2edata_dir, outputdir)
     test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
     test_fluxcal_pol_dataformat_e2e(e2edata_dir, outputdir)
+    test_specfluxcal_dataformat_e2e(e2edata_dir, outputdir)
     test_kgain_dataformat_e2e(e2edata_dir, outputdir)
     test_l2a_dataformat_e2e(e2edata_dir, outputdir)
     test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
@@ -1596,6 +1667,7 @@ if __name__ == "__main__":
     test_l4_spec_noncoron_dataformat_e2e(e2edata_dir, outputdir)
     test_mueller_matrix_dataformat_e2e(e2edata_dir, outputdir)
     test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
+    test_ndfilter_spec_dataformat_e2e(e2edata_dir, outputdir)
     test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
     test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
     test_nd_mueller_dataformat_e2e(e2edata_dir, outputdir)

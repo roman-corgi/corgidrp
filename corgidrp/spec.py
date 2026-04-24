@@ -12,7 +12,6 @@ import astropy.modeling.models as models
 import astropy.modeling.fitting as fitting
 import corgidrp
 from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve, get_calspec_file
-import corgidrp
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     """
@@ -1317,9 +1316,9 @@ def star_pos_spec(
         except:
             raise ValueError(f'WAVLEN0 keyword missing in L3 frame.')
         
-        fsmlos = img.ext_hdr['FSMLOS']
+        vistype = img.pri_hdr['VISTYPE']
         # shift of star location only for coronagraphic observations
-        if fsmlos == "1":
+        if vistype != 'CGIVST_CAL_SPEC_TGTREF':
             # Conversion from EXCAM pixels to milliarsec
             plate_scale_mas = img.ext_hdr['PLTSCALE']
             # Conversion from radians to milliarsec (mas/rad)
