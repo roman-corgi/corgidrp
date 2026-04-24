@@ -528,6 +528,7 @@ class CalDB:
         for filepath in options["Filepath"]:
             if os.path.exists(filepath):
                 return filepath
+            print("Calibration file {0} no longer exists on disk, trying next best option.".format(filepath))
         raise ValueError(
             "No valid {0} calibration in caldb located at {1}: "
             "all matching entries reference files that no longer exist on disk".format(
