@@ -216,6 +216,15 @@ def test_bias_subtracted():
 
     pass
 
+def test_recipe_propagated():
+    """RECIPE keyword from input dataset is written to output ext_hdr"""
+    dset = dataset.copy()
+    recipe_val = '{"name": "test_recipe"}'
+    for fr in dset.frames:
+        fr.ext_hdr['RECIPE'] = recipe_val
+    new_dark = build_synthesized_dark(dset, noise_maps)
+    assert new_dark.ext_hdr['RECIPE'] == recipe_val
+
 def test_invalid_D_range():
     """Invalid inputs caught as expected"""
     for perr in [-1*np.ones_like(Dd)]:
