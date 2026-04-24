@@ -150,6 +150,52 @@ def test_get_calib():
 
 
 
+def test_get_calib_missing_file():
+    """
+    Tests that get_calib falls back to the next best calibration when the
+    best-matching file no longer exists on disk, rather than crashing.
+    """
+    if os.path.exists(testcaldb_filepath):
+        os.remove(testcaldb_filepath)
+    testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
+
+    # Create two darks using the same headers so EXPTIME/EMGAIN_C match the reference frame
+    dark1 = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
+    dark1.save(filedir=calibdir, filename="mockdark_miss1.fits")
+    dark2 = data.Dark(dark_dataset[1].data, dark_dataset[1].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
+    dark2.save(filedir=calibdir, filename="mockdark_miss2.fits")
+
+    testcaldb.create_entry(dark1)
+    testcaldb.create_entry(dark2)
+
+    # Manually set MJDs so dark1 is closer to the reference frame than dark2
+    ref_frame = dark_dataset[2]
+    ref_mjd = float(ref_frame.ext_hdr['MJDSRT'])
+    dark1_abs = os.path.abspath(dark1.filepath)
+    dark2_abs = os.path.abspath(dark2.filepath)
+    testcaldb._db.loc[testcaldb._db['Filepath'] == dark1_abs, 'MJD'] = ref_mjd + 1.0
+    testcaldb._db.loc[testcaldb._db['Filepath'] == dark2_abs, 'MJD'] = ref_mjd + 100.0
+    testcaldb.save()
+
+    # With both files present, dark1 is selected (closest in time)
+    result = testcaldb.get_calib(ref_frame, data.Dark)
+    assert result.filepath == dark1_abs
+
+    # Remove dark1 from disk to simulate user moving/deleting the file
+    os.remove(dark1_abs)
+
+    # get_calib should fall back to dark2 without crashing
+    result = testcaldb.get_calib(ref_frame, data.Dark)
+    assert result.filepath == dark2_abs
+
+    # Remove dark2 too; now all matching calibrations are gone
+    os.remove(dark2_abs)
+    with pytest.raises(ValueError):
+        testcaldb.get_calib(ref_frame, data.Dark)
+
+    os.remove(testcaldb_filepath)
+
+
 def test_caldb_scan():
     """
     Tests ability to scan a folder to look for calibration files
