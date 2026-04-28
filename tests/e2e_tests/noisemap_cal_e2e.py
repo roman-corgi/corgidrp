@@ -467,8 +467,11 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
 
     # create synthesized master dark in output folder (for inspection and for having a sample synthesized dark with all the right headers)
     mock_dataset = mocks.create_prescan_files() # dummy dataset with an EM gain and exposure time for creating synthesized dark
+    for frame in mock_dataset.frames:
+        frame.ext_hdr['RECIPE'] = "{ 'name' : 'test'}"
     master_dark = build_synthesized_dark(mock_dataset, corgidrp_noisemap)
     master_dark.save(filedir=calibrations_dir)
+    assert master_dark.ext_hdr['RECIPE'] == "{ 'name' : 'test'}"
     
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
         # corgi_dat = detector.imaging_slice('SCI', corgidrp_noisemap.__dict__[noise_ext])
