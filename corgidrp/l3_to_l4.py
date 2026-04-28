@@ -1813,37 +1813,24 @@ def spec_psf_subtraction(input_dataset):
     return out_dataset
 
 def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
-    """
+    '''
     Calculates spectroscopy PSF subtraction algorithmic throughput
     
     Args:
-        orig_frame:  Science data frame from spec_psf_subtraction
-        shifted_ref: Shifted reference frame from spec_psf_subtraction
-        start_row:   Start row location of ref star PSF
-        end_row:     End row location of ref star PSF
+        orig_frame  :  Science data frame from spec_psf_subtraction
+        shifted_ref :  Shifted reference frame from spec_psf_subtraction
+        start_row   :  Start row location of ref star PSF
+        end_row     :  End row location of ref star PSF
 
     Returns:
         Algorithmic throughput as a function of wavelength.
-    """
+    '''
 
-    def gaussian_1d(x, x0, sigma, amplitude):
-        """
-        Helper function to create a 1D Gaussian.
-        
-        Args:
-            x         : coordinate grid
-            x0        : center position
-            sigma     : standard deviation (pixels)
-            amplitude : peak value
-
-        Returns:
-            1-D Gaussian function
-        """
-        return amplitude * np.exp(-((x - x0)**2) / (2 * sigma**2))
-    
+    amplitude = 0.02; sigma = 1.5; x0 = 48
     #Inject fake gaussian to dataset copy to determine throughput
     x = np.arange(42,54)
-    orig_frame[:,42:54] = orig_frame[:,42:54] + gaussian_1d(x, x0=48, sigma=1.5, amplitude=0.02)
+    gaussian_planet = amplitude * np.exp(-((x - x0)**2) / (2 * sigma**2))
+    orig_frame[:,42:54] = orig_frame[:,42:54] + gaussian_planet
     inj_planet = np.ones(orig_frame.shape[0]) * np.max(orig_frame[:,42:54],axis=1) #np.trapz(gaussian_1d(x, x0=51, sigma=1.5, amplitude=0.02))
     
     frame_w_injectedplanet = np.copy(orig_frame)
@@ -1873,7 +1860,7 @@ def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
     orig_frame[:,42:54] = frame_w_injectedplanet[:,42:54]
     postimg_signal = np.max(orig_frame[:,42:54],axis=1) #np.trapz(orig_frame[:,42:54],x)
         
-    orig_frame[:,42:54] = orig_frame[:,42:54] - gaussian_1d(x, x0=48, sigma=1.5, amplitude=0.02)
+    orig_frame[:,42:54] = orig_frame[:,42:54] - gaussian_planet
     speckle_std = np.nanstd(orig_frame[:,42:54],axis=1)
 
     through = (postimg_signal-speckle_std)/inj_planet
