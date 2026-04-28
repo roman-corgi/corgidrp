@@ -1817,10 +1817,10 @@ def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
     Calculates spectroscopy PSF subtraction algorithmic throughput.
     
     Args:
-        orig_frame  (individual frame) :  Science data frame from spec_psf_subtraction.
-        shifted_ref (individual frame) :  Shifted reference frame from spec_psf_subtraction.
-        start_row (int) :  Start row location of ref star PSF.
-        end_row   (int) :  End row location of ref star PSF.
+        orig_frame (corgidrp.data.Image): Science data frame from spec_psf_subtraction.
+        shifted_ref (corgidrp.data.Image): Shifted reference frame from spec_psf_subtraction.
+        start_row (int, optional): Start row location of ref star PSF.
+        end_row (int, optional): End row location of ref star PSF.
 
     Returns:
         Algorithmic throughput as a function of wavelength.
