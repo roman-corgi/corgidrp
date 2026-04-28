@@ -1814,13 +1814,13 @@ def spec_psf_subtraction(input_dataset):
 
 def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
     '''
-    Calculates spectroscopy PSF subtraction algorithmic throughput
+    Calculates spectroscopy PSF subtraction algorithmic throughput.
     
     Args:
-        orig_frame  :  Science data frame from spec_psf_subtraction
-        shifted_ref :  Shifted reference frame from spec_psf_subtraction
-        start_row   :  Start row location of ref star PSF
-        end_row     :  End row location of ref star PSF
+        orig_frame  (individual frame) :  Science data frame from spec_psf_subtraction.
+        shifted_ref (individual frame) :  Shifted reference frame from spec_psf_subtraction.
+        start_row (int) :  Start row location of ref star PSF.
+        end_row   (int) :  End row location of ref star PSF.
 
     Returns:
         Algorithmic throughput as a function of wavelength.
