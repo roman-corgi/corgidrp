@@ -1830,7 +1830,7 @@ def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
         """
         Helper function to create a 1D Gaussian.
         
-        Parameters:
+        Args:
             x         : coordinate grid
             x0        : center position
             sigma     : standard deviation (pixels)
