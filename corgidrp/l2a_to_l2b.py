@@ -68,13 +68,16 @@ def dark_subtraction(input_dataset, noisemaps=None, dark=None, detector_regions=
 
     Perform dark subtraction of a dataset using the corresponding dark frame.  The dark frame can be either a synthesized master dark (made for any given EM gain and exposure time)
     or for a traditional master dark (average of darks taken at the EM gain and exposure time of the corresponding observation).  The function gives preference for the traditional master dark if provided.
-    If the frames are photon-counted (PC) and a PC dark is provided, the subtraction will not happen here but instead in the PC function pc_mean(), later in the pipeline.  
+    If the frames are photon-counted (PC) and a PC dark is provided, the subtraction will not happen here but instead in the PC function pc_mean(), later in the pipeline.
     The master dark is also saved if it is of the synthesized type after it is built.
+    When noisemaps is provided (and dark is not), the dataset may contain frames with multiple distinct
+    EMGAIN and exposure time configurations; a separate synthesized dark is built for each configuration.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need dark subtraction (L2a-level)
-        noisemaps (corgidrp.data.DetectorNoiseMaps): If not None and if dark input not provided, a synthesized master dark is created using this DetectorNoiseMaps object 
-            for the EM gain and exposure time used in the frames in input_dataset.
+        noisemaps (corgidrp.data.DetectorNoiseMaps): If not None and if dark input not provided, a synthesized master dark is created using this DetectorNoiseMaps object
+            for the EM gain and exposure time used in the frames in input_dataset.  Multiple EMGAIN/EXPTIME
+            configurations within input_dataset are supported in this mode.
         dark (corgidrp.data.Dark or corgidrp.data.DetectorNoiseMaps): If dark is of the corgidrp.data.Dark type, dark subtraction will be done with this input whether noisemaps is specified or not.
         detector_regions: (dict):  A dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         outputdir (string): Filepath for output directory where to save the master dark if it is a synthesized master dark.  Defaults to current directory.
@@ -87,7 +90,18 @@ def dark_subtraction(input_dataset, noisemaps=None, dark=None, detector_regions=
     if input_dataset[0].ext_hdr['BUNIT'] != "detected electron":
         if input_dataset[0].ext_hdr['ISPC'] == 0: #i.e., analog
             raise ValueError ("input dataset must have unit 'detected electron' for dark subtraction, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
-    _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+    sub_datasets, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+
+    # When synthesizing darks from noisemaps, multiple detector configurations are supported:
+    # split by configuration, process each subset, and recombine.
+    if type(noisemaps) is data.DetectorNoiseMaps and dark is None and len(unique_vals) > 1:
+        output_frames = []
+        for sub_dataset in sub_datasets:
+            sub_result = dark_subtraction(sub_dataset, noisemaps=noisemaps,
+                                          detector_regions=detector_regions, outputdir=outputdir)
+            output_frames.extend(sub_result.frames)
+        return data.Dataset(output_frames)
+
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
 
@@ -112,6 +126,12 @@ def dark_subtraction(input_dataset, noisemaps=None, dark=None, detector_regions=
         dark = build_synthesized_dark(input_dataset, noisemaps, detector_regions=detector_regions, full_frame=full_frame)
         if outputdir is None:
             outputdir = '.' #current directory
+        # Embed gain and exposure time in the filename so that darks from different
+        # detector configurations (e.g., multiple recursive calls) do not overwrite each other.
+        dark_basename = dark.filename.replace('.fits', '')
+        dark.filename = "{0}_g{1:g}_t{2:g}s.fits".format(
+            dark_basename, dark.ext_hdr['EMGAIN_C'], dark.ext_hdr['EXPTIME'])
+        dark.pri_hdr['FILENAME'] = dark.filename
         dark.save(filedir=outputdir)
     elif type(dark) is data.Dark: # dark is used whether noisemaps is provided or not 
         if 'PC_STAT' in dark.ext_hdr:
