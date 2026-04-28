@@ -2,6 +2,7 @@
 import warnings
 import numpy as np
 import os
+import scipy.stats
 import pyklip.rdi
 from pyklip.klip import rotate, collapse_data
 import scipy.ndimage
@@ -1728,9 +1729,46 @@ def spec_psf_subtraction(input_dataset):
         # rescale wavelengh bands to match
         ref_col_mean = np.mean(shifted_ref,axis=1)
         ref_col_mean[ref_col_mean==0] = 1 # prevent div by 0
-        scale = np.mean(frame.data,axis=1)/ref_col_mean
-        shifted_scaled_ref = shifted_ref*scale[:,None]
 
+        frame_datcopy = np.copy(frame.data)
+
+        # Masking 6 pixels about planet location for dataset copy
+        planet_pos = int(frame.ext_hdr['WV0_X'])
+        frame_datcopy[:,planet_pos-6:planet_pos+6] = np.nan
+
+        # First, find slice where peak of ref star psf lies at each wav. Next, compute mode to find "best" slice. Then, calculate mean for 10-pixel centered on best slice for each wav for both ref and science.
+        # This mean is used to scale down ref star psf
+        row_peak_arr = np.argmax(shifted_ref, axis=1)
+        best_peak = int(scipy.stats.mode(row_peak_arr).mode)
+        if best_peak < 5 or best_peak > frame_datcopy.shape[1]-5:  ##Default to center of image if peak at edges and give warning
+            warnings.warn("Ref star PSF peak at edge of image. Please manually verify if reference is shifted properly.")
+            best_peak = int(frame.data.shape[1]/2)
+        avg_peak_ref = np.nanmean(shifted_ref[:,best_peak-5:best_peak+5],axis=1)
+        avg_peak_dat = np.nanmean(frame_datcopy[:,best_peak-5:best_peak+5],axis=1)
+
+        ##Find background median and std deviation from first 10 rows/wvs at top and bottom edge of image
+        bg_std = np.std(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
+        bg_median = np.median(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
+
+   
+        ##Use boxcar mean to identify wvs with the ref psf
+        cumulatsum = np.cumsum(np.insert(avg_peak_ref, 0, 0))
+        boxcar_mean = (cumulatsum[5:] - cumulatsum[:-5]) / 5
+        start = np.where(boxcar_mean > (bg_median+5 * bg_std))[0][0]; end = np.where(boxcar_mean > (bg_median+5 * bg_std))[0][-1]
+
+
+        # Fit a 5th order function to mean across wavelengths to scale down ref star psf. Only do this for wvs identified above
+        pixel_arr = np.arange(start,end)
+        polyfn_dat = np.polyfit(pixel_arr,avg_peak_dat[start:end],deg=5)
+        polyarr_dat = np.polyval(polyfn_dat, pixel_arr)
+
+        polyfn_ref = np.polyfit(pixel_arr,avg_peak_ref[start:end],deg=5)
+        polyarr_ref = np.polyval(polyfn_ref, pixel_arr)
+
+        scale = np.nanmean(frame_datcopy,axis=1)/ref_col_mean
+        scale[start:end] = polyarr_dat/polyarr_ref
+        shifted_scaled_ref = shifted_ref*scale[:,None]
+    
         shifted_refdq = np.roll(mean_ref.dq, (shift[0], shift[1]), axis=(0,1))
         # at this point in the pipeline, the err is mainly shot noise, so multiplying the err is appropriate
         # shifting may throw off err at the edges of the frame, but those pixels aren't used anyways
@@ -1740,12 +1778,16 @@ def spec_psf_subtraction(input_dataset):
         orig_frame = frame.data.copy()
         frame.data -= shifted_scaled_ref
 
+        # subtract reference from dataset copy 
+        frame_datcopy -= shifted_scaled_ref
+        frame_datcopy[:,planet_pos-6:planet_pos+6] = frame.data[:,planet_pos-6:planet_pos+6]
+
         # determine the throughput at the estimated source position
         # This is a rough guess at the throughput. Want to make this more accurate
         with warnings.catch_warnings():
             # catch divide by zero warnings
             warnings.filterwarnings('ignore', category=RuntimeWarning)
-            through = 1 - np.nansum(frame.data * shifted_scaled_ref, axis=1)/np.nansum(shifted_scaled_ref * shifted_scaled_ref, axis=1)**0.5/np.nansum(frame.data*frame.data, axis=1)**0.5
+            through = spec_throughput(orig_frame, shifted_ref, start_row=start, end_row=end)
         # Save algorithm throughput as an extension on the psf-subtracted Image
         frame.add_extension_hdu('ALGO_THRU', data = np.array(through), header = algothru_hdr)
 
@@ -1769,6 +1811,59 @@ def spec_psf_subtraction(input_dataset):
         history_msg = thru_msg + f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
         out_dataset.update_after_processing_step(history_msg)
     return out_dataset
+
+def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
+    
+    def gaussian_1d(x, x0, sigma, amplitude):
+        """
+        Create a 1D Gaussian.
+        
+        Parameters:
+            x         : coordinate grid
+            x0        : center position
+            sigma     : standard deviation (pixels)
+            amplitude : peak value
+        """
+        return amplitude * np.exp(-((x - x0)**2) / (2 * sigma**2))
+    
+    #Inject fake gaussian to dataset copy to determine throughput
+    x = np.arange(45,57)
+    orig_frame[:,45:57] = orig_frame[:,45:57] + gaussian_1d(x, x0=51, sigma=1.5, amplitude=0.02)
+    inj_planet = np.ones(orig_frame.shape[0]) * np.max(orig_frame[:,45:57],axis=1) #np.trapz(gaussian_1d(x, x0=51, sigma=1.5, amplitude=0.02))
+    
+    frame_w_injectedplanet = np.copy(orig_frame)
+    orig_frame[:,45:57] = np.nan
+
+    row_peak_arr = np.argmax(shifted_ref, axis=1)
+    best_peak = int(scipy.stats.mode(row_peak_arr).mode)
+    avg_peak_ref = np.nanmean(shifted_ref[:,best_peak-5:best_peak+5],axis=1)
+    avg_peak_dat = np.nanmean(orig_frame[:,best_peak-5:best_peak+5],axis=1)
+
+    pixel_arr = np.arange(start_row,end_row)
+    polyfn_dat = np.polyfit(pixel_arr,avg_peak_dat[start_row:end_row],deg=5)
+    polyarr_dat = np.polyval(polyfn_dat, pixel_arr)
+
+    polyfn_ref = np.polyfit(pixel_arr,avg_peak_ref[start_row:end_row],deg=5)
+    polyarr_ref = np.polyval(polyfn_ref, pixel_arr)
+
+    ref_col_mean = np.mean(shifted_ref,axis=1)
+    ref_col_mean[ref_col_mean==0] = 1 # prevent div by 0
+
+    scale = np.nanmean(orig_frame,axis=1)/ref_col_mean
+    scale[start_row:end_row]= polyarr_dat/polyarr_ref
+    shifted_scaled_ref = shifted_ref*scale[:,None]
+
+    # make same 
+    orig_frame-= shifted_scaled_ref
+    orig_frame[:,45:57] = frame_w_injectedplanet[:,45:57]
+    postimg_signal = np.max(orig_frame[:,45:57],axis=1) #np.trapz(orig_frame[:,45:57],x)
+        
+    orig_frame[:,45:57] = orig_frame[:,45:57] - gaussian_1d(x, x0=51, sigma=1.5, amplitude=0.02)
+    speckle_std = np.nanstd(orig_frame[:,45:57],axis=1)
+
+    through = (postimg_signal-speckle_std)/inj_planet
+    return through
+
 
 def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     '''
