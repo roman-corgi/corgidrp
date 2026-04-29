@@ -1832,16 +1832,16 @@ def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105, mask_pla
         Algorithmic throughput as a function of wavelength.
     '''
 
-    amplitude = 0.02; sigma = 1.5; x0 = 48
+    amplitude = 0.02; sigma = 1.5; x0 = 50
     #Inject fake gaussian to dataset copy to determine throughput
-    x = np.arange(42,54)
+    x = np.arange(45,55)
     gaussian_planet = amplitude * np.exp(-((x - x0)**2) / (2 * sigma**2))
-    orig_frame[:,42:54] = orig_frame[:,42:54] + gaussian_planet
-    inj_planet = np.ones(orig_frame.shape[0]) * np.max(orig_frame[:,42:54],axis=1) #np.trapz(gaussian_1d(x, x0=51, sigma=1.5, amplitude=0.02))
+    orig_frame[:,45:55] = orig_frame[:,45:55] + gaussian_planet
+    inj_planet = np.ones(orig_frame.shape[0]) * np.max(orig_frame[:,45:55],axis=1) #np.trapz(gaussian_planet[3:7],x[3:7])
     
     frame_w_injectedplanet = np.copy(orig_frame)
     if mask_planet:
-        orig_frame[:,43:53] = np.nan
+        orig_frame[:,45:55] = np.nan
 
     row_peak_arr = np.argmax(shifted_ref, axis=1)
     best_peak = int(scipy.stats.mode(row_peak_arr).mode)
@@ -1865,11 +1865,11 @@ def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105, mask_pla
     # make same 
     orig_frame-= shifted_scaled_ref
     if mask_planet:
-        orig_frame[:,43:53] = frame_w_injectedplanet[:,43:53]
-    postimg_signal = np.max(orig_frame[:,42:54],axis=1) #np.trapz(orig_frame[:,42:54],x)
+        orig_frame[:,45:55] = frame_w_injectedplanet[:,45:55]
+    postimg_signal = np.max(orig_frame[:,45:55],axis=1) #np.trapz(orig_frame[:,48:52],x[3:7])
         
-    orig_frame[:,42:54] = orig_frame[:,42:54] - gaussian_planet
-    speckle_std = np.nanstd(orig_frame[:,42:54],axis=1)
+    orig_frame[:,45:55] = orig_frame[:,45:55] - gaussian_planet
+    speckle_std = np.nanstd(orig_frame[:,45:55],axis=1)
 
     through = (postimg_signal-speckle_std)/inj_planet
     return through
