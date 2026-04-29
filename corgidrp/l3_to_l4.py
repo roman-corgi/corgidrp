@@ -1731,18 +1731,22 @@ def spec_psf_subtraction(input_dataset):
         ref_col_mean[ref_col_mean==0] = 1 # prevent div by 0
 
         frame_datcopy = np.copy(frame.data)
-
-        # Masking 6 pixels about planet location for dataset copy
-        planet_pos = int(frame.ext_hdr['WV0_X'])
-        frame_datcopy[:,planet_pos-6:planet_pos+6] = np.nan
-
-        # First, find slice where peak of ref star psf lies at each wav. Next, compute mode to find "best" slice. Then, calculate mean for 10-pixel centered on best slice for each wav for both ref and science.
-        # This mean is used to scale down ref star psf
+        # First, find slice where peak of ref star psf lies at each wav. Next, compute mode to find "best" slice.
         row_peak_arr = np.argmax(shifted_ref, axis=1)
         best_peak = int(scipy.stats.mode(row_peak_arr).mode)
         if best_peak < 5 or best_peak > frame_datcopy.shape[1]-5:  ##Default to center of image if peak at edges and give warning
             warnings.warn("Ref star PSF peak at edge of image. Please manually verify if reference is shifted properly.")
             best_peak = int(frame.data.shape[1]/2)
+
+        # Masking 10 pixels about planet location for dataset copy. Do this only if planet psf is separated from peak of reference psf.
+        planet_pos = int(frame.ext_hdr['WV0_X'])
+        if abs(planet_pos-best_peak) <= 7:
+            mask_planet=False
+            warnings.warn("Planet psf too close to peak of reference star psf, check subtraction manually.")
+        else:
+            frame_datcopy[:,planet_pos-5:planet_pos+5] = np.nan
+            mask_planet=True
+        #Calculate mean for 10-pixel centered on best slice for each wav for both ref and science. This mean is used to scale down ref star psf
         avg_peak_ref = np.nanmean(shifted_ref[:,best_peak-5:best_peak+5],axis=1)
         avg_peak_dat = np.nanmean(frame_datcopy[:,best_peak-5:best_peak+5],axis=1)
 
@@ -1751,7 +1755,7 @@ def spec_psf_subtraction(input_dataset):
         bg_median = np.median(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
 
    
-        ##Use boxcar mean to identify wvs with the ref psf
+        ##Use boxcar mean of row-by-row avg to identify wvs with the ref psf
         cumulatsum = np.cumsum(np.insert(avg_peak_ref, 0, 0))
         boxcar_mean = (cumulatsum[5:] - cumulatsum[:-5]) / 5
         start = np.where(boxcar_mean > (bg_median+5 * bg_std))[0][0]; end = np.where(boxcar_mean > (bg_median+5 * bg_std))[0][-1]
@@ -1780,14 +1784,15 @@ def spec_psf_subtraction(input_dataset):
 
         # subtract reference from dataset copy 
         frame_datcopy -= shifted_scaled_ref
-        frame_datcopy[:,planet_pos-6:planet_pos+6] = frame.data[:,planet_pos-6:planet_pos+6]
+        if mask_planet: #Unmasking if we masked before
+            frame_datcopy[:,planet_pos-5:planet_pos+5] = frame.data[:,planet_pos-5:planet_pos+5]
 
         # determine the throughput at the estimated source position
         # This is a rough guess at the throughput. Want to make this more accurate
         with warnings.catch_warnings():
             # catch divide by zero warnings
             warnings.filterwarnings('ignore', category=RuntimeWarning)
-            through = spec_throughput(orig_frame, shifted_ref, start_row=start, end_row=end)
+            through = spec_throughput(orig_frame, shifted_ref, start_row=start, end_row=end, mask_planet=mask_planet)
         # Save algorithm throughput as an extension on the psf-subtracted Image
         frame.add_extension_hdu('ALGO_THRU', data = np.array(through), header = algothru_hdr)
 
@@ -1812,7 +1817,7 @@ def spec_psf_subtraction(input_dataset):
         out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 
-def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
+def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105, mask_planet=False):
     '''
     Calculates spectroscopy PSF subtraction algorithmic throughput.
     
@@ -1821,6 +1826,7 @@ def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
         shifted_ref (corgidrp.data.Image): Shifted reference frame from spec_psf_subtraction.
         start_row (int, optional): Start row location of ref star PSF.
         end_row (int, optional): End row location of ref star PSF.
+        mask_planet (bool, optional): Mask 10 pixels about planet location. Do this only if planet psf is sufficiently separated (>7 pixels) from peak of reference psf.
 
     Returns:
         Algorithmic throughput as a function of wavelength.
@@ -1834,7 +1840,8 @@ def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
     inj_planet = np.ones(orig_frame.shape[0]) * np.max(orig_frame[:,42:54],axis=1) #np.trapz(gaussian_1d(x, x0=51, sigma=1.5, amplitude=0.02))
     
     frame_w_injectedplanet = np.copy(orig_frame)
-    orig_frame[:,42:54] = np.nan
+    if mask_planet:
+        orig_frame[:,43:53] = np.nan
 
     row_peak_arr = np.argmax(shifted_ref, axis=1)
     best_peak = int(scipy.stats.mode(row_peak_arr).mode)
@@ -1857,7 +1864,8 @@ def spec_throughput(orig_frame, shifted_ref, start_row=55, end_row=105):
 
     # make same 
     orig_frame-= shifted_scaled_ref
-    orig_frame[:,42:54] = frame_w_injectedplanet[:,42:54]
+    if mask_planet:
+        orig_frame[:,43:53] = frame_w_injectedplanet[:,43:53]
     postimg_signal = np.max(orig_frame[:,42:54],axis=1) #np.trapz(orig_frame[:,42:54],x)
         
     orig_frame[:,42:54] = orig_frame[:,42:54] - gaussian_planet
