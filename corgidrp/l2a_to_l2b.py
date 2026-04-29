@@ -126,12 +126,12 @@ def dark_subtraction(input_dataset, noisemaps=None, dark=None, detector_regions=
         dark = build_synthesized_dark(input_dataset, noisemaps, detector_regions=detector_regions, full_frame=full_frame)
         if outputdir is None:
             outputdir = '.' #current directory
-        # Embed gain and exposure time in the filename so that darks from different
-        # detector configurations (e.g., multiple recursive calls) do not overwrite each other.
-        dark_basename = dark.filename.replace('.fits', '')
-        dark.filename = "{0}_g{1:g}_t{2:g}s.fits".format(
-            dark_basename, dark.ext_hdr['EMGAIN_C'], dark.ext_hdr['EXPTIME'])
-        dark.pri_hdr['FILENAME'] = dark.filename
+        # Base the dark filename on the input science frame, replacing the data-level
+        # marker so the dark can be traced back to the data it was built from.
+        input_filename = input_dataset[-1].filename or input_dataset[-1].pri_hdr.get('FILENAME', '')
+        if '_l2a.' in input_filename:
+            dark.filename = input_filename.replace('_l2a.', '_drk_cal.')
+            dark.pri_hdr['FILENAME'] = dark.filename
         dark.save(filedir=outputdir)
     elif type(dark) is data.Dark: # dark is used whether noisemaps is provided or not 
         if 'PC_STAT' in dark.ext_hdr:
