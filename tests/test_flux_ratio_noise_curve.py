@@ -108,7 +108,7 @@ def test_expected_flux_ratio_noise():
     nd_x, nd_y = np.meshgrid(np.linspace(0, data_shape[1], 5), np.linspace(0, data_shape[0], 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
-    nd_od_val = 1e-2
+    nd_od_val = 2  # OD=2 → T=10**(-2)=1% transmission, physically realistic ND filter
     nd_od = np.ones(nd_y.shape) * nd_od_val
     # expected flux of star: Gaussian integral corrected for ND filter (true_flux = measured * 10**OD)
     Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 10**nd_od_val
@@ -308,7 +308,7 @@ def test_expected_flux_ratio_noise_pol():
     nd_x, nd_y = np.meshgrid(np.linspace(0, data_shape[1], 5), np.linspace(0, data_shape[0], 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
-    nd_od_val = 1e-2
+    nd_od_val = 2  # OD=2 → T=10**(-2)=1% transmission, physically realistic ND filter
     nd_od = np.ones(nd_y.shape) * nd_od_val
     # expected flux of star: Gaussian integral corrected for ND filter (true_flux = measured * 10**OD)
     Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 10**nd_od_val
