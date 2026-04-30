@@ -272,7 +272,7 @@ def test_replace_bps_pol_4frames():
     """
 
     # test this w/ 4 frames
-    input_dataset_pol = mocks.create_mock_polarization_l3_dataset()
+    input_dataset_pol = mocks.create_mock_polarization_l3_dataset(image_size=64)
 
 
     # Set to uniform constant values
