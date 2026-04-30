@@ -97,11 +97,8 @@ def test_expected_flux_ratio_noise():
     sig_x = 4
     sig_y = 4
     FWHM_star = 2*np.sqrt(2*np.log(2))*sig_x
-    # expected flux of star, same for each frame of input dataset to compute_flux_ratio_noise:
-    # integral under Gaussian times ND transmission
-    Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 1e-2
     star_PSF = np.reshape(gauss_spot(XY,star_amp,x0,y0,sig_x,sig_y), X.shape)
-    # add some noise to the star 
+    # add some noise to the star
     np.random.seed(987)
     star_PSF += np.random.poisson(lam=star_PSF.mean(), size=star_PSF.shape)
     prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
@@ -111,11 +108,14 @@ def test_expected_flux_ratio_noise():
     nd_x, nd_y = np.meshgrid(np.linspace(0, data_shape[1], 5), np.linspace(0, data_shape[0], 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
-    nd_od = np.ones(nd_y.shape) * 1e-2
+    nd_od_val = 1e-2
+    nd_od = np.ones(nd_y.shape) * nd_od_val
+    # expected flux of star: Gaussian integral corrected for ND filter (true_flux = measured * 10**OD)
+    Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 10**nd_od_val
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     nd_cal = data.NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
                                       ext_hdr=ext_hdr)
-    
+
     # now see what the step function gives, with and without a supplied star location guess:
     frn_dataset_nostarloc = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=3)
     frn_dataset_starloc = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, unocculted_star_loc=np.array([[17],[15]]), halfwidth=3)
@@ -295,13 +295,10 @@ def test_expected_flux_ratio_noise_pol():
     # Use fwhm_pix to calculate sigma for consistency with the PSF subtraction dataset
     # FWHM = 2*sqrt(2*ln(2)) * sigma, so sigma = FWHM / (2*sqrt(2*ln(2)))
     sig_x = fwhm_pix / (2 * np.sqrt(2 * np.log(2)))
-    sig_y = sig_x 
+    sig_y = sig_x
     FWHM_star = 2*np.sqrt(2*np.log(2))*sig_x
-    # expected flux of star, same for each frame of input dataset to compute_flux_ratio_noise:
-    # integral under Gaussian times ND transmission
-    Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 1e-2
     star_PSF = np.reshape(gauss_spot(XY,star_amp,x0,y0,sig_x,sig_y), X.shape)
-    # add some noise to the star 
+    # add some noise to the star
     np.random.seed(987)
     star_PSF += np.random.poisson(lam=star_PSF.mean(), size=star_PSF.shape)
     prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
@@ -311,7 +308,10 @@ def test_expected_flux_ratio_noise_pol():
     nd_x, nd_y = np.meshgrid(np.linspace(0, data_shape[1], 5), np.linspace(0, data_shape[0], 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
-    nd_od = np.ones(nd_y.shape) * 1e-2
+    nd_od_val = 1e-2
+    nd_od = np.ones(nd_y.shape) * nd_od_val
+    # expected flux of star: Gaussian integral corrected for ND filter (true_flux = measured * 10**OD)
+    Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 10**nd_od_val
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     nd_cal = data.NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
                                       ext_hdr=ext_hdr)
