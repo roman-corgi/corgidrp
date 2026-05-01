@@ -664,15 +664,15 @@ def initialize():
         rescan_needed = True
 
     # Add TVAC default calibration files built from raw TVAC data packaged in corgidrp/data/default_calibs/.
-    # Fixed filenames use the TVAC data date (20240322) so the existence check is stable across runs.
+    # Fixed filenames encode the synthetic timestamp (20260101) so the existence check is stable across runs.
     tvac_raw_dir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "default_calibs")
-    tvac_nln_filename = "cgi_0000000000000000000_20240322t0000000_nln_cal.fits"
-    tvac_krn_filename = "cgi_0000000000000000000_20240322t0000001_krn_cal.fits"
-    tvac_dnm_filename = "cgi_0000000000000000000_20240322t0000002_dnm_cal.fits"
-    tvac_flt_filename = "cgi_0000000000000000000_20240322t0000003_flt_cal.fits"
-    tvac_bpm_filename = "cgi_0000000000000000000_20240322t0000004_bpm_cal.fits"
-    tvac_pol0_flt_filename = "cgi_0000000000000000000_20240322t0000005_flt_cal.fits"
-    tvac_pol45_flt_filename = "cgi_0000000000000000000_20240322t0000006_flt_cal.fits"
+    tvac_nln_filename = "cgi_0000000000000000000_20260101t0000000_nln_cal.fits"
+    tvac_krn_filename = "cgi_0000000000000000000_20260101t0000001_krn_cal.fits"
+    tvac_dnm_filename = "cgi_0000000000000000000_20260101t0000002_dnm_cal.fits"
+    tvac_flt_filename = "cgi_0000000000000000000_20260101t0000003_flt_cal.fits"
+    tvac_bpm_filename = "cgi_0000000000000000000_20260101t0000004_bpm_cal.fits"
+    tvac_pol0_flt_filename = "cgi_0000000000000000000_20260101t0000005_flt_cal.fits"
+    tvac_pol45_flt_filename = "cgi_0000000000000000000_20260101t0000006_flt_cal.fits"
 
     tvac_cal_filenames = [tvac_nln_filename, tvac_krn_filename, tvac_dnm_filename,
                           tvac_flt_filename, tvac_bpm_filename,
@@ -685,8 +685,11 @@ def initialize():
     if tvac_cals_missing:
         pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
         mjd_2026 = float(time.Time("2026-01-01").mjd)
+        isot_2026 = "2026-01-01T00:00:00.000"
         ext_hdr["MJDSRT"] = mjd_2026
-        ext_hdr["DRPCTIME"] = time.Time.now().isot
+        ext_hdr["DATETIME"] = isot_2026
+        ext_hdr["FTIMEUTC"] = isot_2026
+        ext_hdr["DRPCTIME"] = isot_2026
         ext_hdr["DRPVERSN"] = corgidrp.__version__
         # Minimal mock input dataset for bookkeeping requirements in calibration constructors
         mock_dataset = mocks.create_flatfield_dummy(numfiles=2)
@@ -700,6 +703,8 @@ def initialize():
                 input_dataset=mock_dataset,
             )
             nonlinear_cal.ext_hdr["MJDSRT"] = mjd_2026
+            nonlinear_cal.ext_hdr["DATETIME"] = isot_2026
+            nonlinear_cal.ext_hdr["FTIMEUTC"] = isot_2026
             nonlinear_cal.save(filedir=corgidrp.default_cal_dir, filename=tvac_nln_filename)
 
         # KGain — 8.7 e/DN and read noise from TVAC measurements
@@ -716,6 +721,8 @@ def initialize():
                 input_dataset=mock_dataset,
             )
             kgain.ext_hdr["MJDSRT"] = mjd_2026
+            kgain.ext_hdr["DATETIME"] = isot_2026
+            kgain.ext_hdr["FTIMEUTC"] = isot_2026
             kgain.save(filedir=corgidrp.default_cal_dir, filename=tvac_krn_filename)
 
         # DetectorNoiseMaps from packaged TVAC noise component files.
@@ -752,6 +759,8 @@ def initialize():
                 err_hdr=noise_err_hdr,
             )
             noise_map.ext_hdr["MJDSRT"] = mjd_2026
+            noise_map.ext_hdr["DATETIME"] = isot_2026
+            noise_map.ext_hdr["FTIMEUTC"] = isot_2026
             noise_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_dnm_filename)
 
         # FlatField — all-ones array for the default imaging configuration.
@@ -766,6 +775,8 @@ def initialize():
             tvac_flat.ext_hdr["CFAMNAME"] = "1F"
             tvac_flat.ext_hdr["DPAMNAME"] = "IMAGING"
             tvac_flat.ext_hdr["MJDSRT"] = mjd_2026
+            tvac_flat.ext_hdr["DATETIME"] = isot_2026
+            tvac_flat.ext_hdr["FTIMEUTC"] = isot_2026
             tvac_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt_filename)
 
         # BadPixelMap from packaged TVAC bad pixel data.
@@ -778,6 +789,8 @@ def initialize():
             bp_dark_ext["EMGAIN_C"] = 1.0
             bp_dark_ext["DRPNFILE"] = 1
             bp_dark_ext["MJDSRT"] = mjd_2026
+            bp_dark_ext["DATETIME"] = isot_2026
+            bp_dark_ext["FTIMEUTC"] = isot_2026
             bp_dark = data.Dark(
                 np.zeros_like(bp_dat, dtype=float),
                 pri_hdr=bp_dark_pri,
@@ -794,6 +807,8 @@ def initialize():
                 input_dataset=data.Dataset([bp_dark]),
             )
             bp_map.ext_hdr["MJDSRT"] = mjd_2026
+            bp_map.ext_hdr["DATETIME"] = isot_2026
+            bp_map.ext_hdr["FTIMEUTC"] = isot_2026
             bp_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_bpm_filename)
 
         # POL0 FlatField — all-ones for the default polarimetry configuration.
@@ -807,6 +822,8 @@ def initialize():
             pol0_flat.ext_hdr["CFAMNAME"] = "1F"
             pol0_flat.ext_hdr["DPAMNAME"] = "POL0"
             pol0_flat.ext_hdr["MJDSRT"] = mjd_2026
+            pol0_flat.ext_hdr["DATETIME"] = isot_2026
+            pol0_flat.ext_hdr["FTIMEUTC"] = isot_2026
             pol0_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol0_flt_filename)
 
         # POL45 FlatField — all-ones for the default polarimetry configuration.
@@ -820,6 +837,8 @@ def initialize():
             pol45_flat.ext_hdr["CFAMNAME"] = "1F"
             pol45_flat.ext_hdr["DPAMNAME"] = "POL45"
             pol45_flat.ext_hdr["MJDSRT"] = mjd_2026
+            pol45_flat.ext_hdr["DATETIME"] = isot_2026
+            pol45_flat.ext_hdr["FTIMEUTC"] = isot_2026
             pol45_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol45_flt_filename)
 
         rescan_needed = True
