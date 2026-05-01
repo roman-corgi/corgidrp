@@ -695,14 +695,17 @@ def initialize():
             )
             nonlinear_cal.save(filedir=corgidrp.default_cal_dir, filename=tvac_nln_filename)
 
-        # KGain — 8.7 e/DN from TVAC measurements
+        # KGain — 8.7 e/DN and read noise from TVAC measurements
         if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_krn_filename)):
             kgain_val = 8.7
             signal_array = np.linspace(0, 50)
             noise_array = np.sqrt(signal_array)
             ptc = np.column_stack([signal_array, noise_array])
+            ext_hdr_krn = ext_hdr.copy()
+            ext_hdr_krn["RN"] = 121.76     # read noise in electrons from TVAC measurement
+            ext_hdr_krn["RN_ERR"] = 2.0    # read noise uncertainty in electrons
             kgain = data.KGain(
-                kgain_val, ptc=ptc, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                kgain_val, ptc=ptc, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr_krn,
                 input_dataset=mock_dataset,
             )
             kgain.save(filedir=corgidrp.default_cal_dir, filename=tvac_krn_filename)
@@ -742,13 +745,17 @@ def initialize():
             )
             noise_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_dnm_filename)
 
-        # FlatField from packaged TVAC flat data.
+        # FlatField — all-ones array for the default imaging configuration.
+        # FPAMNAME='OPEN_12' and CFAMNAME='1F' match the caldb lookup for
+        # standard DPAMNAME='IMAGING' observations in bands 1 & 2.
         if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_flt_filename)):
-            with fits.open(os.path.join(tvac_raw_dir, "flat.fits")) as hdulist:
-                flat_dat = hdulist[0].data.astype(float)
+            flat_dat = np.ones((1024, 1024))
             flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
-            flat_mock_dataset[0].data = flat_dat
-            tvac_flat = flat.create_flatfield(flat_mock_dataset)
+            tvac_flat = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                       input_dataset=flat_mock_dataset)
+            tvac_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
+            tvac_flat.ext_hdr["CFAMNAME"] = "1F"
+            tvac_flat.ext_hdr["DPAMNAME"] = "IMAGING"
             tvac_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt_filename)
 
         # BadPixelMap from packaged TVAC bad pixel data.
