@@ -243,7 +243,11 @@ def test_default_calibs():
     """
     Tests that the default calibration files are created if they don't exist.
     """
-    # Copy all files in corgidrp.default_cal_dir to a temporary directory, 
+    # Ensure the test caldb starts fresh (a failing earlier test may leave it behind)
+    if os.path.exists(testcaldb_filepath):
+        os.remove(testcaldb_filepath)
+
+    # Copy all files in corgidrp.default_cal_dir to a temporary directory,
     # then clear out corgidrp.default_cal_dir for this test and restore it at the end
     current_dir = os.path.dirname(__file__)
     temp_dir = os.path.join(current_dir, "temp_test_dir")
