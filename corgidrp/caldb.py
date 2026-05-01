@@ -9,8 +9,10 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.spec as spec
 import corgidrp.flat as flat
+import corgidrp.detector as detector
 
 import astropy.time as time
+import astropy.io.fits as fits
 from astropy.table import Table
 import datetime
 
@@ -658,6 +660,123 @@ def initialize():
         ones_flat.filename = fixed_ones_flat_filename
         ones_flat.pri_hdr["FILENAME"] = fixed_ones_flat_filename
         ones_flat.save(filedir=corgidrp.default_cal_dir, filename=fixed_ones_flat_filename)
+        rescan_needed = True
+
+    # Add TVAC default calibration files built from raw TVAC data packaged in corgidrp/data/default_calibs/.
+    # Fixed filenames use the TVAC data date (20240322) so the existence check is stable across runs.
+    tvac_raw_dir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "default_calibs")
+    tvac_nln_filename = "cgi_0000000000000000000_20240322t0000000_nln_cal.fits"
+    tvac_krn_filename = "cgi_0000000000000000000_20240322t0000001_krn_cal.fits"
+    tvac_dnm_filename = "cgi_0000000000000000000_20240322t0000002_dnm_cal.fits"
+    tvac_flt_filename = "cgi_0000000000000000000_20240322t0000003_flt_cal.fits"
+    tvac_bpm_filename = "cgi_0000000000000000000_20240322t0000004_bpm_cal.fits"
+
+    tvac_cal_filenames = [tvac_nln_filename, tvac_krn_filename, tvac_dnm_filename,
+                          tvac_flt_filename, tvac_bpm_filename]
+    tvac_cals_missing = any(
+        not os.path.exists(os.path.join(corgidrp.default_cal_dir, f))
+        for f in tvac_cal_filenames
+    )
+
+    if tvac_cals_missing:
+        pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
+        ext_hdr["DRPCTIME"] = time.Time.now().isot
+        ext_hdr["DRPVERSN"] = corgidrp.__version__
+        # Minimal mock input dataset for bookkeeping requirements in calibration constructors
+        mock_dataset = mocks.create_flatfield_dummy(numfiles=2)
+
+        # NonLinearityCalibration from packaged TVAC nonlinearity table
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_nln_filename)):
+            nonlin_path = os.path.join(tvac_raw_dir, "nonlin_table_240322.txt")
+            nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
+            nonlinear_cal = data.NonLinearityCalibration(
+                nonlin_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                input_dataset=mock_dataset,
+            )
+            nonlinear_cal.save(filedir=corgidrp.default_cal_dir, filename=tvac_nln_filename)
+
+        # KGain — 8.7 e/DN from TVAC measurements
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_krn_filename)):
+            kgain_val = 8.7
+            signal_array = np.linspace(0, 50)
+            noise_array = np.sqrt(signal_array)
+            ptc = np.column_stack([signal_array, noise_array])
+            kgain = data.KGain(
+                kgain_val, ptc=ptc, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                input_dataset=mock_dataset,
+            )
+            kgain.save(filedir=corgidrp.default_cal_dir, filename=tvac_krn_filename)
+
+        # DetectorNoiseMaps from packaged TVAC noise component files.
+        # The 1024x1024 science-image data is embedded in the full detector frame.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_dnm_filename)):
+            with fits.open(os.path.join(tvac_raw_dir, "fpn_20240322.fits")) as hdulist:
+                fpn_dat = hdulist[0].data.astype(float)
+            with fits.open(os.path.join(tvac_raw_dir, "cic_20240322.fits")) as hdulist:
+                cic_dat = hdulist[0].data.astype(float)
+            with fits.open(os.path.join(tvac_raw_dir, "dark_current_20240322.fits")) as hdulist:
+                dark_dat = hdulist[0].data.astype(float)
+            frame_rows = detector.detector_areas["SCI"]["frame_rows"]
+            frame_cols = detector.detector_areas["SCI"]["frame_cols"]
+            img_rows, img_cols, r0c0 = detector.unpack_geom("SCI", "image")
+            r0, c0 = r0c0
+            noise_map_dat = np.zeros((3, frame_rows, frame_cols))
+            noise_map_dat[0, r0:r0 + img_rows, c0:c0 + img_cols] = fpn_dat
+            noise_map_dat[1, r0:r0 + img_rows, c0:c0 + img_cols] = cic_dat
+            noise_map_dat[2, r0:r0 + img_rows, c0:c0 + img_cols] = dark_dat
+            noise_map_err = np.zeros((1,) + noise_map_dat.shape)
+            noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+            noise_err_hdr = fits.Header()
+            noise_err_hdr["BUNIT"] = "detected electron"
+            ext_hdr_dnm = ext_hdr.copy()
+            ext_hdr_dnm["B_O"] = 0.0
+            ext_hdr_dnm["B_O_ERR"] = 0.0
+            noise_map = data.DetectorNoiseMaps(
+                noise_map_dat,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr_dnm,
+                input_dataset=mock_dataset,
+                err=noise_map_err,
+                dq=noise_map_dq,
+                err_hdr=noise_err_hdr,
+            )
+            noise_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_dnm_filename)
+
+        # FlatField from packaged TVAC flat data.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_flt_filename)):
+            with fits.open(os.path.join(tvac_raw_dir, "flat.fits")) as hdulist:
+                flat_dat = hdulist[0].data.astype(float)
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            flat_mock_dataset[0].data = flat_dat
+            tvac_flat = flat.create_flatfield(flat_mock_dataset)
+            tvac_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt_filename)
+
+        # BadPixelMap from packaged TVAC bad pixel data.
+        # A synthetic Dark frame is required by BadPixelMap as the base header source.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_bpm_filename)):
+            with fits.open(os.path.join(tvac_raw_dir, "bad_pix.fits")) as hdulist:
+                bp_dat = hdulist[0].data.astype(float)
+            bp_dark_pri, bp_dark_ext, _, _ = mocks.create_default_calibration_product_headers()
+            bp_dark_ext["EXPTIME"] = 1.0
+            bp_dark_ext["EMGAIN_C"] = 1.0
+            bp_dark_ext["DRPNFILE"] = 1
+            bp_dark = data.Dark(
+                np.zeros_like(bp_dat, dtype=float),
+                pri_hdr=bp_dark_pri,
+                ext_hdr=bp_dark_ext,
+                input_dataset=mock_dataset,
+                err=np.zeros((1,) + bp_dat.shape, dtype=float),
+                dq=np.zeros(bp_dat.shape, dtype="uint16"),
+                err_hdr=fits.Header(),
+            )
+            bp_map = data.BadPixelMap(
+                bp_dat,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr.copy(),
+                input_dataset=data.Dataset([bp_dark]),
+            )
+            bp_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_bpm_filename)
+
         rescan_needed = True
 
     if rescan_needed:
