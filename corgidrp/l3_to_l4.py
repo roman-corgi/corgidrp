@@ -1858,7 +1858,7 @@ def spec_throughput(orig_frame, shifted_ref, injection_site, best_peak_col, star
         best_peak_col (int): Column with peak of reference star speckles.
         start_row (int): Start row location of ref star speckles.
         end_row (int): End row location of ref star speckles.
-        amplitude (int, optional): Amplitude of planet psf.
+        amplitude (float, optional): Amplitude of planet psf.
         mask_pl_pixels (int, optional): No. of pixels to mask on either side of planet position.
 
     Returns:
