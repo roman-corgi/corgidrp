@@ -17,6 +17,7 @@ from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
 from astropy.io import fits
 from scipy.ndimage import shift
+from numpy.lib.stride_tricks import sliding_window_view
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation, star_pos_spec
 from corgidrp import pol
 from corgidrp import fluxcal
@@ -24,7 +25,30 @@ from astropy.io.fits.verify import VerifyWarning
 from astropy.wcs import FITSFixedWarning
 from pytest import approx
 
-def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
+def _nanmedian_filter_vectorized(arr, kernelsize):
+    """Compute nanmedian over a sliding spatial window for every pixel in arr.
+
+    Works for any array dimensionality; the spatial axes are assumed to be the
+    last two.
+
+    Args:
+        arr (numpy.ndarray): input array with NaN at bad-pixel locations.
+        kernelsize (int): side length of the square median-filter window.
+
+    Returns:
+        numpy.ndarray: filtered array of the same shape as arr.
+    """
+    half_k = kernelsize // 2
+    pad = [(0, 0)] * (arr.ndim - 2) + [(half_k, half_k), (half_k, half_k)]
+    padded = np.pad(arr, pad, mode='constant', constant_values=np.nan)
+    windows = sliding_window_view(padded, (kernelsize, kernelsize), axis=(-2, -1))
+    flat = windows.reshape(windows.shape[:-2] + (-1,))   # (..., H, W, k*k)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        return np.nanmedian(flat, axis=-1)
+
+
+def replace_bad_pixels(input_dataset, kernelsize=3, dq_thresh=1, vectorized_threshold=0.01):
     """Interpolate over bad pixels in image and error arrays using a median filter.
     TODO: Add additional options for bad pixel replacement (e.g. 2d interpolation that
     can handle nans, constant value, etc.)
@@ -33,9 +57,13 @@ def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
         input_dataset (corgidrp.data.Dataset): input L3 dataset with bad pixels
         kernelsize (int, optional): Size of median filter window in pixels. Defaults to 3.
         dq_thresh (int, optional): Minimum DQ value for a pixel to be replaced. Defaults to 1.
+        vectorized_threshold (float, optional): Bad-pixel fraction above which a
+            full-array vectorized nanmedian filter is used instead of a sparse
+            per-pixel loop. The vectorized path is faster when many pixels are
+            bad; the sparse path is faster when very few are. Defaults to 0.01.
 
     Returns:
-        corgidrp.data.Dataset: A copy of the dataset with the bad pixels and error values interpolated over. 
+        corgidrp.data.Dataset: A copy of the dataset with the bad pixels and error values interpolated over.
         The bad pixel map is unchanged.
     """
 
@@ -46,40 +74,53 @@ def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
     im_dq_bool = dataset.all_dq >= dq_thresh
 
     im_data[im_dq_bool] = np.nan
-    # Vectorized: broadcast dq mask across the error-layer axis (axis 1 of im_err)
+    # Broadcast dq mask across the error-layer axis (axis 1 of im_err)
     im_err[:] = np.where(im_dq_bool[:, np.newaxis], np.nan, im_err)
 
-    # Sparse median replacement: only visit bad-pixel locations, not every pixel.
-    # im_data axes: (n_frames, [extra...], H, W); spatial dims are always the last two.
-    # im_err axes: (n_frames, n_err, [extra...], H, W).
-    half_k = kernelsize // 2
+    bp_count = int(np.sum(im_dq_bool))
     im_replaced = im_data.copy()
     err_replaced = im_err.copy()
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', category=RuntimeWarning)
-        for idx in np.argwhere(im_dq_bool):
-            row, col = int(idx[-2]), int(idx[-1])
-            r0 = max(0, row - half_k)
-            r1 = min(im_data.shape[-2], row + half_k + 1)
-            c0 = max(0, col - half_k)
-            c1 = min(im_data.shape[-1], col + half_k + 1)
+    if bp_count > 0:
+        bad_fraction = bp_count / im_dq_bool.size
+        if bad_fraction >= vectorized_threshold:
+            # Vectorized path: fast for high bad-pixel fractions.
+            # Applies a full-array sliding-window nanmedian, then copies results
+            # only at bad-pixel locations.
+            im_filtered = _nanmedian_filter_vectorized(im_data, kernelsize)
+            err_filtered = _nanmedian_filter_vectorized(im_err, kernelsize)
+            im_replaced = np.where(im_dq_bool, im_filtered, im_data)
+            err_replaced = np.where(im_dq_bool[:, np.newaxis], err_filtered, im_err)
+        else:
+            # Sparse path: fast for low bad-pixel fractions.
+            # Visits only bad-pixel locations; O(n_bad) nanmedian calls instead
+            # of O(n_total).
+            # im_data axes: (n_frames, [extra...], H, W)
+            # im_err  axes: (n_frames, n_err, [extra...], H, W)
+            half_k = kernelsize // 2
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                for idx in np.argwhere(im_dq_bool):
+                    row, col = int(idx[-2]), int(idx[-1])
+                    r0 = max(0, row - half_k)
+                    r1 = min(im_data.shape[-2], row + half_k + 1)
+                    c0 = max(0, col - half_k)
+                    c1 = min(im_data.shape[-1], col + half_k + 1)
 
-            frame_idx = int(idx[0])
-            mid = tuple(int(x) for x in idx[1:-2])
+                    frame_idx = int(idx[0])
+                    mid = tuple(int(x) for x in idx[1:-2])
 
-            data_prefix = (frame_idx,) + mid
-            im_replaced[data_prefix + (row, col)] = np.nanmedian(
-                im_data[data_prefix][r0:r1, c0:c1]
-            )
+                    data_prefix = (frame_idx,) + mid
+                    im_replaced[data_prefix + (row, col)] = np.nanmedian(
+                        im_data[data_prefix][r0:r1, c0:c1]
+                    )
 
-            for e in range(im_err.shape[1]):
-                err_prefix = (frame_idx, e) + mid
-                err_replaced[err_prefix + (row, col)] = np.nanmedian(
-                    im_err[err_prefix][r0:r1, c0:c1]
-                )
+                    for e in range(im_err.shape[1]):
+                        err_prefix = (frame_idx, e) + mid
+                        err_replaced[err_prefix + (row, col)] = np.nanmedian(
+                            im_err[err_prefix][r0:r1, c0:c1]
+                        )
 
-    bp_count = int(np.sum(im_dq_bool))
     history_msg = f"Interpolated over {bp_count} bad pixels with median filter size {kernelsize}."
     dataset.update_after_processing_step(history_msg,
                                          new_all_data=im_replaced,
