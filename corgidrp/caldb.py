@@ -761,6 +761,7 @@ def initialize():
             noise_map.ext_hdr["MJDSRT"] = mjd_2026
             noise_map.ext_hdr["DATETIME"] = isot_2026
             noise_map.ext_hdr["FTIMEUTC"] = isot_2026
+            noise_map.ext_hdr["DRPNFILE"] = 96
             noise_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_dnm_filename)
 
         # FlatField — all-ones array for the default imaging configuration.
