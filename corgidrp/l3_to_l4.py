@@ -1683,7 +1683,7 @@ def combine_polarization_states(input_dataset,
     return updated_dataset
 
 
-def spec_psf_subtraction(input_dataset,mask_pl_pixels=3,bg_threshold=5,sigma_injplanet=1.5):
+def spec_psf_subtraction(input_dataset,mask_pl_pixels=3,bg_threshold=5,poly_order=5,sigma_injplanet=1.5):
     '''
     RDI PSF subtraction for spectroscopy mode.
     Assumes the reference images are marked with PSFREF=True in the primary header
@@ -1691,9 +1691,10 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=3,bg_threshold=5,sigma_inj
 
     Args:
         input_dataset (corgidrp.data.Dataset): L3 dataset containing the science and reference images.
-        mask_pl_pixels (int, optional): No. of pixels to mask on either side of planet position.
-        bg_threshold (int, optional): Threshold to identify detector rows with reference psf using no. of std deviations from median.
-        sigma_injplanet (float, optional): Standard deviation of injected gaussian planet for throughput calcs from injection-recovery tests.
+        mask_pl_pixels (int, optional): No. of pixels to mask on either side of planet position. Default value is 3 pixels.
+        bg_threshold (int, optional): Threshold to identify detector rows with reference psf using no. of std deviations from median. Default value is 5.
+        poly_order (int, optional): Order of polynomial used to scale down reference star psf to target star psf. Default value is 5. 
+        sigma_injplanet (float, optional): Standard deviation of injected gaussian planet for throughput calcs from injection-recovery tests. Default value is 1.5 pixels.
     
     Returns:
         corgidrp.data.Dataset: dataset containing the PSF-subtracted science images
@@ -1783,12 +1784,14 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=3,bg_threshold=5,sigma_inj
         #Improve median background estimate. Used to identify sites for injection/recovery tests
         bg_median = np.median(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
 
-        # Fit a 5th order function to mean across wavelengths to scale down ref star psf. Only do this for wvs identified above
+        if poly_order < 4:
+            warnings.warn("NOTE: Order of scaling polynomial seems too low, psf subtraction might be poor.")
+        # Fit a nth order function to mean across wavelengths to scale down ref star psf. Only do this for wvs identified above
         pixel_arr = np.arange(start,end)
-        polyfn_dat = np.polyfit(pixel_arr,avg_peak_dat[start:end],deg=5)
+        polyfn_dat = np.polyfit(pixel_arr,avg_peak_dat[start:end],deg=poly_order)
         polyarr_dat = np.polyval(polyfn_dat, pixel_arr)
 
-        polyfn_ref = np.polyfit(pixel_arr,avg_peak_ref[start:end],deg=5)
+        polyfn_ref = np.polyfit(pixel_arr,avg_peak_ref[start:end],deg=poly_order)
         polyarr_ref = np.polyval(polyfn_ref, pixel_arr)
         polyarr_ref[polyarr_ref==0] = 1 # prevent div by 0
 
@@ -1812,12 +1815,12 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=3,bg_threshold=5,sigma_inj
         col_avg = np.nanmean(frame_datcopy,axis=0)
         
         injection_cols = np.where(np.logical_and(np.isfinite(col_avg), col_avg > bg_median))[0]
-        cols_mask = (abs(injection_cols-planet_pos)>mask_pl_pixels) * (abs(injection_cols-best_peak)>5) * (injection_cols-mask_pl_pixels > 0) * (injection_cols + mask_pl_pixels < 125)
+        cols_mask = (abs(injection_cols-planet_pos)>mask_pl_pixels) * (abs(injection_cols-best_peak)>5) * (injection_cols-mask_pl_pixels > 0) * (injection_cols + mask_pl_pixels < frame_datcopy.shape[1])
         injection_cols = injection_cols[cols_mask]
         if len(injection_cols) == 0:
             warnings.warn("Choosing columns with speckle flux lower than median background for injection-recovery tests. This could bias throughput calculations.")
             injection_cols = np.where(np.isfinite(col_avg))[0]
-            cols_mask = (abs(injection_cols-planet_pos)>mask_pl_pixels) * (abs(injection_cols-best_peak)>5) * (injection_cols-mask_pl_pixels > 0) * (injection_cols + mask_pl_pixels < 125)
+            cols_mask = (abs(injection_cols-planet_pos)>mask_pl_pixels) * (abs(injection_cols-best_peak)>5) * (injection_cols-mask_pl_pixels > 0) * (injection_cols + mask_pl_pixels < frame_datcopy.shape[1])
             injection_cols = injection_cols[cols_mask]
         
         # determine the throughput at the estimated source position
@@ -1828,7 +1831,7 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=3,bg_threshold=5,sigma_inj
             through = []
             for i in range(0,min(len(injection_cols),5)):
                 injection_site = injection_cols[i]
-                through.append(spec_throughput(orig_frame, shifted_ref, injection_site = injection_site, sigma_injplanet = sigma_injplanet, best_peak_col = best_peak, start_row=start, end_row=end, amplitude=amplitude, mask_pl_pixels=mask_pl_pixels))
+                through.append(spec_throughput(orig_frame, shifted_ref, injection_site = injection_site, sigma_injplanet = sigma_injplanet, best_peak_col = best_peak, start_row=start, end_row=end, poly_order=poly_order, amplitude=amplitude, mask_pl_pixels=mask_pl_pixels))
             through = np.array(through)
             through = np.nanmedian(through,axis=0)
             through[through>1] = 1
@@ -1855,7 +1858,7 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=3,bg_threshold=5,sigma_inj
         out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 
-def spec_throughput(orig_frame, shifted_ref, injection_site, sigma_injplanet, best_peak_col, start_row, end_row, amplitude=0.02, mask_pl_pixels=3):
+def spec_throughput(orig_frame, shifted_ref, injection_site, sigma_injplanet, best_peak_col, start_row, end_row, poly_order=5, amplitude=0.02, mask_pl_pixels=3):
     '''
     Calculates spectroscopy PSF subtraction algorithmic throughput.
     
@@ -1867,8 +1870,9 @@ def spec_throughput(orig_frame, shifted_ref, injection_site, sigma_injplanet, be
         best_peak_col (int): Column with peak of reference star speckles.
         start_row (int): Start row location of ref star speckles.
         end_row (int): End row location of ref star speckles.
-        amplitude (float, optional): Amplitude of planet psf.
-        mask_pl_pixels (int, optional): No. of pixels to mask on either side of planet position.
+        poly_order (int, optional): Order of polynomial used to scale down reference star psf to target star psf. Default value is 5.
+        amplitude (float, optional): Amplitude of planet psf. Default value is 0.02.
+        mask_pl_pixels (int, optional): No. of pixels to mask on either side of planet position. Also used to define pixels where planet is injected. Default value is 3 pixels. 
 
     Returns:
         Algorithmic throughput as a function of wavelength.
@@ -1894,10 +1898,10 @@ def spec_throughput(orig_frame, shifted_ref, injection_site, sigma_injplanet, be
     avg_peak_dat = np.nanmean(frame_copy[:,best_peak_col-5:best_peak_col+5],axis=1)
 
     pixel_arr = np.arange(start_row,end_row)
-    polyfn_dat = np.polyfit(pixel_arr,avg_peak_dat[start_row:end_row],deg=5)
+    polyfn_dat = np.polyfit(pixel_arr,avg_peak_dat[start_row:end_row],deg=poly_order)
     polyarr_dat = np.polyval(polyfn_dat, pixel_arr)
 
-    polyfn_ref = np.polyfit(pixel_arr,avg_peak_ref[start_row:end_row],deg=5)
+    polyfn_ref = np.polyfit(pixel_arr,avg_peak_ref[start_row:end_row],deg=poly_order)
     polyarr_ref = np.polyval(polyfn_ref, pixel_arr)
 
     ref_col_mean = np.mean(shifted_ref,axis=1)
