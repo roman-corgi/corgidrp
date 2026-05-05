@@ -583,6 +583,13 @@ def test_ct_interp():
     err = np.ones([1024,1024])
     # Generate random indices between 0 and the number of radii and azimuths,
     # excluding the edge cases 
+    # Save the full ct_excam so the loop can temporarily drop one point at a time
+    # without rebuilding the entire CT dataset (create_ct_interp + Dataset +
+    # generate_ct_cal) on every iteration.  InterpolateCT only reads ct_excam,
+    # so a direct slice is equivalent to rebuilding the cal with one PSF removed.
+    ct_excam_full = ct_cal_in.ct_excam.copy()
+    n_pts = ct_excam_full.shape[1]
+
     n_random = 50
     rtol_ct = 0.05
     ct_result_list = []  # initialize
@@ -591,32 +598,23 @@ def test_ct_interp():
     for idx in range(n_random):
         random_index_radius = rng.choice(np.arange(1, n_radii-1), 1)
         random_index_az = rng.choice(np.arange(1, n_azimuths-1), 1)
-     
+
         #Convert these to flattned indices
         random_indices_flat = random_index_radius + random_index_az*n_radii
-        
+
         # Record the missing value
         missing_x = x_grid[random_indices_flat]
         missing_y = y_grid[random_indices_flat]
         missing_core_throughput = core_throughput[random_indices_flat]
-        # Generate CT dataset w/o the latter (needed to call the interpolant
-        # without this location)
-        # Dataset for CT map interpolation: pupil images plus off-axis PSFs
-        data_ct = [Image(pupil_image,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
-        data_ct += create_ct_interp(
-            n_radii=n_radii,
-            n_azimuths=n_azimuths,
-            max_angle=max_angle,
-            norm=pupil_image.sum(),
-            fpm_x=fpam_ct_pix[0],
-            fpm_y=fpam_ct_pix[1],
-            pop_index=random_indices_flat)[0]
-        dataset_ct_tmp = Dataset(data_ct)
-        # Generate core throughput calibration file
-        ct_cal_tmp = corethroughput.generate_ct_cal(dataset_ct_tmp)
+
+        # Drop one point from ct_excam rather than rebuilding the full CT dataset
+        mask = np.ones(n_pts, dtype=bool)
+        mask[random_indices_flat] = False
+        ct_cal_in.ct_excam = ct_excam_full[:, mask]
+
         # Now we can interpolate the missing values
         # Test with linear mapping of radii
-        interpolated_value = ct_cal_tmp.InterpolateCT(
+        interpolated_value = ct_cal_in.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=False)[0]
         # Good to within 5%
         test_result_ct = interpolated_value == pytest.approx(missing_core_throughput, rel=rtol_ct)
@@ -625,8 +623,8 @@ def test_ct_interp():
         print('') if test_result_ct else print_fail()
         assert test_result_ct, 'Error more than 5% (linear radii mapping)'
         # Test with radii mapped into their logarithmic values before
-        # constructing the interpolant 
-        interpolated_value_log = ct_cal_tmp.InterpolateCT(
+        # constructing the interpolant
+        interpolated_value_log = ct_cal_in.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
         # Good to within 2%
         assert interpolated_value_log == pytest.approx(missing_core_throughput, rel=rtol_ct), 'Error more than 5% (logarithmic radii mapping)'
@@ -635,17 +633,21 @@ def test_ct_interp():
     print(f'All {n_random} CT estimates are correct to within {100*rtol_ct}% relative: ', end='')
     print_pass() if test_result_ct_all else print_fail()
 
+    # ct_cal_in.ct_excam is now the last iteration's 44-point slice; use it
+    # directly for the out-of-range and azimuth-wrapping checks below
+    # (equivalent to the original ct_cal_tmp built from 44 PSFs).
+
     # Test that if the radius is out of the range then an error is thrown
     # Pick a data point that is out of the range. For instance, set y to zero
     # and x to a value that is greater than the maximum radius
     radii = np.sqrt(x_grid**2 + y_grid**2)
     with pytest.raises(ValueError):
         # Too Big
-        ct_cal_tmp.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal) 
-             
+        ct_cal_in.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal)
+
     with pytest.raises(ValueError):
         #Too small
-        ct_cal_tmp.InterpolateCT(0.9*radii.min(), 0, dataset_cor, fpam_fsam_cal)
+        ct_cal_in.InterpolateCT(0.9*radii.min(), 0, dataset_cor, fpam_fsam_cal)
 
     # Test that something with an azimuth out of range returns the same result
     # as within the range
@@ -653,15 +655,17 @@ def test_ct_interp():
     azimuths -= azimuths.min()
     x_new_out = 0.9*np.max(radii)*np.cos(np.max(azimuths)+0.1)
     y_new_out = 0.9*np.max(radii)*np.sin(np.max(azimuths)+0.1)
-    interpolated_value_out = ct_cal_tmp.InterpolateCT(
+    interpolated_value_out = ct_cal_in.InterpolateCT(
         x_new_out, y_new_out, dataset_cor, fpam_fsam_cal)[0]
 
     x_new_in = 0.9*np.max(radii)*np.cos(0.1)
     y_new_in = 0.9*np.max(radii)*np.sin(0.1)
-    interpolated_value_in = ct_cal_tmp.InterpolateCT(
+    interpolated_value_in = ct_cal_in.InterpolateCT(
         x_new_in, y_new_in, dataset_cor, fpam_fsam_cal)[0]
 
     assert interpolated_value_out == pytest.approx(interpolated_value_in, abs=0.01), "Error more than 1% error"
+    # Restore full ct_excam before the non-zero min_angle test below
+    ct_cal_in.ct_excam = ct_excam_full
     # Make sure it still works with a non-zero starting azimuth: min_angle below
     data_ct = [Image(pupil_image,pri_hdr = prhd, ext_hdr = exthd_pupil,
             err = err)]
