@@ -1475,13 +1475,13 @@ class NonLinearityCalibration(Image):
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
         if self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
-        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
         # headers deleted from initial L1 level
-        leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+        leave_out_ext = ['BSCALE', 'BZERO', 'LOCAMT', 'CYCLES', 'LASTEXP']
         for key in leave_out_ext:
             if key in self.ext_hdr:
                 del self.ext_hdr[key]
-        
+
 class KGain(Image):
     """
     Class for KGain calibration file. Until further insights it is just one float value.
@@ -1573,7 +1573,7 @@ class KGain(Image):
         if self.ext_hdr['DATATYPE'] != 'KGain':
             raise ValueError("File that was loaded was not a KGain Calibration file.")
         # headers deleted from initial L1 level
-        leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+        leave_out_ext = ['BSCALE', 'BZERO', 'LOCAMT', 'CYCLES', 'LASTEXP']
         for key in leave_out_ext:
             if key in self.ext_hdr:
                 del self.ext_hdr[key]

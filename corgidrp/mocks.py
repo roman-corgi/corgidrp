@@ -259,6 +259,8 @@ def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
+    exthdr['SCTSRT'] = dt_str
+    exthdr['SCTEND'] = dt_str
     prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
 
     return prihdr, exthdr
@@ -417,7 +419,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     biashdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     biashdr['EXTNAME']     = 'BIAS'           # Extension name
 
-    deleted_after_l1 = ['SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    deleted_after_l1 = ['LOCAMT', 'CYCLES', 'LASTEXP']
     for key in deleted_after_l1:
         if key in prihdr:
             del prihdr[key]
