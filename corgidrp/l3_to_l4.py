@@ -667,10 +667,10 @@ def do_psf_subtraction(input_dataset,
     # average/delete header keywords as L4 involves combination of multiple frames
     pri_hdr, ext_hdr, _, _ = check.merge_headers(
         collapsed_dataset,
-        last_frame_keywords = ['VISITID', 'MJDEND'],
+        last_frame_keywords = ['VISITID', 'MJDEND', 'SCTEND'],
         # the first frame in collapsed dataset seems to contain the correct WCS, so
         # propagate that one
-        first_frame_keywords = ['MJDSRT', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+        first_frame_keywords = ['MJDSRT', 'SCTSRT', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
                                 'CRPIX1', 'CRPIX2','NORTHANG'],
         invalid_keywords=[
             # Primary header keywords
@@ -1789,8 +1789,8 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     # Here we change header keywords for both spec mode datasets (coron/non-coron)
     # average/delete header keywords as L4 involves combination of multiple frames
     pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
-    last_frame_keywords=['VISITID', 'MJDEND'],
-    first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2','NORTHANG'],
+    last_frame_keywords=['VISITID', 'MJDEND', 'SCTEND'],
+    first_frame_keywords=['MJDSRT','SCTSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2','NORTHANG'],
     deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
     invalid_keywords=[
                     #Primary header keywords
