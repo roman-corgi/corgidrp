@@ -1242,6 +1242,7 @@ def create_cr_dataset(nonlin_filepath, filedir=None, obs_datetime=None, numfiles
 
         # Save the date
         dataset[i].ext_hdr['DATETIME'] = str(obs_datetime)
+        dataset[i].ext_hdr['SCTSRT'] = str(obs_datetime)
 
         # Pick random locations to add a cosmic ray
         for x in range(numCRs):
