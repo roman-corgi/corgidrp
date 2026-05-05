@@ -2,7 +2,6 @@
 import warnings
 import numpy as np
 import os
-import scipy.stats
 import pyklip.rdi
 from pyklip.klip import rotate, collapse_data
 import scipy.ndimage
@@ -1684,16 +1683,17 @@ def combine_polarization_states(input_dataset,
     return updated_dataset
 
 
-def spec_psf_subtraction(input_dataset,mask_pl_pixels=5,bg_threshold=5):
+def spec_psf_subtraction(input_dataset,mask_pl_pixels=3,bg_threshold=5,sigma_injplanet=1.5):
     '''
     RDI PSF subtraction for spectroscopy mode.
     Assumes the reference images are marked with PSFREF=True in the primary header
     and that they all have the same alignment.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): L3 dataset containing the science and reference images
+        input_dataset (corgidrp.data.Dataset): L3 dataset containing the science and reference images.
         mask_pl_pixels (int, optional): No. of pixels to mask on either side of planet position.
-        bg_threshold (int, optional): Threshold to identify detector rows with reference psf using no. of std deviations from median
+        bg_threshold (int, optional): Threshold to identify detector rows with reference psf using no. of std deviations from median.
+        sigma_injplanet (float, optional): Standard deviation of injected gaussian planet for throughput calcs from injection-recovery tests.
     
     Returns:
         corgidrp.data.Dataset: dataset containing the PSF-subtracted science images
@@ -1735,21 +1735,21 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=5,bg_threshold=5):
         frame_datcopy = np.copy(frame.data)
         ref_copy = np.copy(shifted_ref)
 
-        # Identify planet position
+        #Identify planet position
         planet_pos = int(frame.ext_hdr['WV0_X'])
         # Masking pixels about planet location for dataset copy and reference.
         if mask_pl_pixels > 0:
             frame_datcopy[:,planet_pos-mask_pl_pixels:planet_pos+mask_pl_pixels+1] = np.nan
             ref_copy[:,planet_pos-mask_pl_pixels:planet_pos+mask_pl_pixels+1] = np.nan
 
-        # Calculate mean for each row for both ref and science.
+        #Calculate mean for each row for both ref and science.
         avg_peak_ref = np.nanmean(ref_copy,axis=1)
         avg_peak_dat = np.nanmean(frame_datcopy,axis=1)
-        # Find background median and std deviation from first 10 rows/wvs at top and bottom edge of image
+        #Find background median and std deviation from first 10 rows/wvs at top and bottom edge of image
         bg_std = np.std(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
         bg_median = np.median(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
 
-        # Use boxcar mean of row-by-row avg to identify wavelengths with the ref star speckles.
+        #Use boxcar mean of row-by-row avg to identify wavelengths with the ref star speckles.
         cumulatsum = np.cumsum(np.insert(avg_peak_ref, 0, 0))
         boxcar_mean = (cumulatsum[5:] - cumulatsum[:-5]) / 5
         ref_psf_wvs = np.where(boxcar_mean > (bg_median + bg_threshold * bg_std))[0] 
@@ -1761,18 +1761,26 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=5,bg_threshold=5):
         if start==end:
             raise Exception('Found only one row/wavelength with reference psf. Please check your background threshold.')
 
-        # Find slice where peak of ref star psf lies between start and end wavelengths. Next, compute mode to find "best" slice. 
-        # Reference was masked earlier to ensure chosen slice is not on same slices as masked planet psf.
+        #Find rows where peak of ref star psf lies between start and end wavelengths. Next, we find col with brightest speckle in each row. 
+        #Rank the cols such that col with brightest peak across most rows is #1, brightest peak across second-most rows is #2, and so on. We prefer to use brightest col, but that might be difficult if that col is at edge of image.
+        #Reference was masked earlier to ensure chosen slice is not on same slices as masked planet psf.
         row_peak_arr = np.nanargmax(ref_copy[start:end,:], axis=1)
-        best_peak = int(scipy.stats.mode(row_peak_arr).mode)
+        values, counts = np.unique(row_peak_arr, return_counts=True)
+        best_peak = values[np.argmax(counts)]
         if best_peak < 5 or best_peak > frame_datcopy.shape[1]-5:  #If reference star speckles peak at edge of image, raise exception
-            raise Exception("Ref star PSF peak at edge of image. Please manually verify if reference is shifted properly.")
-
-        # Now calculate mean for 10-pixel centered on best slice for each wav for both ref and science. This mean is used to scale down ref star psf for psfsub.
+            warnings.warn("Ref star speckles are brightest at edge of image. Please manually verify if reference is shifted properly. Regardless, proceeding with a less-optimal psf subtraction using adjacent speckles which may be fainter.")
+            if best_peak < 5:
+                delta_peak = 5-best_peak
+                best_peak = best_peak + delta_peak
+            elif best_peak > frame_datcopy.shape[1]-5:
+                delta_peak = best_peak - (frame_datcopy.shape[1]-5)
+                best_peak = best_peak - delta_peak
+        
+        #Now calculate mean for 10-pixel centered on best slice for each wav for both ref and science. This mean is used to scale down ref star psf for psfsub.
         avg_peak_ref = np.nanmean(ref_copy[:,best_peak-5:best_peak+5],axis=1)
         avg_peak_dat = np.nanmean(frame_datcopy[:,best_peak-5:best_peak+5],axis=1)
 
-        # Improve median background estimate. Used to identify sites for injection/recovery tests
+        #Improve median background estimate. Used to identify sites for injection/recovery tests
         bg_median = np.median(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
 
         # Fit a 5th order function to mean across wavelengths to scale down ref star psf. Only do this for wvs identified above
@@ -1783,7 +1791,7 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=5,bg_threshold=5):
         polyfn_ref = np.polyfit(pixel_arr,avg_peak_ref[start:end],deg=5)
         polyarr_ref = np.polyval(polyfn_ref, pixel_arr)
         polyarr_ref[polyarr_ref==0] = 1 # prevent div by 0
-        
+
         scale = np.nanmean(frame_datcopy,axis=1)/ref_col_mean
         scale[start:end] = polyarr_dat/polyarr_ref
         shifted_scaled_ref = shifted_ref*scale[:,None]
@@ -1797,7 +1805,7 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=5,bg_threshold=5):
         orig_frame = frame.data.copy()
         frame.data -= shifted_scaled_ref
 
-        amplitude = np.max(frame.data[:,planet_pos]) # Amplitude of planet psf test for injection-recovery tests for throughput calculation
+        amplitude = np.max(frame.data[:,planet_pos]) #Amplitude of planet psf test for injection-recovery tests for throughput calculation
 
         # Find best position for injection/recovery tests. Since planet is already masked in frame_datcopy, we only need to mask the slices that correspond with peak reference psf.
         frame_datcopy[:,best_peak-5:best_peak+5] = np.nan
@@ -1807,7 +1815,7 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=5,bg_threshold=5):
         cols_mask = (abs(injection_cols-planet_pos)>mask_pl_pixels) * (abs(injection_cols-best_peak)>5) * (injection_cols-mask_pl_pixels > 0) * (injection_cols + mask_pl_pixels < 125)
         injection_cols = injection_cols[cols_mask]
         if len(injection_cols) == 0:
-            warnings.warn("NOTE: Choosing columns with speckle flux lower than median background for injection-recovery tests. This could bias throughput calculations.")
+            warnings.warn("Choosing columns with speckle flux lower than median background for injection-recovery tests. This could bias throughput calculations.")
             injection_cols = np.where(np.isfinite(col_avg))[0]
             cols_mask = (abs(injection_cols-planet_pos)>mask_pl_pixels) * (abs(injection_cols-best_peak)>5) * (injection_cols-mask_pl_pixels > 0) * (injection_cols + mask_pl_pixels < 125)
             injection_cols = injection_cols[cols_mask]
@@ -1820,7 +1828,7 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=5,bg_threshold=5):
             through = []
             for i in range(0,min(len(injection_cols),5)):
                 injection_site = injection_cols[i]
-                through.append(spec_throughput(orig_frame, shifted_ref, injection_site = injection_site, best_peak_col = best_peak, start_row=start, end_row=end, amplitude=amplitude, mask_pl_pixels=mask_pl_pixels))
+                through.append(spec_throughput(orig_frame, shifted_ref, injection_site = injection_site, sigma_injplanet = sigma_injplanet, best_peak_col = best_peak, start_row=start, end_row=end, amplitude=amplitude, mask_pl_pixels=mask_pl_pixels))
             through = np.array(through)
             through = np.nanmedian(through,axis=0)
             through[through>1] = 1
@@ -1847,7 +1855,7 @@ def spec_psf_subtraction(input_dataset,mask_pl_pixels=5,bg_threshold=5):
         out_dataset.update_after_processing_step(history_msg)
     return out_dataset
 
-def spec_throughput(orig_frame, shifted_ref, injection_site, best_peak_col, start_row, end_row, amplitude=0.02, mask_pl_pixels=3):
+def spec_throughput(orig_frame, shifted_ref, injection_site, sigma_injplanet, best_peak_col, start_row, end_row, amplitude=0.02, mask_pl_pixels=3):
     '''
     Calculates spectroscopy PSF subtraction algorithmic throughput.
     
@@ -1855,6 +1863,7 @@ def spec_throughput(orig_frame, shifted_ref, injection_site, best_peak_col, star
         orig_frame (corgidrp.data.Image): Science data frame from spec_psf_subtraction.
         shifted_ref (corgidrp.data.Image): Shifted reference frame from spec_psf_subtraction.
         injection_site (int): Column with peak of injected planet psf.
+        sigma_injplanet (float): Standard deviation of injected gaussian planet for throughput calcs from injection-recovery tests.
         best_peak_col (int): Column with peak of reference star speckles.
         start_row (int): Start row location of ref star speckles.
         end_row (int): End row location of ref star speckles.
@@ -1865,12 +1874,12 @@ def spec_throughput(orig_frame, shifted_ref, injection_site, best_peak_col, star
         Algorithmic throughput as a function of wavelength.
     '''
 
-    fwhm = 1.5 #mask_pl_pixels/2.
+    sigma = sigma_injplanet
     x0 = injection_site
 
     #Inject fake gaussian to dataset copy to determine throughput
     x = np.arange(x0 - mask_pl_pixels,x0 + mask_pl_pixels)
-    gaussian_planet = amplitude * np.exp(-((x - x0)**2) / (2 * fwhm**2))
+    gaussian_planet = amplitude * np.exp(-((x - x0)**2) / (2 * sigma**2))
 
     frame_copy = np.copy(orig_frame)
 
