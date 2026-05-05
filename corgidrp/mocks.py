@@ -260,7 +260,10 @@ def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS"):
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
     exthdr['SCTSRT'] = dt_str
-    exthdr['SCTEND'] = dt_str
+    exthdr['SCTEND'] = (dt + datetime.timedelta(seconds=exthdr['EXPTIME'])).strftime("%Y-%m-%dT%H:%M:%S")
+    mjdsrt = Time(dt).mjd
+    exthdr['MJDSRT'] = mjdsrt
+    exthdr['MJDEND'] = mjdsrt + exthdr['EXPTIME'] / 86400.0
     prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
 
     return prihdr, exthdr
