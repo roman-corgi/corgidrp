@@ -660,7 +660,7 @@ def test_l1_to_l4(e2edata_path, e2eoutput_path):
         e2eoutput_path (str): Output directory path for results and logs
     """
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
-    l1_datadir_analog = os.path.join(e2edata_path, "NON_CORON_SPEC_sims","analog")
+    l1_datadir_analog = os.path.join(e2edata_path, "SPEC_NOM_sims/NON_CORON_SPEC","analog")
     #l1_datadir_pc = os.path.join(e2edata_path, "NON_CORON_SPEC_sims","pc")
 
     l4_outputdir = os.path.join(e2eoutput_path, "l1_to_l4_spec_noncoron_e2e")
