@@ -1,5 +1,6 @@
 import os
 import glob
+import shutil
 import numpy as np
 import astropy.io.fits as fits
 import logging
@@ -132,8 +133,9 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         logger.info("")
     
     l3_files_dir = os.path.join(e2eoutput_path, "L3")
-    if not os.path.exists(l3_files_dir):
-        os.makedirs(l3_files_dir)
+    if os.path.exists(l3_files_dir):
+        shutil.rmtree(l3_files_dir)
+    os.makedirs(l3_files_dir)
     l3_dataset.save(filedir = l3_files_dir)
     l3_files_input = sorted(glob.glob(os.path.join(l3_files_dir, "cgi_*_l3_.fits")))
     logger.info(f"Total input images validated: {len(l3_dataset)}")
