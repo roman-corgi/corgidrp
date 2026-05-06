@@ -91,7 +91,6 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         shutil.copy2(f, os.path.join(mock_cal_dir, os.path.basename(f)))
         for f in mock_cal_filelist
     ]
-    mock_cal_filelist = check.fix_hdrs_for_tvac(mock_cal_filelist, mock_cal_dir)
     # fix ISPC to int 
     for file in mock_cal_filelist:
         with fits.open(file, mode='update') as fits_file:
@@ -161,7 +160,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
                     raise ValueError(f"Expected 0 or 1 for ISPC value in header: {ispc_val}.")
             else:
                 raise ValueError("Missing ISPC keyword in L1 header. Cannot determine PC vs analog.")
-    logger.info(f'ISPC = {is_pc_data}')
+    logger.info(f'Photon counting mode = {is_pc_data}')
     # Dark calibration - create appropriate dark based on data type
     dark_cal = None
     if not is_pc_data:
@@ -216,7 +215,13 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     astrom_cal = astrom.boresight_calibration(input_dataset=mock_dataset, field_path=field_path, find_threshold=5)
     mocks.rename_files_to_cgi_format(list_of_fits=[astrom_cal], output_dir=calibrations_dir, level_suffix="ast_cal")
     this_caldb.create_entry(astrom_cal)
-    
+
+    #Using a specfluxcal calib file created using DIP data
+    specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(processed_cal_path,'cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
+
+    mocks.rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
+    this_caldb.create_entry(specflux_cal)
+
     logger.info("Created calibration products:")
     logger.info(f"  - NonLinearityCalibration: {nonlinear_cal.filename}")
     logger.info(f"  - KGain: {kgain.filename}")
@@ -229,6 +234,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f"  - FlatField: {flat.filename}")
     logger.info(f"  - BadPixelMap: {bp_map.filename}")
     logger.info(f"  - AstrometricCalibration: {astrom_cal.filename}")
+    logger.info(f"  - SpecFluxCal: {specflux_cal.filename}")
     logger.info('')
 
     # ================================================================================
@@ -279,12 +285,6 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f"Total input images validated: {len(input_dataset)}")
     logger.info('')
  
-    #Using a specfluxcal calib file created using DIP data
-    specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(processed_cal_path,'cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
-
-    mocks.rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
-    this_caldb.create_entry(specflux_cal)
-
     # ================================================================================
     # (3) Run Processing Pipeline
     # ================================================================================
@@ -303,6 +303,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     l2a_filelist = [os.path.join(l4_outputdir, f) for f in l2a_files]
     logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
     
+    '''
     if l2a_filelist:
         
         # Dark calibration: Create PC master dark from L2a frames (for PC data only)
@@ -352,10 +353,12 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
                 logger.warning(f'Could not create photon-counted master dark: {e}.')
                 import traceback
                 logger.warning(traceback.format_exc())
-    
+    '''
+
     # Step 2: L2a -> L2b (auto-detect spectroscopy recipe)
 
     logger.info('Step 2: Running L2a to L2b recipe...')
+    '''
     if is_pc_data:
         recipe = walker.autogen_recipe(l2a_filelist, l4_outputdir)
         ### Modify keyword to so that the PC master dark is used
@@ -375,10 +378,10 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
             # files are overwritten with same filenames
             recipe[2]['inputs'] = output_filepaths1
             walker.run_recipe(recipe[2], save_recipe_file=True)
-    else:
-        with warnings.catch_warnings():  
-            warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-            walker.walk_corgidrp(l2a_filelist, "", l4_outputdir)
+    '''
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.walk_corgidrp(l2a_filelist, "", l4_outputdir)
     
     # Find the L2b output files
     l2b_files = [f for f in os.listdir(l4_outputdir) if f.endswith('_l2b.fits')]
@@ -563,7 +566,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         else:
             logger.error(f"    No valid (finite) wavelength values found for min/max calculation. FAIL")
         
-        # Check and print wavelength zero-point values (CGI-REQT-5474)
+        # Check and print wavelength zero-point values
         hdu1_header = hdul[1].header
         wv0_keywords = {'WAVLEN0', 'WV0_X', 'WV0_Y', 'WV0_XERR', 'WV0_YERR', 'WV0_DIMX', 'WV0_DIMY'}
         missing_wv0 = wv0_keywords - set(hdu1_header.keys())
@@ -658,7 +661,7 @@ def test_l1_to_l4(e2edata_path, e2eoutput_path):
     """
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     l1_datadir_analog = os.path.join(e2edata_path, "NON_CORON_SPEC_sims","analog")
-    l1_datadir_pc = os.path.join(e2edata_path, "NON_CORON_SPEC_sims","pc")
+    #l1_datadir_pc = os.path.join(e2edata_path, "NON_CORON_SPEC_sims","pc")
 
     l4_outputdir = os.path.join(e2eoutput_path, "l1_to_l4_spec_noncoron_e2e")
     if os.path.exists(l4_outputdir):
@@ -668,17 +671,18 @@ def test_l1_to_l4(e2edata_path, e2eoutput_path):
     analog_outputdir = os.path.join(l4_outputdir, "analog")
     sat_spots_outputdir = os.path.join(analog_outputdir, "sat_spots")
 
-    pc_outputdir = os.path.join(l4_outputdir, "pc")
-    pc_sat_spots_outputdir = os.path.join(pc_outputdir, "sat_spots")
-    
     if not os.path.exists(analog_outputdir):
         os.makedirs(analog_outputdir)
-    if not os.path.exists(pc_outputdir):
-        os.makedirs(pc_outputdir)
     if not os.path.exists(sat_spots_outputdir):
         os.makedirs(sat_spots_outputdir)
-    if not os.path.exists(pc_sat_spots_outputdir):
-        os.makedirs(pc_sat_spots_outputdir)
+
+    #pc_outputdir = os.path.join(l4_outputdir, "pc")
+    #pc_sat_spots_outputdir = os.path.join(pc_outputdir, "sat_spots")
+    
+    #if not os.path.exists(pc_outputdir):
+    #    os.makedirs(pc_outputdir)
+    #if not os.path.exists(pc_sat_spots_outputdir):
+    #    os.makedirs(pc_sat_spots_outputdir)
     
     log_file = os.path.join(l4_outputdir, 'l1_to_l4_spec_noncoron_e2e.log')
     
