@@ -257,9 +257,6 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Update L1 headers for sims files
-    input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
-
     # Validate all input images
     input_dataset = Dataset(input_data_filelist)
 
@@ -399,7 +396,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     ##################################################################################
     # Step 3: L3 -> L4 (with policy)
     logger.info('Step 3: Running L3 to L4 non-coronographic spectroscopy recipe...')
-    walker.walk_corgidrp(l3_filelist, "", os.path.join(l4_outputdir,'../'), template="l3_to_l4_noncoron_spec.json")
+    walker.walk_corgidrp(l3_filelist, "", os.path.join(l4_outputdir,'../'))
     logger.info('L3 to L4 complete.')
     logger.info('')
 
