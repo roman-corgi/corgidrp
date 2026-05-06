@@ -217,7 +217,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     this_caldb.create_entry(astrom_cal)
 
     #Using a specfluxcal calib file created using DIP data
-    specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(processed_cal_path,'cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
+    specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(l1_datadir,'../../cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
 
     mocks.rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
     this_caldb.create_entry(specflux_cal)
