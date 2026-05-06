@@ -20,7 +20,6 @@ from corgidrp.mocks import (make_fluxmap_image, nonlin_coefs)
 from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params_default)
 
 
-
 ######################## function definitions ###############################
 
 def count_contiguous_repeats(arr):

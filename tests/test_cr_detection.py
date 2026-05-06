@@ -849,7 +849,33 @@ def test_remove_sat_images():
     assert Counter([i.filename for i in ds_out]) == Counter(good_filenames)
     assert Counter(good_fwcs) == Counter(fwcs_out)
 
+def test_EM_gain_1():
+    '''Verify that cosmic ray mask for EM gain 1 has no tails since no tail is made in the gain register in this case.  True even 
+    if cosm_tail input not equal to 0.  Also, verify that fwc is used for EM gain of 1 instead of fwcem.'''
+    check_mask = np.zeros((10,10), dtype=int)
+    image = np.zeros((10,10), dtype=float)
+    # head #1
+    image[-2,0:4] = fwc # with sat_thresh = 0.99, this tests recent change to use effective fwc instead of fwcem 
+    # head #2
+    image[-2,6:9] = fwc
+
+    # for cosm_filter=2 and cosm_tail=0:
+    # head #1
+    check_mask[-2,0:0+2+1] = 1
+    # cosmic head #2
+    check_mask[-2,6:6+2+1] = 1
+    prihdr, exthdr = mocks.create_default_L1_headers()
+    frame = data.Image(image, pri_hdr=prihdr,
+                    ext_hdr=exthdr)
+    dataset = data.Dataset([frame])
+    dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                        plat_thresh=0.85, cosm_filter=2, cosm_box=0,
+                        cosm_tail=1)
+
+    assert (np.array_equal(np.where(dataset_masked.all_dq>0,1,0)[0], check_mask))
+
 if __name__ == "__main__":
+    test_EM_gain_1()
     test_iit_vs_corgidrp()
     test_crs_zeros_frame()
     test_correct_headers()

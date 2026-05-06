@@ -1827,8 +1827,8 @@ class DetectorParams(Image):
     # default detector params
     default_values = {
         'KGAINPAR' : 8.7,
-        'FWC_PP_E' : 90000.,
-        'FWC_EM_E' : 100000.,
+        'FWC_PP_E' : 90000.,    # full-well capacity in electrons for image area (before gain register)
+        'FWC_EM_E' : 105000.,   # full-well capacity in electrons for gain register
         'ROWREADT' : 223.5e-6,  # seconds
         'NEMGAIN': 604,         # number of EM gain register stages
         'TELRSTRT': -1,         # slice of rows that are used for telemetry
@@ -1838,8 +1838,8 @@ class DetectorParams(Image):
         'GAINMAX': 8000.0,      # Maximum allowable EM gain
         'DELCNST': 1.0e-4,      # tolerance in exposure time calculator
         'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
-        'PCECNTMX': 0.1,        # Maximum allowed electrons/pixel/frame for photon counting
-        'TFACTOR': 5,            # number of read noise standard deviations at which to set the photon-counting threshold
+        'PCECNTMX': 0.25,       # Maximum allowed electrons/pixel/frame for photon counting
+        'TFACTOR': 5,           # number of read noise standard deviations at which to set the photon-counting threshold
     }
 
     back_compat_mapping = {
@@ -4256,6 +4256,38 @@ def get_bit_to_flag_map():
         dict: A dictionary with bit positions (int) as keys and flag names as values.
     """
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
+
+def selective_dq(dq, val=32):
+    '''Reduces the DQ map to just the flags valued at val.  This allows the ability to mask a frame because 
+    of a single DQ flag without regard to other flags. 
+    
+    For example, for val=32, the function identifies which pixels are flagged as saturated and creates a new map where those pixels are flagged as val and all other pixels are flagged as 0.
+    The function does this by iteratively identifying the highest power of 2 in the DQ map, 
+    checking if that power of 2 corresponds to the value for saturation, and if so, marking those pixels in the output map.  
+    Then it removes that power of 2 from the DQ map copy and repeats until there are no more flags left in the DQ map copy.
+    
+    To select for all DQs except for the one indicated by val, do dq - selective_dq(dq,val).
+
+    Args:
+        dq (array-like): DQ map where each pixel's value is a combination of powers of 2 corresponding to different flags.  For example, if a pixel has a value of 34, it means that it has flags corresponding to 32 and 2.
+        val (int): The specific flag value to identify in the DQ map.  Defaults to 32 for saturation.
+
+    Returns:
+        cosmic_pixels (array-like): A map where pixels that had the specified flag value in the original DQ map are marked as val, and all other pixels are marked as 0.
+    '''
+    cosmic_pixels = np.zeros_like(dq).astype(float)
+    temp_dq = dq.copy().astype(float)
+    nan_rows = np.array([]) # initialize
+    while nan_rows.size < temp_dq.size:
+        bad_rows, bad_cols = np.where(temp_dq == 0)
+        temp_dq[bad_rows, bad_cols] = np.nan
+        highest_power = np.floor(np.log(temp_dq)/np.log(2))
+        cosmic_rows, cosmic_cols = np.where(2**(highest_power) == val)
+        cosmic_pixels[cosmic_rows,cosmic_cols] = val
+        temp_dq = temp_dq - 2**(highest_power)
+        nan_rows, nan_cols = np.where(np.isnan(temp_dq))
+    return cosmic_pixels
+
 
 def get_stokes_intensity_image(stokes_image):
     """Return a copy containing only the Stokes I plane for photometry.

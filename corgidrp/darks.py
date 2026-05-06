@@ -5,8 +5,7 @@ from astropy.io import fits
 
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
-from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords, typical_bool_keywords
-
+from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords, typical_bool_keywords, selective_dq, get_flag_to_value_map
 
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
@@ -28,11 +27,12 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
         dataset_or_image_list (data.Dataset, list, or array_like): Dataset or list (or stack) of L2b data frames
     (with no bad pixels applied to them).
         bpmap_list (list or array_like): List (or stack) of bad-pixel maps
-        associated with L2b data frames. Each must be 0 (good) or 1 (bad)
-        at every pixel. If first input is a Dataset, this input is ignored.
+    associated with L2b data frames. Each must be 0 (good) or 1 (bad)
+    at every pixel. If first input is a Dataset, this input is ignored.
         err (bool):  If True, calculates the standard error over all
-        the frames.  Intended for the corgidrp.Data.Dataset.all_err
-        arrays. Defaults to False.
+    the frames.  Intended for the corgidrp.Data.Dataset.all_err
+    arrays. Defaults to False.   
+
 
     Returns:
         comb_image (array_like): Mean-combined frame from input list data.
