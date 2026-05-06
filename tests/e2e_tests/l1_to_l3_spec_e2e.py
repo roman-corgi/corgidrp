@@ -278,12 +278,14 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
             # Fix data types 
             if 'ISPC' in fits_file[1].header:
                 fits_file[1].header['ISPC'] = int(fits_file[1].header['ISPC'])
-            print(fits_file[1].header['EXPTIME'])
             fits_file[0].header['VISTYPE'] = 'CGIVST_TDD_OBS'
-            if fits_file[1].header['EXPTIME'] >= 100:
-                fits_file[1].data = fits_file[1].data/10.
-                fits_file[1].header['EXPTIME'] = fits_file[1].header['EXPTIME']/10.
-                print('Changed exposure time',fits_file[1].header['EXPTIME'])
+            if fits_file[1].header['EMGAIN_C'] == 200:
+                logger.info(f"Filename: {fits_file[0].header['FILENAME']}")
+                logger.info(f"Original exposure time: {fits_file[1].header['EXPTIME']}")
+                if fits_file[1].header['EXPTIME'] >= 100:
+                    fits_file[1].data = fits_file[1].data * 0.8
+                    fits_file[1].header['EXPTIME'] = fits_file[1].header['EXPTIME'] * 0.8
+                    logger.info(f"Changed exposure time: {fits_file[1].header['EXPTIME']}")
 
     # Validate all input images
     input_dataset = data.Dataset(input_data_filelist)

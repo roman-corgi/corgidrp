@@ -67,13 +67,13 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
         
-    psfref_satspot_path = os.path.join(e2edata_path, "SPEC_refstar_satspot", "Analog", "L1")
-    target_satspot_path = os.path.join(e2edata_path, "SPEC_targetstar_satspot", "L1", "analog")
+    psfref_satspot_path = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_zeropoint")
+    target_satspot_path = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_zeropoint")
     psfref_satspot_files = sorted(glob.glob(os.path.join(psfref_satspot_path, "cgi_*l1_.fits")))
     target_satspot_files = sorted(glob.glob(os.path.join(target_satspot_path, "cgi_*l1_.fits")))
-    psfref_files_path = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "Analog", "L1")
+    psfref_files_path = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_science_analog")
     psfref_files = sorted(glob.glob(os.path.join(psfref_files_path, "cgi_*l1_.fits")))
-    target_files_path = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1", "analog")
+    target_files_path = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_science_analog")
     target_files = sorted(glob.glob(os.path.join(target_files_path, "cgi_*l1_.fits")))
     logger.info(f"Found {len(target_files)} existing L1 target files in {e2edata_path}")
     logger.info(f"Found {len(psfref_files)} existing L1 reference files in {e2edata_path}")
@@ -81,10 +81,10 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info(f"Found {len(psfref_satspot_files)} existing L1 reference satspot files in {e2edata_path}")
     
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
-    ref_l3_output_dir = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L3")
-    target_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3")
-    ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L3", "satspot")
-    target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3", "satspot")
+    ref_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_science_analog", "L3")
+    target_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_science_analog", "L3")
+    ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_zeropoint", "L3")
+    target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_zeropoint", "L3")
 
     cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "cpgs_mock.xml")
 
@@ -163,7 +163,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
 
     rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
-    
+
     ###########################
     #### Make dummy CT cal ####
     ###########################
@@ -472,7 +472,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/home/ababuraj/roman/E2E_Test_Data'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
