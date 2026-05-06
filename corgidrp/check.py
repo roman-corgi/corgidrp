@@ -1150,9 +1150,22 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
                     mock_img_hdr['EMGAIN_A'] = -1.
             if 'EMGAIN_A' in mock_img_hdr:
                 mock_img_hdr['EMGAIN_A'] = float(mock_img_hdr['EMGAIN_A'])
-            # sometimes, EMGAIN_C is not float when preserving the original value, but it should be, so convert 
+            # sometimes, EMGAIN_C is not float when preserving the original value, but it should be, so convert
             if 'EMGAIN_C' in mock_img_hdr and isinstance(mock_img_hdr['EMGAIN_C'], str):
                 mock_img_hdr['EMGAIN_C'] = float(mock_img_hdr['EMGAIN_C'])
+
+            # TVAC files have a static placeholder for SCTSRT/SCTEND; derive unique values from DATETIME
+            if 'DATETIME' in mock_img_hdr:
+                datetime_str = mock_img_hdr['DATETIME']
+                if '+' in datetime_str:
+                    datetime_str = datetime_str[:datetime_str.index('+')]
+                mock_img_hdr['SCTSRT'] = datetime_str
+                if 'EXPTIME' in mock_img_hdr:
+                    t_start = datetime.datetime.fromisoformat(datetime_str)
+                    t_end = t_start + datetime.timedelta(seconds=float(mock_img_hdr['EXPTIME']))
+                    mock_img_hdr['SCTEND'] = t_end.strftime('%Y-%m-%dT%H:%M:%S')
+                else:
+                    mock_img_hdr['SCTEND'] = datetime_str
 
             # these keys were removed completely
             for key in ['SATSPOTS', 'ISHOWFSC', 'HOWFSLNK']:
