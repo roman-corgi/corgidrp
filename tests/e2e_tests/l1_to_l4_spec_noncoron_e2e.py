@@ -27,27 +27,6 @@ import warnings
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 
-def patch_l2b_eacq_to_cropped_center(filelist):
-    """Set EACQ_ROW/EACQ_COL to the center of the L2b (cropped) image.
-
-    L2b frames have already been cropped by prescan_biassub in L1->L2a, but
-    EACQ_ROW/EACQ_COL are still in full-frame coordinates. The L2b->L3 crop
-    step uses EACQ as the crop center, so this updates L2b headers to the image
-    center to avoid the crop window falling outside the data. This is only to
-    get the tests to work, the better fix is to update EACQ when cropping in
-    the pipeline.
-
-    Args:
-        filelist (list): List of L2b FITS file paths to patch.
-    """
-    for path in filelist:
-        with fits.open(path, mode='update') as hdul:
-            h = hdul[1].header
-            n1, n2 = int(h['NAXIS1']), int(h['NAXIS2'])
-            h['EACQ_ROW'] = (n2 - 1) / 2.0
-            h['EACQ_COL'] = (n1 - 1) / 2.0
-
-
 def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     """Run the complete L1 to L4 spectroscopy data end-to-end test.
     
@@ -275,21 +254,6 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     # Update L1 headers for sims files
     input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
 
-    ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
-    for file in input_data_filelist:
-        with fits.open(file, mode='update') as fits_file:
-            # Fix data types 
-            if 'ISPC' in fits_file[1].header:
-                fits_file[1].header['ISPC'] = int(fits_file[1].header['ISPC'])
-            fits_file[0].header['VISTYPE'] = 'CGIVST_TDD_OBS'
-            if fits_file[1].header['EMGAIN_C'] == 200:
-                logger.info(f"Filename: {fits_file[0].header['FILENAME']}")
-                logger.info(f"Original exposure time: {fits_file[1].header['EXPTIME']}")
-                if fits_file[1].header['EXPTIME'] >= 100:
-                    fits_file[1].data = fits_file[1].data * 0.8
-                    fits_file[1].header['EXPTIME'] = fits_file[1].header['EXPTIME'] * 0.8
-                    logger.info(f"Changed exposure time: {fits_file[1].header['EXPTIME']}")
-
     # Validate all input images
     input_dataset = Dataset(input_data_filelist)
 
@@ -314,7 +278,13 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     
     logger.info(f"Total input images validated: {len(input_dataset)}")
     logger.info('')
-    
+ 
+    #Using a specfluxcal calib file created using DIP data
+    specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(processed_cal_path,'cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
+
+    mocks.rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
+    this_caldb.create_entry(specflux_cal)
+
     # ================================================================================
     # (3) Run Processing Pipeline
     # ================================================================================
@@ -415,71 +385,15 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     l2b_filelist = [os.path.join(l4_outputdir, f) for f in l2b_files]
     logger.info(f'L2a to L2b complete. Generated {len(l2b_filelist)} L2b files.')
 
-    # Patch L2b EACQ to cropped-frame center. TODO: fix this elsewhere
-    patch_l2b_eacq_to_cropped_center(l2b_filelist)
-
     # Step 3: L2b -> L3 (using output from step 2)
     logger.info('Step 3: Running L2b to L3 spectroscopy recipe...')
     walker.walk_corgidrp(l2b_filelist, "", l4_outputdir)
     l3_filelist = [os.path.join(l4_outputdir, f) for f in os.listdir(l4_outputdir) if f.endswith('_l3_.fits')]
     logger.info('L2b to L3 complete.')
     logger.info('')
-    
-    ##################################################################################
-    #Do the same for satspot data
-
-    logger.info('Running L1 to L2a on the non-coronographic spectroscopy satspots...')
-    input_satspots_filenames = os.listdir(os.path.join(l1_datadir,"sat_spots"))
-    input_files = np.array(sorted([os.path.join(l1_datadir, "sat_spots", f) for f in input_satspots_filenames if f.endswith('l1_.fits')]))
-    logger.info(f'Found {len(input_files)} sat spot files in input directory: {l1_datadir}/sat_spots')
-    sat_spot_dir = os.path.join(l4_outputdir,"sat_spots")
-
-   #Split the input data by targets
-    input_targets = np.array([fits.getheader(f)['TARGET'] for f in input_files])
-    unique_targets = np.unique(input_targets)
-    for target in unique_targets:
-        filelist = input_files[np.where(input_targets == target)]
-        walker.walk_corgidrp(list(filelist), "", sat_spot_dir, template='l1_to_l2a_basic.json')
-    l2a_satspot_files = np.array([os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l2a.fits')])
-    logger.info(f'L1 to L2a complete for satspots. Generated {len(l2a_satspot_files)} L2a files.')
-
-    logger.info('Running L2a to L2b on the non-coronographic spectroscopy satspots...')
-    input_targets = np.array([fits.getheader(f)['TARGET'] for f in l2a_satspot_files])
-    unique_targets = np.unique(input_targets)
-    for target in unique_targets:
-        filelist = l2a_satspot_files[input_targets == target]
-        walker.walk_corgidrp(list(filelist), "", sat_spot_dir, template='l2a_to_l2b_spec.json')
-    l2b_satspot_files = [os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l2b.fits')]
-    logger.info(f'L2a to L2b complete for satspots. Generated {len(l2b_satspot_files)} L2b files.')    
-
-    #Don't need to split them for L3 - data can be more inhomogeneous. 
-    logger.info('Running L2b to L3 on the non-coronographic spectroscopy satspots...')
-    walker.walk_corgidrp(l2b_satspot_files, "", sat_spot_dir, template='l2b_to_l3.json')    
-    logger.info('L2b to L3 sat spots complete')
-    l3_satspot_files = [os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l3_.fits')]
-
-    # # # Append the satspot files to the l3_filelist
-    l3_filelist.extend(l3_satspot_files)
-
-    l3_files = Dataset(l3_filelist)
     logger.info(f"Generated and saved {len(l3_filelist)} L3 input files")
 
-    #Create a mock flux calibration file
-    fluxcal_factor = 2e-12
-    fluxcal_factor_error = 1e-14
-    prhd, exthd, errhd, dqhd = mocks.create_default_calibration_product_headers()
-    # Set consistent header values for flux calibration factor
-    exthd['CFAMNAME'] = '3F'
-    exthd['DPAMNAME'] = 'PRISM3'
-    exthd['FSAMNAME'] = 'R1C2'
-    # Use only the science frames (CFAMNAME='3F') for FluxcalFactor, not the spot frame (CFAMNAME='3D')
-    science_dataset = Dataset([f for f in l3_files if f.ext_hdr.get('CFAMNAME') == '3F'])
-    fluxcal_fac = FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = science_dataset)
-
-    mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
-    this_caldb.create_entry(fluxcal_fac)
-    
-
+    ##################################################################################
     # Step 3: L3 -> L4 (with policy)
     logger.info('Step 3: Running L3 to L4 non-coronographic spectroscopy recipe...')
     walker.walk_corgidrp(l3_filelist, "", os.path.join(l4_outputdir,'../'), template="l3_to_l4_noncoron_spec.json")
@@ -562,10 +476,10 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info('')
 
    # ================================================================================
-    # (4) Validate Output Calibration Product
+    # (4) Validate Output L4 Image Data
     # ================================================================================
     logger.info('='*80)
-    logger.info('Test Case 2: Output Calibration Product Data Format and Content')
+    logger.info('Test Case 2: Output Output L4 Image Data Format and Content')
     logger.info('='*80)
 
     # Validate output product
