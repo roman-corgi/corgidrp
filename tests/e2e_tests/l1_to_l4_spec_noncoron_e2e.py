@@ -490,7 +490,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info('='*80)
 
     # Validate output product
-    out_file = check.get_latest_cal_file(os.path.join(l4_outputdir,'../'), '*_l4_.fits', logger)
+    out_file = check.get_latest_cal_file(l4_outputdir, '*_l4_.fits', logger)
     check_filename_convention(os.path.basename(out_file), 'cgi_*_l4_.fits', "spec l4 output product", logger, data_level = "l4_")
 
     with fits.open(out_file) as hdul:        
