@@ -515,10 +515,7 @@ class CalDB:
 
         # load all these files into the caldb
         for calib_frame in calib_frames:
-            try:
-                self.create_entry(calib_frame, to_disk=to_disk)
-            except Exception:
-                continue
+            self.create_entry(calib_frame, to_disk=to_disk)
 
     def _pick_existing(self, options, dtype_label):
         """Walk candidates in preference order and return the first filepath that exists on disk.
