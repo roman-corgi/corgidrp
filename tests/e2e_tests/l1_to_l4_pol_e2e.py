@@ -259,25 +259,19 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     #Create a mock flux calibration file (POL0)
     fluxcal_factor = 2e-12
     fluxcal_factor_error = 1e-14
-    prhd, exthd, errhd, dqhd = mocks.create_default_L3_headers()
+    fluxcal_fac = mocks.make_mock_fluxcal_factor(fluxcal_factor, err = fluxcal_factor_error, cfam_name = '1F', dpam_name = 'POL0')
     # Set consistent header values for flux calibration factor
-    exthd['CFAMNAME'] = '1F'
-    exthd['DPAMNAME'] = 'POL0'
-    exthd['FPAMNAME'] = 'HLC12_C2R1'
-    exthd['DRPNFILE'] = 0  # mock calibration, no input files
-    fluxcal_fac = data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd)
-
+    fluxcal_fac.ext_hdr['FPAMNAME'] = 'HLC12_C2R1'
+    
     mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac)
-
+    
     # POL45 absolute flux cal
-    prhd_pol45 = prhd.copy()
-    prhd_pol45['VISITID'] = str(int(prhd['VISITID']) + 1)
-    exthd_pol45 = exthd.copy()
-    exthd_pol45['DPAMNAME'] = 'POL45'
-    fluxcal_fac_pol45 = data.FluxcalFactor(
-        fluxcal_factor, err=fluxcal_factor_error, pri_hdr=prhd_pol45, ext_hdr=exthd_pol45, err_hdr=errhd.copy()
-    )
+    fluxcal_fac_pol45 = mocks.make_mock_fluxcal_factor(fluxcal_factor, err = fluxcal_factor_error, cfam_name = '1F', dpam_name = 'POL45')
+    fluxcal_fac_pol45.ext_hdr['FPAMNAME'] = 'HLC12_C2R1'
+    
+    fluxcal_fac_pol45.pri_hdr["VISITID"] = str(int(prhd['VISITID']) + 1)
+
     mocks.rename_files_to_cgi_format(list_of_fits=[fluxcal_fac_pol45], output_dir=calibrations_dir, level_suffix="abf_cal")
     this_caldb.create_entry(fluxcal_fac_pol45)
 
@@ -688,8 +682,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
-    outputdir = '/Users/jmilton/Github/corgidrp/tests/e2e_tests'
+    e2edata_dir = '/home/schreiber/DataCopy/E2E_Test_Data'
+    outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l4 polarimetry end-to-end test with recipe chaining")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
