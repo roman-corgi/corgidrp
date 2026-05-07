@@ -175,10 +175,12 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             pixels. Interval 0 to 1, defaults to 0.99. Lower numbers are more aggressive in flagging saturation.
         plat_thresh (float):
             Multiplication factor for pixel full-well capacity (fwc) that determines edges of cosmic
-            plateau. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging cosmic
+            plateau. Interval 0 to 1, defaults to 0.85. Lower numbers are more aggressive in flagging cosmic
             ray hits.
         cosm_filter (int):
-            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 1.
+            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 1.  For EM gain = 1, 
+            this should probaly be 1 since no serial streaking is expected to occur, so a cosmic head could just
+            be in 1 pixel.
         cosm_box (int):
             Number of pixels out from an identified cosmic head (i.e., beginning of
             the plateau) to mask out.
@@ -188,7 +190,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             Number of pixels in the row downstream of the end of a cosmic plateau
             to mask.  If cosm_tail is greater than the number of
             columns left to the end of the row from the cosmic
-            plateau, the cosmic masking ends at the end of the row. Defaults to 10.
+            plateau, the cosmic masking ends at the end of the row. Defaults to 10. 
+            For EM gain = 1, no serial streaking occurs, so this is internally set to 0 
+            in that case regardless of the input value here.
         mode (string):
             If 'image', an image-area input is assumed, and if the input
             tail length is longer than the length to the end of the image-area row,

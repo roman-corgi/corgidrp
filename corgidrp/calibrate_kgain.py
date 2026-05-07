@@ -537,20 +537,6 @@ def calibrate_kgain(dataset_kgain,
             bp_map = np.zeros(frame.shape).astype(int)
             bp_map[bad_rows, bad_cols] = 1
             fr_bp_maps.append(bp_map)
-
-        # fr_bp_maps = [] XXX
-        # for frame in all_frames:
-        #     bad_rows, bad_cols = np.where(np.isnan(frame))
-        #     bp_map = np.zeros(frame.shape).astype(int)
-        #     bp_map[bad_rows, bad_cols] = 1
-        #     fr_bp_maps.append(bp_map)
-        # split_len = len(all_frames)//2
-        # frames_first_half, _, _, _ = mean_combine(all_frames[0:split_len], fr_bp_maps[0:split_len])
-        # frames_second_half, _, _, _ = mean_combine(all_frames[split_len+1:], fr_bp_maps[split_len+1:])
-        # # redefine frames as the two mean-combined frames to better combat comsic ray masking issues in the individual frames. 
-        # frames_avg, _, _, _ = mean_combine(all_frames, fr_bp_maps)
-        # frames = [frames_avg]
-        #XXX frames_diff = [frames_second_half - frames_first_half]
         
         # Calculate frame differences 
         frames_diff = [frames[j] - frames[k] for j, k in index_pairs]

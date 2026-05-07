@@ -410,21 +410,11 @@ def calibrate_nonlin(dataset_nl,
     ####################### create good_mean_frame ###################
     if ram_heavy:
         good_mean_frame, _, _, _ = mean_combine(data.Dataset(mean_frame_arr), None) 
-        # temp_frame = data.Image(mean_frame_arr[0]) # just to get shape#XXX
-        # frame_shape = temp_frame.data.shape
-        # good_mean_frame = np.zeros(frame_shape)
-        # for filepath in mean_frame_arr:
-        #     temp_frame = data.Image(filepath)
-        #     if apply_dq:
-        #         bad = np.where(temp_frame.dq > 0)
-        #         temp_frame.data[bad] = np.nan
-        #     good_mean_frame += temp_frame.data
-        # good_mean_frame = good_mean_frame / len(mean_frame_arr)
     else:
         bp_maps = []
         for frame in mean_frame_arr:
             bad_rows, bad_cols = np.where(np.isnan(frame))
-            bp_map = np.zeros(frame.shape)
+            bp_map = np.zeros(frame.shape).astype(int)
             bp_map[bad_rows, bad_cols] = 1
             bp_maps.append(bp_map)
         good_mean_frame, _, _, _ = mean_combine(mean_frame_arr, bp_maps)  
@@ -598,7 +588,7 @@ def calibrate_nonlin(dataset_nl,
                         bp_maps = []
                         for frame in selected_files:
                             bad_rows, bad_cols = np.where(np.isnan(frame))
-                            bp_map = np.zeros(frame.shape)
+                            bp_map = np.zeros(frame.shape).astype(int)
                             bp_map[bad_rows, bad_cols] = 1
                             bp_maps.append(bp_map)
                         frame_1, bp, _, _ = mean_combine(selected_files, bp_maps)
@@ -646,7 +636,7 @@ def calibrate_nonlin(dataset_nl,
                         bp_maps = []
                         for frame in selected_files[0:first_half]:
                             bad_rows, bad_cols = np.where(np.isnan(frame))
-                            bp_map = np.zeros(frame.shape)
+                            bp_map = np.zeros(frame.shape).astype(int)
                             bp_map[bad_rows, bad_cols] = 1
                             bp_maps.append(bp_map)
                         frame_1, bp, _, _ = mean_combine(selected_files, bp_maps)
@@ -693,7 +683,7 @@ def calibrate_nonlin(dataset_nl,
                         bp_maps = []
                         for frame in selected_files[first_half + 1:second_half]:
                             bad_rows, bad_cols = np.where(np.isnan(frame))
-                            bp_map = np.zeros(frame.shape)
+                            bp_map = np.zeros(frame.shape).astype(int)
                             bp_map[bad_rows, bad_cols] = 1
                             bp_maps.append(bp_map)
                         frame_1, bp, _, _ = mean_combine(selected_files, bp_maps)
