@@ -726,10 +726,11 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         star_y = star_ys[star_ind]
         #TODO perhaps incorporate into ERR in future, and incorporate error in psf_phot argument above (must be non-zero, though)
         star_err = psf_phot.results['flux_err'][star_ind] 
-        # transmission through ND filter:
-        ND_transmission = NDcalibration.interpolate_od(star_x, star_y)
-        # integral under the fitted 2-D Gaussian for the unocculted star:
-        Fs = ND_transmission * psf_phot.results['flux_fit'][star_ind] 
+        # OD (optical density) of the ND filter at the star location:
+        ND_od = NDcalibration.interpolate_od(star_x, star_y)
+        # integral under the fitted 2-D Gaussian for the unocculted star,
+        # corrected for ND filter attenuation: true_flux = measured_flux * 10**OD
+        Fs = 10**ND_od * psf_phot.results['flux_fit'][star_ind]
         # For planet flux, Fp:  treat the annular noise value as the amplitude of a 2-D Gaussian and use the 
         # same FWHM used for KLIP throughput calculation.  The analytic formula for volume under the Gaussian is the integrated flux.
         noise_amp = annular_noise.T

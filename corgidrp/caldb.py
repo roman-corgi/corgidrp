@@ -400,6 +400,20 @@ class CalDB:
             options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
             # FluxcalFactorPOL0/FluxcalFactorPOL45 are looked up as FluxcalFactor entries on disk
             dtype = data.FluxcalFactor
+
+        elif dtype_label in ['SpecFluxCal']:
+            # filter by color filter and DPAM
+            if frame_dict['CFAMNAME'] in ['2F', '3F', '2A', '2B', '2C', '3A', '3B', '3C', '3D', '3E', '3G']:
+                value = list(frame_dict['CFAMNAME'])[0] + 'F'
+                options = self.filter_calib(calibdf, "CFAMNAME", value, err_if_none=True)
+            else:
+                options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+            dtype = data.SpecFluxCal
+            
         elif dtype_label in ['CoreThroughputCalibration']:
             # filter by focal plane mask
             options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
@@ -559,7 +573,7 @@ class CalDB:
             err_if_none is set to false. 
 
         '''
-        
+
         filtered_calibdf = calibdf.loc[
             (
                 (calibdf[col_name] == value)
