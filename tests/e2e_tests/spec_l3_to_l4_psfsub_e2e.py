@@ -151,19 +151,12 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     calibrations_dir = os.path.join(e2eoutput_path, 'calibrations')
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
-    #Create a mock flux calibration file
-    fluxcal_factor = 2e-12
-    fluxcal_factor_error = 1e-14
-    prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
-    # Set consistent header values for flux calibration factor
-    exthd['CFAMNAME'] = '3F'
-    exthd['DPAMNAME'] = 'PRISM3'
-    exthd['FSAMNAME'] = 'R1C2'
-    fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = l3_dataset)
 
-    rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
-    this_caldb.create_entry(fluxcal_fac)
+    #Using a specfluxcal calib file created using DIP data
+    specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(e2edata_path,'SPEC_NOM_sims/cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
 
+    rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
+    this_caldb.create_entry(specflux_cal)
     ###########################
     #### Make dummy CT cal ####
     ###########################
@@ -175,6 +168,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     pupil_image[510:530, 510:530]=1
     # Add specific values for pupil images:
     # DPAM = PUPIL, FSAM = OPEN, LSAM=OPEN and FPAM=OPEN_12
+    prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
     exthd['DPAMNAME'] = 'PUPIL'
     exthd['LSAMNAME'] = 'OPEN'
     exthd['FSAMNAME'] = 'OPEN'
