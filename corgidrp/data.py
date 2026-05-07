@@ -1052,7 +1052,7 @@ class LineSpread(Image):
                     'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
-                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN'
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 'FTIMEUTC'
                 ]
             )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
