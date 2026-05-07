@@ -515,7 +515,10 @@ class CalDB:
 
         # load all these files into the caldb
         for calib_frame in calib_frames:
-            self.create_entry(calib_frame, to_disk=to_disk)
+            try:
+                self.create_entry(calib_frame, to_disk=to_disk)
+            except Exception:
+                continue
 
     def _pick_existing(self, options, dtype_label):
         """Walk candidates in preference order and return the first filepath that exists on disk.
@@ -673,10 +676,14 @@ def initialize():
     tvac_bpm_filename = "cgi_0000000000000000000_20260101t0000004_bpm_cal.fits"
     tvac_pol0_flt_filename = "cgi_0000000000000000000_20260101t0000005_flt_cal.fits"
     tvac_pol45_flt_filename = "cgi_0000000000000000000_20260101t0000006_flt_cal.fits"
+    tvac_flt4_filename = "cgi_0000000000000000000_20260101t0000007_flt_cal.fits"
+    tvac_pol0_flt4_filename = "cgi_0000000000000000000_20260101t0000008_flt_cal.fits"
+    tvac_pol45_flt4_filename = "cgi_0000000000000000000_20260101t0000009_flt_cal.fits"
 
     tvac_cal_filenames = [tvac_nln_filename, tvac_krn_filename, tvac_dnm_filename,
                           tvac_flt_filename, tvac_bpm_filename,
-                          tvac_pol0_flt_filename, tvac_pol45_flt_filename]
+                          tvac_pol0_flt_filename, tvac_pol45_flt_filename,
+                          tvac_flt4_filename, tvac_pol0_flt4_filename, tvac_pol45_flt4_filename]
     tvac_cals_missing = any(
         not os.path.exists(os.path.join(corgidrp.default_cal_dir, f))
         for f in tvac_cal_filenames
@@ -841,6 +848,48 @@ def initialize():
             pol45_flat.ext_hdr["DATETIME"] = isot_2026
             pol45_flat.ext_hdr["FTIMEUTC"] = isot_2026
             pol45_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol45_flt_filename)
+
+        # Band-4 IMAGING FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='IMAGING'.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_flt4_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            flt4 = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                  input_dataset=flat_mock_dataset)
+            flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
+            flt4.ext_hdr["CFAMNAME"] = "4F"
+            flt4.ext_hdr["DPAMNAME"] = "IMAGING"
+            flt4.ext_hdr["MJDSRT"] = mjd_2026
+            flt4.ext_hdr["DATETIME"] = isot_2026
+            flt4.ext_hdr["FTIMEUTC"] = isot_2026
+            flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt4_filename)
+
+        # Band-4 POL0 FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='POL0'.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol0_flt4_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol0_flt4 = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                       input_dataset=flat_mock_dataset)
+            pol0_flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
+            pol0_flt4.ext_hdr["CFAMNAME"] = "4F"
+            pol0_flt4.ext_hdr["DPAMNAME"] = "POL0"
+            pol0_flt4.ext_hdr["MJDSRT"] = mjd_2026
+            pol0_flt4.ext_hdr["DATETIME"] = isot_2026
+            pol0_flt4.ext_hdr["FTIMEUTC"] = isot_2026
+            pol0_flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol0_flt4_filename)
+
+        # Band-4 POL45 FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='POL45'.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol45_flt4_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol45_flt4 = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                        input_dataset=flat_mock_dataset)
+            pol45_flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
+            pol45_flt4.ext_hdr["CFAMNAME"] = "4F"
+            pol45_flt4.ext_hdr["DPAMNAME"] = "POL45"
+            pol45_flt4.ext_hdr["MJDSRT"] = mjd_2026
+            pol45_flt4.ext_hdr["DATETIME"] = isot_2026
+            pol45_flt4.ext_hdr["FTIMEUTC"] = isot_2026
+            pol45_flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol45_flt4_filename)
 
         rescan_needed = True
 
