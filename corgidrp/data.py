@@ -161,6 +161,10 @@ class Dataset():
                             frame.hdu_list[name].data = temp_frame.hdu_list[name].data
             ##redoing the change to the FILENAME keyword to cover our bases
             frame.pri_hdr['FILENAME'] = frame.filename
+            ##Fix to ensure L4 file is saved in different folder from L2a/L2b/L3 files. Only needed for particular vistype as it is the only one directly chained from L1->L4
+            if frame.ext_hdr['DATALVL'] == 'L4' and frame.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_TGTREF':
+                filedir = os.path.join(filedir, '../')
+
             frame.save(filename=filename, filedir=filedir)
 
         if not ram_heavy_save:
