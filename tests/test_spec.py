@@ -1445,6 +1445,7 @@ def test_filter_offset():
     load_offset = SpecFilterOffset(os.path.join(output_dir, "SpecFilterOffset_test.fits"))
     assert load_offset.offsets == offset.offsets
     assert load_offset.get_offsets("2A") == [0.5, 0.2]
+    os.remove(os.path.join(output_dir, "SpecFilterOffset_test.fits"))
     offset2 = SpecFilterOffset({})
     assert offset2.offsets == offset2.default_offsets
     
