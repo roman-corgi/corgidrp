@@ -172,7 +172,7 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
 @pytest.mark.e2e
 def test_l1_to_linespread(e2edata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
-    l1_datadir = os.path.join(e2edata_path, "dip_test/SPEC-NOM_linespreadfunc_cal")
+    l1_datadir = os.path.join(e2edata_path, "SPEC_NOM_sims/SPEC-NOM_linespreadfunc_cal")
     processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
 
     # make output directory if needed
