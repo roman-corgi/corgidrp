@@ -156,7 +156,9 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     #Using a specfluxcal calib file created using DIP data
     specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(e2edata_path,'SPEC_NOM_sims/cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
 
-    rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
     this_caldb.create_entry(specflux_cal)
 
     ###########################
