@@ -325,7 +325,8 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
-
+    exthdr['SCTSRT'] = dt_str
+    exthdr['SCTEND'] = (dt + datetime.timedelta(seconds=exthdr['EXPTIME'])).strftime("%Y-%m-%dT%H:%M:%S")
     mjd_start = float(Time(dt_str).mjd)
     exthdr['MJDSRT'] = mjd_start
     exthdr['MJDEND'] = mjd_start + exthdr['EXPTIME'] / 86400.0
