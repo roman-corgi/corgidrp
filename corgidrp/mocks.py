@@ -326,6 +326,10 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
 
+    mjd_start = float(Time(dt_str).mjd)
+    exthdr['MJDSRT'] = mjd_start
+    exthdr['MJDEND'] = mjd_start + exthdr['EXPTIME'] / 86400.0
+
     prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
     
     # Override BUNIT for trap pump data (different from regular L1)
