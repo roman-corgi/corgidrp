@@ -973,7 +973,9 @@ def test_ct_cal_order_independent():
     pupil_frames = []
     offaxis_frames = []
     for frame in dataset_ct_syn:
-        if corethroughput._is_pupil_frame(frame):
+        exthd = frame.ext_hdr
+        if (exthd['DPAMNAME'] == 'PUPIL' and exthd['LSAMNAME'] == 'OPEN' and
+                exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12'):
             pupil_frames.append(frame)
         else:
             offaxis_frames.append(frame)

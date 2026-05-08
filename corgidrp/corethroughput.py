@@ -8,20 +8,6 @@ from corgidrp import astrom, data
 
 here = os.path.abspath(os.path.dirname(__file__))
 
-def _is_pupil_frame(frame):
-    """Return True if frame is a pupil image of the unocculted source.
-
-    Args:
-        frame (corgidrp.data.Image): a frame from a CT dataset.
-
-    Returns:
-        bool: True if the frame is a pupil image (DPAM=PUPIL, LSAM=OPEN,
-            FSAM=OPEN, FPAM=OPEN_12).
-    """
-    exthd = frame.ext_hdr
-    return (exthd['DPAMNAME'] == 'PUPIL' and exthd['LSAMNAME'] == 'OPEN' and
-            exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12')
-
 def get_cfam(
     cfam_name='1F',
     cfam_version=0,
@@ -317,7 +303,9 @@ def generate_psf_cube(
     # PSF cube header: use first off-axis frame so pupil headers don't propagate
     first_offaxis_frame = None
     for frame in dataset:
-        if not _is_pupil_frame(frame):
+        exthd = frame.ext_hdr
+        if not (exthd['DPAMNAME'] == 'PUPIL' and exthd['LSAMNAME'] == 'OPEN' and
+                exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12'):
             first_offaxis_frame = frame
             break
     if first_offaxis_frame is None:
