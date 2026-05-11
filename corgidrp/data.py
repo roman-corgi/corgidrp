@@ -1052,7 +1052,7 @@ class LineSpread(Image):
                     'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
-                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN'
+                    'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 'FTIMEUTC'
                 ]
             )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
@@ -2182,6 +2182,41 @@ class FluxcalFactor(Image):
         else:
             super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
         # if filepath passed in, just load in from disk as usual
+        
+                # if this is a new FluxcalFactors file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                raise ValueError("This appears to be a new FluxcalFactor. The dataset of input files needs to be passed \
+                                 in to the input_dataset keyword to record history of this FluxcalFactor file.")
+            else:
+                # log all the data that went into making this calibration file
+                self._record_parent_filenames(input_dataset)
+                # give it a default filename using the first input file as the base
+                # strip off everything starting at .fits
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+
+            self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
+            # JM: moved the below to fluxcal.py since it varies depending on the method
+            #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+            #self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+            # add to history
+            self.ext_hdr['HISTORY'] = "Flux calibration file created"
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+            self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+            # use the start date for the filename by default
+            self.filedir = "."
+            # slight hack for old mocks not in the standard filename format
+            if input_dataset is not None:
+                self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
+                self.filename = re.sub('_l[0-9].', '', self.filename)
+            else:
+                self.filename = re.sub(r'\.fits$', '_abf_cal.fits', self.pri_hdr['FILENAME'])
+            self.pri_hdr['FILENAME'] = self.filename
+        
         # File format checks
         if self.data.shape != (1,):
             raise ValueError('The FluxcalFactor calibration data should be just one float value')
@@ -2212,50 +2247,10 @@ class FluxcalFactor(Image):
                 raise ValueError("File that was loaded was not a FluxcalFactor file.")
             if self.ext_hdr['DATATYPE'] != 'FluxcalFactor':
                 raise ValueError("File that was loaded was not a FluxcalFactor file.")
-        else:
-            self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-            self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
             
         # make some attributes to be easier to use
         self.fluxcal_fac = self.data[0]
         self.fluxcal_err =  self.err[0]
-
-        # if this is a new FluxcalFactors file, we need to bookkeep it in the header
-        # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
-        if ext_hdr is not None:
-            if input_dataset is None:
-                if 'DRPNFILE' not in ext_hdr:
-                    # error check. this is required in this case
-                    raise ValueError("This appears to be a new FluxcalFactor. The dataset of input files needs to be passed \
-                                     in to the input_dataset keyword to record history of this FluxcalFactor file.")
-                else:
-                    pass
-            else:
-                # log all the data that went into making this calibration file
-                self._record_parent_filenames(input_dataset)
-                # give it a default filename using the first input file as the base
-                # strip off everything starting at .fits
-                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-
-            self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
-            # JM: moved the below to fluxcal.py since it varies depending on the method
-            #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
-            #self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
-            # add to history
-            self.ext_hdr['HISTORY'] = "Flux calibration file created"
-
-            # Enforce data level = CAL
-            self.ext_hdr['DATALVL']    = 'CAL'
-
-            # use the start date for the filename by default
-            self.filedir = "."
-            # slight hack for old mocks not in the standard filename format
-            if input_dataset is not None:
-                self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-                self.filename = re.sub('_l[0-9].', '', self.filename)
-            else:
-                self.filename = re.sub(r'\.fits$', '_abf_cal.fits', self.pri_hdr['FILENAME'])
-            self.pri_hdr['FILENAME'] = self.filename
 
 class SpecFluxCal(Image):
     """
@@ -2290,7 +2285,37 @@ class SpecFluxCal(Image):
     def __init__(self, data_or_filepath, err = None, dq = None, pri_hdr=None, ext_hdr=None, err_hdr = None, input_dataset = None):
        # run the image class contructor
         super().__init__(data_or_filepath, err=err, dq = dq, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
-        # if filepath passed in, just load in from disk as usual
+        # if this is a new SpecFluxCal file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new SpecFluxCal file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                raise ValueError("This appears to be a new SpecFluxCal. The dataset of input files needs to be passed \
+                                     in to the input_dataset keyword to record history of this SpecFluxCal file.")
+            else:
+                # log all the data that went into making this calibration file
+                self._record_parent_filenames(input_dataset)
+                # give it a default filename using the first input file as the base
+                # strip off everything starting at .fits
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+  
+            self.ext_hdr['DATATYPE'] = 'SpecFluxCal' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s/bin)'
+            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s/bin)'
+            # add to history
+            self.ext_hdr['HISTORY'] = "Spectral flux calibration file created"
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+            self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+            
+            # use the start date for the filename by default
+            self.filedir = "."
+            # slight hack for old mocks not in the standard filename format
+            self.filename = "{0}_sfl_cal.fits".format(orig_input_filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.pri_hdr['FILENAME'] = self.filename
+
         # File format checks
         if self.data.shape[0] != 2:
             raise ValueError('The spectral flux calibration data should be a 2D array')
@@ -2307,9 +2332,6 @@ class SpecFluxCal(Image):
                 raise ValueError("File that was loaded was not a SpecFluxCal file.")
             if self.ext_hdr['DATATYPE'] != 'SpecFluxCal':
                 raise ValueError("File that was loaded was not a SpecFluxCal file.")
-        else:
-            self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-            self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
             
         # make some attributes to be easier to use
         self.nd_filter = "ND0" #no neutral density filter in beam, TBC
@@ -2329,12 +2351,8 @@ class SpecFluxCal(Image):
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new SpecFluxCal file
         if ext_hdr is not None:
             if input_dataset is None:
-                if 'DRPNFILE' not in ext_hdr:
-                    # error check. this is required in this case
-                    raise ValueError("This appears to be a new SpecFluxCal. The dataset of input files needs to be passed \
+                raise ValueError("This appears to be a new SpecFluxCal. The dataset of input files needs to be passed \
                                      in to the input_dataset keyword to record history of this SpecFluxCal file.")
-                else:
-                    pass
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
@@ -2350,7 +2368,9 @@ class SpecFluxCal(Image):
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
-
+            self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+            
             # use the start date for the filename by default
             self.filedir = "."
             # slight hack for old mocks not in the standard filename format
@@ -3934,9 +3954,9 @@ class MuellerMatrix(Image):
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
             ]
         )
-            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
         else:
-            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
 
         # if this is a new Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
@@ -4005,9 +4025,9 @@ class NDMuellerMatrix(Image):
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
             ]
         )
-            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr, dq_hdr=dq_hdr)
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
         else:
-            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+            super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
 
         # if this is a new ND Mueller Matrix map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new Mueller Matrix
@@ -4100,6 +4120,14 @@ class FlatFieldPOL45:
     def __init__(self, ref: FlatField):
         self.ref = ref
 
+class FluxcalFactorPOL0:
+    def __init__(self, ref: FluxcalFactor):
+        self.ref = ref
+
+class FluxcalFactorPOL45:
+    def __init__(self, ref: FluxcalFactor):
+        self.ref = ref
+
 datatypes = { "Image" : Image,
               "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -4113,6 +4141,8 @@ datatypes = { "Image" : Image,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration" : TrapCalibration,
               "FluxcalFactor" : FluxcalFactor,
+              "FluxcalFactorPOL0" : FluxcalFactorPOL0,
+              "FluxcalFactorPOL45" : FluxcalFactorPOL45,
               "FpamFsamCal" : FpamFsamCal,
               "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,

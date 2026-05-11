@@ -170,21 +170,13 @@ def run_spec_l3_to_l4_e2e_test(e2edata_path, e2eoutput_path):
     calibrations_dir = os.path.join(e2eoutput_path, 'calibrations')
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
-    #Create a mock flux calibration file
-    fluxcal_factor = 2e-12
-    fluxcal_factor_error = 1e-14
-    prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
-    # Set consistent header values for flux calibration factor
-    exthd['CFAMNAME'] = '3F'
-    exthd['DPAMNAME'] = 'PRISM3'
-    exthd['FSAMNAME'] = 'R1C2'
-    # Use only the science frames (CFAMNAME='3F') for FluxcalFactor, not the spot frame (CFAMNAME='3D')
-    science_dataset = Dataset([f for f in l3_dataset_with_filenames if f.ext_hdr.get('CFAMNAME') == '3F'])
-    fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = science_dataset)
 
-    rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
-    this_caldb.create_entry(fluxcal_fac)
-    
+    #Using a specfluxcal calib file created using DIP data
+    specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(e2edata_path,'SPEC_NOM_sims/cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
+
+    rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
+    this_caldb.create_entry(specflux_cal)
+
     # Scan for default calibrations
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     
@@ -448,7 +440,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/home/ababuraj/roman/E2E_Test_Data'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
