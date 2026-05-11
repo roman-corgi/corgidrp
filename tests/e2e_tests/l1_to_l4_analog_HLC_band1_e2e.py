@@ -32,6 +32,38 @@ def create_and_clean_folder(folder_name):
     for file in os.listdir(folder_name):
         os.remove(os.path.join(folder_name,file))
         
+def separate_sci_and_satspots(filelist):
+    '''
+    This scripts separates the files with satspots from the files without.
+    '''
+    sci_images=[]
+    satspots_images=[]
+    for file in filelist:
+        hdu_temp = fits.open(file)
+        if hdu_temp[1].header['SATSPOTS']==1:
+            satspots_images.append(file)
+        elif hdu_temp[1].header['SATSPOTS']==0:
+            sci_images.append(file)
+    return sci_images, satspots_images  
+        
+def process_l1_to_l2a(filelist,l2a_outputdir):
+    '''
+    This script separates the files in the provided list into those with satspots
+    and those without. It then processess the two subsets of files from L1 to L2a.
+    '''
+    images_sci, images_spots = separate_sci_and_satspots(filelist)
+    walker.walk_corgidrp(images_spots, '', l2a_outputdir)
+    walker.walk_corgidrp(images_sci, '', l2a_outputdir)
+    
+def process_l2a_to_l2b(filelist,l2b_outputdir):
+    '''
+    This script separates the files in the provided list into those with satspots
+    and those without. It then processess the two subsets of files from L2a to L2b.
+    '''
+    images_sci, images_spots = separate_sci_and_satspots(filelist)
+    walker.walk_corgidrp(images_spots, '', l2b_outputdir)
+    walker.walk_corgidrp(images_sci, '', l2b_outputdir)
+
 @pytest.mark.e2e
 def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2eoutput_path):
     '''
@@ -101,7 +133,7 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     mock_input_dataset = data.Dataset(mock_cal_filelist)
     
     # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_l1tol4_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
@@ -151,14 +183,30 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     # Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
+    # The predefined ext_hdr assigns the FPAMNAME to be 'HLC12_R2C5'. It should
+    # be 'OPEN_12' for the flat. Manually correct this. Also need to switch the
+    # DPAMNAME to 'IMAGING' instead of 'IMAGING,IMAGING_FFT'
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    flat.ext_hdr['FPAMNAME'] = 'OPEN_12'
+    flat.ext_hdr['DPAMNAME'] = 'IMAGING'
     mocks.rename_files_to_cgi_format(list_of_fits=[flat], output_dir=calibrations_dir, level_suffix="flt_cal")
     this_caldb.create_entry(flat)
     
     # Bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    # Make sure BPM includes a dark(-like) frame
+    bp_dark_pri, bp_dark_ext, _, _ = mocks.create_default_calibration_product_headers()
+    bp_dark_ext['EXPTIME'] = float(mock_input_dataset.frames[0].ext_hdr.get('EXPTIME', 0.0))
+    bp_dark_ext['EMGAIN_C'] = float(mock_input_dataset.frames[0].ext_hdr.get('EMGAIN_C', 1.0))
+    bp_dark_ext['DRPNFILE'] = 1
+    bp_dark = data.Dark(np.zeros_like(bp_dat, dtype=float), pri_hdr=bp_dark_pri, ext_hdr=bp_dark_ext,
+                        input_dataset=mock_input_dataset,
+                        err=np.zeros((1,) + bp_dat.shape, dtype=float),
+                        dq=np.zeros(bp_dat.shape, dtype='uint16'),
+                        err_hdr=fits.Header())
+    bp_map_inputs = data.Dataset([bp_dark, flat])
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
     mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
     this_caldb.create_entry(bp_map)
     #--------------------------------------------------------------------------
@@ -191,28 +239,40 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     #--------------------------------------------------------------------------
     # Run the walker to process from L1 to L2a
     # Note that the reference star images must be processed separately from the
-    # target star images.
-    ref_star_images = [f for f in l1_data_filelist if f[-27]=='1']
-    walker.walk_corgidrp(ref_star_images,"",l2a_outputdir)
+    # target star images. We will also separate out the images with satspots.
     
-    target_star_images_roll15 = [f for f in l1_data_filelist if f[-27]=='2']
-    target_star_images_rollm15 = [f for f in l1_data_filelist if f[-27]=='3']
-    walker.walk_corgidrp(target_star_images_roll15,"",l2a_outputdir)
-    walker.walk_corgidrp(target_star_images_rollm15,"",l2a_outputdir)
+    car114_images = [f for f in l1_data_filelist if f[-27]=='1']
+    process_l1_to_l2a(car114_images, l2a_outputdir)
     
-    new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')] #[os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
-
+    car115_images = [f for f in l1_data_filelist if f[-27]=='2']
+    process_l1_to_l2a(car115_images, l2a_outputdir)    
+    
+    car116_images = [f for f in l1_data_filelist if f[-27]=='3']
+    process_l1_to_l2a(car116_images, l2a_outputdir)
+    
+    car117_images = [f for f in l1_data_filelist if f[-27]=='4']
+    process_l1_to_l2a(car117_images, l2a_outputdir)
+    
+    new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')]
+    print('Completed processing L1 to L2a')
+    
     # Run the walker to process from L2a to L2b
     # Again, the reference and target star images must be processed separately
-    ref_star_images = [f for f in new_l2a_filenames if f[-27]=='1']
-    walker.walk_corgidrp(ref_star_images, "", l2b_outputdir)
+    # We will also separately process images with and without spots
+    car114_l2a = [f for f in new_l2a_filenames if f[-27]=='1']
+    process_l2a_to_l2b(car114_l2a, l2b_outputdir)
     
-    target_star_images_roll15 = [f for f in new_l2a_filenames if f[-27]=='2']
-    target_star_images_rollm15 = [f for f in new_l2a_filenames if f[-27]=='3']
-    walker.walk_corgidrp(target_star_images_roll15, "", l2b_outputdir)
-    walker.walk_corgidrp(target_star_images_rollm15, "", l2b_outputdir)
-
-    new_l2b_filenames = [os.path.join(l2b_outputdir, f) for f in os.listdir(l2b_outputdir) if f.endswith('l2b.fits') ]
+    car115_l2a = [f for f in new_l2a_filenames if f[-27]=='2']
+    process_l2a_to_l2b(car115_l2a, l2b_outputdir)
+    
+    car116_l2a = [f for f in new_l2a_filenames if f[-27]=='3']
+    process_l2a_to_l2b(car116_l2a, l2b_outputdir)
+    
+    car117_l2a = [f for f in new_l2a_filenames if f[-27]=='4']
+    process_l2a_to_l2b(car117_l2a, l2b_outputdir)
+    
+    new_l2b_filenames = [os.path.join(l2b_outputdir, f) for f in os.listdir(l2b_outputdir) if f.endswith('l2b.fits')]
+    print('Completed processing L2a to L2b')
     #--------------------------------------------------------------------------
     # Processing from L2b to L3 requires three calibrations:
     #   astrometric calibration
@@ -243,6 +303,7 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
 
     # Core Throughput Calibration
     # Dataset with some CT profile defined in create_ct_interp
+    # The DRP will return an error if it does not find at least one pupil image
     # Pupil image
     pupil_image = np.zeros([1024, 1024])
     # Set it to some known value for a selected range of pixels
@@ -269,6 +330,8 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     # We can use a miminal dataset to get to know it
     data_ct_interp += [data_psf[0]]
     ct_cal_tmp = corethroughput.generate_ct_cal(corgidrp.data.Dataset(data_ct_interp))
+    # Change the FPAMNAME to match the sim data
+    ct_cal_tmp.ext_hdr['FPAMNAME']='HLC12_C2R5'
     mocks.rename_files_to_cgi_format(list_of_fits=[ct_cal_tmp], output_dir=calibrations_dir, level_suffix="ctm_cal")
     this_caldb.create_entry(ct_cal_tmp)
 
@@ -289,13 +352,30 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     this_caldb.create_entry(fluxcal_fac)
 
     # Run the walker to process from L2b to L3
-    # Now all of the images are processed together.
-    walker.walk_corgidrp(new_l2b_filenames, "", l3_outputdir)
-    new_l3_filenames = [os.path.join(l3_outputdir, f) for f in os.listdir(l3_outputdir) if f.endswith('l3_.fits') ] 
+    # Now all of the images could be processed together, except that for a 
+    # full dataset (7,222 files), that takes so much memory (235+ GB) and time that 
+    # it takes hours to even get to the printing of the first walker step.
+    # Divide up the files by car
+    car114_l2b = [f for f in new_l2b_filenames if f[-27]=='1']
+    car115_l2b = [f for f in new_l2b_filenames if f[-27]=='2']
+    car116_l2b = [f for f in new_l2b_filenames if f[-27]=='3']
+    car117_l2b = [f for f in new_l2b_filenames if f[-27]=='4']
+    print('Starting walker for CAR114 L2b to L3')
+    walker.walk_corgidrp(car114_l2b,'',l3_outputdir)
+    print('Starting walker for CAR115 L2b to L3')
+    walker.walk_corgidrp(car115_l2b,'',l3_outputdir)
+    print('Starting walker for CAR116 L2b to L3')
+    walker.walk_corgidrp(car116_l2b,'',l3_outputdir)
+    print('Starting walker for CAR117 L2b to L3')
+    walker.walk_corgidrp(car117_l2b,'',l3_outputdir)
+    #walker.walk_corgidrp(new_l2b_filenames,'',l3_outputdir)
+    new_l3_filenames = [os.path.join(l3_outputdir, f) for f in os.listdir(l3_outputdir) if f.endswith('l3_.fits') ]
+    print('Completed processing L2b to L3')
 
     # Run the walker to process from L3 to L4
-    walker.walk_corgidrp(new_l3_filenames, "", l4_outputdir)
-    new_l4_filenames = [os.path.join(l4_outputdir, f) for f in os.listdir(l4_outputdir) if f.endswith('l4.fits') ] 
+    walker.walk_corgidrp(new_l3_filenames,'',l4_outputdir)
+    new_l4_filenames = [os.path.join(l4_outputdir, f) for f in os.listdir(l4_outputdir) if f.endswith('l4.fits') ]
+    print('Completed processing L3 to L4')
     
 
 if __name__=='__main__':
@@ -306,7 +386,7 @@ if __name__=='__main__':
     # workflow.
     
     # Location of the simulated L1 data
-    l1_datadir = os.path.join(this_file_dir,'../test_data/HLC_analog_TestData/')
+    l1_datadir = os.path.join(this_file_dir,'../test_data/input_l1_HLC_Band1_e2e/')
     # Location of the test_data folder that contains JWST_CALFIELD202.csv
     test_data_dir = os.path.join(this_file_dir,'../test_data/')
     e2edata_dir = os.path.join(this_file_dir,'../../../TVAC_Test_Data/E2E_Test_Data/')
