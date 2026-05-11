@@ -88,7 +88,7 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     
     Args:
         l1_datadir: location of the folder containing the L1 data for the test
-        test_data: location of the test_data folder that contains JWST_CALFIELD202.csv
+        test_data_dir: location of the test_data folder that contains JWST_CALFIELD202.csv
         e2edata_path: location of the TVAC test data folder containing the data used for mock calibrations
         e2eoutput_path: directory of e2e output data
     '''
