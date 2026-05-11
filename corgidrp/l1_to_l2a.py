@@ -157,7 +157,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.99,
+def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
                        plat_thresh=0.85, cosm_filter=1, cosm_box=3, cosm_tail=10,
                        mode='image', detector_regions=None, pct_oversat_lim=20, dataset_copy=True):
     """
@@ -172,7 +172,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         k_gain (corgidrp.data.KGain): KGain calibration file
         sat_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
-            pixels. Interval 0 to 1, defaults to 0.99. Lower numbers are more aggressive in flagging saturation.
+            pixels. Interval 0 to 1, defaults to 0.95. Lower numbers are more aggressive in flagging saturation.
         plat_thresh (float):
             Multiplication factor for pixel full-well capacity (fwc) that determines edges of cosmic
             plateau. Interval 0 to 1, defaults to 0.85. Lower numbers are more aggressive in flagging cosmic
@@ -264,7 +264,6 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
     m1 = (crmasked_cube >= sat_fwcs_array) * sat_dqval
-
     # Mask 2:  captures cosmic rays.  If EM gain is 1, no cosmic tails made since 
     # those are only made in gain register.  
     # Do a for loop since it's calling a for loop in the sub-routine anyway
@@ -278,8 +277,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         else:
             cosm_tail_i = cosm_tail
         m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
-                        fwc=sat_fwcs[i],
-                        sat_thresh=sat_thresh, # same value across the frame, so just pick 0,0 
+                        fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
+                        sat_thresh=sat_thresh,
                         plat_thresh=plat_thresh,
                         cosm_filter=cosm_filter,
                         cosm_box=cosm_box,
