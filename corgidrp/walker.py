@@ -156,12 +156,12 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                     if read_cpgs: # if not already specified.
                         # need to populate satellite spot info from XML
                         cpgs_xml = ET.parse(CPGS_XML_filepath)
-                        sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
+                        sat_spot_info = _get_satellite_spot_info_from_xml_new(cpgs_xml)
                         step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
                         step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
             
             output_filelist = run_recipe(recipe)
-
+   
     # return just the recipe if there was only one
     if len(list_of_recipe_chains) == 1:
         if len(list_of_recipe_chains[0]) == 1:
@@ -758,5 +758,46 @@ def _get_satellite_spot_info_from_xml(xml_tree):
             sat_spot_output['spot2_contrast'] = float(pair.find("intensity").text)
             sat_spot_output['spot2_sep'] = float(pair.find("radial_distance").text)
             sat_spot_output['spot2_angle'] = float(pair.find("clocking_angle").text)
+
+    return sat_spot_output
+
+def _get_satellite_spot_info_from_xml_new(xml_tree):
+    """
+    Extracts satellite spot information from the CPGS XML file
+
+    Args:
+        xml_tree (ElementTree): loaded in CPGS XML file
+        
+    Returns:
+        dict: dictionary with satellite spot information
+            "num_spots": int, number of satellite spots
+            "spot1_contrast": float, contrast of spot 1
+            "spot1_sep": float, separation of spot 1 in lam/D
+            "spo1_angle": float, angle of spot 1 in degrees
+            "spot2_contrast": float, contrast of spot 2
+            "spot2_sep": float, separation of spot 2 in lam/D
+            "spo2_angle": float, angle of spot 2 in degrees
+    """
+    obs_specification = xml_tree.getroot()
+    cpgs_input_info = obs_specification.find("cpgs_input")
+    try:
+        sat_spot_info = cpgs_input_info.find("satellite_spots_command_info")
+    except:
+        raise Exception("Field with satellite spot info 'satellite_spots_command_info' not found in CPGS XML file. Please ensure that the CPGS file is formatted correctly.")
+    sat_spot_output = {}
+    sat_spot_output['num_spots'] = 0
+    sat_spots = sat_spot_info.text.split(") (")
+    for sat_spot in sat_spots:
+        sat_spot = sat_spot.replace("(", "").replace(")", "")
+        fields = sat_spot.split(",")
+        sat_spot_output['num_spots'] += 1
+        for i, field in enumerate(fields):
+            key, value = field.split("=")
+            #key = (''.join([c for c in key if not c.isdigit()])).replace(" ","")
+            key = ['sep','angle','contrast','filt']
+            try:
+                sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = float(value)
+            except:
+                sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = str(value)
 
     return sat_spot_output
