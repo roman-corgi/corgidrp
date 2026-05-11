@@ -72,6 +72,7 @@ all_steps = {
     "add_wavelength_map": corgidrp.l3_to_l4.add_wavelength_map,
     "extract_spec": corgidrp.l3_to_l4.extract_spec,
     "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
+    "update_to_l4_pol": corgidrp.l3_to_l4.update_to_l4_pol,
     "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
     "create_ct_map": corgidrp.corethroughput.create_ct_map,
     "create_nd_filter_cal": corgidrp.nd_filter_calibration.create_nd_filter_cal,
@@ -395,6 +396,9 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
             chained = True
+        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_LINESPREAD':
+            recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", 'l2b_to_spec_linespread.json']
+            chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_TGTREF':
             if image.ext_hdr['FPAMNAME'] == 'OPEN':               #L1 -> spec dispersion calibration
                 recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b_spec.json","l2b_to_spec_prism_disp.json"]
@@ -691,6 +695,8 @@ def run_recipe(recipe, save_recipe_file=True):
                                 # special case for pol flat because it has multiple files
                                 if calib == "FlatFieldPOL0" or calib == "FlatFieldPOL45":
                                     calib_dtype = data.datatypes['FlatField']
+                                elif calib == "FluxcalFactorPOL0" or calib == "FluxcalFactorPOL45":
+                                    calib_dtype = data.datatypes['FluxcalFactor']
                                 else:
                                     calib_dtype = data.datatypes[calib]
                                 cal_file = calib_dtype(step["calibs"][calib])

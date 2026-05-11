@@ -1050,5 +1050,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         master_dark = Dark(md_data, prihdr, exthdr, input_data, md_noise, FDCdq,
                         errhdr)
         master_dark.ext_hdr['DRPNFILE'] = noise_maps.ext_hdr['DRPNFILE']
+        if 'RECIPE' in dataset.frames[0].ext_hdr:
+            master_dark.ext_hdr['RECIPE'] = dataset.frames[0].ext_hdr['RECIPE']
 
         return master_dark

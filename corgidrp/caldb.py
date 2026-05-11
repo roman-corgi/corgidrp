@@ -57,6 +57,8 @@ labels = {data.Dark: "Dark",
           data.AstrometricCalibration : "AstrometricCalibration",
           data.TrapCalibration : "TrapCalibration",
           data.FluxcalFactor : "FluxcalFactor",
+          data.FluxcalFactorPOL0 : "FluxcalFactor",
+          data.FluxcalFactorPOL45 : "FluxcalFactor",
           data.FpamFsamCal : "FpamFsamCal",
           data.CoreThroughputCalibration: "CoreThroughputCalibration",
           data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
@@ -266,6 +268,9 @@ class CalDB:
             entry (corgidrp.data.Image subclass): calibration frame to add to the database
             to_disk (bool): True by default, will update DB from disk before adding entry and saving it back to disk
         """
+        if not os.path.exists(entry.filepath):
+            raise FileNotFoundError("Calibration file {0} does not exist on disk; save it before calling create_entry.".format(entry.filepath))
+
         new_row, row_dict = self._get_values_from_entry(entry)
 
         # update database from disk in case anything changed
@@ -349,14 +354,10 @@ class CalDB:
             raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
 
         # different logic for different cases
-        # each if/else statement returns a single filepath to a good calibration
+        # each if/else statement sets options_sorted: candidates ordered by preference (best first)
         if frame is None:
-            # no frame is passed in, get the most recently created 
-            options = calibdf
-
-            # select the one that was most recently created
-            result_index = options["Date Created"].argmax()
-            calib_filepath = options.iloc[result_index, 0]
+            # no frame is passed in, get the most recently created
+            options_sorted = calibdf.sort_values("Date Created", ascending=False)
 
         elif dtype_label in ["Dark"]:
             # match on exposure time and EM gain
@@ -381,25 +382,45 @@ class CalDB:
                         )
                     )
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['FluxcalFactor']:
             # filter by color filter and DPAM
+            # FluxcalFactorPOL0/FluxcalFactorPOL45 force the DPAMNAME for lookup
+            if dtype == data.FluxcalFactorPOL0:
+                dpamname = "POL0"
+            elif dtype == data.FluxcalFactorPOL45:
+                dpamname = "POL45"
+            else:
+                dpamname = frame_dict['DPAMNAME']
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "DPAMNAME", dpamname, err_if_none=True)
+
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+            # FluxcalFactorPOL0/FluxcalFactorPOL45 are looked up as FluxcalFactor entries on disk
+            dtype = data.FluxcalFactor
+
+        elif dtype_label in ['SpecFluxCal']:
+            # filter by color filter and DPAM
+            if frame_dict['CFAMNAME'] in ['2F', '3F', '2A', '2B', '2C', '3A', '3B', '3C', '3D', '3E', '3G']:
+                value = list(frame_dict['CFAMNAME'])[0] + 'F'
+                options = self.filter_calib(calibdf, "CFAMNAME", value, err_if_none=True)
+            else:
+                options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+            dtype = data.SpecFluxCal
+            
         elif dtype_label in ['CoreThroughputCalibration']:
             # filter by focal plane mask
             options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['FlatField']:
             # DPAM: IMAGING, POL0, or POL45 only. All other DPAM settings, including PUPIL, use flat = ones
             # CFAM: spectroscopy bands (2F/3F and their sub-filters) and CLEAR use flat = ones
@@ -417,7 +438,7 @@ class CalDB:
                 if len(options) == 0:
                     raise ValueError("No ones-flat FlatField calibration found in caldb at {0}".format(self.filepath))
                 # Any ones-flat is equivalent, choose the most recently created
-                result_index = options["MJD"].argmax()
+                options_sorted = options.sort_values("MJD", ascending=False)
             elif frame_dict['CFAMNAME'] not in imaging_cfams:
                 raise ValueError(
                     "No flat defined for CFAMNAME={0}, use a custom recipe".format(frame_dict['CFAMNAME'])
@@ -433,49 +454,43 @@ class CalDB:
                 if len(options) == 0:
                     raise ValueError("No FlatField with OPEN FPAM found in caldb at {0} for CFAMNAME={1}, DPAMNAME={2}".format(
                         self.filepath, cfam_lookup, frame_dict['DPAMNAME']))
-                result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+                options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
             # FlatFieldPOL0/FlatFieldPOL45 are looked up as FlatField entries on disk
             dtype = data.FlatField
         elif dtype_label in ['MuellerMatrix']:
             # filter by color filter
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['SlitTransmission']:
             # filter by slit mask (FSAM), prism (DPAM), and color filter (CFAM)
             options = self.filter_calib(calibdf, "FSAMNAME", frame_dict['FSAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['LineSpread']:
             # filter by prism (DPAM) and color filter (CFAM)
             options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['SpectroscopyCentroidPSF']:
             # filter by prism (DPAM) and color filter (CFAM)
             options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         else:
-            options = calibdf
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = calibdf.iloc[np.argsort(np.abs(calibdf["MJD"] - frame_dict["MJD"]))]
 
         # load the object from disk and return it
+        calib_filepath = self._pick_existing(options_sorted, dtype_label)
         return dtype(calib_filepath)
     
     def scan_dir_for_new_entries(self, filedir, look_in_subfolders=True, to_disk=True):
@@ -514,6 +529,30 @@ class CalDB:
         for calib_frame in calib_frames:
             self.create_entry(calib_frame, to_disk=to_disk)
 
+    def _pick_existing(self, options, dtype_label):
+        """Walk candidates in preference order and return the first filepath that exists on disk.
+
+        Args:
+            options (pd.DataFrame): candidate calibration rows sorted in preference order (best first)
+            dtype_label (str): calibration type label used in error messages
+
+        Returns:
+            str: filepath of the best existing calibration
+
+        Raises:
+            ValueError: if no candidate file exists on disk
+        """
+        for filepath in options["Filepath"]:
+            if os.path.exists(filepath):
+                return filepath
+            print("Calibration file {0} no longer exists on disk, trying next best option.".format(filepath))
+        raise ValueError(
+            "No valid {0} calibration in caldb located at {1}: "
+            "all matching entries reference files that no longer exist on disk".format(
+                dtype_label, self.filepath
+            )
+        )
+
     def filter_calib(self, calibdf, col_name, value, err_if_none=True):
         '''
         Takes in a calibration dataframe, filters them so that
@@ -534,7 +573,7 @@ class CalDB:
             err_if_none is set to false. 
 
         '''
-        
+
         filtered_calibdf = calibdf.loc[
             (
                 (calibdf[col_name] == value)
