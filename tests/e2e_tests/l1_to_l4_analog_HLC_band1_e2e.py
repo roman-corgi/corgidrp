@@ -35,6 +35,14 @@ def create_and_clean_folder(folder_name):
 def separate_sci_and_satspots(filelist):
     '''
     This scripts separates the files with satspots from the files without.
+    
+    Args:
+        filelist: A list of files, in no particular order, that may or may not
+                  have satspots
+                  
+    Returns:
+        sci_images: A list of images without satspots
+        satspots_images: A list of images with satspots
     '''
     sci_images=[]
     satspots_images=[]
@@ -50,6 +58,10 @@ def process_l1_to_l2a(filelist,l2a_outputdir):
     '''
     This script separates the files in the provided list into those with satspots
     and those without. It then processess the two subsets of files from L1 to L2a.
+    
+    Args:
+        filelist: a list of the data files to process
+        l2a_outputdir: the directory to store the output l2a files
     '''
     images_sci, images_spots = separate_sci_and_satspots(filelist)
     walker.walk_corgidrp(images_spots, '', l2a_outputdir)
@@ -59,6 +71,10 @@ def process_l2a_to_l2b(filelist,l2b_outputdir):
     '''
     This script separates the files in the provided list into those with satspots
     and those without. It then processess the two subsets of files from L2a to L2b.
+    
+    Args:
+        filelist: a list of data files to process
+        l2b_outputdir: the directory to store the output l2b files
     '''
     images_sci, images_spots = separate_sci_and_satspots(filelist)
     walker.walk_corgidrp(images_spots, '', l2b_outputdir)
@@ -69,6 +85,12 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     '''
     This test function loads simulated HLC band 1 analog data and processes it
     from L1 to L4.
+    
+    Args:
+        l1_datadir: location of the folder containing the L1 data for the test
+        test_data: location of the test_data folder that contains JWST_CALFIELD202.csv
+        e2edata_path: location of the TVAC test data folder containing the data used for mock calibrations
+        e2eoutput_path: directory of e2e output data
     '''
     # Define the file paths for the TVAC test data (used for example calibrations)
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
