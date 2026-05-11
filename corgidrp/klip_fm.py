@@ -262,14 +262,14 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     
     
     if seps is None:
-        match sci_dataset_in[0].ext_hdr['FPAMNAME']: 
-            case 'SPC34_R5C1':
+        match sci_dataset_in[0].ext_hdr['FPAMNAME'][0:-1]: 
+            case 'SPC34_R5C':
                 owa_mas = 1447.4
                 iwa_mas = 425.9             
-            case 'SPC12_R1C1':
+            case 'SPC12_R1C':
                 owa_mas = 1008.8
                 iwa_mas = 296.1  
-            case 'HLC12_C2R1':
+            case 'HLC12_C2R':
                 owa_mas = 450.0
                 iwa_mas = 140.0
             case _: 
