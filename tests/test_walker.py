@@ -613,7 +613,7 @@ def test_cpgs_satspots():
     filelist = [frame.filepath for frame in l3_dataset]
 
     # load CPGS
-    CPGS_XML_filepath = os.path.join(os.path.dirname(__file__), "test_data", "cpgs_mock.xml")
+    CPGS_XML_filepath = os.path.join(os.path.dirname(__file__), "test_data", "CPGS_betatest_041426.xml")
     
     # create a recipe just to do spec star centering
     # use this simple saving recipe as a template
