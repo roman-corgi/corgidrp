@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import astropy.time as time
 import warnings
@@ -156,9 +157,10 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                     if read_cpgs: # if not already specified.
                         # need to populate satellite spot info from XML
                         cpgs_xml = ET.parse(CPGS_XML_filepath)
-                        sat_spot_info = _get_satellite_spot_info_from_xml_new(cpgs_xml)
+                        sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
                         step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
                         step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
+                        print(step['keywords']['r_lamD'],step['keywords']['phi_deg'])
             
             output_filelist = run_recipe(recipe)
    
@@ -726,42 +728,7 @@ def run_recipe(recipe, save_recipe_file=True):
         for setting, old_val in old_settings.items():
             setattr(corgidrp, setting, old_val)
 
-
 def _get_satellite_spot_info_from_xml(xml_tree):
-    """
-    Extracts satellite spot information from the CPGS XML file
-
-    Args:
-        xml_tree (ElementTree): loaded in CPGS XML file
-        
-    Returns:
-        dict: dictionary with satellite spot information
-            "num_spots": int, number of satellite spots
-            "spot1_contrast": float, contrast of spot 1
-            "spot1_sep": float, separation of spot 1 in lam/D
-            "spo1_angle": float, angle of spot 1 in degrees
-            "spot2_contrast": float, contrast of spot 2
-            "spot2_sep": float, separation of spot 2 in lam/D
-            "spo2_angle": float, angle of spot 2 in degrees
-    """
-    obs_specification = xml_tree.getroot()
-    sat_spot_info = obs_specification.find("satellite_spots")
-    sat_spot_output = {}
-    sat_spot_output['num_spots'] = 0
-    for i, pair in enumerate(sat_spot_info.findall("pair")):
-        sat_spot_output['num_spots'] += 1
-        if i == 0:
-            sat_spot_output['spot1_contrast'] = float(pair.find("intensity").text)
-            sat_spot_output['spot1_sep'] = float(pair.find("radial_distance").text)
-            sat_spot_output['spot1_angle'] = float(pair.find("clocking_angle").text)
-        elif i == 1:
-            sat_spot_output['spot2_contrast'] = float(pair.find("intensity").text)
-            sat_spot_output['spot2_sep'] = float(pair.find("radial_distance").text)
-            sat_spot_output['spot2_angle'] = float(pair.find("clocking_angle").text)
-
-    return sat_spot_output
-
-def _get_satellite_spot_info_from_xml_new(xml_tree):
     """
     Extracts satellite spot information from the CPGS XML file
 
@@ -786,18 +753,17 @@ def _get_satellite_spot_info_from_xml_new(xml_tree):
         raise Exception("Field with satellite spot info 'satellite_spots_command_info' not found in CPGS XML file. Please ensure that the CPGS file is formatted correctly.")
     sat_spot_output = {}
     sat_spot_output['num_spots'] = 0
-    sat_spots = sat_spot_info.text.split(") (")
+    string = re.compile(r'sep[1-2]=[\d.]+, angle[1-2]=[\d.]+, fr[1-2]=[\w-]+, filt[1-2]=[\w]+')
+    sat_spots = string.findall(sat_spot_info.text)
+    key = ['sep','angle','contrast','filt']
     for sat_spot in sat_spots:
-        sat_spot = sat_spot.replace("(", "").replace(")", "")
-        fields = sat_spot.split(",")
+        fields = sat_spot.split(", ")
         sat_spot_output['num_spots'] += 1
         for i, field in enumerate(fields):
-            key, value = field.split("=")
-            #key = (''.join([c for c in key if not c.isdigit()])).replace(" ","")
-            key = ['sep','angle','contrast','filt']
-            try:
+            value = field.split("=")[1]            
+            if i <=2:
                 sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = float(value)
-            except:
+            else:
                 sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = str(value)
 
     return sat_spot_output
