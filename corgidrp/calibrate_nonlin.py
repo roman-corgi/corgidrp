@@ -678,7 +678,7 @@ def calibrate_nonlin(dataset_nl,
                     
                     second_half = len(selected_files)
                     if ram_heavy:
-                        frame_1, bp, _, _ = mean_combine(data.Dataset(selected_files[first_half + 1:second_half]), None) 
+                        frame_1, bp, _, _ = mean_combine(data.Dataset(selected_files[first_half:second_half]), None) 
                     else:
                         bp_maps = []
                         for frame in selected_files[first_half + 1:second_half]:
@@ -686,7 +686,7 @@ def calibrate_nonlin(dataset_nl,
                             bp_map = np.zeros(frame.shape).astype(int)
                             bp_map[bad_rows, bad_cols] = 1
                             bp_maps.append(bp_map)
-                        frame_1, bp, _, _ = mean_combine(selected_files[first_half + 1:second_half], bp_maps)
+                        frame_1, bp, _, _ = mean_combine(selected_files[first_half:second_half], bp_maps)
                     frame_1 = frame_1.astype(np.float64)
 
                     # Assess how much of the image is thrown away from trying to mask cosmic rays and saturation, 
