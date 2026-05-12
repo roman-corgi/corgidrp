@@ -158,8 +158,8 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     if (input_dataset[0].ext_hdr['DPAMNAME'] == 'IMAGING' and input_dataset[0].ext_hdr['LSAMNAME'] == 'OPEN') and input_dataset[0].ext_hdr['DATALVL'] == 'L3':
         # average/delete header keywords as L4 involves combination of multiple frames
         pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
-        last_frame_keywords=['VISITID', 'MJDEND'],
-        first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2','NORTHANG'],
+        last_frame_keywords=['VISITID', 'MJDEND', 'SCTEND'],
+        first_frame_keywords=['MJDSRT','SCTSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2','NORTHANG'],
         deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
         invalid_keywords=[
                         #Primary header keywords
