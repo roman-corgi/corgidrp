@@ -655,9 +655,9 @@ def test_cpgs_one_satspot():
     cpgs_xml = ET.parse(CPGS_XML_filepath)
     sat_spot_info = walker._get_satellite_spot_info_from_xml(cpgs_xml)
     assert sat_spot_info['num_spots'] == 1
-    assert sat_spot_info['spot1_sep'] == 6.0
-    assert sat_spot_info['spot1_angle'] == 45
-    assert sat_spot_info['spot1_contrast'] == 1e-06
+    assert sat_spot_info['spot1_sep'] == 6.2
+    assert sat_spot_info['spot1_angle'] == 45.4
+    assert sat_spot_info['spot1_contrast'] == 1.7E-06
     assert sat_spot_info['spot1_filt'] == '3D'
     
 if __name__ == "__main__":#

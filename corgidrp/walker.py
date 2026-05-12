@@ -753,11 +753,11 @@ def _get_satellite_spot_info_from_xml(xml_tree):
         raise Exception("Field with satellite spot info 'satellite_spots_command_info' not found in CPGS XML file. Please ensure that the CPGS file is formatted correctly.")
     sat_spot_output = {}
     sat_spot_output['num_spots'] = 0
-    string = re.compile(r'sep[1-2]=[\d.]+, angle[1-2]=[\d.]+, fr[1-2]=[\w-]+, filt[1-2]=[\w]+')
+    string = re.compile(r'sep[1-2]=[\d.]+,\s*angle[1-2]=[\d.]+,\s*fr[1-2]=[\w.-]+,\s*filt[1-2]=[\w]+')
     sat_spots = string.findall(sat_spot_info.text)
     key = ['sep','angle','contrast','filt']
     for sat_spot in sat_spots:
-        fields = sat_spot.split(", ")
+        fields = sat_spot.split(",")
         sat_spot_output['num_spots'] += 1
         for i, field in enumerate(fields):
             value = field.split("=")[1]            
