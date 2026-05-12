@@ -38,7 +38,7 @@
             "name": "update_to_l4",
             "calibs": {
                 "CoreThroughputCalibration": "AUTOMATIC, OPTIONAL",
-                "FluxcalFactor": "AUTOMATIC"
+                "SpecFluxCal": "AUTOMATIC"
             }
         },
         {

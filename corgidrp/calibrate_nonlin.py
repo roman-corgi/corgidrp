@@ -997,7 +997,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
                     mean_frame_list.append(frame.data)
         for cal_dset in cal_dsets:
             # each of dsets has just one frame in it
-            dsets, vals = cal_dset.split_dataset(exthdr_keywords=['DATETIME','EXPTIME'])
+            dsets, vals = cal_dset.split_dataset(exthdr_keywords=['SCTSRT','EXPTIME'])
             smallest_set_length = np.inf
             sub = []
             start_val = float(vals[0][1])
@@ -1029,10 +1029,10 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
                     if not (frame.pri_hdr['OBSNAME'] == 'KGAIN' or 
                     frame.pri_hdr['OBSNAME'] == 'NONLIN'):
                         raise Exception('OBSNAME can only be MNFRAME or NONLIN in non-linearity')
-                    datetime = frame.ext_hdr['DATETIME']                
-                    if isinstance(datetime, str) is False:
-                        raise Exception('DATETIME must be a string')
-                    datetimes.append(datetime)
+                    sctsrt = frame.ext_hdr['SCTSRT']
+                    if isinstance(sctsrt, str) is False:
+                        raise Exception('SCTSRT must be a string')
+                    datetimes.append(sctsrt)
                     exp_time = frame.ext_hdr['EXPTIME']
                     if isinstance(exp_time, float) is False:
                         raise Exception('Exposure times must be float')
@@ -1068,7 +1068,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
     
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):
-        raise Exception('DATETIMEs cannot be duplicated')
+        raise Exception('SCTSRTs cannot be duplicated')
     # Every EM gain must be greater than or equal to 1
     if np.any(np.array(split[1]) < 1):
         raise Exception('Each set of frames categorized by commanded EM gains must be have 1 or more frames')

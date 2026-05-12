@@ -908,14 +908,14 @@ class FlatField(Image):
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         if input_dataset is not None:
             pri_hdr,ext_hdr,err_hdr,dq_hdr=corgidrp.check.merge_headers(
-                input_dataset, first_frame_keywords= ['MJDSRT','PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT','OBSNUM','VISNUM','CPGSFILE','AUXFILE','VISTYPE',
+                input_dataset, first_frame_keywords= ['MJDSRT','SCTSRT','PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT','OBSNUM','VISNUM','CPGSFILE','AUXFILE','VISTYPE',
                                                       'TARGET', 'RA','DEC', 'EQUINOX', 'RAPM','DECPM', 'PSFREF', 'OPGAIN','PHTCNT','OPMODE','EXPTIME','EMGAIN_C',
                                                       'UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5','EMGAIN_A','KGAINPAR','ISPC','SPAM_H','SPAM_V',
                                                       'SPAMNAME','SPAMSP_H','SPAMSP_V','FPAM_H','FPAM_V','FPAMNAME','FPAMSP_H','FPAMSP_V','LSAM_H','LSAM_V',
                                                       'LSAMNAME','LSAMSP_H','LSAMSP_V','FSAM_H','FSAM_V','FSAMNAME','FSAMSP_H','FSAMSP_V','CFAM_H','CFAM_V',
                                                       'CFAMNAME','CFAMSP_H','CFAMSP_V','DPAM_H','DPAM_V','DPAMNAME','DPAMSP_H','DPAMSP_V','PA_V3','WBJ_1','WBJ_2','WBJ_3','GAINTCAL',
                                                       'STATUS','BLNKTIME','BLNKCYC','EXPCYC','OVEREXP','NOVEREXP'],
-                last_frame_keywords = ['VISITID', 'MJDEND',  'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4','EACQ_ROW', 'EACQ_COL','DATATYPE'],
+                last_frame_keywords = ['VISITID', 'MJDEND', 'SCTEND', 'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4','EACQ_ROW', 'EACQ_COL','DATATYPE'],
 
                 invalid_keywords=['PA_APER','FRAMET','SVB_1','SVB_2','SVB_3','ROLL','PITCH','YAW','ISHOWFSC', 'ISACQ', 'SPBAL', 'SATSPOTS',  'HCVBIAS','EXCAMT','LOCAMT','CYCLES',
                     'LASTEXP','PROXET','FCMLOOP', 'FCMPOS','FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
@@ -1475,13 +1475,13 @@ class NonLinearityCalibration(Image):
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
         if self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
-        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
         # headers deleted from initial L1 level
-        leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+        leave_out_ext = ['BSCALE', 'BZERO', 'LOCAMT', 'CYCLES', 'LASTEXP']
         for key in leave_out_ext:
             if key in self.ext_hdr:
                 del self.ext_hdr[key]
-        
+
 class KGain(Image):
     """
     Class for KGain calibration file. Until further insights it is just one float value.
@@ -1573,7 +1573,7 @@ class KGain(Image):
         if self.ext_hdr['DATATYPE'] != 'KGain':
             raise ValueError("File that was loaded was not a KGain Calibration file.")
         # headers deleted from initial L1 level
-        leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+        leave_out_ext = ['BSCALE', 'BZERO', 'LOCAMT', 'CYCLES', 'LASTEXP']
         for key in leave_out_ext:
             if key in self.ext_hdr:
                 del self.ext_hdr[key]

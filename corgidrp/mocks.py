@@ -259,6 +259,11 @@ def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
+    exthdr['SCTSRT'] = dt_str
+    exthdr['SCTEND'] = (dt + datetime.timedelta(seconds=exthdr['EXPTIME'])).strftime("%Y-%m-%dT%H:%M:%S")
+    mjdsrt = float(Time(dt).mjd)
+    exthdr['MJDSRT'] = mjdsrt
+    exthdr['MJDEND'] = mjdsrt + exthdr['EXPTIME'] / 86400.0
     prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
 
     return prihdr, exthdr
@@ -320,6 +325,11 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
+    exthdr['SCTSRT'] = dt_str
+    exthdr['SCTEND'] = (dt + datetime.timedelta(seconds=exthdr['EXPTIME'])).strftime("%Y-%m-%dT%H:%M:%S")
+    mjd_start = float(Time(dt_str).mjd)
+    exthdr['MJDSRT'] = mjd_start
+    exthdr['MJDEND'] = mjd_start + exthdr['EXPTIME'] / 86400.0
 
     prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
     
@@ -417,7 +427,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     biashdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     biashdr['EXTNAME']     = 'BIAS'           # Extension name
 
-    deleted_after_l1 = ['SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    deleted_after_l1 = ['LOCAMT', 'CYCLES', 'LASTEXP']
     for key in deleted_after_l1:
         if key in prihdr:
             del prihdr[key]
@@ -1240,6 +1250,7 @@ def create_cr_dataset(nonlin_filepath, filedir=None, obs_datetime=None, numfiles
 
         # Save the date
         dataset[i].ext_hdr['DATETIME'] = str(obs_datetime)
+        dataset[i].ext_hdr['SCTSRT'] = str(obs_datetime)
 
         # Pick random locations to add a cosmic ray
         for x in range(numCRs):
