@@ -343,7 +343,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
                     'OPGAIN', 'PHTCNT', 'FRAMET', 'PA_V3', 'PA_APER', 'SVB_1', 'SVB_2', 'SVB_3', 'ROLL', 
                     'PITCH', 'YAW', 'WBJ_1', 'WBJ_2', 'WBJ_3', 'VISITID', 
                     #ext header
-                    'FRMTYPE', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS', 'STATUS',
+                    'DATETIME', 'FTIMEUTC', 'FRMTYPE', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS', 'STATUS',
                     'HVCBIAS', 'OPMODE', 'EMGAIN_C', 'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
                     'PROXET', 'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
                     'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY',
@@ -354,7 +354,7 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES', 'Z2VAR', 'Z3VAR',
                     'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
-                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V'
+                    'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V', 'DATETIME', 'FTIMEUTC'
                 ]
         )
     if initial_cent is None:
@@ -971,7 +971,7 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
     the wavelength map extension and wavelength zeropoint header
 
     Args:
-        dataset (corgidrp.data.Dataset): dataset containg a narrowband filter + prism PSF
+        dataset (corgidrp.data.Dataset): dataset containing a narrowband filter + prism PSF
         halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels.
         halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels.
         guess_fwhm (float): guess value of the fwhm of the line

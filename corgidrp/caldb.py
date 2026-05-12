@@ -402,6 +402,20 @@ class CalDB:
             options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
             # FluxcalFactorPOL0/FluxcalFactorPOL45 are looked up as FluxcalFactor entries on disk
             dtype = data.FluxcalFactor
+
+        elif dtype_label in ['SpecFluxCal']:
+            # filter by color filter and DPAM
+            if frame_dict['CFAMNAME'] in ['2F', '3F', '2A', '2B', '2C', '3A', '3B', '3C', '3D', '3E', '3G']:
+                value = list(frame_dict['CFAMNAME'])[0] + 'F'
+                options = self.filter_calib(calibdf, "CFAMNAME", value, err_if_none=True)
+            else:
+                options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+            dtype = data.SpecFluxCal
+            
         elif dtype_label in ['CoreThroughputCalibration']:
             # filter by focal plane mask
             options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
@@ -561,7 +575,7 @@ class CalDB:
             err_if_none is set to false. 
 
         '''
-        
+
         filtered_calibdf = calibdf.loc[
             (
                 (calibdf[col_name] == value)
@@ -589,21 +603,31 @@ def initialize():
     rescan_needed = False
     # Add default detector_params calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00.00.00.000.fits")):
-        default_detparams = data.DetectorParams({}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
+        date_valid = time.Time("2023-11-01 00:00:00", scale='utc')
+        sctsrt_str = date_valid.to_datetime().strftime("%Y-%m-%dT%H:%M:%S")
+        default_detparams = data.DetectorParams({}, date_valid=date_valid)
+        default_detparams.ext_hdr['SCTSRT'] = sctsrt_str
+        default_detparams.ext_hdr['SCTEND'] = sctsrt_str
         default_detparams.save(filedir=corgidrp.default_cal_dir, filename="DetectorParams_2023-11-01T00.00.00.000.fits")
         rescan_needed = True
     # Add default FpamFsamCal calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00.00.00.000.fits")):
         date_valid = time.Time("2024-02-10 00:00:00", scale='utc')
+        sctsrt_str = date_valid.to_datetime().strftime("%Y-%m-%dT%H:%M:%S")
         fpamfsam_2excam = data.FpamFsamCal([], date_valid=date_valid)
         fpamfsam_2excam.ext_hdr['MJDSRT'] = float(date_valid.mjd)
+        fpamfsam_2excam.ext_hdr['SCTSRT'] = sctsrt_str
+        fpamfsam_2excam.ext_hdr['SCTEND'] = sctsrt_str
         fpamfsam_2excam.save(filedir=corgidrp.default_cal_dir)
         rescan_needed = True
     # Add default SpecFilterOffset calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "SpecFilterOffset_2025-12-10T00.00.00.000.fits")):
         date_valid = time.Time("2025-12-10 00:00:00", scale='utc')
+        sctsrt_str = date_valid.to_datetime().strftime("%Y-%m-%dT%H:%M:%S")
         spec_filter = data.SpecFilterOffset({}, date_valid=date_valid)
         spec_filter.ext_hdr['MJDSRT'] = float(date_valid.mjd)
+        spec_filter.ext_hdr['SCTSRT'] = sctsrt_str
+        spec_filter.ext_hdr['SCTEND'] = sctsrt_str
         spec_filter.save(filedir=corgidrp.default_cal_dir)
         rescan_needed = True
     # Add default DispersionModel calibration file if it doesn't exist
@@ -621,6 +645,8 @@ def initialize():
         exthdr['DATETIME'] = dt_str
         exthdr['FTIMEUTC'] = dt_str
         exthdr['MJDSRT'] = float(dt_time.mjd)
+        exthdr['SCTSRT'] = dt_str
+        exthdr['SCTEND'] = dt_str
         # not physically relevant since we are just constructing the calibration product for the dispersion model, not 
         # the observations that produced it, but just to avoid confusion, we set the values to something sensible
         exthdr['DPAMNAME'] = 'PRISM3' 

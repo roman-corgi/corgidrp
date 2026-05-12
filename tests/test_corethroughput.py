@@ -961,6 +961,42 @@ def test_psf_interp():
 
     print('Tests about PSF interpolation passed')
 
+def test_ct_cal_order_independent():
+    """Test that FPAMNAME in CT cal file is independent of frame ordering in input dataset.
+
+    When pupil images appear first in the dataset, FPAMNAME should reflect
+    the off-axis PSF FPM setting, not 'OPEN_12' from the pupil image header.
+    Regression test for issue #624.
+    """
+    # Separate pupil and off-axis frames from the synthetic dataset.
+    # dataset_ct_syn has PSF first then pupils; we reverse to make pupil-first.
+    pupil_frames = []
+    offaxis_frames = []
+    for frame in dataset_ct_syn:
+        exthd = frame.ext_hdr
+        if (exthd['DPAMNAME'] == 'PUPIL' and exthd['LSAMNAME'] == 'OPEN' and
+                exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12'):
+            pupil_frames.append(frame)
+        else:
+            offaxis_frames.append(frame)
+
+    dataset_psf_first = Dataset(offaxis_frames + pupil_frames)
+    dataset_pupil_first = Dataset(pupil_frames + offaxis_frames)
+
+    ct_cal_psf_first = corethroughput.generate_ct_cal(dataset_psf_first)
+    ct_cal_pupil_first = corethroughput.generate_ct_cal(dataset_pupil_first)
+
+    assert ct_cal_psf_first.ext_hdr['FPAMNAME'] != 'OPEN_12', \
+        "CT cal FPAMNAME should not be 'OPEN_12' when PSF is first"
+    assert ct_cal_pupil_first.ext_hdr['FPAMNAME'] != 'OPEN_12', \
+        "CT cal FPAMNAME is 'OPEN_12' when pupil image is first (issue #624)"
+    assert ct_cal_psf_first.ext_hdr['FPAMNAME'] == ct_cal_pupil_first.ext_hdr['FPAMNAME'], \
+        "CT cal FPAMNAME differs depending on input frame ordering (issue #624)"
+
+    print(f"FPAMNAME is '{ct_cal_psf_first.ext_hdr['FPAMNAME']}' regardless of frame ordering")
+    print('Tests about CT cal order independence passed')
+
+
 def teardown_module():
     """
     Deletes variables
@@ -992,3 +1028,4 @@ if __name__ == '__main__':
     test_get_1d_ct()
     test_ct_map()
     test_psf_interp()
+    test_ct_cal_order_independent()

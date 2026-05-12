@@ -185,5 +185,73 @@ def test_dark_sub():
 
     corgidrp.track_individual_errors = old_err_tracking
 
+def test_dark_sub_multi_config():
+    """
+    Verify that dark_subtraction handles a dataset with multiple EMGAIN/EXPTIME
+    configurations when noisemaps is provided, and that the traditional-dark path
+    still rejects multi-config input.
+    """
+    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    if not os.path.exists(calibdir):
+        os.mkdir(calibdir)
+
+    configs = [
+        {"EMGAIN_C": 10, "EXPTIME": 4},
+        {"EMGAIN_C": 20, "EXPTIME": 8},
+    ]
+
+    frames = []
+    for cfg in configs:
+        em_gain = cfg["EMGAIN_C"]
+        exptime = cfg["EXPTIME"]
+        # Frame data equal to the synthesized dark so the result should be ~0
+        frame_data = (noise_maps.FPN_map + noise_maps.CIC_map * em_gain + noise_maps.DC_map * exptime * em_gain) / em_gain
+        prihdr, exthdr, errhdr, dqhdr, _ = mocks.create_default_L2a_headers()
+        # Give each frame a unique FILENAME so darks for different configs don't collide on disk
+        prihdr['FILENAME'] = "mock_g{0}_t{1}_l2a.fits".format(em_gain, exptime)
+        img = data.Image(frame_data, pri_hdr=prihdr, ext_hdr=exthdr, err_hdr=errhdr, dq_hdr=dqhdr)
+        img.ext_hdr['EMGAIN_C'] = em_gain
+        img.ext_hdr['EXPTIME'] = exptime
+        img.ext_hdr['KGAINPAR'] = 7.
+        img.ext_hdr['BUNIT'] = 'detected electron'
+        frames.append(img)
+
+    multi_config_dataset = data.Dataset(frames)
+
+    # use a fresh empty directory so every dark saved by the call is attributable to it
+    darkout = os.path.join(os.path.dirname(__file__), "testcalib_multiconfig")
+    if os.path.exists(darkout):
+        shutil.rmtree(darkout)
+    os.mkdir(darkout)
+
+    # noisemaps path: must succeed and produce ~0 result for each frame
+    result = l2a_to_l2b.dark_subtraction(multi_config_dataset, noisemaps=noise_maps, outputdir=darkout)
+    assert len(result) == len(frames)
+    for frame in result.frames:
+        # exclude telemetry row (last row) from the mean check
+        assert np.mean(frame.data[:-1, :]) == pytest.approx(0, abs=1e-2)
+
+    # one synthesized dark file must have been saved per configuration
+    saved_dark_files = [f for f in os.listdir(darkout) if "_drk_cal" in f and f.endswith(".fits")]
+    assert len(saved_dark_files) == len(configs)
+
+    # each saved dark must carry the EXPTIME and EMGAIN_C of one of the input configs
+    saved_configs = set()
+    for dark_file in saved_dark_files:
+        saved_dark = data.Dark(os.path.join(darkout, dark_file))
+        saved_configs.add((saved_dark.ext_hdr['EXPTIME'], saved_dark.ext_hdr['EMGAIN_C']))
+    expected_configs = {(cfg['EXPTIME'], cfg['EMGAIN_C']) for cfg in configs}
+    assert saved_configs == expected_configs
+
+    # traditional dark path: must still raise for multi-config datasets
+    dark_dataset = mocks.create_dark_calib_files(filedir=calibdir)
+    detector_params_local = data.DetectorParams({})
+    from corgidrp.darks import build_trad_dark
+    traditional_dark = build_trad_dark(dark_dataset, detector_params_local, full_frame=True)
+    with pytest.raises(Exception):
+        l2a_to_l2b.dark_subtraction(multi_config_dataset, dark=traditional_dark, outputdir=calibdir)
+
+
 if __name__ == "__main__":
     test_dark_sub()
+    test_dark_sub_multi_config()

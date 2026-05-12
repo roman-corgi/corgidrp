@@ -162,11 +162,11 @@ def generate_test_data(out_dir):
     nd_x, nd_y = np.meshgrid(np.linspace(300, 700, 5), np.linspace(300, 700, 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
-    nd_od = np.ones(nd_y.shape) * 1e-2
+    nd_od = np.ones(nd_y.shape) * 2  # OD=2 → T=10**(-2)=1% transmission, physically realistic ND filter
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     nd_cal = NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
                                       ext_hdr=ext_hdr)
-    host_star_image.data *= nd_cal.interpolate_od(512, 512)
+    host_star_image.data *= 10**(-nd_cal.interpolate_od(512, 512))
 
     # 4) Generate coronagraphic frames (just star, no companions) and RDI reference star dataset
     coron_data, ref_data = mocks.create_psfsub_dataset(NUM_IMAGES, NUM_IMAGES, np.append(ROTATION_ANGLES, ROTATION_ANGLES), 

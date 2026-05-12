@@ -8,15 +8,21 @@ import corgidrp.data as data
 
 def extract_datetime(datetime_str):
     """
-    Convert the value for ext_hdr's 'DATETIME' to a numerical time stamp.
+    Convert an ISO 8601 timestamp string to a numerical time stamp.
+
+    Accepts strings with or without sub-second precision
+    (e.g. 'YYYY-MM-DDTHH:MM:SS' or 'YYYY-MM-DDTHH:MM:SS.ssssss').
 
     Args:
-      datetime_str: time string in the format 'YYYY-MM-DDTHH:MM:SS.ssssss'
+      datetime_str (str): ISO 8601 time string
 
     Returns:
-      numerical time stamp in seconds since the epoch (1970-01-01T00:00:00Z)
+      float: time stamp in seconds since the epoch (1970-01-01T00:00:00Z)
     """
-    dt_obj = datetime.strptime(datetime_str[:26], "%Y-%m-%dT%H:%M:%S.%f")
+    try:
+        dt_obj = datetime.strptime(datetime_str[:26], "%Y-%m-%dT%H:%M:%S.%f")
+    except ValueError:
+        dt_obj = datetime.strptime(datetime_str[:19], "%Y-%m-%dT%H:%M:%S")
     output = time.mktime(dt_obj.timetuple()) + dt_obj.microsecond / 1e6
     return output
 
@@ -54,7 +60,7 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
     filepath_list = []
     for subset in dataset_in_list:
         for frame in subset:
-            cal_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
+            cal_frame_time_list += [extract_datetime(frame.ext_hdr['SCTSRT'])]
             exptime_list += [frame.ext_hdr['EXPTIME']]
             filepath_list += [frame.filepath]
     idx_id_sort = np.argsort(cal_frame_time_list)
@@ -258,11 +264,11 @@ def sort_pupilimg_frames(
         if len(frames_to_keep) == 0:
             raise Exception("Input dataset appears to have no files relevant for k gain/nonlin calibration.")
         dataset_in = data.Dataset(frames_to_keep) #overwrite
-    split_datetime_ds, _ = dataset_in.split_dataset(exthdr_keywords=['DATETIME'])
-    for ds in split_datetime_ds:
+    split_sctsrt_ds, _ = dataset_in.split_dataset(exthdr_keywords=['SCTSRT'])
+    for ds in split_sctsrt_ds:
         if len(ds) > 1:
-            raise Exception('Dataset contains more than one frame with the same DATETIME value.')
-    del split_datetime_ds
+            raise Exception('Dataset contains more than one frame with the same SCTSRT value.')
+    del split_sctsrt_ds
     # Split by EMGAIN_C
     split_cmdgain = dataset_in.split_dataset(exthdr_keywords=['EMGAIN_C'])
     # Mean frame: split by EXPTIME
@@ -299,11 +305,11 @@ def sort_pupilimg_frames(
     frame_time_list = []
     for dataset in exptime_sets[0]:
         for frame in dataset:
-            frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
+            frame_time_list += [extract_datetime(frame.ext_hdr['SCTSRT'])]
     frame_time_sort = sorted(frame_time_list)
     mean_frame_time_list = []
     for frame in exptime_sets[0][idx_mean_frame]:
-        mean_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
+        mean_frame_time_list += [extract_datetime(frame.ext_hdr['SCTSRT'])]
     # Choose the frames with consecutive time stamp values
     mean_frame_time_sort = np.array(mean_frame_time_list)
     mean_frame_time_sort.sort()
@@ -326,7 +332,7 @@ def sort_pupilimg_frames(
     n_mean_frame = 0
     mean_frames = exptime_sets[0][idx_mean_frame] 
     for frame in mean_frames:
-        if extract_datetime(frame.ext_hdr['DATETIME']) in frame_id_mean_frame:
+        if extract_datetime(frame.ext_hdr['SCTSRT']) in frame_id_mean_frame:
             exptime_mean_frame = frame.ext_hdr['EXPTIME']
             # Update keyword OBSNAME
             frame.pri_hdr['OBSNAME'] = 'MNFRAME'
@@ -346,13 +352,13 @@ def sort_pupilimg_frames(
         raise Exception('Unrecognized calibration type (expected k-gain, non-lin)')
 
     # Remove MNFRAME frames from unity gain frames
-    mean_frames_datetime_list = []
+    mean_frames_sctsrt_list = []
     for frame in mean_frames:
-        mean_frames_datetime_list.append(frame.ext_hdr['DATETIME'])
+        mean_frames_sctsrt_list.append(frame.ext_hdr['SCTSRT'])
     if actual_visit: 
         inds_to_remove = []
         for ind, f in enumerate(aux_set_to_use):
-            if extract_datetime(f.ext_hdr['DATETIME']) in frame_id_mean_frame:
+            if extract_datetime(f.ext_hdr['SCTSRT']) in frame_id_mean_frame:
                 inds_to_remove.append(ind)
         aux_set_to_use.frames = np.delete(aux_set_to_use.frames, np.array(inds_to_remove))
         aux_set_to_use.all_data = np.delete(aux_set_to_use.all_data, np.array(inds_to_remove))
