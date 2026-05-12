@@ -160,7 +160,6 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                         sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
                         step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
                         step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
-                        print(step['keywords']['r_lamD'],step['keywords']['phi_deg'])
             
             output_filelist = run_recipe(recipe)
    
