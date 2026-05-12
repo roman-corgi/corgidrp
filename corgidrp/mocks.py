@@ -4641,66 +4641,85 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
 
 
 def create_satellite_spot_observing_sequence(
-        n_sci_frames, n_satspot_frames, 
+        n_sci_frames, n_satspot_frames,
         image_shape=(201, 201), bg_sigma=1.0, bg_offset=10.0,
         gaussian_fwhm=5.0, separation=14.79, star_center=None, angle_offset=0,
         amplitude_multiplier=100, observing_mode='NFOV'):
     """
-    Creates a single dataset of synthetic observing frames. The dataset contains:
+    Creates a single dataset of synthetic observing frames mirroring the real satellite
+    spot data acquisition procedure. The dataset contains:
 
-        • Science frames (with amplitude_multiplier=0), simulating no satellite spots.
-        • Satellite spot frames (with amplitude_multiplier > 0), simulating the presence of spots.
+        • Science frames (``SATSPOTS=False``), simulating frames with no satellite spots.
+        • Satellite spot frames (``SATSPOTS=True``) in three sequential equal-sized groups:
 
-    Synthetic frames are generated using the create_synthetic_satellite_spot_image function, 
-    with added Gaussian noise and adjustable parameters for background level, spot separation, 
+            1. No-offset frames (first ``n_satspot_frames // 3``): DM has no probe offset;
+               no satellite spots injected (amplitude_multiplier=0).
+            2. Positive-offset frames (middle third): DM at +1.0 probe offset; spots present.
+            3. Negative-offset frames (last third): DM at -1.0 probe offset; spots present.
+
+    ``SCTSRT`` is set on every frame with strictly ascending timestamps so that
+    ``find_star`` can recover acquisition order by sorting on this keyword.
+
+    Synthetic frames are generated using the create_synthetic_satellite_spot_image function,
+    with added Gaussian noise and adjustable parameters for background level, spot separation,
     and overall amplitude scaling.
 
     Args:
-        n_sci_frames (int): 
+        n_sci_frames (int):
             Number of science frames without satellite spots.
-        n_satspot_frames (int): 
-            Number of frames with satellite spots.
-        image_shape (tuple, optional): 
+        n_satspot_frames (int):
+            Total number of satellite spot frames. Must be divisible by 3 to accommodate
+            the no-offset / positive-offset / negative-offset acquisition groups.
+        image_shape (tuple, optional):
             Shape of the synthetic image (height, width). Defaults to (201, 201).
-        bg_sigma (float, optional): 
+        bg_sigma (float, optional):
             Standard deviation of the background noise. Defaults to 1.0.
-        bg_offset (float, optional): 
+        bg_offset (float, optional):
             Offset of the background noise. Defaults to 10.0.
-        gaussian_fwhm (float, optional): 
+        gaussian_fwhm (float, optional):
             Full width at half maximum of the Gaussian spot. Defaults to 5.0.
-        separation (float, optional): 
+        separation (float, optional):
             Separation between the satellite spots. Defaults to 14.79.
-        star_center (tuple of float, optional):  
+        star_center (tuple of float, optional):
             Absolute (x, y) position in the image at which the four Gaussians will be centered.
             If None, defaults to the image center (nx//2, ny//2).
-        angle_offset (float, optional): 
+        angle_offset (float, optional):
             Offset of the spot angles. Defaults to 0.
-        amplitude_multiplier (int, optional): 
+        amplitude_multiplier (int, optional):
             Amplitude multiplier for the satellite spots. Defaults to 100.
-        observing_mode (str, optional): 
-            Observing mode. Must be one of ['NFOV', 'WFOV', 'SPEC660', 'SPEC730']. 
+        observing_mode (str, optional):
+            Observing mode. Must be one of ['NFOV', 'WFOV', 'SPEC660', 'SPEC730'].
             Defaults to 'NFOV'.
 
     Returns:
-        data.Dataset: 
-            A single dataset object containing both science frames (no satellite spots) 
-            and satellite spot frames. The science frames have header value "SATSPOTS" set to 0, 
-            while the satellite spot frames have "SATSPOTS" set to 1.
+        data.Dataset:
+            A single dataset object containing science frames and the three satellite spot
+            groups. Science frames have ``SATSPOTS=False``; all satellite spot frames have
+            ``SATSPOTS=True``.
     """
 
     assert len(image_shape) == 2, "Data shape needs to have two values"
     assert observing_mode in ['NFOV', 'WFOV', 'SPEC660', 'SPEC730'], \
         "Invalid mode. Mode has to be one of 'NFOV', 'WFOV', 'SPEC660', 'SPEC730'"
+    if n_satspot_frames % 3 != 0:
+        raise ValueError(
+            f"n_satspot_frames must be divisible by 3 (no-offset / +offset / -offset groups), "
+            f"but got {n_satspot_frames}."
+        )
 
+    n_per_group = n_satspot_frames // 3
     sci_frames = []
     satspot_frames = []
-    
-    # Example of setting up headers
+
+    base_time = datetime.datetime(2024, 1, 1, 0, 0, 0)
+
+    # Set up shared headers
     prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers(arrtype="SCI")
     prihdr['NAXIS1'] = image_shape[1]
     prihdr['NAXIS2'] = image_shape[0]
-    exthdr["SATSPOTS"] = False  # False if no satellite spots, True if satellite spots
     exthdr['FSMPRFL'] = f'{observing_mode}'  # Needed for initial guess of satellite spot parameters
+
+    visitid = prihdr["VISITID"]
 
     # Make science images (no satellite spots)
     for i in range(n_sci_frames):
@@ -4709,36 +4728,33 @@ def create_satellite_spot_observing_sequence(
             separation, star_center, angle_offset,
             amplitude_multiplier=0
         )
+        frame_time = base_time + datetime.timedelta(seconds=i)
         sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         sci_frame.ext_hdr["SATSPOTS"] = False
-        
-        # Generate CGI filename with incrementing datetime for science frames
-        visitid = sci_frame.pri_hdr["VISITID"]
-        base_time = datetime.datetime.now()
-        time_offset = datetime.timedelta(seconds=i)
-        unique_time = base_time + time_offset
-        time_str = data.format_ftimeutc(unique_time.isoformat())
+        sci_frame.ext_hdr['SCTSRT'] = frame_time.isoformat()
+        time_str = data.format_ftimeutc(frame_time.isoformat())
         sci_frame.filename = f"cgi_{visitid}_{time_str}_l3_.fits"
         sci_frames.append(sci_frame)
 
-    # Make satellite spot images
-    for i in range(n_satspot_frames):
-        satspot_image = create_synthetic_satellite_spot_image(
-            image_shape, bg_sigma, bg_offset, gaussian_fwhm,
-            separation, star_center, angle_offset, amplitude_multiplier
-        )
-        satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        satspot_frame.ext_hdr["SATSPOTS"] = True
-        
-        # Generate CGI filename with incrementing datetime for satellite spot frames
-        visitid = satspot_frame.pri_hdr["VISITID"]
-        base_time = datetime.datetime.now()
-        time_offset = datetime.timedelta(seconds=i + 1000)  # Offset to avoid conflicts with science frames
-        unique_time = base_time + time_offset
-        time_str = data.format_ftimeutc(unique_time.isoformat())
-        satspot_frame.filename = f"cgi_{visitid}_{time_str}_l3_.fits"
-        satspot_frames.append(satspot_frame)
-    
+    # Satellite spot frames: three equal groups with strictly ascending SCTSRT.
+    # Group amplitudes: no-offset=0, +offset=amplitude_multiplier, -offset=amplitude_multiplier
+    group_amplitudes = [0, amplitude_multiplier, amplitude_multiplier]
+    satspot_start_second = n_sci_frames
+    for group_idx, amp in enumerate(group_amplitudes):
+        for j in range(n_per_group):
+            frame_second = satspot_start_second + group_idx * n_per_group + j
+            frame_time = base_time + datetime.timedelta(seconds=frame_second)
+            satspot_image = create_synthetic_satellite_spot_image(
+                image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+                separation, star_center, angle_offset, amp
+            )
+            satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+            satspot_frame.ext_hdr["SATSPOTS"] = True
+            satspot_frame.ext_hdr['SCTSRT'] = frame_time.isoformat()
+            time_str = data.format_ftimeutc(frame_time.isoformat())
+            satspot_frame.filename = f"cgi_{visitid}_{time_str}_l3_.fits"
+            satspot_frames.append(satspot_frame)
+
     all_frames = sci_frames + satspot_frames
     dataset = data.Dataset(all_frames)
 

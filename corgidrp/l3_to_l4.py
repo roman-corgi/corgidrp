@@ -192,25 +192,37 @@ def find_star(input_dataset,
               thetaOffsetGuess=0,
               satellite_spot_parameters=None,
               drop_satspots_frames=True,
+              subtract_no_offset_frames=True,
               pri_split_keywords = None,
               ext_split_keywords = None):
     """
-    Determines the star position within a coronagraphic dataset by analyzing frames that 
-    contain satellite spots (indicated by ``SATSPOTS=True`` in the image header). The 
-    function computes the median of all science frames (``SATSPOTS=False``) and the median 
-    of all satellite spot frames (``SATSPOTS=True``), then estimates the star location 
-    based on these median images and the initial guess provided.
+    Determines the star position within a coronagraphic dataset by analyzing frames that
+    contain satellite spots (indicated by ``SATSPOTS=True`` in the image header). The
+    function computes the median of all science frames (``SATSPOTS=False``) and the median
+    of the DM-offset satellite spot frames (``SATSPOTS=True``), then estimates the star
+    location based on these median images and the initial guess provided.
 
-    The star's (x, y) location is stored in each frame's extension header under 
+    Satellite spot data is collected in three sequential equal-sized groups, all tagged
+    ``SATSPOTS=True`` and ordered by their ``SCTSRT`` header timestamp:
+
+        1. No-offset frames (first third): DM has no probe offset; no satellite spots,
+           only speckles/PSF. These frames are excluded from the satellite spot median.
+        2. Positive-offset frames (middle third): DM at +1.0 probe offset; spots present.
+        3. Negative-offset frames (last third): DM at -1.0 probe offset; spots present.
+
+    The no-offset median can optionally be subtracted from the offset median to suppress
+    speckles and astrophysical sources before star-center estimation.
+
+    The star's (x, y) location is stored in each frame's extension header under
     ``STARLOCX`` and ``STARLOCY``.
 
-    In case of polarimetric data, the star location is estimated on the first slice and 
-    the second slice is aligned on it. POL 0 and POL 45 are processed independantly 
+    In case of polarimetric data, the star location is estimated on the first slice and
+    the second slice is aligned on it. POL 0 and POL 45 are processed independantly
 
-    You can replace many of the default settings for by adjusting the satellite_spot_parameters 
-    dictionary. You only need to replace the parameters of interest and the rest will stay as defaults. 
+    You can replace many of the default settings for by adjusting the satellite_spot_parameters
+    dictionary. You only need to replace the parameters of interest and the rest will stay as defaults.
 
-    satellite_spot_parameters of the form: 
+    satellite_spot_parameters of the form:
          offset : dict
                 Parameters for estimating the offset of the star center:
 
@@ -253,29 +265,36 @@ def find_star(input_dataset,
                 nIter : int
                     Number of iterations refining the radial separation.
 
-    
+
 
     Args:
         input_dataset (corgidrp.data.Dataset):
-            A dataset of L3-level frames. Frames should be labeled in their primary 
-            headers with ``SATSPOTS=False`` (science frames) or ``SATSPOTS=True`` 
-            (satellite spot frames).
+            A dataset of L3-level frames. Frames should be labeled in their primary
+            headers with ``SATSPOTS=False`` (science frames) or ``SATSPOTS=True``
+            (satellite spot frames). The total number of ``SATSPOTS=True`` frames must
+            be divisible by 3, reflecting the no-offset / positive-offset / negative-offset
+            acquisition groups.
         star_coordinate_guess (tuple of float or None, optional):
             Initial guess for the star's (x, y) location as absolute coordinates.
             If ``None``, defaults to the center of the median satellite spot image.
             Defaults to None.
         thetaOffsetGuess (float, optional):
-            Initial guess for any angular rotation of the star center 
+            Initial guess for any angular rotation of the star center
             (in degrees, for example). Defaults to 0.
         satellite_spot_parameters (dict, optional):
             Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
             can contain the following keys and structure. Only provided parameters will be changed,
             otherwise defaults for the mode will be used:
-            If None, default parameters corresponding to the specified observing_mode will be used.     
+            If None, default parameters corresponding to the specified observing_mode will be used.
         drop_satspots_frames (bool, optional):
-            If True, frames with satellite spots (``SATSPOTS=True``) will be removed from 
+            If True, frames with satellite spots (``SATSPOTS=True``) will be removed from
             the returned dataset. Defaults to True.
-        pri_split_keywords (list of str, optional): 
+        subtract_no_offset_frames (bool, optional):
+            If True, the median of the no-offset frames is subtracted from the median of
+            the DM-offset frames before star-center estimation. This suppresses static
+            speckles and astrophysical sources, isolating the satellite spot signal.
+            Defaults to True.
+        pri_split_keywords (list of str, optional):
             List of primary header keywords to use for splitting the dataset into subsets.
             If None, defaults to ['VISITID']. Defaults to None.
         ext_split_keywords (list of str, optional):
@@ -286,23 +305,23 @@ def find_star(input_dataset,
 
     Returns:
         corgidrp.data.Dataset:
-            The original dataset, augmented with the star's (x, y) location stored in 
-            the extension header (``ext_hdr``) of each frame under the keys 
+            The original dataset, augmented with the star's (x, y) location stored in
+            the extension header (``ext_hdr``) of each frame under the keys
             ``STARLOCX`` and ``STARLOCY``.
 
     Raises:
         AssertionError:
-            If any frames have an invalid ``SATSPOTS`` keyword (not 0 or 1), or if 
-            the frames do not all share the same observing mode (as determined by 
+            If any frames have an invalid ``SATSPOTS`` keyword (not 0 or 1), or if
+            the frames do not all share the same observing mode (as determined by
             the ``FSMPRFL`` keyword).
+        ValueError:
+            If the number of ``SATSPOTS=True`` frames is not divisible by 3.
 
     Notes:
-        • This function merges the science frames (for reference) and the satellite 
-          spot frames (for analysis) by taking a median image of each set.
-        • The star center is computed using the median images and the 
+        • This function merges the science frames (for reference) and the DM-offset
+          satellite spot frames (for analysis) by taking a median image of each set.
+        • The star center is computed using the median images and the
           ``star_center.star_center_from_satellite_spots`` routine.
-        • Future enhancements may include separate handling of positive vs. negative 
-          satellite spot frames once the relevant metadata keywords are defined.
         • This routine can fail, if the guess position is off by more than a few pixels.
           More than 2 pixels on any axis leads almost systematically to failure
           A significantly wrong guess of the angle offset can also lead to failure.
@@ -316,7 +335,7 @@ def find_star(input_dataset,
 
     if pri_split_keywords is None:
         pri_split_keywords = ['VISITID']
-    
+
     if ext_split_keywords is None:
         ext_split_keywords = ['DPAMNAME']
 
@@ -343,16 +362,34 @@ def find_star(input_dataset,
 
         observing_mode = observing_mode[0]
 
+        # Split sat spot frames into the three acquisition groups by SCTSRT order.
+        # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
+        if len(sat_spot_frames) % 3 != 0:
+            raise ValueError(
+                f"Expected the number of SATSPOTS=True frames to be divisible by 3 "
+                f"(no-offset / +offset / -offset groups), but got {len(sat_spot_frames)}."
+            )
+        if all('SCTSRT' in f.ext_hdr for f in sat_spot_frames):
+            sat_spot_frames_sorted = sorted(sat_spot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
+        else:
+            sat_spot_frames_sorted = sorted(sat_spot_frames, key=lambda f: f.filename)
+        n_per_group = len(sat_spot_frames_sorted) // 3
+        no_offset_frames = sat_spot_frames_sorted[:n_per_group]
+        offset_frames = sat_spot_frames_sorted[n_per_group:]
+
         sci_dataset = data.Dataset(sci_frames)
-        sat_spot_dataset = data.Dataset(sat_spot_frames)
+        offset_dataset = data.Dataset(offset_frames)
 
         tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
         # See if the satellite spot parameters are provided, if not used defaults
         if satellite_spot_parameters is not None:
             tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
-        # Compute median images
+        # Compute median images; exclude no-offset frames from the sat spot median
         img_ref = np.nanmedian(sci_dataset.all_data, axis=0)
-        img_sat_spot = np.nanmedian(sat_spot_dataset.all_data, axis=0)
+        img_sat_spot = np.nanmedian(offset_dataset.all_data, axis=0)
+        if subtract_no_offset_frames:
+            img_no_offset = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
+            img_sat_spot = img_sat_spot - img_no_offset
 
         # if polarimetry
         if 'POL0' in val  or 'POL45' in val: 
