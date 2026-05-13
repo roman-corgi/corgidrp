@@ -270,6 +270,12 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     # and can't handle different 'FWC_EM's for different frames.
     m2 = np.zeros_like(crmasked_cube)
 
+    # warn user of potential overriding of cosm_tail choice in EM gain = 1 case
+    for g in emgain_list:
+        if g == 1:
+            print("cosm_tail set to 0 since cosmic tails only occur for EM gain > 1.")
+            break
+
     for i in range(len(crmasked_cube)):
         arrtype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
         if emgain_list[i] == 1:
