@@ -3,11 +3,13 @@
 #the need for l3_to_l4_pol_e2e.py. 
 
 import argparse
+import copy
 import os
 import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime, timedelta
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -426,11 +428,41 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     input_files = np.array(sorted([os.path.join(l1_datadir, "sat_spots", f) for f in input_satspots_filenames if f.endswith('l1_.fits')]))
     logger.info(f'Found {len(input_files)} sat spot files in input directory: {l1_datadir}/sat_spots')
     sat_spot_dir = os.path.join(l4_outputdir,"sat_spots")
+    os.makedirs(sat_spot_dir, exist_ok=True)
 
-    #Split the input data by targets
+    # Inject fake no-offset L1 satellite spot frames so find_star sees the
+    # expected three-group structure (no-offset / +offset / -offset).  Real
+    # TVAC satspot data only has +/- offset frames.  We copy real L1 satspot
+    # frames, zero their data, and give them an early-timestamp filename
+    # (year 2000) so they propagate through the full L1->L3 pipeline and
+    # sort before real frames in the no-offset group.
     input_targets = np.array([fits.getheader(f)['TARGET'] for f in input_files])
     unique_targets = np.unique(input_targets)
-    # import IPython; IPython.embed()
+    fake_l1_paths = []
+    fake_base_time = datetime(2000, 1, 1, 0, 0, 0)
+    for target in unique_targets:
+        target_files = input_files[input_targets == target]
+        num_real_frames = len(target_files)
+        if num_real_frames % 2 != 0:
+            target_files = target_files[:-1]
+            num_real_frames -= 1
+        n_fake = num_real_frames // 2
+        template_img = data.Image(target_files[0])
+        visitid = template_img.pri_hdr.get('VISITID', '')
+        for _ in range(n_fake):
+            fake_frame = copy.deepcopy(template_img)
+            fake_frame.data[:] = 0.0
+            if fake_frame.err is not None:
+                fake_frame.err[:] = 0.0
+            fake_frame.ext_hdr['SCTSRT'] = fake_base_time.isoformat()
+            time_str = fake_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
+            fake_frame.save(filedir=sat_spot_dir, filename=f"cgi_{visitid}_{time_str}_l1_.fits")
+            fake_l1_paths.append(fake_frame.filepath)
+            fake_base_time += timedelta(seconds=1)
+    if fake_l1_paths:
+        input_files = np.concatenate([np.array(fake_l1_paths), input_files])
+        input_targets = np.array([fits.getheader(f)['TARGET'] for f in input_files])
+
     for target in unique_targets:
         filelist = input_files[np.where(input_targets == target)]
         walker.walk_corgidrp(list(filelist), "", sat_spot_dir)
