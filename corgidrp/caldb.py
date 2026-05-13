@@ -9,8 +9,10 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.spec as spec
 import corgidrp.flat as flat
+import corgidrp.detector as detector
 
 import astropy.time as time
+import astropy.io.fits as fits
 from astropy.table import Table
 import datetime
 
@@ -57,6 +59,8 @@ labels = {data.Dark: "Dark",
           data.AstrometricCalibration : "AstrometricCalibration",
           data.TrapCalibration : "TrapCalibration",
           data.FluxcalFactor : "FluxcalFactor",
+          data.FluxcalFactorPOL0 : "FluxcalFactor",
+          data.FluxcalFactorPOL45 : "FluxcalFactor",
           data.FpamFsamCal : "FpamFsamCal",
           data.CoreThroughputCalibration: "CoreThroughputCalibration",
           data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
@@ -266,6 +270,9 @@ class CalDB:
             entry (corgidrp.data.Image subclass): calibration frame to add to the database
             to_disk (bool): True by default, will update DB from disk before adding entry and saving it back to disk
         """
+        if not os.path.exists(entry.filepath):
+            raise FileNotFoundError("Calibration file {0} does not exist on disk; save it before calling create_entry.".format(entry.filepath))
+
         new_row, row_dict = self._get_values_from_entry(entry)
 
         # update database from disk in case anything changed
@@ -349,14 +356,10 @@ class CalDB:
             raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
 
         # different logic for different cases
-        # each if/else statement returns a single filepath to a good calibration
+        # each if/else statement sets options_sorted: candidates ordered by preference (best first)
         if frame is None:
-            # no frame is passed in, get the most recently created 
-            options = calibdf
-
-            # select the one that was most recently created
-            result_index = options["Date Created"].argmax()
-            calib_filepath = options.iloc[result_index, 0]
+            # no frame is passed in, get the most recently created
+            options_sorted = calibdf.sort_values("Date Created", ascending=False)
 
         elif dtype_label in ["Dark"]:
             # match on exposure time and EM gain
@@ -381,25 +384,45 @@ class CalDB:
                         )
                     )
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['FluxcalFactor']:
             # filter by color filter and DPAM
+            # FluxcalFactorPOL0/FluxcalFactorPOL45 force the DPAMNAME for lookup
+            if dtype == data.FluxcalFactorPOL0:
+                dpamname = "POL0"
+            elif dtype == data.FluxcalFactorPOL45:
+                dpamname = "POL45"
+            else:
+                dpamname = frame_dict['DPAMNAME']
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "DPAMNAME", dpamname, err_if_none=True)
+
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+            # FluxcalFactorPOL0/FluxcalFactorPOL45 are looked up as FluxcalFactor entries on disk
+            dtype = data.FluxcalFactor
+
+        elif dtype_label in ['SpecFluxCal']:
+            # filter by color filter and DPAM
+            if frame_dict['CFAMNAME'] in ['2F', '3F', '2A', '2B', '2C', '3A', '3B', '3C', '3D', '3E', '3G']:
+                value = list(frame_dict['CFAMNAME'])[0] + 'F'
+                options = self.filter_calib(calibdf, "CFAMNAME", value, err_if_none=True)
+            else:
+                options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+            dtype = data.SpecFluxCal
+            
         elif dtype_label in ['CoreThroughputCalibration']:
             # filter by focal plane mask
             options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['FlatField']:
             # DPAM: IMAGING, POL0, or POL45 only. All other DPAM settings, including PUPIL, use flat = ones
             # CFAM: spectroscopy bands (2F/3F and their sub-filters) and CLEAR use flat = ones
@@ -417,7 +440,7 @@ class CalDB:
                 if len(options) == 0:
                     raise ValueError("No ones-flat FlatField calibration found in caldb at {0}".format(self.filepath))
                 # Any ones-flat is equivalent, choose the most recently created
-                result_index = options["MJD"].argmax()
+                options_sorted = options.sort_values("MJD", ascending=False)
             elif frame_dict['CFAMNAME'] not in imaging_cfams:
                 raise ValueError(
                     "No flat defined for CFAMNAME={0}, use a custom recipe".format(frame_dict['CFAMNAME'])
@@ -433,49 +456,43 @@ class CalDB:
                 if len(options) == 0:
                     raise ValueError("No FlatField with OPEN FPAM found in caldb at {0} for CFAMNAME={1}, DPAMNAME={2}".format(
                         self.filepath, cfam_lookup, frame_dict['DPAMNAME']))
-                result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+                options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
             # FlatFieldPOL0/FlatFieldPOL45 are looked up as FlatField entries on disk
             dtype = data.FlatField
         elif dtype_label in ['MuellerMatrix']:
             # filter by color filter
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['SlitTransmission']:
             # filter by slit mask (FSAM), prism (DPAM), and color filter (CFAM)
             options = self.filter_calib(calibdf, "FSAMNAME", frame_dict['FSAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['LineSpread']:
             # filter by prism (DPAM) and color filter (CFAM)
             options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['SpectroscopyCentroidPSF']:
             # filter by prism (DPAM) and color filter (CFAM)
             options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
             options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         else:
-            options = calibdf
-            # select the one closest in time
-            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-            calib_filepath = options.iloc[result_index, 0]
+            # sort by closest in time
+            options_sorted = calibdf.iloc[np.argsort(np.abs(calibdf["MJD"] - frame_dict["MJD"]))]
 
         # load the object from disk and return it
+        calib_filepath = self._pick_existing(options_sorted, dtype_label)
         return dtype(calib_filepath)
     
     def scan_dir_for_new_entries(self, filedir, look_in_subfolders=True, to_disk=True):
@@ -514,6 +531,30 @@ class CalDB:
         for calib_frame in calib_frames:
             self.create_entry(calib_frame, to_disk=to_disk)
 
+    def _pick_existing(self, options, dtype_label):
+        """Walk candidates in preference order and return the first filepath that exists on disk.
+
+        Args:
+            options (pd.DataFrame): candidate calibration rows sorted in preference order (best first)
+            dtype_label (str): calibration type label used in error messages
+
+        Returns:
+            str: filepath of the best existing calibration
+
+        Raises:
+            ValueError: if no candidate file exists on disk
+        """
+        for filepath in options["Filepath"]:
+            if os.path.exists(filepath):
+                return filepath
+            print("Calibration file {0} no longer exists on disk, trying next best option.".format(filepath))
+        raise ValueError(
+            "No valid {0} calibration in caldb located at {1}: "
+            "all matching entries reference files that no longer exist on disk".format(
+                dtype_label, self.filepath
+            )
+        )
+
     def filter_calib(self, calibdf, col_name, value, err_if_none=True):
         '''
         Takes in a calibration dataframe, filters them so that
@@ -534,7 +575,7 @@ class CalDB:
             err_if_none is set to false. 
 
         '''
-        
+
         filtered_calibdf = calibdf.loc[
             (
                 (calibdf[col_name] == value)
@@ -562,21 +603,31 @@ def initialize():
     rescan_needed = False
     # Add default detector_params calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00.00.00.000.fits")):
-        default_detparams = data.DetectorParams({}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
+        date_valid = time.Time("2023-11-01 00:00:00", scale='utc')
+        sctsrt_str = date_valid.to_datetime().strftime("%Y-%m-%dT%H:%M:%S")
+        default_detparams = data.DetectorParams({}, date_valid=date_valid)
+        default_detparams.ext_hdr['SCTSRT'] = sctsrt_str
+        default_detparams.ext_hdr['SCTEND'] = sctsrt_str
         default_detparams.save(filedir=corgidrp.default_cal_dir, filename="DetectorParams_2023-11-01T00.00.00.000.fits")
         rescan_needed = True
     # Add default FpamFsamCal calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00.00.00.000.fits")):
         date_valid = time.Time("2024-02-10 00:00:00", scale='utc')
+        sctsrt_str = date_valid.to_datetime().strftime("%Y-%m-%dT%H:%M:%S")
         fpamfsam_2excam = data.FpamFsamCal([], date_valid=date_valid)
         fpamfsam_2excam.ext_hdr['MJDSRT'] = float(date_valid.mjd)
+        fpamfsam_2excam.ext_hdr['SCTSRT'] = sctsrt_str
+        fpamfsam_2excam.ext_hdr['SCTEND'] = sctsrt_str
         fpamfsam_2excam.save(filedir=corgidrp.default_cal_dir)
         rescan_needed = True
     # Add default SpecFilterOffset calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "SpecFilterOffset_2025-12-10T00.00.00.000.fits")):
         date_valid = time.Time("2025-12-10 00:00:00", scale='utc')
+        sctsrt_str = date_valid.to_datetime().strftime("%Y-%m-%dT%H:%M:%S")
         spec_filter = data.SpecFilterOffset({}, date_valid=date_valid)
         spec_filter.ext_hdr['MJDSRT'] = float(date_valid.mjd)
+        spec_filter.ext_hdr['SCTSRT'] = sctsrt_str
+        spec_filter.ext_hdr['SCTEND'] = sctsrt_str
         spec_filter.save(filedir=corgidrp.default_cal_dir)
         rescan_needed = True
     # Add default DispersionModel calibration file if it doesn't exist
@@ -594,6 +645,8 @@ def initialize():
         exthdr['DATETIME'] = dt_str
         exthdr['FTIMEUTC'] = dt_str
         exthdr['MJDSRT'] = float(dt_time.mjd)
+        exthdr['SCTSRT'] = dt_str
+        exthdr['SCTEND'] = dt_str
         # not physically relevant since we are just constructing the calibration product for the dispersion model, not 
         # the observations that produced it, but just to avoid confusion, we set the values to something sensible
         exthdr['DPAMNAME'] = 'PRISM3' 
@@ -629,10 +682,238 @@ def initialize():
         ones_flat_dataset[0].data[:] = 1.0
         ones_flat = flat.create_flatfield(ones_flat_dataset)
         ones_flat.ext_hdr["FPAMNAME"] = "ONES"
+        ones_flat.ext_hdr["MJDSRT"] = float(time.Time("2026-01-01").mjd)
         # Write to a fixed CGI-formatted filename so there's no need to search for the latest ones-flat
         ones_flat.filename = fixed_ones_flat_filename
         ones_flat.pri_hdr["FILENAME"] = fixed_ones_flat_filename
         ones_flat.save(filedir=corgidrp.default_cal_dir, filename=fixed_ones_flat_filename)
+        rescan_needed = True
+
+    # Add TVAC default calibration files built from raw TVAC data packaged in corgidrp/data/default_calibs/.
+    # Fixed filenames encode the synthetic timestamp (20260101) so the existence check is stable across runs.
+    tvac_raw_dir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "default_calibs")
+    tvac_nln_filename = "cgi_0000000000000000000_20260101t0000000_nln_cal.fits"
+    tvac_krn_filename = "cgi_0000000000000000000_20260101t0000001_krn_cal.fits"
+    tvac_dnm_filename = "cgi_0000000000000000000_20260101t0000002_dnm_cal.fits"
+    tvac_flt_filename = "cgi_0000000000000000000_20260101t0000003_flt_cal.fits"
+    tvac_bpm_filename = "cgi_0000000000000000000_20260101t0000004_bpm_cal.fits"
+    tvac_pol0_flt_filename = "cgi_0000000000000000000_20260101t0000005_flt_cal.fits"
+    tvac_pol45_flt_filename = "cgi_0000000000000000000_20260101t0000006_flt_cal.fits"
+    tvac_flt4_filename = "cgi_0000000000000000000_20260101t0000007_flt_cal.fits"
+    tvac_pol0_flt4_filename = "cgi_0000000000000000000_20260101t0000008_flt_cal.fits"
+    tvac_pol45_flt4_filename = "cgi_0000000000000000000_20260101t0000009_flt_cal.fits"
+
+    tvac_cal_filenames = [tvac_nln_filename, tvac_krn_filename, tvac_dnm_filename,
+                          tvac_flt_filename, tvac_bpm_filename,
+                          tvac_pol0_flt_filename, tvac_pol45_flt_filename,
+                          tvac_flt4_filename, tvac_pol0_flt4_filename, tvac_pol45_flt4_filename]
+    tvac_cals_missing = any(
+        not os.path.exists(os.path.join(corgidrp.default_cal_dir, f))
+        for f in tvac_cal_filenames
+    )
+
+    if tvac_cals_missing:
+        pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
+        mjd_2026 = float(time.Time("2026-01-01").mjd)
+        isot_2026 = "2026-01-01T00:00:00.000"
+        ext_hdr["MJDSRT"] = mjd_2026
+        ext_hdr["DATETIME"] = isot_2026
+        ext_hdr["FTIMEUTC"] = isot_2026
+        ext_hdr["DRPCTIME"] = isot_2026
+        ext_hdr["DRPVERSN"] = corgidrp.__version__
+        # Minimal mock input dataset for bookkeeping requirements in calibration constructors
+        mock_dataset = mocks.create_flatfield_dummy(numfiles=2)
+
+        # NonLinearityCalibration from packaged TVAC nonlinearity table
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_nln_filename)):
+            nonlin_path = os.path.join(tvac_raw_dir, "nonlin_table_240322.txt")
+            nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
+            nonlinear_cal = data.NonLinearityCalibration(
+                nonlin_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                input_dataset=mock_dataset,
+            )
+            nonlinear_cal.ext_hdr["MJDSRT"] = mjd_2026
+            nonlinear_cal.ext_hdr["DATETIME"] = isot_2026
+            nonlinear_cal.ext_hdr["FTIMEUTC"] = isot_2026
+            nonlinear_cal.save(filedir=corgidrp.default_cal_dir, filename=tvac_nln_filename)
+
+        # KGain — 8.7 e/DN and read noise from TVAC measurements
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_krn_filename)):
+            kgain_val = 8.7
+            signal_array = np.linspace(0, 50)
+            noise_array = np.sqrt(signal_array)
+            ptc = np.column_stack([signal_array, noise_array])
+            ext_hdr_krn = ext_hdr.copy()
+            ext_hdr_krn["RN"] = 121.76     # read noise in electrons from TVAC measurement
+            ext_hdr_krn["RN_ERR"] = 2.0    # read noise uncertainty in electrons
+            kgain = data.KGain(
+                kgain_val, ptc=ptc, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr_krn,
+                input_dataset=mock_dataset,
+            )
+            kgain.ext_hdr["MJDSRT"] = mjd_2026
+            kgain.ext_hdr["DATETIME"] = isot_2026
+            kgain.ext_hdr["FTIMEUTC"] = isot_2026
+            kgain.save(filedir=corgidrp.default_cal_dir, filename=tvac_krn_filename)
+
+        # DetectorNoiseMaps from packaged TVAC noise component files.
+        # The 1024x1024 science-image data is embedded in the full detector frame.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_dnm_filename)):
+            with fits.open(os.path.join(tvac_raw_dir, "fpn_20240322.fits")) as hdulist:
+                fpn_dat = hdulist[0].data.astype(float)
+            with fits.open(os.path.join(tvac_raw_dir, "cic_20240322.fits")) as hdulist:
+                cic_dat = hdulist[0].data.astype(float)
+            with fits.open(os.path.join(tvac_raw_dir, "dark_current_20240322.fits")) as hdulist:
+                dark_dat = hdulist[0].data.astype(float)
+            frame_rows = detector.detector_areas["SCI"]["frame_rows"]
+            frame_cols = detector.detector_areas["SCI"]["frame_cols"]
+            img_rows, img_cols, r0c0 = detector.unpack_geom("SCI", "image")
+            r0, c0 = r0c0
+            noise_map_dat = np.zeros((3, frame_rows, frame_cols))
+            noise_map_dat[0, r0:r0 + img_rows, c0:c0 + img_cols] = fpn_dat
+            noise_map_dat[1, r0:r0 + img_rows, c0:c0 + img_cols] = cic_dat
+            noise_map_dat[2, r0:r0 + img_rows, c0:c0 + img_cols] = dark_dat
+            noise_map_err = np.zeros((1,) + noise_map_dat.shape)
+            noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+            noise_err_hdr = fits.Header()
+            noise_err_hdr["BUNIT"] = "detected electron"
+            ext_hdr_dnm = ext_hdr.copy()
+            ext_hdr_dnm["B_O"] = 0.0
+            ext_hdr_dnm["B_O_ERR"] = 0.0
+            noise_map = data.DetectorNoiseMaps(
+                noise_map_dat,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr_dnm,
+                input_dataset=mock_dataset,
+                err=noise_map_err,
+                dq=noise_map_dq,
+                err_hdr=noise_err_hdr,
+            )
+            noise_map.ext_hdr["MJDSRT"] = mjd_2026
+            noise_map.ext_hdr["DATETIME"] = isot_2026
+            noise_map.ext_hdr["FTIMEUTC"] = isot_2026
+            noise_map.ext_hdr["DRPNFILE"] = 96
+            noise_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_dnm_filename)
+
+        # FlatField — all-ones array for the default imaging configuration.
+        # FPAMNAME='OPEN_12' and CFAMNAME='1F' match the caldb lookup for
+        # standard DPAMNAME='IMAGING' observations in bands 1 & 2.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_flt_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            tvac_flat = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                       input_dataset=flat_mock_dataset)
+            tvac_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
+            tvac_flat.ext_hdr["CFAMNAME"] = "1F"
+            tvac_flat.ext_hdr["DPAMNAME"] = "IMAGING"
+            tvac_flat.ext_hdr["MJDSRT"] = mjd_2026
+            tvac_flat.ext_hdr["DATETIME"] = isot_2026
+            tvac_flat.ext_hdr["FTIMEUTC"] = isot_2026
+            tvac_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt_filename)
+
+        # BadPixelMap from packaged TVAC bad pixel data.
+        # A synthetic Dark frame is required by BadPixelMap as the base header source.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_bpm_filename)):
+            with fits.open(os.path.join(tvac_raw_dir, "bad_pix.fits")) as hdulist:
+                bp_dat = hdulist[0].data.astype(float)
+            bp_dark_pri, bp_dark_ext, _, _ = mocks.create_default_calibration_product_headers()
+            bp_dark_ext["EXPTIME"] = 1.0
+            bp_dark_ext["EMGAIN_C"] = 1.0
+            bp_dark_ext["DRPNFILE"] = 1
+            bp_dark_ext["MJDSRT"] = mjd_2026
+            bp_dark_ext["DATETIME"] = isot_2026
+            bp_dark_ext["FTIMEUTC"] = isot_2026
+            bp_dark = data.Dark(
+                np.zeros_like(bp_dat, dtype=float),
+                pri_hdr=bp_dark_pri,
+                ext_hdr=bp_dark_ext,
+                input_dataset=mock_dataset,
+                err=np.zeros((1,) + bp_dat.shape, dtype=float),
+                dq=np.zeros(bp_dat.shape, dtype="uint16"),
+                err_hdr=fits.Header(),
+            )
+            bp_map = data.BadPixelMap(
+                bp_dat,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr.copy(),
+                input_dataset=data.Dataset([bp_dark]),
+            )
+            bp_map.ext_hdr["MJDSRT"] = mjd_2026
+            bp_map.ext_hdr["DATETIME"] = isot_2026
+            bp_map.ext_hdr["FTIMEUTC"] = isot_2026
+            bp_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_bpm_filename)
+
+        # POL0 FlatField — all-ones for the default polarimetry configuration.
+        # FPAMNAME='OPEN_12', CFAMNAME='1F', DPAMNAME='POL0' for caldb lookup.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol0_flt_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol0_flat = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                       input_dataset=flat_mock_dataset)
+            pol0_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
+            pol0_flat.ext_hdr["CFAMNAME"] = "1F"
+            pol0_flat.ext_hdr["DPAMNAME"] = "POL0"
+            pol0_flat.ext_hdr["MJDSRT"] = mjd_2026
+            pol0_flat.ext_hdr["DATETIME"] = isot_2026
+            pol0_flat.ext_hdr["FTIMEUTC"] = isot_2026
+            pol0_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol0_flt_filename)
+
+        # POL45 FlatField — all-ones for the default polarimetry configuration.
+        # FPAMNAME='OPEN_12', CFAMNAME='1F', DPAMNAME='POL45' for caldb lookup.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol45_flt_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol45_flat = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                        input_dataset=flat_mock_dataset)
+            pol45_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
+            pol45_flat.ext_hdr["CFAMNAME"] = "1F"
+            pol45_flat.ext_hdr["DPAMNAME"] = "POL45"
+            pol45_flat.ext_hdr["MJDSRT"] = mjd_2026
+            pol45_flat.ext_hdr["DATETIME"] = isot_2026
+            pol45_flat.ext_hdr["FTIMEUTC"] = isot_2026
+            pol45_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol45_flt_filename)
+
+        # Band-4 IMAGING FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='IMAGING'.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_flt4_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            flt4 = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                  input_dataset=flat_mock_dataset)
+            flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
+            flt4.ext_hdr["CFAMNAME"] = "4F"
+            flt4.ext_hdr["DPAMNAME"] = "IMAGING"
+            flt4.ext_hdr["MJDSRT"] = mjd_2026
+            flt4.ext_hdr["DATETIME"] = isot_2026
+            flt4.ext_hdr["FTIMEUTC"] = isot_2026
+            flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt4_filename)
+
+        # Band-4 POL0 FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='POL0'.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol0_flt4_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol0_flt4 = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                       input_dataset=flat_mock_dataset)
+            pol0_flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
+            pol0_flt4.ext_hdr["CFAMNAME"] = "4F"
+            pol0_flt4.ext_hdr["DPAMNAME"] = "POL0"
+            pol0_flt4.ext_hdr["MJDSRT"] = mjd_2026
+            pol0_flt4.ext_hdr["DATETIME"] = isot_2026
+            pol0_flt4.ext_hdr["FTIMEUTC"] = isot_2026
+            pol0_flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol0_flt4_filename)
+
+        # Band-4 POL45 FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='POL45'.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol45_flt4_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol45_flt4 = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                        input_dataset=flat_mock_dataset)
+            pol45_flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
+            pol45_flt4.ext_hdr["CFAMNAME"] = "4F"
+            pol45_flt4.ext_hdr["DPAMNAME"] = "POL45"
+            pol45_flt4.ext_hdr["MJDSRT"] = mjd_2026
+            pol45_flt4.ext_hdr["DATETIME"] = isot_2026
+            pol45_flt4.ext_hdr["FTIMEUTC"] = isot_2026
+            pol45_flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol45_flt4_filename)
+
         rescan_needed = True
 
     if rescan_needed:

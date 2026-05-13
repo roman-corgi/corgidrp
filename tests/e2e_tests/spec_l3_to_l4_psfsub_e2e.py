@@ -1,5 +1,6 @@
 import os
 import glob
+import shutil
 import numpy as np
 import astropy.io.fits as fits
 import logging
@@ -67,13 +68,13 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
         
-    psfref_satspot_path = os.path.join(e2edata_path, "SPEC_refstar_satspot", "Analog", "L1")
-    target_satspot_path = os.path.join(e2edata_path, "SPEC_targetstar_satspot", "L1", "analog")
+    psfref_satspot_path = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_zeropoint")
+    target_satspot_path = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_zeropoint")
     psfref_satspot_files = sorted(glob.glob(os.path.join(psfref_satspot_path, "cgi_*l1_.fits")))
     target_satspot_files = sorted(glob.glob(os.path.join(target_satspot_path, "cgi_*l1_.fits")))
-    psfref_files_path = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "Analog", "L1")
+    psfref_files_path = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_science_analog")
     psfref_files = sorted(glob.glob(os.path.join(psfref_files_path, "cgi_*l1_.fits")))
-    target_files_path = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L1", "analog")
+    target_files_path = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_science_analog")
     target_files = sorted(glob.glob(os.path.join(target_files_path, "cgi_*l1_.fits")))
     logger.info(f"Found {len(target_files)} existing L1 target files in {e2edata_path}")
     logger.info(f"Found {len(psfref_files)} existing L1 reference files in {e2edata_path}")
@@ -81,10 +82,10 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info(f"Found {len(psfref_satspot_files)} existing L1 reference satspot files in {e2edata_path}")
     
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
-    ref_l3_output_dir = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L3")
-    target_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3")
-    ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_refstar_slit_prism", "L3", "satspot")
-    target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_targetstar_slit_prism", "L3", "satspot")
+    ref_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_science_analog", "L3")
+    target_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_science_analog", "L3")
+    ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_zeropoint", "L3")
+    target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_zeropoint", "L3")
 
     cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "cpgs_mock.xml")
 
@@ -132,8 +133,9 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         logger.info("")
     
     l3_files_dir = os.path.join(e2eoutput_path, "L3")
-    if not os.path.exists(l3_files_dir):
-        os.makedirs(l3_files_dir)
+    if os.path.exists(l3_files_dir):
+        shutil.rmtree(l3_files_dir)
+    os.makedirs(l3_files_dir)
     l3_dataset.save(filedir = l3_files_dir)
     l3_files_input = sorted(glob.glob(os.path.join(l3_files_dir, "cgi_*_l3_.fits")))
     logger.info(f"Total input images validated: {len(l3_dataset)}")
@@ -151,23 +153,19 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     calibrations_dir = os.path.join(e2eoutput_path, 'calibrations')
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
-    #Create a mock flux calibration file
-    fluxcal_factor = 2e-12
-    fluxcal_factor_error = 1e-14
-    prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
-    # Set consistent header values for flux calibration factor
-    exthd['CFAMNAME'] = '3F'
-    exthd['DPAMNAME'] = 'PRISM3'
-    exthd['FSAMNAME'] = 'R1C2'
-    fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = l3_dataset)
+    #Using a specfluxcal calib file created using DIP data
+    specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(e2edata_path,'SPEC_NOM_sims/cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
 
-    rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
-    this_caldb.create_entry(fluxcal_fac)
-    
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
+    this_caldb.create_entry(specflux_cal)
+
     ###########################
     #### Make dummy CT cal ####
     ###########################
 
+    prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
     # Dataset with some CT profile defined in create_ct_interp
     # Pupil image
     pupil_image = np.zeros([1024, 1024])
@@ -472,7 +470,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/home/ababuraj/roman/E2E_Test_Data'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,

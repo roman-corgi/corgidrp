@@ -188,6 +188,8 @@ def make_minimal_image(
         updated_time = updated_time.replace(microsecond=microsec)
     # Convert output back to ISO format string
     exthd['DATETIME'] = updated_time.isoformat(timespec='microseconds')
+    exthd['SCTSRT'] = updated_time.isoformat(timespec='microseconds')
+    exthd['SCTEND'] = updated_time.isoformat(timespec='microseconds')
     # Creating a FITS file to assign it a filename with the frame ID
     prim = fits.PrimaryHDU(header = prhd)
     hdr_img = fits.ImageHDU(signal, header=exthd)

@@ -67,10 +67,10 @@ def measure_companions(
                                                         guesspeak=np.nanmax(host_star_image.data), refinefit=True)
     # host_star_counts, _ = measure_counts(ref_star_dataset[0], phot_method, None, **photometry_kwargs)
     
-    # correct host star counts for  for ND if ND cal is provided
+    # correct host star counts for ND if ND cal is provided: true_flux = measured_flux * 10**OD
     if nd_cal is not None:
         od_val = nd_cal.interpolate_od(x_host, y_host)
-        host_star_peakflux /= od_val
+        host_star_peakflux *= 10**od_val
     
 
     # measure peak flux in CT dataset and use as CT=1

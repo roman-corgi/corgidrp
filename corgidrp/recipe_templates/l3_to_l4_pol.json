@@ -37,10 +37,11 @@
             }
         },
         {
-            "name": "update_to_l4",
+            "name": "update_to_l4_pol",
             "calibs": {
                 "CoreThroughputCalibration": "AUTOMATIC",
-                "FluxcalFactor": "AUTOMATIC"
+                "FluxcalFactorPOL0": "AUTOMATIC",
+                "FluxcalFactorPOL45": "AUTOMATIC"
             }
         },
         {

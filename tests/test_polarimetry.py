@@ -556,6 +556,86 @@ def test_mueller_matrix_cal():
     with pytest.raises(ValueError):
         mueller_matrix_mixed = pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file)
 
+def test_mueller_matrix_cal_errors_stored():
+    """
+    Tests that generate_mueller_matrix_cal stores non-zero errors in the
+    returned MuellerMatrix object.
+    """
+    current_file_path = os.path.dirname(os.path.abspath(__file__))
+    path_to_pol_ref_file = os.path.join(current_file_path, "test_data",
+                                         "stellar_polarization_database.csv")
+
+    mock_dataset = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file)
+    mock_dataset = l2b_to_l3.divide_by_exptime(mock_dataset)
+    mock_dataset = l2b_to_l3.split_image_by_polarization_state(mock_dataset)
+    stokes_dataset = pol.calc_stokes_unocculted(mock_dataset)
+
+    mueller_matrix = pol.generate_mueller_matrix_cal(
+        stokes_dataset, path_to_pol_ref_file=path_to_pol_ref_file
+    )
+
+    # errors should be stored (not all zero)
+    assert not np.all(mueller_matrix.err == 0), \
+        "MuellerMatrix errors should not all be zero"
+
+    # the 6 non-trivial elements should have finite positive errors
+    mm_err = mueller_matrix.err[0]
+    for idx in [(1,0), (1,1), (1,2), (2,0), (2,1), (2,2)]:
+        assert np.isfinite(mm_err[idx]) and mm_err[idx] > 0, \
+            f"MM err at {idx} should be finite and positive"
+
+    # the fixed MM elements (corners) should remain NaN
+    assert np.isnan(mm_err[0, 1])
+    assert np.isnan(mm_err[3, 0])
+
+
+def test_mueller_matrix_cal_source_pol_errors_increase_mm_err():
+    """
+    Tests that nonzero reference star polarization uncertainties (P_err, PA_err)
+    produce larger Mueller matrix errors than zero uncertainties.
+    """
+    import tempfile
+
+    current_file_path = os.path.dirname(os.path.abspath(__file__))
+    path_to_pol_ref_file = os.path.join(current_file_path, "test_data",
+                                         "stellar_polarization_database.csv")
+
+    mock_dataset = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file)
+    mock_dataset = l2b_to_l3.divide_by_exptime(mock_dataset)
+    mock_dataset = l2b_to_l3.split_image_by_polarization_state(mock_dataset)
+    stokes_dataset = pol.calc_stokes_unocculted(mock_dataset)
+
+    # create a temporary ref file with P_err=0 and PA_err=0
+    zero_err_path = None
+    try:
+        original = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
+        original['P_err'] = 0.0
+        original['PA_err'] = 0.0
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+            zero_err_path = f.name
+            original.to_csv(f, index=False)
+
+        # use the same stokes dataset for both calls so measurement noise is identical
+        mm_with_source_err = pol.generate_mueller_matrix_cal(
+            stokes_dataset.copy(), path_to_pol_ref_file=path_to_pol_ref_file
+        )
+
+        mm_without_source_err = pol.generate_mueller_matrix_cal(
+            stokes_dataset.copy(), path_to_pol_ref_file=zero_err_path
+        )
+
+        # MM errors with source uncertainties should be >= errors without
+        mm_err_with = mm_with_source_err.err[0]
+        mm_err_without = mm_without_source_err.err[0]
+
+        for idx in [(1,0), (1,1), (1,2), (2,0), (2,1), (2,2)]:
+            assert mm_err_with[idx] >= mm_err_without[idx], \
+                f"MM err at {idx} should be >= zero-source-error case"
+    finally:
+        if zero_err_path is not None:
+            os.unlink(zero_err_path)
+
+
 def test_subtract_stellar_polarization():
     """
     Test that the subtract_stellar_polarization step function separates the input dataset by target star
@@ -1341,6 +1421,53 @@ def test_compute_QphiUPhi():
     logger.info('='*80)
 
 
+def test_update_to_l4_pol():
+    """
+    Tests that update_to_l4_pol writes both POL0 and POL45 flux calibration filenames
+    into the L4 headers.
+    """
+    # create a mock L3 frame (single Stokes datacube, as produced by combine_polarization_states)
+    pri_hdr, ext_hdr, err_hdr, dq_hdr = mocks.create_default_L3_headers()
+    ext_hdr['DATALVL'] = 'L3'
+    mock_data = np.zeros((4, 100, 100))
+    frame = data.Image(mock_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                       err=np.zeros((4, 100, 100)), dq=np.zeros((4, 100, 100), dtype=int),
+                       err_hdr=err_hdr, dq_hdr=dq_hdr)
+    frame.filename = "cgi_0200001001001001001_20250101t0000000_l3_.fits"
+    frame.pri_hdr['FILENAME'] = frame.filename
+    input_dataset = Dataset([frame])
+
+    # create mock flux cal objects for POL0 and POL45
+    flux_cal_pol0 = mocks.make_mock_fluxcal_factor(1.0, dpam_name='POL0')
+    flux_cal_pol0.filename = "mock_abf_cal_pol0.fits"
+    flux_cal_pol45 = mocks.make_mock_fluxcal_factor(1.0, dpam_name='POL45')
+    flux_cal_pol45.filename = "mock_abf_cal_pol45.fits"
+
+    # create mock core throughput cal
+    ct_cal = mocks.create_ct_cal(3)
+    ct_cal.filename = "mock_ct_cal.fits"
+
+    result = l3_to_l4.update_to_l4_pol(input_dataset, ct_cal, flux_cal_pol0, flux_cal_pol45)
+
+    assert len(result) == 1
+    out_frame = result[0]
+    assert out_frame.ext_hdr['DATALVL'] == 'L4'
+    assert out_frame.ext_hdr['CTCALFN'] == 'mock_ct_cal.fits'
+    assert out_frame.ext_hdr['FLXCLF0'] == 'mock_abf_cal_pol0.fits'
+    assert out_frame.ext_hdr['FLXCLF45'] == 'mock_abf_cal_pol45.fits'
+    assert '_l4_' in out_frame.filename
+
+    # test with corethroughput_cal=None (need fresh L3 frame since headers were modified)
+    frame2 = data.Image(mock_data, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                        err=np.zeros((4, 100, 100)), dq=np.zeros((4, 100, 100), dtype=int),
+                        err_hdr=err_hdr.copy(), dq_hdr=dq_hdr.copy())
+    frame2.filename = "cgi_0200001001001001001_20250101t0000000_l3_.fits"
+    frame2.pri_hdr['FILENAME'] = frame2.filename
+    frame2.ext_hdr['DATALVL'] = 'L3'
+    result2 = l3_to_l4.update_to_l4_pol(Dataset([frame2]), None, flux_cal_pol0, flux_cal_pol45)
+    assert result2[0].ext_hdr['CTCALFN'] == ''
+
+
 if __name__ == "__main__":
     test_image_splitting()
     test_calc_pol_p_and_pa_image()
@@ -1350,3 +1477,4 @@ if __name__ == "__main__":
     test_align_frames()
     test_calc_stokes_unocculted()
     test_compute_QphiUPhi()
+    test_update_to_l4_pol()
