@@ -6,6 +6,7 @@ from astropy.io import fits
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
 from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords, typical_bool_keywords, selective_dq, get_flag_to_value_map
+import corgidrp
 
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
@@ -14,11 +15,14 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     removed.  This function takes the bad-pixels maps into account when taking
     the mean.
 
-    The two lists must be the same length, and each 2D array in each list must
-    be the same size, both within a list and across lists.
+    The first two inputs can be lists.  If the first two inputs are np.ndarray 
+    (a single frame or a stack), the function will accommodate and convert them 
+    to lists of arrays.  If the first input is a Dataset, RAM-heavy mode is assumed, 
+    and the second input is irrelevant since the DQ map for each frame of the input 
+    Dataset will be used to construct the bad-pixel maps.  
 
-    If the inputs are instead np.ndarray (a single frame or a stack),
-    the function will accommodate and convert them to lists of arrays.
+    Unless the first input is a Dataset, the first two inputs must be the same length, and each 2D array in each list must
+    be the same size, both within a list and across lists.
 
     Also Includes outputs for processing darks used for calibrating the
     master dark.
@@ -157,7 +161,171 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
 
     return comb_image, comb_bpmap, map_im, enough_for_rn
 
-def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=False):
+def median_combine(dataset_or_image_list, bpmap_list, err=False, chunk_size=corgidrp.chunk_size):
+    """
+    Get median frame and corresponding bad-pixel map from L2b data frames.  The
+    input image_list should consist of frames with no bad pixels marked or
+    removed.  This function takes the bad-pixels maps into account when taking
+    the median.
+
+    The first two inputs can be lists.  If the first two inputs are np.ndarray 
+    (a single frame or a stack), the function will accommodate and convert them 
+    to lists of arrays.  If the first input is a Dataset, RAM-heavy mode is assumed, 
+    and the second input is irrelevant since the DQ map for each frame of the input 
+    Dataset will be used to construct the bad-pixel maps.  In this case, to so that 
+    many frames are not held in memory at once, the median is taken of smaller stacks 
+    of the whole stack, one at a time, and then the median of the smaller stacks are 
+    taken for the median over the total.  
+
+    Unless the first input is a Dataset, the first two inputs must be the same length, and each 2D array in each list must
+    be the same size, both within a list and across lists.
+
+    Also Includes outputs for processing darks used for calibrating the
+    master dark.
+
+    Args:
+        dataset_or_image_list (data.Dataset, list, or array_like): Dataset or list (or stack) of L2b data frames
+    (with no bad pixels applied to them).
+        bpmap_list (list or array_like): List (or stack) of bad-pixel maps
+    associated with L2b data frames. Each must be 0 (good) or 1 (bad)
+    at every pixel. If first input is a Dataset, this input is ignored.
+        err (bool):  If True, calculates the standard error over all
+    the frames.  Intended for the corgidrp.Data.Dataset.all_err
+    arrays. Defaults to False.   
+        chunk_size (int):  Used if median-combine employed.  Defaults to 
+    corgidrp.chunk_size, which is 200.
+
+
+    Returns:
+        comb_image (array_like): Mean-combined frame from input list data.
+
+        comb_bpmap (array_like): Mean-combined bad-pixel map.
+
+        map_im (array-like): Array showing how many frames per pixel were
+        unmasked. Used for getting read noise in the calibration of the
+        master dark.
+
+        enough_for_rn (bool): Useful only for the calibration of the master dark.
+        False:  Fewer than half the frames available for at least one pixel in
+        the averaging due to masking, so noise maps cannot be effectively
+        determined for all pixels.
+        True:  Half or more of the frames available for all pixels, so noise
+        mpas can be effectively determined for all pixels.
+
+    """
+    # uncomment for RAM check
+    # import psutil
+    # process = psutil.Process()
+
+    if not isinstance(dataset_or_image_list, Dataset):
+        # if input is an np array or stack, try to accommodate
+        if type(dataset_or_image_list) == np.ndarray:
+            if dataset_or_image_list.ndim == 1: # pathological case of empty array
+                dataset_or_image_list = list(dataset_or_image_list)
+            elif dataset_or_image_list.ndim == 2: #covers case of single 2D frame
+                dataset_or_image_list = [dataset_or_image_list]
+            elif dataset_or_image_list.ndim == 3: #covers case of stack of 2D frames
+                dataset_or_image_list = list(dataset_or_image_list)
+        if type(bpmap_list) == np.ndarray:
+            if bpmap_list.ndim == 1: # pathological case of empty array
+                bpmap_list = list(bpmap_list)
+            elif bpmap_list.ndim == 2: #covers case of single 2D frame
+                bpmap_list = [bpmap_list]
+            elif bpmap_list.ndim == 3: #covers case of stack of 2D frames
+                bpmap_list = list(bpmap_list)
+
+        # Check inputs
+        if not isinstance(bpmap_list, list):
+            raise TypeError('bpmap_list must be a list')
+        if len(dataset_or_image_list) != len(bpmap_list):
+            raise TypeError('image_list and bpmap_list must be the same length')
+        if len(dataset_or_image_list) == 0:
+            raise TypeError('input lists cannot be empty')
+        s0 = dataset_or_image_list[0].shape
+        for index, im in enumerate(dataset_or_image_list):
+            check.twoD_array(im, 'image_list[' + str(index) + ']', TypeError)
+            if im.shape != s0:
+                raise TypeError('all input list elements must be the same shape')
+            pass
+        for index, bp in enumerate(bpmap_list):
+            check.twoD_array(bp, 'bpmap_list[' + str(index) + ']', TypeError)
+            if np.logical_and((bp != 0), (bp != 1)).any():
+                raise TypeError('bpmap_list elements must be 0- or 1-valued')
+            if bp.dtype != int:
+                raise TypeError('bpmap_list must be made up of int arrays')
+            if bp.shape != s0:
+                raise TypeError('all input list elements must be the same shape')
+            pass
+
+    # Add non masked elements
+    if isinstance(dataset_or_image_list, Dataset):
+        temp_fits = Image(dataset_or_image_list[0].filepath)
+        shape = temp_fits.data.shape
+        sum_im = np.zeros(shape).astype(float)
+        map_im = np.zeros(shape, dtype=int)
+    elif isinstance(dataset_or_image_list, list) or isinstance(dataset_or_image_list, np.array):
+        sum_im = np.zeros_like(dataset_or_image_list[0]).astype(float)
+        map_im = np.zeros_like(dataset_or_image_list[0], dtype=int)
+    else:
+        raise TypeError('image_list must be a list, array-like, or a Dataset')
+
+    chunks = np.arange(0, len(dataset_or_image_list), chunk_size)
+    if (len(dataset_or_image_list) - chunks[-1] >= chunk_size/2) or len(chunks) == 1:
+        chunks = np.append(chunks, len(dataset_or_image_list))
+    else:
+        chunks[-1] = len(dataset_or_image_list)
+    comb_ims = []
+    comb_masks = []
+    for j in range(1, len(chunks)):
+        images = []
+        masks = []
+        for  i in range(chunks[j-1], chunks[j]):
+            if isinstance(dataset_or_image_list, Dataset):
+                if dataset_or_image_list[0].data is None:
+                    temp_fits = Image(dataset_or_image_list[i].filepath)
+                else:
+                    temp_fits = dataset_or_image_list[i]
+                frame_data = temp_fits.data.astype(float)
+                im = frame_data
+                mask = temp_fits.dq.astype(bool).astype(int)
+            else: #list
+                im = dataset_or_image_list[i] 
+                mask = bpmap_list[i]
+            images.append(im)
+            masks.append(mask)
+            map_im += (mask == False).astype(int)
+        ims_m = np.ma.masked_array(images, masks)
+        # take median, ignoring masked pixels
+        med = np.ma.median(ims_m, axis=0)
+        comb_ims.append(med.data)
+        comb_masks.append(med.mask)
+    comb_ims_m = np.ma.masked_array(comb_ims, comb_masks)
+    med_medians = np.ma.median(comb_ims_m, axis=0)
+    # combined image, setting any pixels that were masked all the way through
+    # to 0 (which will be masked later in dark processing anyways, but this at 
+    # least makes it a regular non-masked array)
+    comb_image = med_medians.filled(0)
+    
+    # combined mask:
+    # Mask any value that was never mapped (aka masked in every frame)
+    comb_bpmap = med_medians.mask.astype(int)
+
+    enough_for_rn = True
+    if map_im.min() < len(dataset_or_image_list)/2:
+        enough_for_rn = False
+
+    # uncomment for RAM check
+    # mem = process.memory_info()
+    # # peak_wset is only available on Windows; fall back to rss on other platforms
+    # if hasattr(mem, 'peak_wset') and getattr(mem, 'peak_wset') is not None:
+    #     peak_memory = mem.peak_wset / (1024 ** 2)  # convert to MB
+    # else:
+    #     peak_memory = mem.rss / (1024 ** 2)  # convert to MB
+    # print(f"mean_combine peak memory usage:  {peak_memory:.2f} MB")s
+    
+    return comb_image, comb_bpmap, map_im, enough_for_rn
+
+def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=False, med_fraction=0.5):
     """This function produces a traditional master dark from a stack of darks
     taken at a specific EM gain and exposure time to match a corresponding
     observation.  The input dataset represents a stack of dark frames (in e-).
@@ -209,6 +377,10 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         may be useful for the module that statistically fits a frame to find
         the empirically applied EM gain, for example). If False, an image-area
         master dark is generated.  Defaults to False.
+    med_fraction (float):
+        The fraction of frames for a given pixel which need to be masked to warrant 
+        mediancombination of frames rather than a mean combination for that pixel. 
+        Defaults to 0.5.
 
     Returns:
     master_dark : corgidrp.data.DetectorNoiseMaps instance
@@ -262,6 +434,13 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         test_frame[telem_rows] = 0
     mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
     mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
+    # if med_fraction or more masked for a given pixel, do median for that pixel
+    median_inds = np.where(unmasked_num <= len(frames)*(1-med_fraction))
+    if median_inds[0].size > 0: #combined_bpmap same whether median or mean 
+        median_frame, _, _, _ = median_combine(frames, bpmaps)
+        median_err, _, _, _ = median_combine(errs, bpmaps, err=True)
+        mean_frame[median_inds] = median_frame[median_inds]
+        mean_err[median_inds] = median_err[median_inds]
     if dataset[0].data is None:
         # equivalent to what is done in if statement above for datasets with data
         mean_frame[telem_rows] = 0
@@ -349,7 +528,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
 class CalDarksLSQException(Exception):
     """Exception class for calibrate_darks_lsq."""
 
-def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regions=None):
+def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regions=None, med_fraction=0.5):
     """The input dataset represents a collection of frame stacks of the
     (in e- units), where the stacks are for various
     EM gain values and exposure times.  Stacks with fewer frames than other
@@ -411,9 +590,13 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         the effect of any DQ masking.  If False, all data is evenly weighted in
         the least squares fit.  Defaults to True.
     detector_regions (dict):
-        a dictionary of detector geometry properties.  Keys should be as found
+        A dictionary of detector geometry properties.  Keys should be as found
         in detector_areas in detector.py.
         Defaults to None, in which case detector_areas from detector.py is used.
+    med_fraction (float):
+        The fraction of frames for a given pixel which need to be masked to warrant 
+        mediancombination of frames rather than a mean combination for that pixel. 
+        Defaults to 0.5.
 
     Returns:
     noise_maps : corgidrp.data.DetectorNoiseMaps instance
@@ -601,6 +784,13 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             test_frame[telem_rows] = 0
         mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
         mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
+        # if med_fraction or more masked for a given pixel, do median for that pixel
+        median_inds = np.where(unmasked_num <= len(frames)*(1-med_fraction))
+        if median_inds[0].size > 0: #combined_bpmap same whether median or mean 
+            median_frame, _, _, _ = median_combine(frames, bpmaps)
+            median_err, _, _, _ = median_combine(errs, bpmaps, err=True)
+            mean_frame[median_inds] = median_frame[median_inds]
+            mean_err[median_inds] = median_err[median_inds]
         if dataset[0].data is None:
             # equivalent to what is done in if statement above for datasets with data
             mean_frame[telem_rows] = 0
