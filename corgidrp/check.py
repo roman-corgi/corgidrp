@@ -790,8 +790,8 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
 
 
 # Default keyword sets for merge_headers
-first_frame_keywords_default = ['MJDSRT']
-last_frame_keywords_default = ['VISITID', 'MJDEND',  'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4']
+first_frame_keywords_default = ['MJDSRT', 'SCTSRT']
+last_frame_keywords_default = ['VISITID', 'MJDEND', 'SCTEND', 'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4']
 averaged_keywords_default = (
     ['RA'] + ['DEC'] + ['RAPM'] + ['DECPM'] + ['PA_V3'] + ['PA_APER'] + ['SVB_1'] + ['SVB_2'] + ['SVB_3'] +
     ['ROLL'] + ['PITCH'] + ['YAW'] +
@@ -801,7 +801,7 @@ averaged_keywords_default = (
     [f'Z{i}VAR' for i in range(2, 15)] +
     [f'Z{i}RES' for i in range(2, 15)]
 )
-deleted_keywords_default = ['SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+deleted_keywords_default = ['LOCAMT', 'CYCLES', 'LASTEXP']
 invalid_keywords_default = ['FTIMEUTC', 'PROXET', 'DATETIME']
 # FILETIME is the only one calculated in merge_heades, the others are calculated elsewhere in the
 # pipeline but are included here so that they are exempt from the identical check
@@ -826,7 +826,7 @@ def merge_headers(
 
     Used when building combined frames or calibration products from a dataset of frames.
 
-    Frames are sorted by MJDSRT (ascending); the chronologically last frame
+    Frames are sorted by SCTSRT (ascending); the chronologically last frame
     provides the base headers and values for last_frame_keywords.
 
     Header keywords are handled according to which set they belong to:
@@ -885,10 +885,10 @@ def merge_headers(
     calculated_value_keywords = set(calculated_value_keywords)
     any_true_keywords = set(any_true_keywords) if any_true_keywords else set()
 
-    # Dataset may not be time-ordered, so sort by MJDSRT to define the last frame
+    # Dataset may not be time-ordered, so sort by SCTSRT to define the last frame
     # and define the header starting point
-    mjd_vals = [float(f.ext_hdr['MJDSRT']) for f in input_dataset]
-    sort_idx = np.argsort(mjd_vals)
+    sctsrt_vals = [f.ext_hdr['SCTSRT'] for f in input_dataset]
+    sort_idx = np.argsort(sctsrt_vals)
     time_ordered = input_dataset[sort_idx]
     first = time_ordered[0]
     last = time_ordered[-1]
@@ -1150,9 +1150,22 @@ def fix_hdrs_for_tvac(list_of_fits, output_dir, header_template=None):
                     mock_img_hdr['EMGAIN_A'] = -1.
             if 'EMGAIN_A' in mock_img_hdr:
                 mock_img_hdr['EMGAIN_A'] = float(mock_img_hdr['EMGAIN_A'])
-            # sometimes, EMGAIN_C is not float when preserving the original value, but it should be, so convert 
+            # sometimes, EMGAIN_C is not float when preserving the original value, but it should be, so convert
             if 'EMGAIN_C' in mock_img_hdr and isinstance(mock_img_hdr['EMGAIN_C'], str):
                 mock_img_hdr['EMGAIN_C'] = float(mock_img_hdr['EMGAIN_C'])
+
+            # TVAC files have a static placeholder for SCTSRT/SCTEND; derive unique values from DATETIME
+            if 'DATETIME' in mock_img_hdr:
+                datetime_str = mock_img_hdr['DATETIME']
+                if '+' in datetime_str:
+                    datetime_str = datetime_str[:datetime_str.index('+')]
+                mock_img_hdr['SCTSRT'] = datetime_str
+                if 'EXPTIME' in mock_img_hdr:
+                    t_start = datetime.datetime.fromisoformat(datetime_str)
+                    t_end = t_start + datetime.timedelta(seconds=float(mock_img_hdr['EXPTIME']))
+                    mock_img_hdr['SCTEND'] = t_end.strftime('%Y-%m-%dT%H:%M:%S')
+                else:
+                    mock_img_hdr['SCTEND'] = datetime_str
 
             # these keys were removed completely
             for key in ['SATSPOTS', 'ISHOWFSC', 'HOWFSLNK']:
@@ -1191,7 +1204,7 @@ def compare_to_mocks_hdrs(fits_file, header_template=None):
     # needs to have at least the L1 headers, except for leave_out_ext below
     l1_headers = mocks.create_default_L1_headers()
     l1_pri_hdr, l1_img_hdr = l1_headers[0], l1_headers[1]
-    leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+    leave_out_ext = ['BSCALE', 'BZERO', 'LOCAMT', 'CYCLES', 'LASTEXP']
     for key in leave_out_ext:
         if key in l1_img_hdr:
             del l1_img_hdr[key]
