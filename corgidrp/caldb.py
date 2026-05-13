@@ -9,8 +9,10 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.spec as spec
 import corgidrp.flat as flat
+import corgidrp.detector as detector
 
 import astropy.time as time
+import astropy.io.fits as fits
 from astropy.table import Table
 import datetime
 
@@ -680,10 +682,238 @@ def initialize():
         ones_flat_dataset[0].data[:] = 1.0
         ones_flat = flat.create_flatfield(ones_flat_dataset)
         ones_flat.ext_hdr["FPAMNAME"] = "ONES"
+        ones_flat.ext_hdr["MJDSRT"] = float(time.Time("2026-01-01").mjd)
         # Write to a fixed CGI-formatted filename so there's no need to search for the latest ones-flat
         ones_flat.filename = fixed_ones_flat_filename
         ones_flat.pri_hdr["FILENAME"] = fixed_ones_flat_filename
         ones_flat.save(filedir=corgidrp.default_cal_dir, filename=fixed_ones_flat_filename)
+        rescan_needed = True
+
+    # Add TVAC default calibration files built from raw TVAC data packaged in corgidrp/data/default_calibs/.
+    # Fixed filenames encode the synthetic timestamp (20260101) so the existence check is stable across runs.
+    tvac_raw_dir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "default_calibs")
+    tvac_nln_filename = "cgi_0000000000000000000_20260101t0000000_nln_cal.fits"
+    tvac_krn_filename = "cgi_0000000000000000000_20260101t0000001_krn_cal.fits"
+    tvac_dnm_filename = "cgi_0000000000000000000_20260101t0000002_dnm_cal.fits"
+    tvac_flt_filename = "cgi_0000000000000000000_20260101t0000003_flt_cal.fits"
+    tvac_bpm_filename = "cgi_0000000000000000000_20260101t0000004_bpm_cal.fits"
+    tvac_pol0_flt_filename = "cgi_0000000000000000000_20260101t0000005_flt_cal.fits"
+    tvac_pol45_flt_filename = "cgi_0000000000000000000_20260101t0000006_flt_cal.fits"
+    tvac_flt4_filename = "cgi_0000000000000000000_20260101t0000007_flt_cal.fits"
+    tvac_pol0_flt4_filename = "cgi_0000000000000000000_20260101t0000008_flt_cal.fits"
+    tvac_pol45_flt4_filename = "cgi_0000000000000000000_20260101t0000009_flt_cal.fits"
+
+    tvac_cal_filenames = [tvac_nln_filename, tvac_krn_filename, tvac_dnm_filename,
+                          tvac_flt_filename, tvac_bpm_filename,
+                          tvac_pol0_flt_filename, tvac_pol45_flt_filename,
+                          tvac_flt4_filename, tvac_pol0_flt4_filename, tvac_pol45_flt4_filename]
+    tvac_cals_missing = any(
+        not os.path.exists(os.path.join(corgidrp.default_cal_dir, f))
+        for f in tvac_cal_filenames
+    )
+
+    if tvac_cals_missing:
+        pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
+        mjd_2026 = float(time.Time("2026-01-01").mjd)
+        isot_2026 = "2026-01-01T00:00:00.000"
+        ext_hdr["MJDSRT"] = mjd_2026
+        ext_hdr["DATETIME"] = isot_2026
+        ext_hdr["FTIMEUTC"] = isot_2026
+        ext_hdr["DRPCTIME"] = isot_2026
+        ext_hdr["DRPVERSN"] = corgidrp.__version__
+        # Minimal mock input dataset for bookkeeping requirements in calibration constructors
+        mock_dataset = mocks.create_flatfield_dummy(numfiles=2)
+
+        # NonLinearityCalibration from packaged TVAC nonlinearity table
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_nln_filename)):
+            nonlin_path = os.path.join(tvac_raw_dir, "nonlin_table_240322.txt")
+            nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
+            nonlinear_cal = data.NonLinearityCalibration(
+                nonlin_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                input_dataset=mock_dataset,
+            )
+            nonlinear_cal.ext_hdr["MJDSRT"] = mjd_2026
+            nonlinear_cal.ext_hdr["DATETIME"] = isot_2026
+            nonlinear_cal.ext_hdr["FTIMEUTC"] = isot_2026
+            nonlinear_cal.save(filedir=corgidrp.default_cal_dir, filename=tvac_nln_filename)
+
+        # KGain — 8.7 e/DN and read noise from TVAC measurements
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_krn_filename)):
+            kgain_val = 8.7
+            signal_array = np.linspace(0, 50)
+            noise_array = np.sqrt(signal_array)
+            ptc = np.column_stack([signal_array, noise_array])
+            ext_hdr_krn = ext_hdr.copy()
+            ext_hdr_krn["RN"] = 121.76     # read noise in electrons from TVAC measurement
+            ext_hdr_krn["RN_ERR"] = 2.0    # read noise uncertainty in electrons
+            kgain = data.KGain(
+                kgain_val, ptc=ptc, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr_krn,
+                input_dataset=mock_dataset,
+            )
+            kgain.ext_hdr["MJDSRT"] = mjd_2026
+            kgain.ext_hdr["DATETIME"] = isot_2026
+            kgain.ext_hdr["FTIMEUTC"] = isot_2026
+            kgain.save(filedir=corgidrp.default_cal_dir, filename=tvac_krn_filename)
+
+        # DetectorNoiseMaps from packaged TVAC noise component files.
+        # The 1024x1024 science-image data is embedded in the full detector frame.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_dnm_filename)):
+            with fits.open(os.path.join(tvac_raw_dir, "fpn_20240322.fits")) as hdulist:
+                fpn_dat = hdulist[0].data.astype(float)
+            with fits.open(os.path.join(tvac_raw_dir, "cic_20240322.fits")) as hdulist:
+                cic_dat = hdulist[0].data.astype(float)
+            with fits.open(os.path.join(tvac_raw_dir, "dark_current_20240322.fits")) as hdulist:
+                dark_dat = hdulist[0].data.astype(float)
+            frame_rows = detector.detector_areas["SCI"]["frame_rows"]
+            frame_cols = detector.detector_areas["SCI"]["frame_cols"]
+            img_rows, img_cols, r0c0 = detector.unpack_geom("SCI", "image")
+            r0, c0 = r0c0
+            noise_map_dat = np.zeros((3, frame_rows, frame_cols))
+            noise_map_dat[0, r0:r0 + img_rows, c0:c0 + img_cols] = fpn_dat
+            noise_map_dat[1, r0:r0 + img_rows, c0:c0 + img_cols] = cic_dat
+            noise_map_dat[2, r0:r0 + img_rows, c0:c0 + img_cols] = dark_dat
+            noise_map_err = np.zeros((1,) + noise_map_dat.shape)
+            noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+            noise_err_hdr = fits.Header()
+            noise_err_hdr["BUNIT"] = "detected electron"
+            ext_hdr_dnm = ext_hdr.copy()
+            ext_hdr_dnm["B_O"] = 0.0
+            ext_hdr_dnm["B_O_ERR"] = 0.0
+            noise_map = data.DetectorNoiseMaps(
+                noise_map_dat,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr_dnm,
+                input_dataset=mock_dataset,
+                err=noise_map_err,
+                dq=noise_map_dq,
+                err_hdr=noise_err_hdr,
+            )
+            noise_map.ext_hdr["MJDSRT"] = mjd_2026
+            noise_map.ext_hdr["DATETIME"] = isot_2026
+            noise_map.ext_hdr["FTIMEUTC"] = isot_2026
+            noise_map.ext_hdr["DRPNFILE"] = 96
+            noise_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_dnm_filename)
+
+        # FlatField — all-ones array for the default imaging configuration.
+        # FPAMNAME='OPEN_12' and CFAMNAME='1F' match the caldb lookup for
+        # standard DPAMNAME='IMAGING' observations in bands 1 & 2.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_flt_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            tvac_flat = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                       input_dataset=flat_mock_dataset)
+            tvac_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
+            tvac_flat.ext_hdr["CFAMNAME"] = "1F"
+            tvac_flat.ext_hdr["DPAMNAME"] = "IMAGING"
+            tvac_flat.ext_hdr["MJDSRT"] = mjd_2026
+            tvac_flat.ext_hdr["DATETIME"] = isot_2026
+            tvac_flat.ext_hdr["FTIMEUTC"] = isot_2026
+            tvac_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt_filename)
+
+        # BadPixelMap from packaged TVAC bad pixel data.
+        # A synthetic Dark frame is required by BadPixelMap as the base header source.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_bpm_filename)):
+            with fits.open(os.path.join(tvac_raw_dir, "bad_pix.fits")) as hdulist:
+                bp_dat = hdulist[0].data.astype(float)
+            bp_dark_pri, bp_dark_ext, _, _ = mocks.create_default_calibration_product_headers()
+            bp_dark_ext["EXPTIME"] = 1.0
+            bp_dark_ext["EMGAIN_C"] = 1.0
+            bp_dark_ext["DRPNFILE"] = 1
+            bp_dark_ext["MJDSRT"] = mjd_2026
+            bp_dark_ext["DATETIME"] = isot_2026
+            bp_dark_ext["FTIMEUTC"] = isot_2026
+            bp_dark = data.Dark(
+                np.zeros_like(bp_dat, dtype=float),
+                pri_hdr=bp_dark_pri,
+                ext_hdr=bp_dark_ext,
+                input_dataset=mock_dataset,
+                err=np.zeros((1,) + bp_dat.shape, dtype=float),
+                dq=np.zeros(bp_dat.shape, dtype="uint16"),
+                err_hdr=fits.Header(),
+            )
+            bp_map = data.BadPixelMap(
+                bp_dat,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr.copy(),
+                input_dataset=data.Dataset([bp_dark]),
+            )
+            bp_map.ext_hdr["MJDSRT"] = mjd_2026
+            bp_map.ext_hdr["DATETIME"] = isot_2026
+            bp_map.ext_hdr["FTIMEUTC"] = isot_2026
+            bp_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_bpm_filename)
+
+        # POL0 FlatField — all-ones for the default polarimetry configuration.
+        # FPAMNAME='OPEN_12', CFAMNAME='1F', DPAMNAME='POL0' for caldb lookup.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol0_flt_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol0_flat = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                       input_dataset=flat_mock_dataset)
+            pol0_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
+            pol0_flat.ext_hdr["CFAMNAME"] = "1F"
+            pol0_flat.ext_hdr["DPAMNAME"] = "POL0"
+            pol0_flat.ext_hdr["MJDSRT"] = mjd_2026
+            pol0_flat.ext_hdr["DATETIME"] = isot_2026
+            pol0_flat.ext_hdr["FTIMEUTC"] = isot_2026
+            pol0_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol0_flt_filename)
+
+        # POL45 FlatField — all-ones for the default polarimetry configuration.
+        # FPAMNAME='OPEN_12', CFAMNAME='1F', DPAMNAME='POL45' for caldb lookup.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol45_flt_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol45_flat = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                        input_dataset=flat_mock_dataset)
+            pol45_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
+            pol45_flat.ext_hdr["CFAMNAME"] = "1F"
+            pol45_flat.ext_hdr["DPAMNAME"] = "POL45"
+            pol45_flat.ext_hdr["MJDSRT"] = mjd_2026
+            pol45_flat.ext_hdr["DATETIME"] = isot_2026
+            pol45_flat.ext_hdr["FTIMEUTC"] = isot_2026
+            pol45_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol45_flt_filename)
+
+        # Band-4 IMAGING FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='IMAGING'.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_flt4_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            flt4 = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                  input_dataset=flat_mock_dataset)
+            flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
+            flt4.ext_hdr["CFAMNAME"] = "4F"
+            flt4.ext_hdr["DPAMNAME"] = "IMAGING"
+            flt4.ext_hdr["MJDSRT"] = mjd_2026
+            flt4.ext_hdr["DATETIME"] = isot_2026
+            flt4.ext_hdr["FTIMEUTC"] = isot_2026
+            flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt4_filename)
+
+        # Band-4 POL0 FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='POL0'.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol0_flt4_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol0_flt4 = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                       input_dataset=flat_mock_dataset)
+            pol0_flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
+            pol0_flt4.ext_hdr["CFAMNAME"] = "4F"
+            pol0_flt4.ext_hdr["DPAMNAME"] = "POL0"
+            pol0_flt4.ext_hdr["MJDSRT"] = mjd_2026
+            pol0_flt4.ext_hdr["DATETIME"] = isot_2026
+            pol0_flt4.ext_hdr["FTIMEUTC"] = isot_2026
+            pol0_flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol0_flt4_filename)
+
+        # Band-4 POL45 FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='POL45'.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol45_flt4_filename)):
+            flat_dat = np.ones((1024, 1024))
+            flat_mock_dataset = mocks.create_flatfield_dummy(numfiles=1)
+            pol45_flt4 = data.FlatField(flat_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
+                                        input_dataset=flat_mock_dataset)
+            pol45_flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
+            pol45_flt4.ext_hdr["CFAMNAME"] = "4F"
+            pol45_flt4.ext_hdr["DPAMNAME"] = "POL45"
+            pol45_flt4.ext_hdr["MJDSRT"] = mjd_2026
+            pol45_flt4.ext_hdr["DATETIME"] = isot_2026
+            pol45_flt4.ext_hdr["FTIMEUTC"] = isot_2026
+            pol45_flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol45_flt4_filename)
+
         rescan_needed = True
 
     if rescan_needed:
