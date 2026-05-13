@@ -300,13 +300,22 @@ def generate_psf_cube(
         raise Exception(('The number of PSFs does not match the number of PSF '+
             ' locations.'))
 
-    # PSF cube header
-    ext_hdr = dataset[0].ext_hdr
+    # PSF cube header: use first off-axis frame so pupil headers don't propagate
+    first_offaxis_frame = None
+    for frame in dataset:
+        exthd = frame.ext_hdr
+        if not (exthd['DPAMNAME'] == 'PUPIL' and exthd['LSAMNAME'] == 'OPEN' and
+                exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12'):
+            first_offaxis_frame = frame
+            break
+    if first_offaxis_frame is None:
+        raise Exception('No off-axis PSF frame found in dataset')
+    ext_hdr = first_offaxis_frame.ext_hdr
     # Add EXTNAME
     psf_hdu = fits.ImageHDU(data=psf_cube, header=ext_hdr, name='PSFCUBE')
 
     # Data quality cube
-    dq_hdr = dataset[0].dq_hdr
+    dq_hdr = first_offaxis_frame.dq_hdr
     # Add specific information
     dq_hdr['COMMENT'] = 'Data quality for each image' 
     # Add EXTNAME
