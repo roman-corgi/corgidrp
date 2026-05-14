@@ -154,7 +154,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
         #Create the new Image object
         mock_pri_header, mock_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-        new_image = Image(big_array, mock_pri_header, mock_ext_header, input_hdulist=[bias_hdu])
+        new_image = Image(big_array, mock_pri_header, mock_ext_header, err_hdr=errhdr, dq_hdr=dqhdr,  input_hdulist=[bias_hdu])
         # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
         # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
         new_image.pri_hdr.set('FRAMET', str(frame_exptime_sec[ibatch]))
@@ -215,13 +215,13 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     sat_spot_nooffset.filename = f"cgi_{sat_spot_nooffset.pri_hdr['VISITID']}_{nooffset_time_str}_l2b.fits"
 
     # Positive-offset frame.
-    sat_spot_pos = Image(big_array.copy(), mock_satspot_pri_header, mock_satspot_ext_header)
+    sat_spot_pos = Image(big_array.copy(), mock_satspot_pri_header, mock_satspot_ext_header, err_hdr=errhdr, dq_hdr=dqhdr)
     sat_spot_pos.ext_hdr['SCTSRT'] = (satspot_base_time + timedelta(seconds=1)).isoformat()
     pos_time_str = (satspot_base_time + timedelta(seconds=1)).strftime('%Y%m%dt%H%M%S%f')[:-5]
     sat_spot_pos.filename = f"cgi_{sat_spot_pos.pri_hdr['VISITID']}_{pos_time_str}_l2b.fits"
 
     # Negative-offset frame (identical to positive for mock purposes).
-    sat_spot_neg = Image(big_array.copy(), mock_satspot_pri_header, mock_satspot_ext_header)
+    sat_spot_neg = Image(big_array.copy(), mock_satspot_pri_header, mock_satspot_ext_header, err_hdr=errhdr, dq_hdr=dqhdr)
     sat_spot_neg.ext_hdr['SCTSRT'] = (satspot_base_time + timedelta(seconds=2)).isoformat()
     neg_time_str = (satspot_base_time + timedelta(seconds=2)).strftime('%Y%m%dt%H%M%S%f')[:-5]
     sat_spot_neg.filename = f"cgi_{sat_spot_neg.pri_hdr['VISITID']}_{neg_time_str}_l2b.fits"
