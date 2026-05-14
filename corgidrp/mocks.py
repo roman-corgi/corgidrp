@@ -4568,13 +4568,17 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
         if excamt is not None and scheme is not None and emgain_c is not None and tptau is not None:
             # Create unique timestamp based on temperature, scheme, and phase time
             # Start from a fixed base time
-            base_dt = datetime.datetime(2025, 1, 1, 0, 0, 0)
+            base_dt = datetime.datetime(int(2025+emgain_c), 1, 1, 0, 0, 0)
             # Add seconds based on: temperature*10000 + scheme*1000 + file_index
             # This spreads files across a wide timestamp range
             temp_offset = int(float(excamt)) * 10  # e.g., 180K → 1800 seconds
             scheme_offset = scheme * 2000  # Each scheme gets 2000 seconds
-            emgain_offset = emgain_c * 10000 # EM gain adds more spread, beyond the range used for EM gain = 1
-            unique_dt = base_dt + datetime.timedelta(seconds=temp_offset + scheme_offset + emgain_offset + i)
+            #emgain_offset = emgain_c * 10000 # EM gain adds more spread, beyond the range used for EM gain = 1
+            # 2 to 3 frames per config
+            config_offset = int(file[file.find('_config')+7])+13
+            fr_offset = int(file[file.find('_fr')+3])+7
+            #unique_dt = base_dt + datetime.timedelta(seconds=temp_offset + scheme_offset + config_offset + fr_offset + i)
+            unique_dt = base_dt + datetime.timedelta(seconds=i)
         else:
             # Fallback for non-pump-trap data
             filetime_hdr = exthdr.get('FILETIME', prihdr.get('FILETIME', None))

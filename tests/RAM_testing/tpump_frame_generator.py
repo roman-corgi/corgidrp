@@ -794,7 +794,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50.,
                             output_dn = temps[temp][sc][i]
                         else:
                             output_dn = np.zeros_like(temps[temp][sc][i])
-                            output_dn[1027:1037] += 10
+                            output_dn[1027:1037] += 3
                     prihdr, exthdr = create_default_L1_TrapPump_headers(arrtype)
                     prim = fits.PrimaryHDU(header = prihdr)
                     hdr_img = fits.ImageHDU(output_dn, header=exthdr)
@@ -828,7 +828,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50.,
                     mult_counter = 0
                     #print(mult_counter)
                     filename = Path(output_dir,
-                        str(temp)+'K'+'Scheme_'+str(sc)+'TPUMP_Npumps_'+str(int(num_cycles[sc]))+'_gain'+str(EMgain)+'_phasetime'+str(t)+'.fits')
+                        str(temp)+'K'+'Scheme_'+str(sc)+'TPUMP_Npumps_'+str(int(num_cycles[sc]))+'_gain'+str(EMgain)+'_phasetime'+str(t)+'_config'+str(i)+'_fr'+str(fr)+'.fits')
                     if os.path.exists(filename):
                         mult_counter += 1
                         hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
@@ -840,8 +840,8 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50.,
     rename_files_to_cgi_format(pattern=os.path.join(output_dir, "*K*Scheme_*TPUMP*.fits"), level_suffix="l1")
 
 if __name__ == "__main__":
-    output_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3\TPUMP_RAM_TEST'
+    output_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3\TPUMP_RAM_TEST2'
     metadata_path = os.path.join('c:\\Users\\SensorLab\\Documents\\GitHub\\corgidrp\\tests', 'test_data', "metadata.yaml")
-    generate_car_pump_trap_data(output_dir=output_dir,meta_path=metadata_path) 
+    generate_car_pump_trap_data(output_dir=output_dir,meta_path=metadata_path)
     generate_car_pump_trap_data(output_dir=output_dir, meta_path=metadata_path, EMgain=1.,temperatures=[228,233,238],cycles_per_injection=7200,
-                                 num_cycles={1: 3200, 2: 3200, 3: 1684, 4: 1684}, num_frames_per_config=2, num_phase_times=100) #just do one temp for testing
+                                 num_cycles={1: 3200, 2: 3200, 3: 1684, 4: 1684}, num_frames_per_config=2, num_phase_times=100)
