@@ -87,7 +87,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_zeropoint", "L3")
     target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_zeropoint", "L3")
 
-    cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "cpgs_mock.xml")
+    cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "CPGS_betatest_041426.xml")
 
     # Patch EACQ_ROW/EACQ_COL on L1s. TODO: fix this in the sims
     for flist in (psfref_satspot_files, psfref_files, target_satspot_files, target_files):

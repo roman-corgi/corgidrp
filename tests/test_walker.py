@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+import xml.etree.ElementTree as ET
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -613,7 +614,7 @@ def test_cpgs_satspots():
     filelist = [frame.filepath for frame in l3_dataset]
 
     # load CPGS
-    CPGS_XML_filepath = os.path.join(os.path.dirname(__file__), "test_data", "cpgs_mock.xml")
+    CPGS_XML_filepath = os.path.join(os.path.dirname(__file__), "test_data", "CPGS_betatest_041426.xml")
     
     # create a recipe just to do spec star centering
     # use this simple saving recipe as a template
@@ -644,7 +645,21 @@ def test_cpgs_satspots():
         assert 'phi_deg' in hdr_recipe['steps'][0]['keywords']
         assert hdr_recipe['steps'][0]['keywords']['phi_deg'] == 0.
 
+def test_cpgs_one_satspot():
+    """
+    Tests if walker.py can parse CPGS XML to extract satspot info 
+    if just one satspot tuple is specified.
+    """
 
+    CPGS_XML_filepath = os.path.join(os.path.dirname(__file__), "test_data", "CPGS_satspot_test.xml")
+    cpgs_xml = ET.parse(CPGS_XML_filepath)
+    sat_spot_info = walker._get_satellite_spot_info_from_xml(cpgs_xml)
+    assert sat_spot_info['num_spots'] == 1
+    assert sat_spot_info['spot1_sep'] == 6.2
+    assert sat_spot_info['spot1_angle'] == 45.4
+    assert sat_spot_info['spot1_contrast'] == 1.7E-06
+    assert sat_spot_info['spot1_filt'] == '3D'
+    
 def test_l1_to_l2b_default_calibs():
     """
     Tests that L1 to L2b processing works using only the packaged TVAC default
@@ -698,6 +713,7 @@ if __name__ == "__main__":#
     test_jit_calibs()
     test_generate_multiple_recipes()
     test_cpgs_satspots()
+    test_cpgs_one_satspot()
     test_l1_to_l2b_default_calibs()
 
 
