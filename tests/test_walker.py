@@ -660,6 +660,50 @@ def test_cpgs_one_satspot():
     assert sat_spot_info['spot1_contrast'] == 1.7E-06
     assert sat_spot_info['spot1_filt'] == '3D'
     
+def test_l1_to_l2b_default_calibs():
+    """
+    Tests that L1 to L2b processing works using only the packaged TVAC default
+    calibrations, without creating any custom dummy calibration files.
+    """
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    os.makedirs(datadir, exist_ok=True)
+
+    # Create simulated L1 data. The default headers have DPAMNAME='IMAGING',
+    # CFAMNAME='1F', which the default TVAC flat (FPAMNAME='OPEN_12') satisfies.
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+    l1_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l1_dataset]
+
+    # Ensure the default calibrations are present and indexed in the caldb.
+    caldb.initialized = False
+    caldb.initialize()
+
+    # Run l1 to l2b using only the packaged default calibrations.
+    template_filepath = os.path.join(
+        os.path.dirname(walker.__file__), "recipe_templates", "l1_to_l2b.json"
+    )
+    template_recipe = json.load(open(template_filepath, "r"))
+    walker.walk_corgidrp(filelist, "", outputdir, template=template_recipe)
+
+    # Verify that L2b output files were produced.
+    output_files = sorted(glob.glob(os.path.join(outputdir, "*_l2b.fits")))
+    assert len(output_files) == len(l1_dataset), (
+        f"Expected {len(l1_dataset)} L2b files, found {len(output_files)}"
+    )
+
+    # Verify each output file is a valid L2b Image.
+    for output_file in output_files:
+        img = data.Image(output_file)
+        assert img.ext_hdr["DATALVL"] == "L2b", (
+            f"Expected DATALVL='L2b' in {output_file}, got {img.ext_hdr['DATALVL']!r}"
+        )
+
+
 if __name__ == "__main__":#
     test_autoreducing()
     test_auto_template_identification()
@@ -670,5 +714,6 @@ if __name__ == "__main__":#
     test_generate_multiple_recipes()
     test_cpgs_satspots()
     test_cpgs_one_satspot()
+    test_l1_to_l2b_default_calibs()
 
 
