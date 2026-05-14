@@ -895,14 +895,14 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
                 if exp_time <=0:
                     raise Exception('Exposure times must be positive')
                 exp_times.append(exp_time)
-                datetime = frame.ext_hdr['DATETIME']
-                date_number = extract_datetime(datetime)
+                sctsrt = frame.ext_hdr['SCTSRT']
+                date_number = extract_datetime(sctsrt)
                 if date_number > latest_datetime:
                     latest_datetime = date_number
                     repeat_ind = len(sub_stack) - 1
-                if isinstance(datetime, str) is False:
-                    raise Exception('DATETIME must be a string')
-                datetimes.append(datetime)
+                if isinstance(sctsrt, str) is False:
+                    raise Exception('SCTSRT must be a string')
+                datetimes.append(sctsrt)
                 em_gain = frame.ext_hdr['EMGAIN_C']
                 if em_gain < 1:
                     raise Exception('Commanded EM gain must be >= 1')
@@ -958,7 +958,7 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
     stack = stack_cp        
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):
-        raise Exception('DATETIMEs cannot be duplicated')
+        raise Exception('SCTSRTs cannot be duplicated')
     # There can only be an EM gain in the data used to calibrate K-gain
     if len(set(em_gains)) != 1:
         raise Exception('There can only be one commanded EM gain when calibrating K-Gain')
