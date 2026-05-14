@@ -197,13 +197,13 @@ def find_star(input_dataset,
               ext_split_keywords = None):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that
-    contain satellite spots (indicated by ``SATSPOTS=True`` in the image header). The
-    function computes the median of all science frames (``SATSPOTS=False``) and the median
-    of the DM-offset satellite spot frames (``SATSPOTS=True``), then estimates the star
+    contain satellite spots (indicated by ``SATSPOTS=1`` in the image header). The
+    function computes the median of all science frames (``SATSPOTS=0``) and the median
+    of the DM-offset satellite spot frames (``SATSPOTS=1``), then estimates the star
     location based on these median images and the initial guess provided.
 
     When ``subtract_no_offset_frames=True`` (default), satellite spot data is expected in
-    three sequential equal-sized groups, all tagged ``SATSPOTS=True`` and ordered by their
+    three sequential equal-sized groups, all tagged ``SATSPOTS=1`` and ordered by their
     ``SCTSRT`` header timestamp (filename order is used as a fallback):
 
         1. No-offset frames (first third): DM has no probe offset; no satellite spots,
@@ -214,7 +214,7 @@ def find_star(input_dataset,
     The no-offset median is subtracted from the offset median to suppress static speckles
     and astrophysical sources before star-center estimation.
 
-    When ``subtract_no_offset_frames=False``, all ``SATSPOTS=True`` frames are treated as
+    When ``subtract_no_offset_frames=False``, all ``SATSPOTS=1`` frames are treated as
     offset (spot-bearing) frames. No three-group structure is assumed or required.
 
     The star's (x, y) location is stored in each frame's extension header under
@@ -274,9 +274,9 @@ def find_star(input_dataset,
     Args:
         input_dataset (corgidrp.data.Dataset):
             A dataset of L3-level frames. Frames should be labeled in their primary
-            headers with ``SATSPOTS=False`` (science frames) or ``SATSPOTS=True``
+            headers with ``SATSPOTS=0`` (science frames) or ``SATSPOTS=1``
             (satellite spot frames). When ``subtract_no_offset_frames=True``, the total
-            number of ``SATSPOTS=True`` frames must be divisible by 3, reflecting the
+            number of ``SATSPOTS=1`` frames must be divisible by 3, reflecting the
             no-offset / positive-offset / negative-offset acquisition groups.
         star_coordinate_guess (tuple of float or None, optional):
             Initial guess for the star's (x, y) location as absolute coordinates.
@@ -291,13 +291,13 @@ def find_star(input_dataset,
             otherwise defaults for the mode will be used:
             If None, default parameters corresponding to the specified observing_mode will be used.
         drop_satspots_frames (bool, optional):
-            If True, frames with satellite spots (``SATSPOTS=True``) will be removed from
+            If True, frames with satellite spots (``SATSPOTS=1``) will be removed from
             the returned dataset. Defaults to True.
         subtract_no_offset_frames (bool, optional):
-            If True, the ``SATSPOTS=True`` frames are assumed to follow the three-group
+            If True, the ``SATSPOTS=1`` frames are assumed to follow the three-group
             acquisition structure (no-offset / +offset / -offset). The no-offset median
             is subtracted from the offset median before star-center estimation to suppress
-            static speckles and astrophysical sources. If False, all ``SATSPOTS=True``
+            static speckles and astrophysical sources. If False, all ``SATSPOTS=1``
             frames are used directly as the offset (spot-bearing) median with no background
             subtraction and no three-group structure assumed. Defaults to True.
         pri_split_keywords (list of str, optional):
@@ -321,7 +321,7 @@ def find_star(input_dataset,
             the frames do not all share the same observing mode (as determined by
             the ``FSMPRFL`` keyword).
         ValueError:
-            If ``subtract_no_offset_frames=True`` and the number of ``SATSPOTS=True``
+            If ``subtract_no_offset_frames=True`` and the number of ``SATSPOTS=1``
             frames is not divisible by 3.
 
     Notes:
@@ -355,10 +355,10 @@ def find_star(input_dataset,
         sat_spot_frames = []
         for frame in split_dataset.frames:
             satspots = frame.ext_hdr["SATSPOTS"]
-            if satspots == False:
+            if satspots == 0:
                 sci_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
-            elif satspots == True:
+            elif satspots == 1:
                 sat_spot_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
             else:
@@ -374,7 +374,7 @@ def find_star(input_dataset,
             # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
             if len(sat_spot_frames) % 3 != 0:
                 raise ValueError(
-                    f"Expected the number of SATSPOTS=True frames to be divisible by 3 "
+                    f"Expected the number of SATSPOTS=1 frames to be divisible by 3 "
                     f"(no-offset / +offset / -offset groups), but got {len(sat_spot_frames)}."
                 )
             if all('SCTSRT' in f.ext_hdr for f in sat_spot_frames):
@@ -424,7 +424,7 @@ def find_star(input_dataset,
             #align second slice on first slice and drop satellite spot images if necessary
             shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
                     aligned_slice = shift(frame.data[1], shift_value)
                     frame.data[1] = aligned_slice
                     frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]
@@ -453,7 +453,7 @@ def find_star(input_dataset,
                 processed_dataset = sci_dataset
 
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
                     frame.ext_hdr['STARLOCX'] =star_xy[0]
                     frame.ext_hdr['STARLOCY'] =star_xy[1]
                     frame.ext_hdr['HISTORY'] = (

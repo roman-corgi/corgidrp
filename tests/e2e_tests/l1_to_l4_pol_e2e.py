@@ -434,7 +434,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     ]))
     logger.info(f'Found {len(satspot_l1_files)} L1 sat spot files in {satspot_l1_dir}')
 
-    # Real TVAC satspot data only has +/- offset frames, but find_star expects
+    # Existing satspot data only has +/- offset frames, but find_star expects
     # three equal groups: no-offset, +offset, -offset.  We inject fake no-offset
     # frames (science background data, no DM probe) at L1 so they flow through
     # the full pipeline and sort first (year-2000 timestamps) into the no-offset

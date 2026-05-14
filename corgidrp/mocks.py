@@ -4660,8 +4660,8 @@ def create_satellite_spot_observing_sequence(
     Creates a single dataset of synthetic observing frames mirroring the real satellite
     spot data acquisition procedure. The dataset contains:
 
-        • Science frames (``SATSPOTS=False``), simulating frames with no satellite spots.
-        • Satellite spot frames (``SATSPOTS=True``) in three sequential equal-sized groups:
+        • Science frames (``SATSPOTS=0``), simulating frames with no satellite spots.
+        • Satellite spot frames (``SATSPOTS=1``) in three sequential equal-sized groups:
 
             1. No-offset frames (first ``n_satspot_frames // 3``): DM has no probe offset;
                no satellite spots injected (amplitude_multiplier=0).
@@ -4705,8 +4705,8 @@ def create_satellite_spot_observing_sequence(
     Returns:
         data.Dataset:
             A single dataset object containing science frames and the three satellite spot
-            groups. Science frames have ``SATSPOTS=False``; all satellite spot frames have
-            ``SATSPOTS=True``.
+            groups. Science frames have ``SATSPOTS=0``; all satellite spot frames have
+            ``SATSPOTS=1``.
     """
 
     assert len(image_shape) == 2, "Data shape needs to have two values"
@@ -4741,7 +4741,7 @@ def create_satellite_spot_observing_sequence(
         )
         frame_time = base_time + datetime.timedelta(seconds=i)
         sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        sci_frame.ext_hdr["SATSPOTS"] = False
+        sci_frame.ext_hdr["SATSPOTS"] = 0
         sci_frame.ext_hdr['SCTSRT'] = frame_time.isoformat()
         time_str = data.format_ftimeutc(frame_time.isoformat())
         sci_frame.filename = f"cgi_{visitid}_{time_str}_l3_.fits"
@@ -4760,7 +4760,7 @@ def create_satellite_spot_observing_sequence(
                 separation, star_center, angle_offset, amp
             )
             satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-            satspot_frame.ext_hdr["SATSPOTS"] = True
+            satspot_frame.ext_hdr["SATSPOTS"] = 1
             satspot_frame.ext_hdr['SCTSRT'] = frame_time.isoformat()
             time_str = data.format_ftimeutc(frame_time.isoformat())
             satspot_frame.filename = f"cgi_{visitid}_{time_str}_l3_.fits"
@@ -5133,7 +5133,7 @@ def create_mock_l2b_polarimetric_image_with_satellite_spots(
     exthdr['DPAMNAME'] = dpamname
     exthdr['LSAMNAME'] = observing_mode
     exthdr['FSMPRFL'] = observing_mode
-    exthdr["SATSPOTS"] = True
+    exthdr["SATSPOTS"] = 1
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr,
                        err_hdr=errhdr, dq_hdr=dqhdr)
 
