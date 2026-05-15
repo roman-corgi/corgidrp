@@ -209,7 +209,6 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Load and display dispersion model results
-    cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits', logger)
     disp_model = DispersionModel(cal_file)
 
     coeffs = disp_model.pos_vs_wavlen_polycoeff

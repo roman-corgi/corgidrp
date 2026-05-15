@@ -400,7 +400,7 @@ def guess_template(dataset):
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", 'l2b_to_spec_linespread.json']
             chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_TGTREF':
-            if image.ext_hdr['FPAMNAME'] == 'OPEN':               #L1 -> spec dispersion calibration
+            if image.ext_hdr['FPAMNAME'].startswith('OPEN'):               #L1 -> spec dispersion calibration
                 recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b_spec.json","l2b_to_spec_prism_disp.json"]
                 chained = True
             else:
