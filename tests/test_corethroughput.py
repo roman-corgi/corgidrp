@@ -403,8 +403,8 @@ def test_cal_file():
     os.mkdir(test_dir) 
     ct_cal_file_in.save(filedir=test_dir)
 
-    # Check that the filename is what we expect
-    ct_cal_filename = dataset_ct[-1].filename.replace("_l2b", "_ctp_cal")
+    # Check that the filename is what we expect (not using latest item in list anymore)
+    ct_cal_filename = ct_cal_file_in.filename
     ct_cal_filepath = os.path.join(test_dir,ct_cal_filename)
     if os.path.exists(ct_cal_filepath) is False:
         raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')

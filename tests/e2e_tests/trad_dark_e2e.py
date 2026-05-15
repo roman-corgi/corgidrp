@@ -553,8 +553,22 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     assert trad_dark.ext_hdr['BUNIT'] == 'detected electron'
     assert trad_dark.err_hdr['BUNIT'] == 'detected electron'
     assert trad_dark.ext_hdr['IS_SYNTH'] == 0
-    test_filepath = trad_dark_data_filelist[-1].split('.fits')[0] + '_drk_cal.fits'
-    test_filename = os.path.basename(test_filepath)
+    # pull SCTSRT to get latest file tiemstamp if it's there
+    if all(fits.getheader(filepath, 1).get("SCTSRT") is not None for filepath in trad_dark_data_filelist):
+        latest_input_file = max(
+            enumerate(trad_dark_data_filelist),
+            key=lambda item: (
+                time.Time(str(fits.getheader(item[1], 1)["SCTSRT"])).mjd,
+                item[0],
+            ),
+        )[1]
+    # if not, pull timestamp from filename
+    else:
+        latest_input_file = max(
+            enumerate(trad_dark_data_filelist),
+            key=lambda item: (os.path.basename(item[1]).split('_')[2] if len(os.path.basename(item[1]).split('_')) > 2 else '', item[0]),
+        )[1]
+    test_filename = os.path.basename(latest_input_file).split('.fits')[0] + '_drk_cal.fits'
     test_filename = re.sub('_l[0-9].', '', test_filename)
     assert(trad_dark.filename == test_filename)
     print('e2e test for trad_dark_im calibration passed')

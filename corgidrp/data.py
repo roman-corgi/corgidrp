@@ -856,13 +856,23 @@ class Dark(Image):
             # give it a default filename using the last input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
-                # get latest timestamp frame name
-                latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # get visitid
+                if latest_frame.pri_hdr.get('VISITID') is not None:
+                    # assign it to output product
+                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
+                # append filename convention and set it as new filename
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
-                # append filename convention and set it as new filename
                 self.filename="{0}_drk_cal.fits".format(orig_input_filename)
                 self.filename=re.sub('_l[0-9].','',self.filename)
                 # remove dnm_cal if building synthesized dark from detector noise maps
@@ -954,10 +964,20 @@ class FlatField(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with calibration suffix
             self.filename=re.sub('_l[0-9].','_flt_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
@@ -1002,13 +1022,23 @@ class SpectroscopyCentroidPSF(Image):
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
 
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
+            # append filename convention and set it as new filename
             # remove .fits extension
             base=latest_filename.split(".fits")[0]
-            # append filename convention and set it as new filename
             filename = f"{base}_scp_cal.fits"
             self.filename = re.sub('_l[0-9].', '', filename)
             self.pri_hdr['FILENAME'] = self.filename
@@ -1087,13 +1117,23 @@ class LineSpread(Image):
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
 
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
+            # append filename convention and set it as new filename
             # remove .fits extension
             base=latest_filename.split(".fits")[0]
-            # append filename convention and set it as new filename
             self.filename = f"{base}_lsf_cal.fits"
             self.filename = re.sub('_l[0-9].', '', self.filename)
             if gauss_par is not None:
@@ -1333,6 +1373,7 @@ class SpecFilterOffset(Image):
             pri_hdr = fits.Header()
             ext_hdr = fits.Header()
             ext_hdr['SCTSRT'] = date_valid.isot # use this for validity date
+            ext_hdr['MJDSRT'] = date_valid.mjd
             ext_hdr['DRPVERSN'] =  corgidrp.__version__
             ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
@@ -1486,10 +1527,20 @@ class NonLinearityCalibration(Image):
 
             # Follow filename convention as of R3.0.2
             self.filedir = '.'
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with nln calibration suffix
             self.filename=re.sub('_l[0-9].','_nln_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
@@ -1577,10 +1628,20 @@ class KGain(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # get latest timestamp frame name
-                latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # get visitid
+                if latest_frame.pri_hdr.get('VISITID') is not None:
+                    # assign it to output product
+                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # use latest frame filename and replace level suffix with krn calibration suffix
                 self.filename=re.sub('_l[0-9].','_krn_cal',latest_filename)
                 self.pri_hdr['FILENAME'] = self.filename
@@ -1715,10 +1776,21 @@ class BadPixelMap(Image):
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
             # check whether we're making the bpmap from a flat only, or from L1/2 files.
-            # pull latest timestamp from all frames
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use that last timestamp frame as file name
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to bpm
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
+
             # replace flat or dark w/ bpm
             if "_flt_cal" in latest_filename:
                 self.filename=latest_filename.replace("_flt_cal","_bpm_cal")
@@ -1798,10 +1870,20 @@ class DetectorNoiseMaps(Image):
 
             # give it a default filename
             if input_dataset is not None:
-                # get latest timestamp frame name
-                latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # get visitid
+                if latest_frame.pri_hdr.get('VISITID') is not None:
+                    # assign it to output product
+                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
             else:
@@ -2089,10 +2171,20 @@ class AstrometricCalibration(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Astrometric Calibration file created"
 
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # remove .fits extension
             orig_input_filename=latest_filename.split(".fits")[0]
             # append filename convention and set it as new filename
@@ -2161,10 +2253,20 @@ class TrapCalibration(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "TrapCalibration created from {0} frames".format(self.ext_hdr['DRPNFILE'])
 
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with tpu calibration suffix
             self.filename=re.sub('_l[0-9].','_tpu_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
@@ -2314,10 +2416,20 @@ class FluxcalFactor(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # get latest timestamp frame name
-                latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # get visitid
+                if latest_frame.pri_hdr.get('VISITID') is not None:
+                    # assign it to output product
+                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
 
@@ -2448,10 +2560,20 @@ class SpecFluxCal(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # get latest timestamp frame name
-                latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # get visitid
+                if latest_frame.pri_hdr.get('VISITID') is not None:
+                    # assign it to output product
+                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
   
@@ -2520,13 +2642,23 @@ class SlitTransmission(Image):
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored Slit Transmission map."
 
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
+            # append filename convention and set it as new filename
             # remove .fits extension
             base=latest_filename.split(".fits")[0]
-            # append filename convention and set it as new filename
             self.filename=f"{base}_slt_cal.fits"
             self.filename=re.sub('_l[0-9].','',self.filename)
             # File format checks
@@ -2885,10 +3017,21 @@ class CoreThroughputCalibration(Image):
             # Default convention: replace _l3_.fits from the filename of the
             # input dataset by _ctp_cal.fits
             self.filedir = '.'
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename and replace level suffix with ctp calibration suffix
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
+            # use latest frame filename and replace level suffix with ctp calibration suffix
             self.filename=re.sub('_l[0-9].','_ctp_cal',latest_filename)
 
             # Enforce data level = CAL
@@ -3343,10 +3486,20 @@ class CoreThroughputMap(Image):
             # Generate filename following the calibration file convention
             self.filedir = '.'
             if input_dataset is not None:
-                # get latest timestamp frame name
-                latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # get visitid
+                if latest_frame.pri_hdr.get('VISITID') is not None:
+                    # assign it to output product
+                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # use latest frame filename and replace suffix with ctm calibration suffix
                 self.filename=re.sub('_l[0-9].','_ctm_cal',latest_filename)
                 self.pri_hdr['FILENAME']=self.filename
@@ -3880,10 +4033,20 @@ class NDFilterSweetSpotDataset(Image):
         if ext_hdr is not None:
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
-                # get latest timestamp frame name
-                latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # get visitid
+                if latest_frame.pri_hdr.get('VISITID') is not None:
+                    # assign it to output product
+                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # use latest frame filename and replace level suffix with ndf calibration suffix
                 self.filename=re.sub('_l[0-9].','_ndf_cal',latest_filename)
             # if no input_dataset is given, do we want to set the filename manually using 
@@ -4021,13 +4184,23 @@ class NDSpectroscopy(Image):
         if ext_hdr is not None:
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
-                # get latest timestamp frame name
-                latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # get visitid
+                if latest_frame.pri_hdr.get('VISITID') is not None:
+                    # assign it to output product
+                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
+                # append filename convention and set it as new filename
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
-                # append filename convention and set it as new filename
                 self.filename = "{0}_nds_cal.fits".format(orig_input_filename)
                 self.filename = re.sub('_l[0-9].', '', self.filename)
             self.ext_hdr['DATATYPE'] = 'NDSpectroscopy'
@@ -4092,10 +4265,20 @@ class MuellerMatrix(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Mueller Matrix created"
 
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with mmx calibration suffix
             self.filename=re.sub('_l[0-9].','_mmx_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename          
@@ -4167,10 +4350,20 @@ class NDMuellerMatrix(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Mueller Matrix created"
 
-            # get latest timestamp frame name
-            latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-            # use latest frame filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # get visitid
+            if latest_frame.pri_hdr.get('VISITID') is not None:
+                # assign it to output product
+                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with ndm calibration suffix
             self.filename=re.sub('_l[0-9].','_ndm_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename          
