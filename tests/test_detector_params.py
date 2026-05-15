@@ -7,7 +7,7 @@ import corgidrp.data as data
 
 
 expected_rowreadtime = 0.0002235
-expected_fwc_em = 100000.
+expected_fwc_em = 105000.
 expected_fwc_pp = 90000.
 expected_kgain = 8.7
 

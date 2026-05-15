@@ -157,8 +157,8 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
-                       plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
+def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
+                       plat_thresh=0.85, cosm_filter=1, cosm_box=3, cosm_tail=10,
                        mode='image', detector_regions=None, pct_oversat_lim=20, dataset_copy=True):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
@@ -172,13 +172,15 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         k_gain (corgidrp.data.KGain): KGain calibration file
         sat_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
-            pixels. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging saturation.
+            pixels. Interval 0 to 1, defaults to 0.95. Lower numbers are more aggressive in flagging saturation.
         plat_thresh (float):
             Multiplication factor for pixel full-well capacity (fwc) that determines edges of cosmic
-            plateau. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging cosmic
+            plateau. Interval 0 to 1, defaults to 0.85. Lower numbers are more aggressive in flagging cosmic
             ray hits.
         cosm_filter (int):
-            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 1.
+            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 1.  For EM gain = 1, 
+            this should probaly be 1 since no serial streaking is expected to occur, so a cosmic head could just
+            be in 1 pixel.
         cosm_box (int):
             Number of pixels out from an identified cosmic head (i.e., beginning of
             the plateau) to mask out.
@@ -188,7 +190,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             Number of pixels in the row downstream of the end of a cosmic plateau
             to mask.  If cosm_tail is greater than the number of
             columns left to the end of the row from the cosmic
-            plateau, the cosmic masking ends at the end of the row. Defaults to 10.
+            plateau, the cosmic masking ends at the end of the row. Defaults to 10. 
+            For EM gain = 1, no serial streaking occurs, so this is internally set to 0 
+            in that case regardless of the input value here.
         mode (string):
             If 'image', an image-area input is assumed, and if the input
             tail length is longer than the length to the end of the image-area row,
@@ -260,22 +264,31 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
     m1 = (crmasked_cube >= sat_fwcs_array) * sat_dqval
-
-    # run remove_cosmics() with fwc=fwc_em since tails only come from
-    # saturation in the gain register --> this is mask 2
+    # Mask 2:  captures cosmic rays.  If EM gain is 1, no cosmic tails made since 
+    # those are only made in gain register.  
     # Do a for loop since it's calling a for loop in the sub-routine anyway
     # and can't handle different 'FWC_EM's for different frames.
     m2 = np.zeros_like(crmasked_cube)
 
+    # warn user of potential overriding of cosm_tail choice in EM gain = 1 case
+    for g in emgain_list:
+        if g == 1:
+            print("cosm_tail set to 0 since cosmic tails only occur for EM gain > 1.")
+            break
+
     for i in range(len(crmasked_cube)):
         arrtype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
+        if emgain_list[i] == 1:
+            cosm_tail_i = 0
+        else:
+            cosm_tail_i = cosm_tail
         m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
-                        fwc=fwcem_dn_arr[i],
+                        fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
                         sat_thresh=sat_thresh,
                         plat_thresh=plat_thresh,
                         cosm_filter=cosm_filter,
                         cosm_box=cosm_box,
-                        cosm_tail=cosm_tail,
+                        cosm_tail=cosm_tail_i,
                         mode=mode,
                         detector_regions=detector_regions,
                         arrtype=arrtype

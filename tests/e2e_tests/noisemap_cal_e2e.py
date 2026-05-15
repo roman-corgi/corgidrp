@@ -190,6 +190,10 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # for no weighting:
     recipe = walker.autogen_recipe(stack_arr_files, noisemap_outputdir)
     ### Modify a keyword
+    for step in recipe[0]['steps']:
+        if step['name'] == "detect_cosmic_rays":
+            step['keywords']['sat_thresh'] = 0.7 # what is used for TVAC data in II&T code
+            step['keywords']['plat_thresh'] = 0.7 # what is used for TVAC data in II&T code
     for step in recipe[1]['steps']:
         if step['name'] == "calibrate_darks":
             step['keywords'] = {}
@@ -215,7 +219,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     
     # Reference (F_map, C_map, D_map) from II&T calibrate_darks_lsq, corgidrp_noisemap from DRP
     # atol=1e-4: intermediate L2a files are saved as float32, introducing quantization error
-    # at (0,1052) this causes a ~1.9e-5 diff that exceeds the rtol-only tolerance
+    # at (0,1052) this causes a ~1.9e-5 diff that exceeds the rtol-only tolerance.
     assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-5, atol=1e-4, equal_nan=True)
     assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-5, atol=1e-4, equal_nan=True)
     assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-5, atol=1e-4, equal_nan=True)
@@ -526,7 +530,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     #e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")
