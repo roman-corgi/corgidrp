@@ -216,13 +216,13 @@ def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
     assert dispersion.ext_hdr["DATATYPE"] == "DispersionModel"
     assert dispersion.ext_hdr["DATALVL"] == "CAL"
     
-    assert isinstance(dispersion.data, dict)
-    print(dispersion.clocking_angle)
-    print(dispersion.clocking_angle_uncertainty)
-    print(dispersion.pos_vs_wavlen_polycoeff)
-    print(dispersion.pos_vs_wavlen_cov)
-    print(dispersion.wavlen_vs_pos_polycoeff)
-    print(dispersion.wavlen_vs_pos_cov)
+    assert np.abs(dispersion.clocking_angle) == pytest.approx(90, abs = dispersion.clocking_angle_uncertainty) 
+    print("clocking angle: ", dispersion.clocking_angle)
+    print("clocking angle uncertainty: ", dispersion.clocking_angle_uncertainty)
+    print("pos_vs_wavlen_polycoeff: ", dispersion.pos_vs_wavlen_polycoeff)
+    print("pos_vs_wavlen_cov: ", dispersion.pos_vs_wavlen_cov)
+    print("wavlen_vs_pos_polycoeff: ", dispersion.wavlen_vs_pos_polycoeff)
+    print("wavlen_vs_pos_cov: ", dispersion.wavlen_vs_pos_cov)
     
     # Remove temporary CalDB
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_dispersion_e2e_caldb.csv')
