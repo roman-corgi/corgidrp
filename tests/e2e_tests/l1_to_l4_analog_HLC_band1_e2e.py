@@ -81,7 +81,7 @@ def process_l2a_to_l2b(filelist,l2b_outputdir):
     walker.walk_corgidrp(images_sci, '', l2b_outputdir)
 
 @pytest.mark.e2e
-def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2eoutput_path):
+def test_l1_to_l4_analog_HLC_band1_e2e(e2edata_path,e2eoutput_path):
     '''
     This test function loads simulated HLC band 1 analog data and processes it
     from L1 to L4.
@@ -95,6 +95,9 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     # Define the file paths for the TVAC test data (used for example calibrations)
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     TVAC_datadir = os.path.join(e2edata_path,"TV-36_Coronagraphic_Data","L1")
+    
+    # Locate the L1 data relative to the e2edata_path
+    l1_datadir = os.path.join(e2edata_path,"Analog_HLC_Band1")
     
     # Create output directories for the test
 
@@ -304,7 +307,7 @@ def test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_path,e2e
     # We will generate mock calibrations.
     
     # Simulated image
-    field_path = os.path.join(test_data_dir,'JWST_CALFIELD2020.csv')
+    field_path = os.path.join(os.path.dirname(__file__),"..","test_data", "JWST_CALFIELD2020.csv")
     
     # Astrometric calibration input
     astrom_input_dir = os.path.join(calibrations_dir,'astrom_cal_input')
@@ -407,25 +410,15 @@ if __name__=='__main__':
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     
-    # Location of the simulated L1 data
-    l1_datadir = os.path.join(this_file_dir,'../test_data/input_l1_HLC_Band1_e2e/')
-    # Location of the test_data folder that contains JWST_CALFIELD202.csv
-    test_data_dir = os.path.join(this_file_dir,'../test_data/')
     e2edata_dir = os.path.join(this_file_dir,'../../../TVAC_Test_Data/E2E_Test_Data/')
     outputdir = this_file_dir
     
     ap = argparse.ArgumentParser(description='run the l1->l4 end-to-end test')
-    ap.add_argument("-l1", "--l1_datadir",default=l1_datadir,
-                    help="Path to the simulated L1 data [%(default)s]")
-    ap.add_argument("-test_data","--test_data_dir",default=test_data_dir,
-                    help="Path to the test data folder containing JWST_CALFIELD202.csv [%(default)s]")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    l1_datadir = args.l1_datadir
-    test_data_dir = args.test_data_dir
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_l1_to_l4_analog_HLC_band1_e2e(l1_datadir,test_data_dir,e2edata_dir,outputdir)
+    test_l1_to_l4_analog_HLC_band1_e2e(e2edata_dir,outputdir)
