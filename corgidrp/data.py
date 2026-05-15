@@ -860,7 +860,7 @@ class Dark(Image):
                 sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
                 if len(sctsrt_values) == len(input_dataset):
                     # if SCTSRT present, use it
-                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
                 else:
                     # if not, use timestamp from filename
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -968,7 +968,7 @@ class FlatField(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -1026,7 +1026,7 @@ class SpectroscopyCentroidPSF(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -1121,7 +1121,7 @@ class LineSpread(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -1531,7 +1531,7 @@ class NonLinearityCalibration(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -1632,7 +1632,7 @@ class KGain(Image):
                 sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
                 if len(sctsrt_values) == len(input_dataset):
                     # if SCTSRT present, use it
-                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
                 else:
                     # if not, use timestamp from filename
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -1780,7 +1780,7 @@ class BadPixelMap(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -1874,7 +1874,7 @@ class DetectorNoiseMaps(Image):
                 sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
                 if len(sctsrt_values) == len(input_dataset):
                     # if SCTSRT present, use it
-                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
                 else:
                     # if not, use timestamp from filename
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -2175,7 +2175,7 @@ class AstrometricCalibration(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -2257,7 +2257,7 @@ class TrapCalibration(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -2420,7 +2420,7 @@ class FluxcalFactor(Image):
                 sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
                 if len(sctsrt_values) == len(input_dataset):
                     # if SCTSRT present, use it
-                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
                 else:
                     # if not, use timestamp from filename
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -2564,7 +2564,7 @@ class SpecFluxCal(Image):
                 sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
                 if len(sctsrt_values) == len(input_dataset):
                     # if SCTSRT present, use it
-                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
                 else:
                     # if not, use timestamp from filename
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -2646,7 +2646,7 @@ class SlitTransmission(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -3021,7 +3021,7 @@ class CoreThroughputCalibration(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -3490,7 +3490,7 @@ class CoreThroughputMap(Image):
                 sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
                 if len(sctsrt_values) == len(input_dataset):
                     # if SCTSRT present, use it
-                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
                 else:
                     # if not, use timestamp from filename
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -4037,7 +4037,7 @@ class NDFilterSweetSpotDataset(Image):
                 sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
                 if len(sctsrt_values) == len(input_dataset):
                     # if SCTSRT present, use it
-                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
                 else:
                     # if not, use timestamp from filename
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -4188,7 +4188,7 @@ class NDSpectroscopy(Image):
                 sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
                 if len(sctsrt_values) == len(input_dataset):
                     # if SCTSRT present, use it
-                    latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
                 else:
                     # if not, use timestamp from filename
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -4269,7 +4269,7 @@ class MuellerMatrix(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
@@ -4354,7 +4354,7 @@ class NDMuellerMatrix(Image):
             sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
             if len(sctsrt_values) == len(input_dataset):
                 # if SCTSRT present, use it
-                latest_frame=max(enumerate(input_dataset),key=lambda item:(time.Time(str(item[1].ext_hdr['SCTSRT'])).mjd, item[0]))[1]
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
                 # if not, use timestamp from filename
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]

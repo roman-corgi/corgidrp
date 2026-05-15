@@ -558,7 +558,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
         latest_input_file = max(
             enumerate(trad_dark_data_filelist),
             key=lambda item: (
-                time.Time(str(fits.getheader(item[1], 1)["SCTSRT"])).mjd,
+                str(fits.getheader(item[1], 1)["SCTSRT"]),
                 item[0],
             ),
         )[1]
