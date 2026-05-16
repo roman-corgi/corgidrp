@@ -283,7 +283,6 @@ def generate_psf_cube(
                 continue
         except:
             pass
-        # Extract cutout centered on PSF, clipping at detector edges if necessary
         idx_0_0 = max(int(np.round(psf_loc[i_psf][1])) - n_pix_psf,0)
         idx_0_1 = min(frame.data.shape[0],
             int(np.round(psf_loc[i_psf][1])) + n_pix_psf + 1)
