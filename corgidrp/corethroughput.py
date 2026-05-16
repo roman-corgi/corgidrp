@@ -294,7 +294,7 @@ def generate_psf_cube(
         cutout_data = frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]
         cutout_dq = frame.dq[idx_0_0:idx_0_1, idx_1_0:idx_1_1]
 
-        # PSFs near detector edges produce clipped cutouts with varying shapes
+        # PSFs near field stop boundary produce clipped cutouts with varying shapes
         # (eg not all 15x15). Pad them to uniform size so np.array() can create 
         # the PSF cube. Padded regions are filled with NaN (data) and DQ flag 1 
         # (bad pixel).
