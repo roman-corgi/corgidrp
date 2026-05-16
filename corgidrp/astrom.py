@@ -73,6 +73,7 @@ def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None):
     # Use nansum to handle NaN pixels from flat field corrections
     total_flux = np.nansum(sub_frame)
     if total_flux == 0 or np.isnan(total_flux):
+        # probably should raise error if total flux is 0 or nan
         raise ValueError(f"Cannot compute centroid: ROI has zero or NaN total flux at position ({peak_x}, {peak_y})")
 
     xcen = np.nansum(x_indices * sub_frame) / total_flux
