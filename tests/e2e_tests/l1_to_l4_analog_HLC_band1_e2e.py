@@ -200,6 +200,7 @@ def test_l1_to_l4_analog_HLC_band1_e2e(e2edata_path,e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                        input_dataset=mock_input_dataset, err=noise_map_noise,
                                        dq = noise_map_dq, err_hdr=err_hdr)
+    noise_map.ext_hdr['DRPNFILE'] = 3000
     mocks.rename_files_to_cgi_format(list_of_fits=[noise_map], output_dir=calibrations_dir, level_suffix="dnm_cal")
     this_caldb.create_entry(noise_map)
     
