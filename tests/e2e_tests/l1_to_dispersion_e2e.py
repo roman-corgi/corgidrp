@@ -213,10 +213,12 @@ def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
     
     ### validate LineSpread product 
     check.compare_to_mocks_hdrs(dispersion_cal_file)
+
     assert dispersion.ext_hdr["DATATYPE"] == "DispersionModel"
     assert dispersion.ext_hdr["DATALVL"] == "CAL"
     
     assert np.abs(dispersion.clocking_angle) == pytest.approx(90, abs = dispersion.clocking_angle_uncertainty) 
+    assert len(dispersion.pos_vs_wavlen_polycoeff) == len(dispersion.wavlen_vs_pos_polycoeff) == 4
     print("clocking angle: ", dispersion.clocking_angle)
     print("clocking angle uncertainty: ", dispersion.clocking_angle_uncertainty)
     print("pos_vs_wavlen_polycoeff: ", dispersion.pos_vs_wavlen_polycoeff)
