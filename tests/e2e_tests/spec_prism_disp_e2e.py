@@ -1,5 +1,4 @@
 import os
-import sys
 import glob
 import shutil
 import numpy as np
@@ -8,11 +7,8 @@ from datetime import datetime, timedelta
 import logging
 import pytest
 import argparse
-import warnings
-from astropy.io.fits.verify import VerifyWarning
 
 from corgidrp.data import Dataset, DispersionModel
-from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model
 from astropy.table import Table
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers, rename_files_to_cgi_format
@@ -100,6 +96,7 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
             time_offset = timedelta(milliseconds=i)
             unique_time = basetime + time_offset
             img.ext_hdr['FILETIME'] = unique_time.isoformat()
+            img.pri_hdr['VISTYPE'] = 'CGIVST_CAL_SPEC_TGTREF'
         
         # Rename Image objects directly to CGI format
         renamed_files = rename_files_to_cgi_format(list_of_fits=psf_images, output_dir=e2edata_path, level_suffix="l2b", pattern=None)
@@ -155,8 +152,7 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     recipe = walk_corgidrp(
         filelist=saved_files, 
         CPGS_XML_filepath="",
-        outputdir=e2eoutput_path,
-        template="l2b_to_spec_prism_disp.json"
+        outputdir=e2eoutput_path
     )
     logger.info("")
     

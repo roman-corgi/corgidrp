@@ -476,6 +476,8 @@ def guess_template(dataset):
             recipe_filename = "l2b_to_polcal.json"
         elif image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l2b_to_l3_pol.json"
+        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_TGTREF':
+            recipe_filename = "l2b_to_spec_prism_disp.json"
         elif 'TDD' not in image.pri_hdr['VISTYPE']:
             warnings.warn("Only VISTYPE TDD and certain cal frames should be processed beyond L2b. Double-check which frames are being processed from L2b -> L3.")
             recipe_filename = "l2b_to_l3.json"
