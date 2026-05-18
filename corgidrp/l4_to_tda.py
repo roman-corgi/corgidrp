@@ -1017,7 +1017,7 @@ def calc_pol_p_and_pa_image(input_Image):
     evpa_err = 0.5 * np.sqrt((U * Qerr)**2 + (Q * Uerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
     evpa = np.degrees(evpa)
     evpa_err = np.degrees(evpa_err)
-
+    
     # --- Data quality propagation ---
     dq = np.bitwise_or(np.bitwise_or(Idq, Qdq), Udq)
 

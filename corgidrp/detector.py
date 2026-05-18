@@ -388,7 +388,7 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
     pixel values drop below 0.85*fwc.
 
     Use cosm_filter to determine the smallest plateaus (in pixels) that will
-    be identified. A reasonable value is 2.
+    be identified. A reasonable value is 1 or 2.  
 
     Args:
         cube (array_like, float):
@@ -400,9 +400,9 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
         sat_thresh (float):
             Multiplication factor for fwc that determines saturated cosmic pixels.
         plat_thresh (float):
-            Multiplication factor for fwc that determines edges of cosmic plateu.
+            Multiplication factor for fwc that determines edges of cosmic plateau.
         cosm_filter (int):
-            Minimum length in pixels of cosmic plateus to be identified.
+            Minimum length in pixels of cosmic plateaus to be identified.
         cosm_box (int):
             Number of pixels out from an identified cosmic head (i.e., beginning of
             the plateau) to mask out.

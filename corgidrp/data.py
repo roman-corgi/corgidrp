@@ -1827,8 +1827,8 @@ class DetectorParams(Image):
     # default detector params
     default_values = {
         'KGAINPAR' : 8.7,
-        'FWC_PP_E' : 90000.,
-        'FWC_EM_E' : 100000.,
+        'FWC_PP_E' : 90000.,    # full-well capacity in electrons for image area (before gain register)
+        'FWC_EM_E' : 105000.,   # full-well capacity in electrons for gain register
         'ROWREADT' : 223.5e-6,  # seconds
         'NEMGAIN': 604,         # number of EM gain register stages
         'TELRSTRT': -1,         # slice of rows that are used for telemetry
@@ -1838,8 +1838,8 @@ class DetectorParams(Image):
         'GAINMAX': 8000.0,      # Maximum allowable EM gain
         'DELCNST': 1.0e-4,      # tolerance in exposure time calculator
         'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
-        'PCECNTMX': 0.1,        # Maximum allowed electrons/pixel/frame for photon counting
-        'TFACTOR': 5,            # number of read noise standard deviations at which to set the photon-counting threshold
+        'PCECNTMX': 0.25,       # Maximum allowed electrons/pixel/frame for photon counting
+        'TFACTOR': 5,           # number of read noise standard deviations at which to set the photon-counting threshold
     }
 
     back_compat_mapping = {
