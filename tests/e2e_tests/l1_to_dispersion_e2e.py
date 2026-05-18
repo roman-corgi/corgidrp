@@ -216,6 +216,8 @@ def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
 
     assert dispersion.ext_hdr["DATATYPE"] == "DispersionModel"
     assert dispersion.ext_hdr["DATALVL"] == "CAL"
+    assert dispersion.ext_hdr['BAND'] == '3'
+    assert dispersion.ext_hdr['REFWAVE'] == 730
     
     assert np.abs(dispersion.clocking_angle) == pytest.approx(90, abs = dispersion.clocking_angle_uncertainty) 
     assert len(dispersion.pos_vs_wavlen_polycoeff) == len(dispersion.wavlen_vs_pos_polycoeff) == 4
