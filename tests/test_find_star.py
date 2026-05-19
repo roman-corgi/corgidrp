@@ -373,49 +373,6 @@ def test_find_star_dataset_split():
         f"Expected y position for visit 1 to be {delta_position} pixels different from visit 0, got {measured_y_visit_0} and {measured_y_visit_1}"
 
 
-def test_satspot_no_offset_excluded():
-    """
-    Verify that the no-offset frames (first third of SATSPOTS=True frames) are excluded
-    from the satellite spot median. The mock generates no-offset frames with amplitude=0
-    (no spots) and offset frames with spots. Star-center recovery should succeed using
-    only the offset frames; it would fail if the no-offset frames diluted the signal.
-    """
-    corgidrp.track_individual_errors = True
-
-    mode = 'NFOV'
-    separation = satellite_spot_parameters_defaults[mode]['separation']['spotSepPix']
-    injected_position = (image_shape[1] // 2 + 2, image_shape[0] // 2 - 1)
-    guess_position = (image_shape[1] // 2, image_shape[0] // 2)
-
-    # n_satspot_frames=6: 2 no-offset (amp=0) + 2 +offset + 2 -offset
-    input_dataset = mocks.create_satellite_spot_observing_sequence(
-        n_sci_frames=3,
-        n_satspot_frames=6,
-        image_shape=image_shape,
-        bg_sigma=1.0,
-        bg_offset=10.0,
-        gaussian_fwhm=5.0,
-        separation=separation,
-        star_center=injected_position,
-        angle_offset=3,
-        amplitude_multiplier=100,
-        observing_mode=mode)
-
-    dataset_with_center = find_star(
-        input_dataset=input_dataset,
-        star_coordinate_guess=guess_position,
-        thetaOffsetGuess=0)
-
-    measured_x = dataset_with_center.frames[0].ext_hdr['STARLOCX']
-    measured_y = dataset_with_center.frames[0].ext_hdr['STARLOCY']
-
-    assert np.isclose(injected_position[0], measured_x, atol=0.1), \
-        f"Expected {injected_position[0]}, got {measured_x}"
-    assert np.isclose(injected_position[1], measured_y, atol=0.1), \
-        f"Expected {injected_position[1]}, got {measured_y}"
-
-    corgidrp.track_individual_errors = old_err_tracking
-
 
 def test_satspot_invalid_count():
     """

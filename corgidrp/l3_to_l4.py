@@ -207,15 +207,17 @@ def find_star(input_dataset,
     ``SCTSRT`` header timestamp (filename order is used as a fallback):
 
         1. No-offset frames (first third): DM has no probe offset; no satellite spots,
-           only speckles/PSF. These frames are excluded from the satellite spot median.
+           only speckles/PSF.
         2. Positive-offset frames (middle third): DM at +1.0 probe offset; spots present.
         3. Negative-offset frames (last third): DM at -1.0 probe offset; spots present.
 
-    The no-offset median is subtracted from the offset median to suppress static speckles
-    and astrophysical sources before star-center estimation.
+    The median of the no-offset frames is passed as ``img_ref`` to
+    ``star_center_from_satellite_spots``, which uses it to suppress static speckles and
+    astrophysical sources when estimating the star center.
 
     When ``subtract_no_offset_frames=False``, all ``SATSPOTS=1`` frames are treated as
-    offset (spot-bearing) frames. No three-group structure is assumed or required.
+    offset (spot-bearing) frames and ``img_ref`` is set to zeros (no background
+    subtraction). No three-group structure is assumed or required.
 
     The star's (x, y) location is stored in each frame's extension header under
     ``STARLOCX`` and ``STARLOCY``.
@@ -295,11 +297,12 @@ def find_star(input_dataset,
             the returned dataset. Defaults to True.
         subtract_no_offset_frames (bool, optional):
             If True, the ``SATSPOTS=1`` frames are assumed to follow the three-group
-            acquisition structure (no-offset / +offset / -offset). The no-offset median
-            is subtracted from the offset median before star-center estimation to suppress
-            static speckles and astrophysical sources. If False, all ``SATSPOTS=1``
-            frames are used directly as the offset (spot-bearing) median with no background
-            subtraction and no three-group structure assumed. Defaults to True.
+            acquisition structure (no-offset / +offset / -offset). The median of the
+            no-offset frames is passed as ``img_ref`` to
+            ``star_center_from_satellite_spots`` so that it can suppress static speckles
+            and astrophysical sources internally. If False, all ``SATSPOTS=1`` frames are
+            used as the offset median and ``img_ref`` is set to zeros; no three-group
+            structure is assumed. Defaults to True.
         pri_split_keywords (list of str, optional):
             List of primary header keywords to use for splitting the dataset into subsets.
             If None, defaults to ['VISITID']. Defaults to None.
@@ -394,12 +397,14 @@ def find_star(input_dataset,
         # See if the satellite spot parameters are provided, if not used defaults
         if satellite_spot_parameters is not None:
             tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
-        # Compute median images
-        img_ref = np.nanmedian(sci_dataset.all_data, axis=0)
+        # Compute median images. When subtract_no_offset_frames is True, use the
+        # no-offset median as img_ref so star_center_from_satellite_spots handles
+        # the background subtraction internally; otherwise use the science median.
         img_sat_spot = np.nanmedian(offset_dataset.all_data, axis=0)
         if subtract_no_offset_frames:
-            img_no_offset = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
-            img_sat_spot = img_sat_spot - img_no_offset
+            img_ref = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
+        else:
+            img_ref = np.zeros_like(img_sat_spot)
 
         # if polarimetry
         if 'POL0' in val  or 'POL45' in val: 
