@@ -918,7 +918,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         spec_filter_offset (corgidrp.data.SpecFilterOffset): instance of SpecFilterOffset calibration class
         template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
                                                   path is taken
-        subtract_no_offset_frame (bool, optional): If True, the ''SATSPOTS=1'' frames are assumed to follow the three-group acquisition structure 
+        subtract_no_offset_frames (bool, optional): If True, the ''SATSPOTS=1'' frames are assumed to follow the three-group acquisition structure 
         (no-offset / +offset / -offset). The no-offset median is subtracted from the offset median before star-center estimation to suppress static speckles and 
         astrophysical sources. If False, all ''SATSPOTS=1'' frames are used directly as the offset (spot-bearing) median with no background subtraction and no 
         three-group structure assumed. Defaults to True.
