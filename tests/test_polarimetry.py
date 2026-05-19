@@ -492,8 +492,7 @@ def test_align_frames():
     # Find the star. The mock data has the correct 3-group structure (no-offset, +offset, -offset)
     # with SCTSRT set in ascending order, so subtract_no_offset_frames=True is appropriate.
     # Checks on finding the star are done in test_find_star.py
-    dataset_with_center = l3_to_l4.find_star(input_dataset_autocrop_nfov, drop_satspots_frames=False,
-                                              subtract_no_offset_frames=True)
+    dataset_with_center = l3_to_l4.find_star(input_dataset_autocrop_nfov, drop_satspots_frames=False)
 
     starloc_pol0  = (dataset_with_center.frames[0].ext_hdr['STARLOCX'], dataset_with_center.frames[0].ext_hdr['STARLOCY'])
     starloc_pol45 = (dataset_with_center.frames[4].ext_hdr['STARLOCX'], dataset_with_center.frames[4].ext_hdr['STARLOCY'])
