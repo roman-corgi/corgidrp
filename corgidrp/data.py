@@ -925,14 +925,14 @@ class FlatField(Image):
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         if input_dataset is not None:
             pri_hdr,ext_hdr,err_hdr,dq_hdr=corgidrp.check.merge_headers(
-                input_dataset, first_frame_keywords= ['MJDSRT','PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT','OBSNUM','VISNUM','CPGSFILE','AUXFILE','VISTYPE',
+                input_dataset, first_frame_keywords= ['MJDSRT','SCTSRT','PROGNUM', 'EXECNUM', 'CAMPAIGN', 'SEGMENT','OBSNUM','VISNUM','CPGSFILE','AUXFILE','VISTYPE',
                                                       'TARGET', 'RA','DEC', 'EQUINOX', 'RAPM','DECPM', 'PSFREF', 'OPGAIN','PHTCNT','OPMODE','EXPTIME','EMGAIN_C',
                                                       'UNITYG','EMGAINA1','EMGAINA2','EMGAINA3','EMGAINA4','EMGAINA5','EMGAIN_A','KGAINPAR','ISPC','SPAM_H','SPAM_V',
                                                       'SPAMNAME','SPAMSP_H','SPAMSP_V','FPAM_H','FPAM_V','FPAMNAME','FPAMSP_H','FPAMSP_V','LSAM_H','LSAM_V',
                                                       'LSAMNAME','LSAMSP_H','LSAMSP_V','FSAM_H','FSAM_V','FSAMNAME','FSAMSP_H','FSAMSP_V','CFAM_H','CFAM_V',
                                                       'CFAMNAME','CFAMSP_H','CFAMSP_V','DPAM_H','DPAM_V','DPAMNAME','DPAMSP_H','DPAMSP_V','PA_V3','WBJ_1','WBJ_2','WBJ_3','GAINTCAL',
                                                       'STATUS','BLNKTIME','BLNKCYC','EXPCYC','OVEREXP','NOVEREXP'],
-                last_frame_keywords = ['VISITID', 'MJDEND',  'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4','EACQ_ROW', 'EACQ_COL','DATATYPE'],
+                last_frame_keywords = ['VISITID', 'MJDEND', 'SCTEND', 'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'NAXIS4','EACQ_ROW', 'EACQ_COL','DATATYPE'],
 
                 invalid_keywords=['PA_APER','FRAMET','SVB_1','SVB_2','SVB_3','ROLL','PITCH','YAW','ISHOWFSC', 'ISACQ', 'SPBAL', 'SATSPOTS',  'HCVBIAS','EXCAMT','LOCAMT','CYCLES',
                     'LASTEXP','PROXET','FCMLOOP', 'FCMPOS','FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
@@ -1551,13 +1551,13 @@ class NonLinearityCalibration(Image):
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
         if self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
-        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'
         # headers deleted from initial L1 level
-        leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+        leave_out_ext = ['BSCALE', 'BZERO', 'LOCAMT', 'CYCLES', 'LASTEXP']
         for key in leave_out_ext:
             if key in self.ext_hdr:
                 del self.ext_hdr[key]
-        
+
 class KGain(Image):
     """
     Class for KGain calibration file. Until further insights it is just one float value.
@@ -1663,7 +1663,7 @@ class KGain(Image):
         if self.ext_hdr['DATATYPE'] != 'KGain':
             raise ValueError("File that was loaded was not a KGain Calibration file.")
         # headers deleted from initial L1 level
-        leave_out_ext = ['BSCALE', 'BZERO', 'SCTSRT', 'SCTEND', 'LOCAMT', 'CYCLES', 'LASTEXP']
+        leave_out_ext = ['BSCALE', 'BZERO', 'LOCAMT', 'CYCLES', 'LASTEXP']
         for key in leave_out_ext:
             if key in self.ext_hdr:
                 del self.ext_hdr[key]
@@ -1950,8 +1950,8 @@ class DetectorParams(Image):
     # default detector params
     default_values = {
         'KGAINPAR' : 8.7,
-        'FWC_PP_E' : 90000.,
-        'FWC_EM_E' : 100000.,
+        'FWC_PP_E' : 90000.,    # full-well capacity in electrons for image area (before gain register)
+        'FWC_EM_E' : 105000.,   # full-well capacity in electrons for gain register
         'ROWREADT' : 223.5e-6,  # seconds
         'NEMGAIN': 604,         # number of EM gain register stages
         'TELRSTRT': -1,         # slice of rows that are used for telemetry
@@ -1961,8 +1961,8 @@ class DetectorParams(Image):
         'GAINMAX': 8000.0,      # Maximum allowable EM gain
         'DELCNST': 1.0e-4,      # tolerance in exposure time calculator
         'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
-        'PCECNTMX': 0.1,        # Maximum allowed electrons/pixel/frame for photon counting
-        'TFACTOR': 5,            # number of read noise standard deviations at which to set the photon-counting threshold
+        'PCECNTMX': 0.25,       # Maximum allowed electrons/pixel/frame for photon counting
+        'TFACTOR': 5,           # number of read noise standard deviations at which to set the photon-counting threshold
     }
 
     back_compat_mapping = {
@@ -4065,21 +4065,41 @@ class NDFilterSweetSpotDataset(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
             raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
 
-    def interpolate_od(self, x, y, method="nearest"):
+    def interpolate_od(self, x, y, method="nearest", image=None):
         """
-        Interpolates the data to get the OD at the requested x/y location
+        Interpolates the data to get the OD at the requested x/y location.
+
+        The calibration stores OD values at absolute EXCAM pixel coordinates
+        (i.e. coordinates in the full 1024×1024 detector frame).  When the
+        query image is a cropped sub-frame, pass it as ``image`` and the
+        function will automatically add the ``DETPIX0X``/``DETPIX0Y`` header
+        values (set by ``l2b_to_l3.crop``) to convert ``x``/``y`` from
+        cropped-frame pixel coordinates to absolute EXCAM coordinates before
+        interpolating.  If those keywords are absent the offsets default to 0,
+        so the call is also correct for full-frame (uncropped) images.
 
         Args:
-            x (float): x detector pixel location
-            y (float): y detector pixel location
-            method (str): only "nearest" supported currently
-        
+            x (float): x pixel location in the science frame's own coordinate system.
+            y (float): y pixel location in the science frame's own coordinate system.
+            method (str): only "nearest" supported currently.
+            image (corgidrp.data.Image, optional): the science Image whose pixel
+                coordinates ``x``/``y`` were measured in.  When provided,
+                ``DETPIX0X`` and ``DETPIX0Y`` are read from its extension
+                header to remap frame coordinates to absolute EXCAM coordinates.
+                Defaults to None (no remapping applied).
+
         Returns:
             float: the OD at the requested point
         """
+        detpix0x = 0
+        detpix0y = 0
+        if image is not None:
+            detpix0x = image.ext_hdr.get('DETPIX0X', 0)
+            detpix0y = image.ext_hdr.get('DETPIX0Y', 0)
+
         interpolator = LinearNDInterpolator(np.array([self.x_values, self.y_values]).T, self.od_values)
 
-        return interpolator(x, y)
+        return interpolator(x + detpix0x, y + detpix0y)
 
 class NDSpectroscopy(Image):
     """

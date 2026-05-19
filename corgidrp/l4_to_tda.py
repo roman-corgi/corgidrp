@@ -725,9 +725,10 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         star_x = star_xs[star_ind]
         star_y = star_ys[star_ind]
         #TODO perhaps incorporate into ERR in future, and incorporate error in psf_phot argument above (must be non-zero, though)
-        star_err = psf_phot.results['flux_err'][star_ind] 
-        # OD (optical density) of the ND filter at the star location:
-        ND_od = NDcalibration.interpolate_od(star_x, star_y)
+        star_err = psf_phot.results['flux_err'][star_ind]
+        # OD (optical density) of the ND filter at the star location.
+        # Pass star_fr so interpolate_od can remap cropped-frame coords to absolute EXCAM.
+        ND_od = NDcalibration.interpolate_od(star_x, star_y, image=star_fr)
         # integral under the fitted 2-D Gaussian for the unocculted star,
         # corrected for ND filter attenuation: true_flux = measured_flux * 10**OD
         Fs = 10**ND_od * psf_phot.results['flux_fit'][star_ind]
@@ -1017,7 +1018,7 @@ def calc_pol_p_and_pa_image(input_Image):
     evpa_err = 0.5 * np.sqrt((U * Qerr)**2 + (Q * Uerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
     evpa = np.degrees(evpa)
     evpa_err = np.degrees(evpa_err)
-
+    
     # --- Data quality propagation ---
     dq = np.bitwise_or(np.bitwise_or(Idq, Qdq), Udq)
 

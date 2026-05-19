@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<obs_specification>
+   <!--Observation Specifications created with CPGS version 5.1.1-->
+   <cpgs_input>
+      <satellite_spots_command_info>(sep1=6.2,angle1=45.4, fr1=1.7e-6,  filt1=3D)</satellite_spots_command_info>
+   </cpgs_input>
+</obs_specification>

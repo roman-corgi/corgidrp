@@ -16,6 +16,7 @@ except:
 
 from corgidrp import check
 import corgidrp.data as data
+from corgidrp.darks import mean_combine
 
 # Dictionary with constant non-linearity calibration parameters
 nonlin_params_default = {
@@ -129,7 +130,7 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=False, plot_outdir='figures', show_plot=False,
-                     verbose=False, nonlin_params=None, apply_dq = True):
+                     verbose=False, nonlin_params=None, apply_dq = True, percent_pupil=0.9):
     """
     Function that derives the non-linearity calibration table for a set of DN
     and EM values.
@@ -225,7 +226,10 @@ def calibrate_nonlin(dataset_nl,
         of two values.  The coordinates of each square are specified by matching 
         up as follows: (rowroi1, colroi1), (rowroi1, colroi2), (rowback11, colback11), 
         (rowback11, colback12), etc. Defaults to nonlin_params_default specified in this file.
-      apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
+      apply_dq (bool): consider the dq mask (from cosmic ray detection, saturation) or not. Defaults to True.
+      percent_pupil (float): (Optional) the fraction of the pupil that must be not masked in order to have good statistics 
+        for the mean signal for each exposure time set for each EM gain. Default is 0.9, meaning that at least 90% of the pixels 
+        in the pupil area must be included in the unmasked pixels to calculate the mean signal for each frame.
       
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
@@ -404,39 +408,16 @@ def calibrate_nonlin(dataset_nl,
     colback2 = list(range(colback21, colback22))
     
     ####################### create good_mean_frame ###################
-    
     if ram_heavy:
-        temp_frame = data.Image(mean_frame_arr[0]) # just to get shape
-        frame_shape = temp_frame.data.shape
-        good_mean_frame = np.zeros(frame_shape)
-        for filepath in mean_frame_arr:
-            temp_frame = data.Image(filepath)
-            if apply_dq:
-                bad = np.where(temp_frame.dq > 0)
-                temp_frame.data[bad] = np.nan
-            good_mean_frame += temp_frame.data
-        good_mean_frame = good_mean_frame / len(mean_frame_arr)
+        good_mean_frame, _, _, _ = mean_combine(data.Dataset(mean_frame_arr), None) 
     else:
-        nrow = len(mean_frame_arr[0])
-        ncol = len(mean_frame_arr[0][0])
-        
-        good_mean_frame = np.zeros((nrow, ncol))
-        nFrames = len(mean_frame_arr)
-
-        good_mean_frame = good_mean_frame / nFrames
-        
-        mean_frame_index = 0
-        # Loop over the mean_frame_arr frames
-        for i in range(nFrames):
-            frame = mean_frame_arr[i]
-        
-            # Add this frame to the cumulative good_mean_frame
-            good_mean_frame += frame
-            mean_frame_index += 1
-
-        # Calculate the average of the frames if required
-        if mean_frame_index > 0:
-            good_mean_frame /= mean_frame_index 
+        bp_maps = []
+        for frame in mean_frame_arr:
+            bad_rows, bad_cols = np.where(np.isnan(frame))
+            bp_map = np.zeros(frame.shape).astype(int)
+            bp_map[bad_rows, bad_cols] = 1
+            bp_maps.append(bp_map)
+        good_mean_frame, _, _, _ = mean_combine(mean_frame_arr, bp_maps)  
     
     # plot, if requested
     if make_plot:
@@ -481,7 +462,8 @@ def calibrate_nonlin(dataset_nl,
     # 1000-1500 DN recommended when the peak of histogram of  
     # "good_mean_frame" is between 2000 and 4000 DN)
     roi_values = good_mean_frame[rowroi[:, None], colroi]
-    hst_counts, hist_edges = np.histogram(roi_values.flatten(),bins=num_bins)
+    good_inds = np.where(~np.isnan(roi_values))
+    hst_counts, hist_edges = np.histogram(roi_values[good_inds].flatten(),bins=num_bins)
     # range above some value
     above_range = (hist_edges[:-1] >= min_bin)
     # Filter the counts and bin_edges arrays
@@ -597,20 +579,32 @@ def calibrate_nonlin(dataset_nl,
         
                 # Initialize for processing of files
                 mean_frame_index = 0
-                frame_count = []
-                frame_mean = []
+                # to be used for assessing how much of an image is thrown away from trying to mask cosmic rays
+                num_pupil_im_pixels = np.where(mask==1)[0].size 
                 if not repeat_flag:
-                    for iframe in range(len(selected_files)):
-                        if ram_heavy:
-                            image_1 = data.Image(selected_files[iframe])
-                            frame_1 = image_1.data
-                            if apply_dq: # in ram_heavy case, this hasn't been applied yet
-                                bad = np.where(image_1.dq > 0)
-                                frame_1[bad] = np.nan
-                        else:
-                            frame_1 = selected_files[iframe]
-                        frame_1 = frame_1.astype(np.float64)
-        
+                    if ram_heavy:
+                        frame_1, bp, _, _ = mean_combine(data.Dataset(selected_files), None)
+                    else:
+                        bp_maps = []
+                        for frame in selected_files:
+                            bad_rows, bad_cols = np.where(np.isnan(frame))
+                            bp_map = np.zeros(frame.shape).astype(int)
+                            bp_map[bad_rows, bad_cols] = 1
+                            bp_maps.append(bp_map)
+                        frame_1, bp, _, _ = mean_combine(selected_files, bp_maps)
+                    frame_1 = frame_1.astype(np.float64)
+                    # Assess how much of the image is thrown away from trying to mask cosmic rays and saturation, 
+                    # and if too much is thrown away, statistics for averaging are not adequate.  Make the whole frame nan, 
+                    # which will trigger it to be ignored later on when calculating 
+                    # mean signal for this set of repeated frames
+                    bp_rows, bp_cols = np.where(bp==1) 
+                    frame_1[bp_rows,bp_cols] = np.nan 
+                    usable_pixels = np.where(mask - bp == 1)[0].size
+                    if usable_pixels/num_pupil_im_pixels < percent_pupil:
+                        # make them all nan, which triggers frame to be ignored later on when calculating mean signal for this set of repeated frames
+                        frame_1 = np.ones_like(frame_1)*np.nan
+                        frame_mean1 = np.nan
+                    else:
                         # Subtract background
                         frame_1_back1 = np.nanmean(frame_1[rowback1[0]:rowback1[-1]+1, 
                                                         colback1[0]:colback1[-1]+1])
@@ -627,29 +621,39 @@ def calibrate_nonlin(dataset_nl,
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
-        
-                        frame_count.append(frame_count0)
-                        frame_mean.append(frame_mean1)
-                        
                         mean_frame_index += 1
-                    mean_signal.append(np.nanmean(frame_mean))
+
+                    mean_signal.append(frame_mean1)
                 elif repeat_flag:
                     # for repeated exposure frames, split into the first half/set
                     # and the second half/set
                     # NOTE works fine for same number of frames per exposure time for a given EM gain (which is the observation plan, and this 
                     # is what the TVAC code has), but for more general case, use repeated_lens[gain_index] instead for the number of frames in the 2nd (repeated) set
                     first_half = len(selected_files) // 2
-                    for i in range(first_half):
-                        if ram_heavy:
-                            image_1 = data.Image(selected_files[i])
-                            frame_1 = image_1.data
-                            if apply_dq: # in ram_heavy case, this hasn't been applied yet
-                                bad = np.where(image_1.dq > 0)
-                                frame_1[bad] = np.nan
-                        else:
-                            frame_1 = selected_files[i]
-                        frame_1 = frame_1.astype(np.float64)
-        
+                    if ram_heavy:
+                        frame_1, bp, _, _ = mean_combine(data.Dataset(selected_files[0:first_half]), None)
+                    else:
+                        bp_maps = []
+                        for frame in selected_files[0:first_half]:
+                            bad_rows, bad_cols = np.where(np.isnan(frame))
+                            bp_map = np.zeros(frame.shape).astype(int)
+                            bp_map[bad_rows, bad_cols] = 1
+                            bp_maps.append(bp_map)
+                        frame_1, bp, _, _ = mean_combine(selected_files[0:first_half], bp_maps)
+                    frame_1 = frame_1.astype(np.float64)
+    
+                    # Assess how much of the image is thrown away from trying to mask cosmic rays and saturation, 
+                    # and if too much is thrown away, statistics for averaging are not adequate.  Make the whole frame nan, 
+                    # which will trigger it to be ignored later on when calculating 
+                    # mean signal for this set of repeated frames
+                    bp_rows, bp_cols = np.where(bp==1) 
+                    frame_1[bp_rows,bp_cols] = np.nan 
+                    usable_pixels = np.where(mask - bp == 1)[0].size
+                    if usable_pixels/num_pupil_im_pixels < percent_pupil:
+                        # make them all nan, which triggers frame to be ignored later on when calculating mean signal for this set of repeated frames
+                        frame_1 = np.ones_like(frame_1)*np.nan
+                        frame_mean1 = np.nan
+                    else:
                         # Subtract background
                         frame_1_back1 = np.nanmean(frame_1[rowback1[0]:rowback1[-1]+1, 
                                                         colback1[0]:colback1[-1]+1])
@@ -666,27 +670,37 @@ def calibrate_nonlin(dataset_nl,
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
-                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
-                        
-                        frame_count.append(frame_count0)
-                        frame_mean.append(frame_mean1)
-                        
+                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan                        
                         mean_frame_index += 1
-                    mean_signal.append(np.nanmean(frame_mean))
-                    repeat1_mean_signal = np.nanmean(frame_mean)
+
+                    mean_signal.append(frame_mean1)
+                    repeat1_mean_signal = frame_mean1
                     
                     second_half = len(selected_files)
-                    for i in range(first_half + 1, second_half):
-                        if ram_heavy:
-                            image_1 = data.Image(selected_files[i])
-                            frame_1 = image_1.data
-                            if apply_dq: # in ram_heavy case, this hasn't been applied yet
-                                bad = np.where(image_1.dq > 0)
-                                frame_1[bad] = np.nan
-                        else:
-                            frame_1 = selected_files[i]
-                        frame_1 = frame_1.astype(np.float64)
-        
+                    if ram_heavy:
+                        frame_1, bp, _, _ = mean_combine(data.Dataset(selected_files[first_half:second_half]), None) 
+                    else:
+                        bp_maps = []
+                        for frame in selected_files[first_half:second_half]:
+                            bad_rows, bad_cols = np.where(np.isnan(frame))
+                            bp_map = np.zeros(frame.shape).astype(int)
+                            bp_map[bad_rows, bad_cols] = 1
+                            bp_maps.append(bp_map)
+                        frame_1, bp, _, _ = mean_combine(selected_files[first_half:second_half], bp_maps)
+                    frame_1 = frame_1.astype(np.float64)
+
+                    # Assess how much of the image is thrown away from trying to mask cosmic rays and saturation, 
+                    # and if too much is thrown away, statistics for averaging are not adequate.  Make the whole frame nan, 
+                    # which will trigger it to be ignored later on when calculating 
+                    # mean signal for this set of repeated frames
+                    bp_rows, bp_cols = np.where(bp==1) 
+                    frame_1[bp_rows,bp_cols] = np.nan 
+                    usable_pixels = np.where(mask - bp == 1)[0].size
+                    if usable_pixels/num_pupil_im_pixels < percent_pupil:
+                        # make them all nan, which triggers frame to be ignored later on when calculating mean signal for this set of repeated frames
+                        frame_1 = np.ones_like(frame_1)*np.nan
+                        frame_mean1 = np.nan
+                    else:
                         # Subtract background
                         frame_1_back1 = np.nanmean(frame_1[rowback1[0]:rowback1[-1]+1, colback1[0]:colback1[-1]+1])
                         frame_1_back2 = np.nanmean(frame_1[rowback2[0]:rowback2[-1]+1, colback2[0]:colback2[-1]+1])
@@ -698,14 +712,11 @@ def calibrate_nonlin(dataset_nl,
                         frame_mean0 = frame_1 - frame_back
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
-                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
-        
-                        frame_count.append(frame_count0)
-                        frame_mean.append(frame_mean1)
-        
+                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan        
                         mean_frame_index += 1
+
                     # Calculate the mean signal from the second half of the processing
-                    repeat2_mean_signal = np.nanmean(frame_mean)
+                    repeat2_mean_signal = frame_mean1
                     repeat_flag = 0  # Reset flag
 
         # Calculate the time deltas in seconds from the first frame
@@ -765,6 +776,9 @@ def calibrate_nonlin(dataset_nl,
             plt.ylabel('Signal (DN)')
         
         # Fit a polynomial to selected points (excluding some points)
+        good_inds = np.where(~np.isnan(corr_mean_signal_sorted))
+        filt_exp_times_sorted = filt_exp_times_sorted[good_inds[0]]
+        corr_mean_signal_sorted = corr_mean_signal_sorted[good_inds[0]]
         p0 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
         y0 = np.polyval(p0, filt_exp_times_sorted)
         y_rel_err = np.abs((corr_mean_signal_sorted - y0)/corr_mean_signal_sorted)
@@ -996,8 +1010,15 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
                 else:
                     mean_frame_list.append(frame.data)
         for cal_dset in cal_dsets:
+            if apply_dq:
+                if ram_heavy:
+                    pass # don't apply yet; apply later when loading in data
+                else:
+                    for frame in cal_dset.frames:
+                        bad = np.where(frame.dq > 0)
+                        frame.data[bad] = np.nan
             # each of dsets has just one frame in it
-            dsets, vals = cal_dset.split_dataset(exthdr_keywords=['DATETIME','EXPTIME'])
+            dsets, vals = cal_dset.split_dataset(exthdr_keywords=['SCTSRT','EXPTIME'])
             smallest_set_length = np.inf
             sub = []
             start_val = float(vals[0][1])
@@ -1029,10 +1050,10 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
                     if not (frame.pri_hdr['OBSNAME'] == 'KGAIN' or 
                     frame.pri_hdr['OBSNAME'] == 'NONLIN'):
                         raise Exception('OBSNAME can only be MNFRAME or NONLIN in non-linearity')
-                    datetime = frame.ext_hdr['DATETIME']                
-                    if isinstance(datetime, str) is False:
-                        raise Exception('DATETIME must be a string')
-                    datetimes.append(datetime)
+                    sctsrt = frame.ext_hdr['SCTSRT']
+                    if isinstance(sctsrt, str) is False:
+                        raise Exception('SCTSRT must be a string')
+                    datetimes.append(sctsrt)
                     exp_time = frame.ext_hdr['EXPTIME']
                     if isinstance(exp_time, float) is False:
                         raise Exception('Exposure times must be float')
@@ -1068,7 +1089,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
     
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):
-        raise Exception('DATETIMEs cannot be duplicated')
+        raise Exception('SCTSRTs cannot be duplicated')
     # Every EM gain must be greater than or equal to 1
     if np.any(np.array(split[1]) < 1):
         raise Exception('Each set of frames categorized by commanded EM gains must be have 1 or more frames')

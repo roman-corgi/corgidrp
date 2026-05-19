@@ -1,5 +1,6 @@
 import os
 import glob
+import shutil
 import numpy as np
 import astropy.io.fits as fits
 import logging
@@ -86,7 +87,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_zeropoint", "L3")
     target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_zeropoint", "L3")
 
-    cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "cpgs_mock.xml")
+    cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "CPGS_betatest_041426.xml")
 
     # Patch EACQ_ROW/EACQ_COL on L1s. TODO: fix this in the sims
     for flist in (psfref_satspot_files, psfref_files, target_satspot_files, target_files):
@@ -132,8 +133,9 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         logger.info("")
     
     l3_files_dir = os.path.join(e2eoutput_path, "L3")
-    if not os.path.exists(l3_files_dir):
-        os.makedirs(l3_files_dir)
+    if os.path.exists(l3_files_dir):
+        shutil.rmtree(l3_files_dir)
+    os.makedirs(l3_files_dir)
     l3_dataset.save(filedir = l3_files_dir)
     l3_files_input = sorted(glob.glob(os.path.join(l3_files_dir, "cgi_*_l3_.fits")))
     logger.info(f"Total input images validated: {len(l3_dataset)}")
@@ -151,23 +153,19 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     calibrations_dir = os.path.join(e2eoutput_path, 'calibrations')
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
-    #Create a mock flux calibration file
-    fluxcal_factor = 2e-12
-    fluxcal_factor_error = 1e-14
-    prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
-    # Set consistent header values for flux calibration factor
-    exthd['CFAMNAME'] = '3F'
-    exthd['DPAMNAME'] = 'PRISM3'
-    exthd['FSAMNAME'] = 'R1C2'
-    fluxcal_fac = corgidrp.data.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = l3_dataset)
+    #Using a specfluxcal calib file created using DIP data
+    specflux_cal = corgidrp.data.SpecFluxCal(os.path.join(e2edata_path,'SPEC_NOM_sims/cgi_0200001001001001001_20260319t1146350_sfl_cal.fits'))
 
-    rename_files_to_cgi_format(list_of_fits=[fluxcal_fac], output_dir=calibrations_dir, level_suffix="abf_cal")
-    this_caldb.create_entry(fluxcal_fac)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        rename_files_to_cgi_format(list_of_fits=[specflux_cal], output_dir=calibrations_dir, level_suffix="sfl_cal")
+    this_caldb.create_entry(specflux_cal)
 
     ###########################
     #### Make dummy CT cal ####
     ###########################
 
+    prhd, exthd, errhd, dqhd = create_default_calibration_product_headers()
     # Dataset with some CT profile defined in create_ct_interp
     # Pupil image
     pupil_image = np.zeros([1024, 1024])

@@ -99,9 +99,10 @@ def setup_module():
     for j in range(n_mean):
         image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
             nonlin_flag=nonlin_flag)
-        # Datetime will have same time as some frames in the cal set, but for this test, 
+        # Timestamp will have same time as some frames in the cal set, but for this test,
         # that doesn't matter; no sorting happening via sorting.py, where that would be caught
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
+        image_sim.ext_hdr['SCTSRT'] = time_stack_arr0[j]
         # Temporary keyword value. Mean frame is TBD
         image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
         #to test the correct handling of cosmic ray flags
@@ -128,18 +129,22 @@ def setup_module():
                 image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,g,t,coeffs,
                     nonlin_flag=nonlin_flag)
                 image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+                image_sim.ext_hdr['SCTSRT'] = time_stack_test[idx_t]
             elif iG == 1:
                 image_sim = make_fluxmap_image(fluxMap2,bias,kgain,rn,g,t,coeffs,
                     nonlin_flag=nonlin_flag)
                 image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+                image_sim.ext_hdr['SCTSRT'] = time_stack_test[idx_t]
             elif iG == 2:
                 image_sim = make_fluxmap_image(fluxMap3,bias,kgain,rn,g,t,coeffs,
                     nonlin_flag=nonlin_flag)
                 image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+                image_sim.ext_hdr['SCTSRT'] = time_stack_test[idx_t]
             else:
                 image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
                     nonlin_flag=nonlin_flag)
                 image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+                image_sim.ext_hdr['SCTSRT'] = time_stack_test[idx_t]
             #to test the correct handling of cosmic ray flags
             if idx_t == 1:
                 image_sim.dq[400, 200:300] = 128
@@ -251,6 +256,7 @@ def test_expected_results_time_sub():
         index = index + len_list0[iG]
         for idx_t, t in enumerate(exp_time_loop):
             dataset_nl[idx_frame].ext_hdr['DATETIME'] = time_stack_test[idx_t]
+            dataset_nl[idx_frame].ext_hdr['SCTSRT'] = time_stack_test[idx_t]
             idx_frame += 1
 
     with warnings.catch_warnings():
