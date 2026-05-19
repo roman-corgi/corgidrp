@@ -83,9 +83,13 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     ref_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_science_analog", "L3")
+    if os.path.exists(ref_l3_output_dir):shutil.rmtree(ref_l3_output_dir)
     target_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_science_analog", "L3")
+    if os.path.exists(target_l3_output_dir):shutil.rmtree(target_l3_output_dir)
     ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_zeropoint", "L3")
+    if os.path.exists(ref_spot_l3_output_dir):shutil.rmtree(ref_spot_l3_output_dir)
     target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_zeropoint", "L3")
+    if os.path.exists(target_spot_l3_output_dir):shutil.rmtree(target_spot_l3_output_dir)
 
     cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "CPGS_betatest_041426.xml")
 
@@ -97,7 +101,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(target_satspot_path, target_spot_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger)
-    
+
     l3_files = []
     l3_psfref = sorted(glob.glob(os.path.join(ref_l3_output_dir, "cgi_*l3_.fits")))
     l3_files.extend(l3_psfref)

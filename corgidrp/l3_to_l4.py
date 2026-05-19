@@ -908,7 +908,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     return processed_dataset
 
 
-def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
+def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
     """ 
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -918,6 +918,10 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         spec_filter_offset (corgidrp.data.SpecFilterOffset): instance of SpecFilterOffset calibration class
         template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
                                                   path is taken
+        subtract_no_offset_frame (bool, optional): If True, the ''SATSPOTS=1'' frames are assumed to follow the three-group acquisition structure 
+        (no-offset / +offset / -offset). The no-offset median is subtracted from the offset median before star-center estimation to suppress static speckles and 
+        astrophysical sources. If False, all ''SATSPOTS=1'' frames are used directly as the offset (spot-bearing) median with no background subtraction and no 
+        three-group structure assumed. Defaults to True.
         xcent_guess (float): initial x guess for the centroid fit for all frames
         ycent_guess (float): initial y guess for the centroid fit for all frames
         bb_nb_dx (float): horizontal image offset between the narrowband and broadband filters, in EXCAM pixels. 
@@ -934,6 +938,8 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     dpamname = dataset.frames[0].ext_hdr["DPAMNAME"]
     if not dpamname.startswith("PRISM"):
         raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
+    if dataset.frames[0].ext_hdr["FPAMNAME"] == 'OPEN_34':
+        subtract_no_offset_frames = False
 
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
@@ -958,15 +964,75 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     else:
         raise AttributeError("No narrowband frames found in input dataset")
     
+
+    if subtract_no_offset_frames:
+        # First we split satspot dataset into ref/target satspot as their exposure times might be different
+        satspot_dataset, exptime = sat_dataset.split_dataset(exthdr_keywords=["EXPTIME"])
+
+        ref_sat_dataset = satspot_dataset[int(np.nonzero(exptime == exptime[0])[0].item())]
+        refstar_satspot_frames = []
+        for frame in ref_sat_dataset:
+            refstar_satspot_frames.append(frame)
+        # Split sat spot frames into the three acquisition groups by SCTSRT order.
+        # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
+        if len(refstar_satspot_frames) % 3 != 0:
+            raise ValueError(f"Expected the number of refstar SATSPOTS=1 frames to be divisible by 3 "
+                f"(no-offset / +offset / -offset groups), but got {len(refstar_satspot_frames)}.")
+        if all('SCTSRT' in f.ext_hdr for f in refstar_satspot_frames):
+            refstar_satspot_frames_sorted = sorted(refstar_satspot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
+        else:
+            refstar_satspot_frames_sorted = sorted(refstar_satspot_frames, key=lambda f: f.filename)
+        n_per_group = len(refstar_satspot_frames_sorted) // 3
+        no_offset_frames = refstar_satspot_frames_sorted[:n_per_group]
+        refstar_offset_frames = refstar_satspot_frames_sorted[n_per_group:]
+        
+        img_no_offset = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
+        for frame in data.Dataset(refstar_offset_frames):
+            frame.data = frame.data - img_no_offset
+
+        if len(exptime) == 1:
+            offset_dataset = data.Dataset(refstar_offset_frames)
+                
+        elif len(exptime) > 1:
+            target_sat_dataset = satspot_dataset[int(np.nonzero(exptime == exptime[1])[0].item())]
+            target_satspot_frames = []
+            for frame in target_sat_dataset:
+                target_satspot_frames.append(frame)
+            # Split sat spot frames into the three acquisition groups by SCTSRT order.
+            # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
+            if len(target_satspot_frames) % 3 != 0:
+                raise ValueError(f"Expected the number of targetstar SATSPOTS=1 frames to be divisible by 3 "
+                    f"(no-offset / +offset / -offset groups), but got {len(target_satspot_frames)}.")
+            if all('SCTSRT' in f.ext_hdr for f in target_satspot_frames):
+                target_satspot_frames_sorted = sorted(target_satspot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
+            else:
+                target_satspot_frames_sorted = sorted(target_satspot_frames, key=lambda f: f.filename)
+            n_per_group = len(target_satspot_frames_sorted) // 3
+            no_offset_frames = target_satspot_frames_sorted[:n_per_group]
+            target_offset_frames = target_satspot_frames_sorted[n_per_group:]
+                
+            img_no_offset = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
+            for frame in data.Dataset(target_offset_frames):
+                frame.data = frame.data - img_no_offset
+
+            offset_dataset = data.Dataset(np.concatenate([np.array(refstar_offset_frames),np.array(target_offset_frames)]))
+
+    else:
+        sat_spot_frames = []
+        for frame in sat_dataset:
+            sat_spot_frames.append(frame)
+        offset_frames = sat_spot_frames
+        offset_dataset = data.Dataset(offset_frames)
+
     if xcent_guess is not None and ycent_guess is not None:
-        n = len(sat_dataset)
+        n = len(offset_dataset)
         initial_cent = {"xcent": np.repeat(xcent_guess, n),
                         "ycent": np.repeat(ycent_guess, n)}
     else:
         initial_cent = None
-    spot_centroids = compute_psf_centroid(dataset = sat_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
+    spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
     
-    nb_filter = sat_dataset[0].ext_hdr["CFAMNAME"]
+    nb_filter = offset_dataset[0].ext_hdr["CFAMNAME"]
     bb_filter = nb_filter[0]
     cen_wave, _, _, _ = read_cent_wave(nb_filter)
     xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
@@ -990,8 +1056,8 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         frame.ext_hdr["WV0_XERR"] = x0err
         frame.ext_hdr["WV0_Y"] = y0
         frame.ext_hdr["WV0_YERR"] = y0err
-        frame.ext_hdr["WV0_DIMX"] = sat_dataset[0].ext_hdr['NAXIS1']
-        frame.ext_hdr["WV0_DIMY"] = sat_dataset[0].ext_hdr['NAXIS2']
+        frame.ext_hdr["WV0_DIMX"] = offset_dataset[0].ext_hdr['NAXIS1']
+        frame.ext_hdr["WV0_DIMY"] = offset_dataset[0].ext_hdr['NAXIS2']
                               
     history_msg = "wavelength zeropoint values added to header"
     sci_dataset.update_after_processing_step(history_msg)
