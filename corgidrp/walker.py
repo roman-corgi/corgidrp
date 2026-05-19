@@ -269,6 +269,23 @@ def autogen_recipe(filelist, outputdir, template=None):
             recipe_list.append(recipe)
         recipe_list_list.append(recipe_list)
 
+    # Print the recipes
+    print("\n" + "="*60)
+    if len(recipe_list_list) > 1:
+        print("Generated Recipe Chains:")
+        for chain_idx, recipe_list in enumerate(recipe_list_list):
+            print(f"\nChain {chain_idx + 1}:")
+            for recipe_idx, recipe in enumerate(recipe_list):
+                print(f"\n  Recipe {recipe_idx + 1}: {recipe['name']}" )
+    else:
+        if len(recipe_list_list[0]) > 1:
+            print("Generated Recipe Chain:")
+            for recipe_idx, recipe in enumerate(recipe_list_list[0]):
+                print(f"\nRecipe {recipe_idx + 1}: {recipe['name']}")
+        else:
+            print(f"Generated Recipe: {recipe_list_list[0][0]['name']}")
+    print("="*60 + "\n")
+
     # if list of chains, return that.  If single list, return that.  If single
     # recipe, return that. 
     if len(recipe_list_list) > 1: # list of chains
