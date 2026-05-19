@@ -3788,21 +3788,41 @@ class NDFilterSweetSpotDataset(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
             raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
 
-    def interpolate_od(self, x, y, method="nearest"):
+    def interpolate_od(self, x, y, method="nearest", image=None):
         """
-        Interpolates the data to get the OD at the requested x/y location
+        Interpolates the data to get the OD at the requested x/y location.
+
+        The calibration stores OD values at absolute EXCAM pixel coordinates
+        (i.e. coordinates in the full 1024×1024 detector frame).  When the
+        query image is a cropped sub-frame, pass it as ``image`` and the
+        function will automatically add the ``DETPIX0X``/``DETPIX0Y`` header
+        values (set by ``l2b_to_l3.crop``) to convert ``x``/``y`` from
+        cropped-frame pixel coordinates to absolute EXCAM coordinates before
+        interpolating.  If those keywords are absent the offsets default to 0,
+        so the call is also correct for full-frame (uncropped) images.
 
         Args:
-            x (float): x detector pixel location
-            y (float): y detector pixel location
-            method (str): only "nearest" supported currently
-        
+            x (float): x pixel location in the science frame's own coordinate system.
+            y (float): y pixel location in the science frame's own coordinate system.
+            method (str): only "nearest" supported currently.
+            image (corgidrp.data.Image, optional): the science Image whose pixel
+                coordinates ``x``/``y`` were measured in.  When provided,
+                ``DETPIX0X`` and ``DETPIX0Y`` are read from its extension
+                header to remap frame coordinates to absolute EXCAM coordinates.
+                Defaults to None (no remapping applied).
+
         Returns:
             float: the OD at the requested point
         """
+        detpix0x = 0
+        detpix0y = 0
+        if image is not None:
+            detpix0x = image.ext_hdr.get('DETPIX0X', 0)
+            detpix0y = image.ext_hdr.get('DETPIX0Y', 0)
+
         interpolator = LinearNDInterpolator(np.array([self.x_values, self.y_values]).T, self.od_values)
 
-        return interpolator(x, y)
+        return interpolator(x + detpix0x, y + detpix0y)
 
 class NDSpectroscopy(Image):
     """
