@@ -14,7 +14,7 @@ import corgidrp.mocks as mocks
 import corgidrp.caldb as caldb
 import corgidrp.walker as walker
 import corgidrp.detector as detector
-
+import datetime
 np.random.seed(456)
 
 def test_autoreducing():
@@ -688,6 +688,73 @@ def test_l1_to_l2b_default_calibs():
             f"Expected DATALVL='L2b' in {output_file}, got {img.ext_hdr['DATALVL']!r}"
         )
 
+def test_pc_science_analog_satspots(): 
+    # create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+    image_shape=(201, 201)
+    bg_sigma=1.0
+    bg_offset=10.0
+    gaussian_fwhm=5.0
+    separation=14.79
+    star_center=None
+    angle_offset=0
+    amplitude_multiplier=100
+    observing_mode='NFOV'
+
+    prihdr, exthdr, errhdr, dqhdr,biashdr = mocks.create_default_L2a_headers(arrtype="SCI")
+    sci_image = mocks.create_synthetic_satellite_spot_image(
+        image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+        separation, star_center, angle_offset,
+        amplitude_multiplier=0
+    )
+    sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    sci_frame.ext_hdr["SATSPOTS"] = False
+
+    # Generate CGI filename with incrementing datetime for science frames
+    visitid = sci_frame.pri_hdr["VISITID"]
+    base_time = datetime.datetime.now()
+    #time_offset = datetime.timedelta(seconds=)
+    #unique_time = base_time + time_offset
+    time_str = data.format_ftimeutc(base_time.isoformat())
+    sci_frame.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+
+    satspot_image = mocks.create_synthetic_satellite_spot_image(
+                image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+                separation, star_center, angle_offset, amplitude_multiplier
+            )
+    satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    satspot_frame.ext_hdr["SATSPOTS"] = True
+            
+    # Generate CGI filename with incrementing datetime for satellite spot frames
+    visitid = satspot_frame.pri_hdr["VISITID"]
+    base_time = datetime.datetime.now()
+    time_offset = datetime.timedelta(seconds=1000)  # Offset to avoid conflicts with science frames
+    unique_time = base_time + time_offset
+    time_str = data.format_ftimeutc(unique_time.isoformat())
+    satspot_frame.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+    #satspot_frames.append(satspot_frame)
+        
+    all_frames = [sci_frame, satspot_frame]
+    dataset = data.Dataset(all_frames)
+    dataset.save()
+    filelist = [frame.filepath for frame in dataset]
+    
+    templates, chained = walker.guess_template(dataset)
+    assert chained == True
+    assert len(templates)==2
+    assert len(templates[0]==3)
+    assert len(templates[1]==1)
+
+    recipes = walker.autogen_recipe(filelist, outputdir)
+    assert len(recipes) == 2
+    assert recipes[0][0]["inputs"] == sci_frame.filename
+    assert recipes[1][0]["inputs"] == satspot_frame.filename
 
 if __name__ == "__main__":#
     test_autoreducing()
@@ -699,5 +766,6 @@ if __name__ == "__main__":#
     test_generate_multiple_recipes()
     test_cpgs_satspots()
     test_l1_to_l2b_default_calibs()
+    test_pc_science_analog_satspots()
 
 
