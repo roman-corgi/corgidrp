@@ -96,7 +96,6 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
             time_offset = timedelta(milliseconds=i)
             unique_time = basetime + time_offset
             img.ext_hdr['FILETIME'] = unique_time.isoformat()
-            img.pri_hdr['VISTYPE'] = 'CGIVST_CAL_SPEC_TGTREF'
         
         # Rename Image objects directly to CGI format
         renamed_files = rename_files_to_cgi_format(list_of_fits=psf_images, output_dir=e2edata_path, level_suffix="l2b", pattern=None)
@@ -152,7 +151,8 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     recipe = walk_corgidrp(
         filelist=saved_files, 
         CPGS_XML_filepath="",
-        outputdir=e2eoutput_path
+        outputdir=e2eoutput_path,
+        template="l2b_to_spec_prism_disp.json"
     )
     logger.info("")
     
@@ -205,6 +205,7 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Load and display dispersion model results
+    cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits', logger)
     disp_model = DispersionModel(cal_file)
 
     coeffs = disp_model.pos_vs_wavlen_polycoeff

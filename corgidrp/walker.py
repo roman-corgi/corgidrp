@@ -401,12 +401,8 @@ def guess_template(dataset):
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", 'l2b_to_spec_linespread.json']
             chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_TGTREF':
-            if image.ext_hdr['FPAMNAME'].startswith('OPEN'):               #L1 -> spec dispersion calibration
-                recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b_spec.json","l2b_to_spec_prism_disp.json"]
-                chained = True
-            else:
-                recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b_spec.json","l2b_to_l3.json","l3_to_l4_noncoron_spec.json"]
-                chained = True
+            recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b_spec.json","l2b_to_l3.json","l3_to_l4_noncoron_spec.json"]
+            chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TGTREF_PHOT' and image.ext_hdr['DPAMNAME'] not in ['POL0','POL45']:
             recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b.json","l2b_to_l3.json","l3_to_l4_nopsfsub.json"]
             chained = True
@@ -476,8 +472,6 @@ def guess_template(dataset):
             recipe_filename = "l2b_to_polcal.json"
         elif image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l2b_to_l3_pol.json"
-        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_TGTREF':
-            recipe_filename = "l2b_to_spec_prism_disp.json"
         elif 'TDD' not in image.pri_hdr['VISTYPE']:
             warnings.warn("Only VISTYPE TDD and certain cal frames should be processed beyond L2b. Double-check which frames are being processed from L2b -> L3.")
             recipe_filename = "l2b_to_l3.json"

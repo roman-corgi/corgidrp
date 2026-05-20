@@ -180,10 +180,6 @@ def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
     if os.path.exists(test_outputdir):
         shutil.rmtree(test_outputdir)
     os.makedirs(test_outputdir)
-    
-    l1_inputdir = os.path.join(test_outputdir, "l1_input")
-    if not os.path.exists(l1_inputdir):
-        os.makedirs(l1_inputdir)
 
     calibrations_dir = os.path.join(test_outputdir, 'calibrations')
     if not os.path.exists(calibrations_dir):
@@ -203,10 +199,47 @@ def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
     l1_data_filelist=[os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in range(len(os.listdir(l1_datadir))) if os.listdir(l1_datadir)[i].endswith("l1_.fits")]
     
     ####### Run the walker on some test_data
+    # ------------------------------------------------------------------ 
+    # L1 -> L2a                                                        
+    # ------------------------------------------------------------------ 
+    print("Running L1 -> L2a …")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l1_data_filelist, "", l2b_outputdir)
+        walker.walk_corgidrp(l1_data_filelist, "", l2b_outputdir,
+                             template="l1_to_l2a_basic.json")
 
+    l2a_filelist = sorted(
+        os.path.join(l2b_outputdir, f)
+        for f in os.listdir(l2b_outputdir) if f.endswith('_l2a.fits')
+    )
+    print(f"L1 -> L2a complete: {len(l2a_filelist)} L2a files produced.")
+    
+    # ------------------------------------------------------------------ 
+    # L2a -> L2b                                                        
+    # ------------------------------------------------------------------ 
+    print("Running L2a -> L2b …")
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=UserWarning)
+        walker.walk_corgidrp(l2a_filelist, "", l2b_outputdir,
+                             template="l2a_to_l2b_spec.json")
+
+    l2b_filelist = sorted(
+        os.path.join(l2b_outputdir, f)
+        for f in os.listdir(l2b_outputdir) if f.endswith('_l2b.fits')
+    )
+    print(f"L2a -> L2b complete: {len(l2b_filelist)} L2b files produced.")
+    
+        # ------------------------------------------------------------------ 
+    # L2b -> spec dispersion                                                        
+    # ------------------------------------------------------------------ 
+    print("Running L2b -> DispersionModel …")
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=UserWarning)
+        walker.walk_corgidrp(l2b_filelist, "", l2b_outputdir,
+                             template="l2b_to_spec_prism_disp.json")
+
+    print(f"L2b -> DispersionModel complete.")
+    
     ####### Load in the output data. It should be the latest line spread calibration file produced.
     dispersion_cal_file = glob.glob(os.path.join(l2b_outputdir, '*dpm_cal*.fits'))[0]
     dispersion = data.DispersionModel(dispersion_cal_file)
