@@ -705,9 +705,9 @@ def test_pc_science_analog_satspots():
     star_center=None
     angle_offset=0
     amplitude_multiplier=100
-    #observing_mode='NFOV'
 
     prihdr, exthdr, errhdr, dqhdr,biashdr = mocks.create_default_L2a_headers(arrtype="SCI")
+
     sci_image = mocks.create_synthetic_satellite_spot_image(
         image_shape, bg_sigma, bg_offset, gaussian_fwhm,
         separation, star_center, angle_offset,
@@ -717,45 +717,45 @@ def test_pc_science_analog_satspots():
     sci_frame.ext_hdr["SATSPOTS"] = False
     sci_frame.ext_hdr["ISPC"] = True
 
-    # Generate CGI filename with incrementing datetime for science frames
-    visitid = sci_frame.pri_hdr["VISITID"]
-    base_time = datetime.datetime.now()
-    #time_offset = datetime.timedelta(seconds=)
-    #unique_time = base_time + time_offset
-    time_str = data.format_ftimeutc(base_time.isoformat())
-    sci_frame.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
-
     satspot_image = mocks.create_synthetic_satellite_spot_image(
                 image_shape, bg_sigma, bg_offset, gaussian_fwhm,
                 separation, star_center, angle_offset, amplitude_multiplier
             )
     satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
     satspot_frame.ext_hdr["SATSPOTS"] = True
-            
-    # Generate CGI filename with incrementing datetime for satellite spot frames
-    visitid = satspot_frame.pri_hdr["VISITID"]
-    base_time = datetime.datetime.now()
-    time_offset = datetime.timedelta(seconds=1000)  # Offset to avoid conflicts with science frames
-    unique_time = base_time + time_offset
-    time_str = data.format_ftimeutc(unique_time.isoformat())
-    satspot_frame.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
-    #satspot_frames.append(satspot_frame)
-        
-    all_frames = [sci_frame, satspot_frame]
-    dataset = data.Dataset(all_frames)
-    dataset.save()
-    filelist = [frame.filepath for frame in dataset]
     
-    templates, chained = walker.guess_template(dataset)
-    assert len(templates)==2
-    assert len(templates[0])==3
-    assert len(templates[1])==1
-    assert chained == True
+    for dpamname in ['IMAGING', 'PRISM3', 'POL0']:
+        sci_frame.ext_hdr["DPAMNAME"] = dpamname
+        visitid = sci_frame.pri_hdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_str = data.format_ftimeutc(base_time.isoformat())
+        sci_frame.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
 
-    recipes = walker.autogen_recipe(filelist, outputdir)
-    assert len(recipes) == 2
-    assert recipes[0][0]["inputs"][0] == sci_frame.filename
-    assert recipes[1][0]["inputs"][0] == satspot_frame.filename
+
+        satspot_frame.ext_hdr["DPAMNAME"] = dpamname
+        time_offset = datetime.timedelta(seconds=1000)  # Offset to avoid conflicts with science frames
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        satspot_frame.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+        
+        all_frames = [sci_frame, satspot_frame]
+        dataset = data.Dataset(all_frames)
+        dataset.save()
+        filelist = [frame.filepath for frame in dataset]
+        
+        templates, chained = walker.guess_template(dataset)
+        assert len(templates)==2
+        assert len(templates[0])==3
+        assert len(templates[1])==1
+        assert chained == True
+
+        recipes = walker.autogen_recipe(filelist, outputdir)
+        assert len(recipes) == 2
+        assert recipes[0][0]["inputs"][0] == sci_frame.filename
+        assert recipes[1][0]["inputs"][0] == satspot_frame.filename
+
+        for file in filelist:
+            os.remove(file)
 
 if __name__ == "__main__":#
     test_autoreducing()
