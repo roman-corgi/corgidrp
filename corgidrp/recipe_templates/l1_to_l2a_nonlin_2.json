@@ -51,6 +51,12 @@
             }
         },
         {
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
             "name" : "save"
         }
     ]

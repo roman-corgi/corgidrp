@@ -51,6 +51,12 @@
             }
 	},
 	{
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
+	},
+	{
 	    "name" : "calibrate_kgain",
 	    "keywords" : {
 	        "detector_regions" : {

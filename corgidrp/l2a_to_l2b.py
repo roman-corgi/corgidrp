@@ -538,7 +538,12 @@ def desmear(input_dataset, detector_params):
     """
 
     data = input_dataset.copy()
-    data_cube = data.all_data
+    # we don't want to desmear things that were not smeared, like cosmic rays and their tails
+    # Best we can do:  Take median of pixels surrounding the cosmic ray ones to get an estimate of the true signal 
+    # and use that for the desmearing calculation.  For saturated non-cosmic-ray pixels, 
+    # best we can do:  assume the flux incident on that physical region is comparable to what's represented in the counts there. 
+    # This way, we at least partially correct for the smearing in those regions.
+    data_cube = np.ma.masked_array(data.all_data, mask=data.all_dq.astype(bool))
 
     rowreadtime_sec = detector_params.params['ROWREADT']
 

@@ -4277,7 +4277,7 @@ def get_bit_to_flag_map():
     """
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
 
-def selective_dq(dq, val=32):
+def selective_dq(dq, val=128):
     '''Reduces the DQ map to just the flags valued at val.  This allows the ability to mask a frame because 
     of a single DQ flag without regard to other flags. 
     
@@ -4290,12 +4290,12 @@ def selective_dq(dq, val=32):
 
     Args:
         dq (array-like): DQ map where each pixel's value is a combination of powers of 2 corresponding to different flags.  For example, if a pixel has a value of 34, it means that it has flags corresponding to 32 and 2.
-        val (int): The specific flag value to identify in the DQ map.  Defaults to 32 for saturation.
+        val (int): The specific flag value to identify in the DQ map.  Defaults to 128 for cosmic rays.
 
     Returns:
-        cosmic_pixels (array-like): A map where pixels that had the specified flag value in the original DQ map are marked as val, and all other pixels are marked as 0.
+        selected_dq (array-like): A map where pixels that had the specified flag value in the original DQ map are marked as val, and all other pixels are marked as 0.
     '''
-    cosmic_pixels = np.zeros_like(dq).astype(float)
+    selected_dq = np.zeros_like(dq).astype(float)
     temp_dq = dq.copy().astype(float)
     nan_rows = np.array([]) # initialize
     while nan_rows.size < temp_dq.size:
@@ -4303,10 +4303,10 @@ def selective_dq(dq, val=32):
         temp_dq[bad_rows, bad_cols] = np.nan
         highest_power = np.floor(np.log(temp_dq)/np.log(2))
         cosmic_rows, cosmic_cols = np.where(2**(highest_power) == val)
-        cosmic_pixels[cosmic_rows,cosmic_cols] = val
+        selected_dq[cosmic_rows,cosmic_cols] = val
         temp_dq = temp_dq - 2**(highest_power)
         nan_rows, nan_cols = np.where(np.isnan(temp_dq))
-    return cosmic_pixels
+    return selected_dq
 
 
 def get_stokes_intensity_image(stokes_image):
