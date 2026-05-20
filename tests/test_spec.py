@@ -470,9 +470,15 @@ def test_determine_zeropoint():
         ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
         ext_hdr['CFAMNAME'] = '3'
         ext_hdr['SCTSRT'] = frame_time.isoformat()
-        if i == 12:
+        # We need three satspot frames, with no offset/+offset/-offset. Test dataset has just one satspot frame, which has +offset (possibly).
+        # We create a fake no_offset (background) satspot frame using np.zeros and a second offset satspot frame by duplicating the pre-existing satspot frame in the test dataset
+        # In next few lines, we only create the data_2d_copy needed for frame faking/duplication
+        if i == 11: 
+            data_2d_copy = np.zeros_like(data_2d)
+        elif i == 12:
             ext_hdr["SATSPOTS"] = True
             ext_hdr['CFAMNAME'] = '3D'
+            data_2d_copy = np.copy(data_2d)
         else:
             ext_hdr["SATSPOTS"] = False
         err = np.zeros_like(data_2d)
@@ -485,21 +491,18 @@ def test_determine_zeropoint():
             dq=dq
         )
         psf_images.append(image)
-        if i == 11:       #With rule of threes, we need three satspot frames. We get it by creating a zeros frame as no_offset satspot frame and duplicating the original satspot frame in the test dataset
-            image_copy=copy.deepcopy(image)
+        if i in [11,12]: # Actually generating the additional satspot frames using data_2d_copy
             frame_time += timedelta(seconds=3)
-            image_copy.ext_hdr['SCTSRT'] = frame_time.isoformat()
-            image_copy.ext_hdr["SATSPOTS"] = True
-            image_copy.ext_hdr['CFAMNAME'] = '3D'
-            image_copy.data = np.zeros(np.shape(image.data))
-            image_copy.err = np.zeros(np.shape(image.err))
-            psf_images.append(image_copy)
-        elif i == 12:      
-            image_copy=copy.deepcopy(image)
-            frame_time += timedelta(seconds=3)
-            image_copy.ext_hdr['SCTSRT'] = frame_time.isoformat()
-            image_copy.ext_hdr["SATSPOTS"] = True
-            image_copy.ext_hdr['CFAMNAME'] = '3D'
+            ext_hdr['SCTSRT'] = frame_time.isoformat()
+            ext_hdr["SATSPOTS"] = True
+            ext_hdr['CFAMNAME'] = '3D'
+            image_copy = Image(
+                data_or_filepath=data_2d_copy,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr.copy(),
+                err=err,
+                dq=dq
+            )
             psf_images.append(image_copy)
 
     # Load the filter-to-filter image offsets to correct for the location of the narrowband centroid
