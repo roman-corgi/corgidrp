@@ -306,6 +306,11 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
 
     for i, frame in enumerate(pruned_dataset.frames):
         reject_reasons[i] = [] # list of rejection reasons
+        # Reject frames already marked bad by an upstream step.
+        if frame.ext_hdr.get('IS_BAD', False):
+            reject_flags[i] += 64
+            reject_reasons[i].append("IS_BAD = T")
+
         if bpix_frac < 1:
             masked_dq = np.bitwise_and(frame.dq, disallowed_bits) # handle allowed_bpix values
             numbadpix = np.size(np.where(masked_dq > 0)[0])

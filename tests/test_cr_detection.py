@@ -884,6 +884,25 @@ def test_EM_gain_1():
 
     assert (np.array_equal(dataset_masked[0].dq, check_mask))
 
+def test_oversaturated_frames_are_marked_not_removed():
+    """
+    Tests that oversaturated frames are kept, marked bad, and skipped by CR detection.
+    """
+    #mock dataset, saturate a frame
+    dataset = mocks.create_cr_dataset(nonlin_fits_filepath, filedir=datadir, numfiles=2, numCRs=0)
+    dataset[0].data[:] = 1e9
+
+
+    output_dataset = detect_cosmic_rays(dataset, detector_params, k_gain, pct_oversat_lim=20)
+    # saturated frame should stay in the dataset, but be marked bad for later rejection.
+    assert len(output_dataset) == len(dataset)
+    assert output_dataset[0].ext_hdr['IS_BAD'] is True
+    assert output_dataset[1].ext_hdr.get('IS_BAD', False) is False
+
+    # since CR detection was skipped for this frame it should only have saturation DQ
+    assert np.all(output_dataset[0].dq > 0)
+    assert np.all(np.bitwise_and(output_dataset[0].dq, 128) == 0)
+
 if __name__ == "__main__":
     test_EM_gain_1()
     test_iit_vs_corgidrp()
@@ -906,3 +925,4 @@ if __name__ == "__main__":
     test_cosm_tail_2()
     test_cosm_tail_bleed_over()
     test_remove_sat_images()
+    test_oversaturated_frames_are_marked_not_removed()

@@ -164,8 +164,9 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
     # define the raw science data to process
 
-    l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
 
+    l1_filenames=sorted(os.listdir(l1_datadir))
+    l1_data_filelist=[os.path.join(l1_datadir,l1_filenames[i]) for i in [0,3]]
     # Update headers for TVAC files
     l1_data_filelist = check.fix_hdrs_for_tvac(l1_data_filelist, input_data_dir)
 

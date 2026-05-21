@@ -255,15 +255,26 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         frame.ext_hdr['FWC_EM_E'] = fwcem_e_arr[i]
         frame.ext_hdr['SAT_DN'] = initial_sat_fwcs[i]
 
-    # Remove images that are too saturated to remove cosmics in a timely manner
-    crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim, dataset_copy=dataset_copy)
+
+    crmasked_dataset = initial_dataset
     crmasked_cube = crmasked_dataset.all_data
+    sat_fwcs = initial_sat_fwcs
+
+    # keep oversaturated frames, but mark them bad and skip the expensive CR search.
+    oversat_frames = set()
+    for i, frame in enumerate(crmasked_dataset.frames):
+        pct_frame_sat = ((frame.data > sat_fwcs[i]).sum() / frame.data.size) * 100
+        if pct_frame_sat > pct_oversat_lim:
+            frame.ext_hdr['IS_BAD'] = True
+            oversat_frames.add(i)
 
     sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])
 
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
     m1 = (crmasked_cube >= sat_fwcs_array) * sat_dqval
+    for i in oversat_frames:
+        m1[i, :, :] = sat_dqval
     # Mask 2:  captures cosmic rays.  If EM gain is 1, no cosmic tails made since 
     # those are only made in gain register.  
     # Do a for loop since it's calling a for loop in the sub-routine anyway
@@ -277,6 +288,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             break
 
     for i in range(len(crmasked_cube)):
+        if i in oversat_frames:
+            continue
+
         arrtype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
         if emgain_list[i] == 1:
             cosm_tail_i = 0

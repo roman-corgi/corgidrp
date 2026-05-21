@@ -184,10 +184,30 @@ def test_marking():
     # and last 2 are bad
     for frame in pruned_dataset[3:]:
         assert frame.ext_hdr['IS_BAD'] == True
+def test_preexisting_is_bad_rejected():
+    """
+    Tests that frames marked bad by an upstream step are rejected.
+    """
 
+    # simulate an upstream step marking the whole frame bad.
+    default_dataset = mocks.create_dark_calib_files(numfiles=5)
+    default_dataset[0].ext_hdr['IS_BAD'] = True
+
+    # by default, frame_select should drop frames already marked IS_BAD
+    pruned_dataset = frame_select(default_dataset)
+
+    assert len(pruned_dataset) == 4
+    assert all(frame.ext_hdr.get('IS_BAD', False) is False for frame in pruned_dataset)
+
+    # With discard_bad=False, the bad frame should be kept but still marked.
+    marked_dataset = frame_select(default_dataset, discard_bad=False)
+
+    assert len(marked_dataset) == 5
+    assert marked_dataset[0].ext_hdr['IS_BAD'] is True
 if __name__ == "__main__":
     test_no_selection()
     test_bpfrac_cutoff()
     test_overexp()
     test_tt_rms()
     test_remove_all()
+    test_preexisting_is_bad_rejected()
