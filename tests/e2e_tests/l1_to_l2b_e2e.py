@@ -157,9 +157,9 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
                         err=np.zeros((1,) + bp_dat.shape, dtype=float),
                         dq=np.zeros(bp_dat.shape, dtype='uint16'),
                         err_hdr=fits.Header())
-    bp_map_inputs = data.Dataset([bp_dark, flat])
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
-    mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
+    bp_map_inputs=data.Dataset([bp_dark,flat])
+    bp_map=data.BadPixelMap(bp_dat,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset=bp_map_inputs)
+    bp_map.save(filedir=calibrations_dir)
     this_caldb.create_entry(bp_map)
 
     # define the raw science data to process
