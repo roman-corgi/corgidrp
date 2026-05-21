@@ -193,8 +193,20 @@ def test_tpump_analysis():
                         input_T=input_T,
                         bins_E=bins_E, bins_cs=bins_cs)
     # filename check
-    test_filename = emgain_divided_dataset.frames[-1].filename.split('.fits')[0] + '_tpu_cal.fits'
-    test_filename = re.sub('_l[0-9].', '', test_filename)
+    sctsrt_values = [frame.ext_hdr.get('SCTSRT') for frame in emgain_divided_dataset
+                     if frame.ext_hdr.get('SCTSRT') is not None]
+    if len(sctsrt_values) == len(emgain_divided_dataset):
+        latest_frame = max(enumerate(emgain_divided_dataset),
+                           key=lambda item: (str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+    else:
+        latest_frame = max(enumerate(emgain_divided_dataset),
+                           key=lambda item: (
+                               next((name.split('_')[2]
+                                     for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')]
+                                     if name and len(name.split('_')) > 2), ''),
+                               item[0]))[1]
+    latest_filename = latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+    test_filename = re.sub('_l[0-9].', '_tpu_cal', latest_filename)
     assert tpump_calibration.filename == test_filename
 
     #Extract the extra info. 

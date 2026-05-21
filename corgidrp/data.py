@@ -866,10 +866,6 @@ class Dark(Image):
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-                # get visitid
-                if latest_frame.pri_hdr.get('VISITID') is not None:
-                    # assign it to output product
-                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # append filename convention and set it as new filename
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
@@ -974,10 +970,6 @@ class FlatField(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with calibration suffix
             self.filename=re.sub('_l[0-9].','_flt_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
@@ -1032,10 +1024,6 @@ class SpectroscopyCentroidPSF(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # append filename convention and set it as new filename
             # remove .fits extension
             base=latest_filename.split(".fits")[0]
@@ -1127,10 +1115,6 @@ class LineSpread(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # append filename convention and set it as new filename
             # remove .fits extension
             base=latest_filename.split(".fits")[0]
@@ -1537,10 +1521,6 @@ class NonLinearityCalibration(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with nln calibration suffix
             self.filename=re.sub('_l[0-9].','_nln_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
@@ -1638,10 +1618,6 @@ class KGain(Image):
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-                # get visitid
-                if latest_frame.pri_hdr.get('VISITID') is not None:
-                    # assign it to output product
-                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # use latest frame filename and replace level suffix with krn calibration suffix
                 self.filename=re.sub('_l[0-9].','_krn_cal',latest_filename)
                 self.pri_hdr['FILENAME'] = self.filename
@@ -1786,10 +1762,6 @@ class BadPixelMap(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to bpm
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
 
             # replace flat or dark w/ bpm
             if "_flt_cal" in latest_filename:
@@ -1880,10 +1852,6 @@ class DetectorNoiseMaps(Image):
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-                # get visitid
-                if latest_frame.pri_hdr.get('VISITID') is not None:
-                    # assign it to output product
-                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
             else:
@@ -2181,10 +2149,6 @@ class AstrometricCalibration(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # remove .fits extension
             orig_input_filename=latest_filename.split(".fits")[0]
             # append filename convention and set it as new filename
@@ -2263,10 +2227,6 @@ class TrapCalibration(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with tpu calibration suffix
             self.filename=re.sub('_l[0-9].','_tpu_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
@@ -2340,9 +2300,15 @@ class FluxcalFactor(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # get latest timestamp frame name
-                latest_frame=max(input_dataset,key=lambda frame:(frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
@@ -2426,10 +2392,6 @@ class FluxcalFactor(Image):
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-                # get visitid
-                if latest_frame.pri_hdr.get('VISITID') is not None:
-                    # assign it to output product
-                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
 
@@ -2495,10 +2457,16 @@ class SpecFluxCal(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # get latest timestamp frame name
-                latest_frame = max(input_dataset, key=lambda frame: (frame.filename or frame.pri_hdr['FILENAME']).split('_')[2])
-                # use latest frame filename
-                latest_filename = latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
                 # remove .fits extension
                 orig_input_filename = latest_filename.split(".fits")[0]
 
@@ -2570,10 +2538,6 @@ class SpecFluxCal(Image):
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-                # get visitid
-                if latest_frame.pri_hdr.get('VISITID') is not None:
-                    # assign it to output product
-                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
   
@@ -2652,10 +2616,6 @@ class SlitTransmission(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # append filename convention and set it as new filename
             # remove .fits extension
             base=latest_filename.split(".fits")[0]
@@ -3027,10 +2987,6 @@ class CoreThroughputCalibration(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with ctp calibration suffix
             self.filename=re.sub('_l[0-9].','_ctp_cal',latest_filename)
 
@@ -3496,10 +3452,6 @@ class CoreThroughputMap(Image):
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-                # get visitid
-                if latest_frame.pri_hdr.get('VISITID') is not None:
-                    # assign it to output product
-                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # use latest frame filename and replace suffix with ctm calibration suffix
                 self.filename=re.sub('_l[0-9].','_ctm_cal',latest_filename)
                 self.pri_hdr['FILENAME']=self.filename
@@ -4043,10 +3995,6 @@ class NDFilterSweetSpotDataset(Image):
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-                # get visitid
-                if latest_frame.pri_hdr.get('VISITID') is not None:
-                    # assign it to output product
-                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # use latest frame filename and replace level suffix with ndf calibration suffix
                 self.filename=re.sub('_l[0-9].','_ndf_cal',latest_filename)
             # if no input_dataset is given, do we want to set the filename manually using 
@@ -4214,10 +4162,6 @@ class NDSpectroscopy(Image):
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-                # get visitid
-                if latest_frame.pri_hdr.get('VISITID') is not None:
-                    # assign it to output product
-                    self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
                 # append filename convention and set it as new filename
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
@@ -4295,10 +4239,6 @@ class MuellerMatrix(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with mmx calibration suffix
             self.filename=re.sub('_l[0-9].','_mmx_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename          
@@ -4380,10 +4320,6 @@ class NDMuellerMatrix(Image):
                 latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-            # get visitid
-            if latest_frame.pri_hdr.get('VISITID') is not None:
-                # assign it to output product
-                self.pri_hdr['VISITID']=latest_frame.pri_hdr['VISITID']
             # use latest frame filename and replace level suffix with ndm calibration suffix
             self.filename=re.sub('_l[0-9].','_ndm_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename          
