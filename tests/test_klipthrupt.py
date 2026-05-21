@@ -203,7 +203,7 @@ def test_inject_psf():
     # Test Rotation
     sep = 5.0
     pa = 0.0
-    pa_aper_deg = 90.0
+    pa_aper_deg = -90.0
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx+5)
 
@@ -218,6 +218,7 @@ def test_inject_psf():
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
     
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak
 
@@ -741,7 +742,8 @@ def test_psfsub_withklipandctmeas_adi(coro_type,FOV,band):
  
     st_amp = 100.
     noise_amp = 1e-3
-    pl_contrast = 3e-4 
+    pl_contrast = 3e-4
+    #pl_contrast = 1e-1  
     pl_amp = st_amp * pl_contrast
     pl_loc = (20.,0.)
     est_pl_snr = pl_amp / noise_amp
@@ -754,6 +756,21 @@ def test_psfsub_withklipandctmeas_adi(coro_type,FOV,band):
                                             pl_sep=pl_loc[0],
                                             data_shape=data_shape,
                                 )
+    #import matplotlib.pyplot as plt
+    #fig,axes = plt.subplots(1,2,sharey=True,layout='constrained',figsize=(8,3))
+    #im0 = axes[0].imshow(mock_sci[0].data,origin='lower')
+    #plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    #axes[0].set_title(f'Output data')
+    #im1 = axes[1].imshow(mock_sci[1].data,origin='lower')
+    #plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    #axes[1].set_title('Analytical result')
+    #diff = psfsub_dataset[0].data[0] - analytical_result
+    #im2 = axes[2].imshow(diff,origin='lower')
+    #plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    #axes[2].set_title('Difference')
+    #plt.suptitle(f'PSF Subtraction {psfsub_dataset[0].pri_hdr["KLIP_ALG"]} ({psfsub_dataset[0].ext_hdr["KLMODE0"]} KL Modes)')
+    #plt.show()  
+
     if coro_type == "SPC":
         for im in mock_sci:
             im.ext_hdr['SPAMNAME'] = FOV
@@ -783,26 +800,26 @@ def test_psfsub_withklipandctmeas_adi(coro_type,FOV,band):
     
 
     # # Plot Psf subtraction result
-    # if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
-    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
-    # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
-    #     analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-pa_aper_degs[1],reshape=False,cval=0)) / 2
-    # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
-    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-pa_aper_degs[1],reshape=False,cval=0)) / 2
-    # import matplotlib.pyplot as plt
-    # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-    # im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
-    # plt.colorbar(im0,ax=axes[0],shrink=0.8)
-    # axes[0].set_title(f'Output data')
-    # im1 = axes[1].imshow(analytical_result,origin='lower')
-    # plt.colorbar(im1,ax=axes[1],shrink=0.8)
-    # axes[1].set_title('Analytical result')
-    # diff = psfsub_dataset[0].data[0] - analytical_result
-    # im2 = axes[2].imshow(diff,origin='lower')
-    # plt.colorbar(im2,ax=axes[2],shrink=0.8)
-    # axes[2].set_title('Difference')
-    # plt.suptitle(f'PSF Subtraction {psfsub_dataset[0].pri_hdr["KLIP_ALG"]} ({psfsub_dataset[0].ext_hdr["KLMODE0"]} KL Modes)')
-    # plt.show()    
+    #if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
+    #  analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
+    #elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
+    #  analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-pa_aper_degs[1],reshape=False,cval=0)) / 2
+    #elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
+    # analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-pa_aper_degs[1],reshape=False,cval=0)) / 2
+    
+    #fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    #im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
+    #plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    #axes[0].set_title(f'Output data')
+    #im1 = axes[1].imshow(analytical_result,origin='lower')
+    #plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    #axes[1].set_title('Analytical result')
+    #diff = psfsub_dataset[0].data[0] - analytical_result
+    #im2 = axes[2].imshow(diff,origin='lower')
+    #plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    #axes[2].set_title('Difference')
+    #plt.suptitle(f'PSF Subtraction {psfsub_dataset[0].pri_hdr["KLIP_ALG"]} ({psfsub_dataset[0].ext_hdr["KLMODE0"]} KL Modes)')
+    #plt.show()    
 
     # Check that klip and ct separations are the same
     kt = psfsub_dataset[0].hdu_list['KL_THRU'].data
@@ -915,6 +932,8 @@ def test_psfsub_withklipandctmeas_adi(coro_type,FOV,band):
     pl_counts = np.pi * pl_amp * fwhm_pix**2 / 4. / np.log(2.)
     recovered_pl_counts = np.pi * postklip_peak * post_fwhm**2 / 4. / np.log(2.)
     recovered_pl_counts_ktcorrected = recovered_pl_counts / pl_kt
+    #print(pl_counts)
+    #print(recovered_pl_counts_ktcorrected)
 
 
     assert pl_counts == pytest.approx(recovered_pl_counts_ktcorrected,rel = 0.10) 

@@ -66,7 +66,7 @@ def inject_psf(frame_in, ct_calibration, amp,
 
     # Get closest psf model
     pa_aper_deg = frame.pri_hdr['PA_APER']
-    rel_pa = pa_deg - pa_aper_deg
+    rel_pa = pa_deg + pa_aper_deg
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
     psf_model = get_closest_psf(ct_calibration,

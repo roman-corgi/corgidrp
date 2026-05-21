@@ -385,10 +385,12 @@ def test_prop_err_dq_adi():
     mock_sci.all_dq[1,98,98] = 4   # This should not become flagged
     
     expected_dqs = np.zeros_like(mock_sci.all_dq[0])
-    expected_dqs[5,5] = 1
+    expected_dqs[95,95] = 1
+    #expected_dqs[5,5] = 1
     expected_dqs[95,5] = 1
 
     dqs, errs = combine.prop_err_dq(mock_sci,mock_ref,mode,dq_thresh)
+    
 
     # Check shape of output dq & err arrays
     assert dqs.shape == mock_sci.all_dq[0].shape
@@ -424,12 +426,19 @@ def test_prop_err_dq_adirdi():
     mock_ref.all_dq[0,3,9] = 4  # This should not become flagged
 
     expected_dqs = np.zeros_like(mock_sci.all_dq[0])
-    expected_dqs[5,5] = 1
+    #expected_dqs[5,5] = 1
+    #expected_dqs[95,5] = 1
+    #expected_dqs[1,1] = 1
+    #expected_dqs[99,1] = 1
+
     expected_dqs[95,5] = 1
-    expected_dqs[1,1] = 1
+    expected_dqs[95,95] = 1
     expected_dqs[99,1] = 1
+    expected_dqs[99,99] = 1
 
     dqs, errs = combine.prop_err_dq(mock_sci,mock_ref,mode,dq_thresh)
+
+    
 
     # Check shape of output dq & err arrays
     assert dqs.shape == mock_sci.all_dq[0].shape
@@ -472,12 +481,23 @@ def test_prop_err_dq_misaligned():
     mock_ref.all_dq[0,3,9] = 4  # This should not become flagged
 
     expected_dqs = np.zeros_like(mock_sci.all_dq[0])
-    expected_dqs[5,5] = 1
+    #expected_dqs[5,5] = 1
+    #expected_dqs[95,5] = 1
+    #expected_dqs[2,2] = 1
+    #expected_dqs[98,2] = 1
+
     expected_dqs[95,5] = 1
-    expected_dqs[2,2] = 1
+    expected_dqs[95,95] = 1
     expected_dqs[98,2] = 1
+    expected_dqs[98,98] = 1
 
     dqs, errs = combine.prop_err_dq(mock_sci,mock_ref,mode,dq_thresh)
+
+    #import matplotlib.pyplot as plt
+    #fig,axes = plt.subplots(1,2,layout='constrained',figsize=(12,8))
+    #im0 = axes[0].imshow(dqs,origin='lower')
+    #im1 = axes[1].imshow(expected_dqs,origin='lower')
+    #plt.show()
 
     # Check shape of output dq & err arrays
     assert dqs.shape == mock_sci.all_dq[0].shape
@@ -588,4 +608,5 @@ if __name__ == "__main__":
     # test_prop_err_dq_rdi()
     # test_prop_err_dq_adi()
     # test_prop_err_dq_adirdi()
+    # test_prop_err_dq_misaligned()
     test_mean_combine_other_hdus()

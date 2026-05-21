@@ -3857,7 +3857,8 @@ def create_psfsub_dataset(n_sci,n_ref,pa_aper_degs,darkhole_scifiles=None,darkho
 
             # Add fake planet to sci files
             if i<n_sci:
-                pa_deg = -pa_aper_degs[i]
+                #pa_deg = -pa_aper_degs[i]
+                pa_deg = pa_aper_degs[i]
                 xoff,yoff = pl_sep * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
                 planet_psf = gaussian_array(array_shape=data_shape[-2:],
                                             amp=pl_amp,
@@ -3884,7 +3885,7 @@ def create_psfsub_dataset(n_sci,n_ref,pa_aper_degs,darkhole_scifiles=None,darkho
         exthdr['EACQ_COL'] = psfcentx
         exthdr['EACQ_ROW'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
-        exthdr['NORTHANG'] = pa_aper_degs[i]
+        exthdr['NORTHANG'] = -pa_aper_degs[i]
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
         
         # Add WCS header info, if provided

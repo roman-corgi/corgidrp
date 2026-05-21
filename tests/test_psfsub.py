@@ -43,7 +43,8 @@ def test_pyklipdata_ADI():
 
     # Check rotation angle assignments match up for sci dataset
     for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
-        assert pa_aper_deg == pa_aper_degs[r]
+        print(pa_aper_deg)
+        assert pa_aper_deg == -pa_aper_degs[r]
         assert mock_sci[r].ext_hdr['NORTHANG'] == pa_aper_deg, f"Incorrect NORTHANG assignment for frame {r}."
     
     # Check ref library is None
@@ -67,7 +68,8 @@ def test_pyklipdata_RDI():
 
     # Check rotation angle assignments match up for sci dataset
     for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
-        assert pa_aper_deg == pa_aper_degs[r]
+        print(pa_aper_deg)
+        assert pa_aper_deg == -pa_aper_degs[r]
         assert mock_sci[r].ext_hdr['NORTHANG'] == pa_aper_deg, f"Incorrect NORTHANG assignment for frame {r}."
     
     # Check ref library shape
@@ -92,7 +94,8 @@ def test_pyklipdata_ADIRDI():
 
     # Check rotation angle assignments match up for sci dataset
     for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
-        assert pa_aper_deg == pa_aper_degs[r]
+        print(pa_aper_deg)
+        assert pa_aper_deg == -pa_aper_degs[r]
         assert mock_sci[r].ext_hdr['NORTHANG'] == pa_aper_deg, f"Incorrect NORTHANG assignment for frame {r}."
     
     # Check ref library shape
@@ -404,6 +407,7 @@ def test_psf_sub_ADI():
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast,
+                                              #pl_sep=20,
                                               data_shape=(101,101))
 
     klip_kwargs={"numbasis":numbasis}
@@ -439,7 +443,8 @@ def test_psf_sub_ADI():
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
 
-    analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-pa_aper_degs[1],reshape=False,cval=0)) / 2
+    #analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-pa_aper_degs[1],reshape=False,cval=0)) / 2
+    analytical_result = (rotate(mock_sci[0].data - mock_sci[1].data,pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,pa_aper_degs[1],reshape=False,cval=0)) / 2
     
     frame = result[0]
 
@@ -495,6 +500,7 @@ def test_psf_sub_RDI():
 
     mock_sci,mock_ref = create_psfsub_dataset(1,2,pa_aper_degs,ref_psf_spread=1.,
                                 pl_contrast=pl_contrast,
+                                pl_sep=20,
                                 noise_amp=noise_amp,
                                 st_amp=st_amp,
                                 data_shape=data_shape
@@ -512,9 +518,25 @@ def test_psf_sub_RDI():
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs
                                 )
-    analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
+    #analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-pa_aper_degs[0],reshape=False,cval=np.nan)
+    analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,pa_aper_degs[0],reshape=False,cval=np.nan)
+    #import matplotlib.pyplot as plt
+    #fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    #im0 = axes[0].imshow(result[0].data[0],origin='lower')
+    #plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    #axes[0].set_title(f'Output data')
+    #im1 = axes[1].imshow(analytical_result,origin='lower')
+    #plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    #axes[1].set_title('Analytical result')
+    #diff = result[0].data[0] - analytical_result
+    #im2 = axes[2].imshow(diff,origin='lower')
+    #plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    #axes[2].set_title('Difference')
+    #plt.suptitle(f'PSF Subtraction {result[0].pri_hdr["KLIP_ALG"]} ({result[0].ext_hdr["KLMODE0"]} KL Modes)')
+    #plt.show()    
     expected_dq = np.zeros(data_shape)
-    expected_dq[15,:] = 1
+    #expected_dq[15,:] = 1
+    expected_dq[-16,:] = 1
 
     frame = result[0]
 
@@ -525,6 +547,11 @@ def test_psf_sub_RDI():
     for i, im in enumerate(frame.data):   
         if not np.nansum(mock_sci[0].data) > np.nansum(im):
             raise Exception(f"RDI subtraction resulted in increased counts for some KL modes.")
+
+        #fig,axes = plt.subplots(1,2,layout='constrained',figsize=(8,8))
+        #im0 = axes[0].imshow(frame.dq[i],origin='lower')
+        #im1 = axes[1].imshow(expected_dq,origin='lower')
+        #plt.show()
         
         assert frame.dq[i] == pytest.approx(expected_dq)
     
@@ -555,10 +582,12 @@ def test_psf_sub_ADIRDI():
                                               st_amp=st_amp,
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast,
+                                              pl_sep=20,
                                               data_shape=data_shape)
     
 
-    analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-pa_aper_degs[1],reshape=False,cval=0)) / 2
+    #analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/3+mock_ref[0].data/3+mock_ref[1].data/3),-pa_aper_degs[1],reshape=False,cval=0)) / 2
+    analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/3+mock_ref[0].data/3+mock_ref[1].data/3),pa_aper_degs[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/3+mock_ref[0].data/3+mock_ref[1].data/3),pa_aper_degs[1],reshape=False,cval=0)) / 2
     
 
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
@@ -566,6 +595,20 @@ def test_psf_sub_ADIRDI():
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
+    import matplotlib.pyplot as plt
+    fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    im0 = axes[0].imshow(result[0].data[0],origin='lower')
+    plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    axes[0].set_title(f'Output data')
+    im1 = axes[1].imshow(analytical_result,origin='lower')
+    plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    axes[1].set_title('Analytical result')
+    diff = result[0].data[0] - analytical_result
+    im2 = axes[2].imshow(diff,origin='lower')
+    plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    axes[2].set_title('Difference')
+    plt.suptitle(f'PSF Subtraction {result[0].pri_hdr["KLIP_ALG"]} ({result[0].ext_hdr["KLMODE0"]} KL Modes)')
+    plt.show()    
     
     frame = result[0]
     mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
@@ -599,8 +642,14 @@ def test_psf_sub_ADIRDI():
         wcs_after = WCS(frame.ext_hdr)
     cd12 = wcs_after.wcs.cd[0,1]
     cd22 = wcs_after.wcs.cd[1,1]
+    print(cd12)
+    print(cd22)
+    print(wcs_after.wcs.cd[0,0])
+    print(wcs_after.wcs.cd[1,0])
 
+    #angle = np.arctan2(-cd12, cd22)
     angle = np.arctan2(-cd12, cd22)
+    print('Angle',np.rad2deg(angle))
     assert angle == pytest.approx(0.0, abs=1e-6), "WCS CD matrix not properly rotated to North-up East-left."
 
 def test_psf_sub_explicit_klip_kwargs():
@@ -689,8 +738,8 @@ if __name__ == '__main__':
     # test_psf_sub_split_dataset()
     # test_psf_sub_explicit_klip_kwargs()
 
-    # test_psf_sub_ADI()
-    # test_psf_sub_RDI()
+    #test_psf_sub_ADI()
+    #test_psf_sub_RDI()
     test_psf_sub_ADIRDI()
     # test_psf_sub_badmode()
 
