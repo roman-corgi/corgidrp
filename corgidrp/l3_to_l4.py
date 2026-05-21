@@ -966,63 +966,40 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     
 
     if subtract_no_offset_frames:
-        # First we split satspot dataset into ref/target satspot as their exposure times might be different
-        satspot_dataset, exptime = sat_dataset.split_dataset(exthdr_keywords=["EXPTIME"])
+        all_satspot_frames = []
 
-        ref_sat_dataset = satspot_dataset[int(np.nonzero(exptime == exptime[0])[0].item())]
-        refstar_satspot_frames = []
-        for frame in ref_sat_dataset:
-            refstar_satspot_frames.append(frame)
-        # Split sat spot frames into the three acquisition groups by SCTSRT order.
-        # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
-        if len(refstar_satspot_frames) % 3 != 0:
-            raise ValueError(f"Expected the number of refstar SATSPOTS=1 frames to be divisible by 3 "
-                f"(no-offset / +offset / -offset groups), but got {len(refstar_satspot_frames)}.")
-        if all('SCTSRT' in f.ext_hdr for f in refstar_satspot_frames):
-            refstar_satspot_frames_sorted = sorted(refstar_satspot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
-        else:
-            refstar_satspot_frames_sorted = sorted(refstar_satspot_frames, key=lambda f: f.filename)
-        n_per_group = len(refstar_satspot_frames_sorted) // 3
-        no_offset_frames = refstar_satspot_frames_sorted[:n_per_group]
-        refstar_offset_frames = refstar_satspot_frames_sorted[n_per_group:]
-        
-        img_no_offset = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
-        for frame in data.Dataset(refstar_offset_frames):
-            frame.data = frame.data - img_no_offset
+        # First we split satspot dataset according to VISITID
+        satspot_dataset, visitid = sat_dataset.split_dataset(prihdr_keywords=["VISITID"])
+        visitid = np.array(visitid)
 
-        if len(exptime) == 1:
-            offset_dataset = data.Dataset(refstar_offset_frames)
-                
-        elif len(exptime) > 1:
-            target_sat_dataset = satspot_dataset[int(np.nonzero(exptime == exptime[1])[0].item())]
-            target_satspot_frames = []
-            for frame in target_sat_dataset:
-                target_satspot_frames.append(frame)
+        for visid in visitid:
+            satspot_subset = satspot_dataset[int(np.nonzero(visitid == visid)[0].item())]
+            satspot_frames = []
+            for frame in satspot_subset:
+                satspot_frames.append(frame)
             # Split sat spot frames into the three acquisition groups by SCTSRT order.
             # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
-            if len(target_satspot_frames) % 3 != 0:
-                raise ValueError(f"Expected the number of targetstar SATSPOTS=1 frames to be divisible by 3 "
-                    f"(no-offset / +offset / -offset groups), but got {len(target_satspot_frames)}.")
-            if all('SCTSRT' in f.ext_hdr for f in target_satspot_frames):
-                target_satspot_frames_sorted = sorted(target_satspot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
+            if len(satspot_frames) % 3 != 0:
+                raise ValueError(f"Expected the number of refstar SATSPOTS=1 frames to be divisible by 3 "
+                    f"(no-offset / +offset / -offset groups), but got {len(satspot_frames)}.")
+            if all('SCTSRT' in f.ext_hdr for f in satspot_frames):
+                satspot_frames_sorted = sorted(satspot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
             else:
-                target_satspot_frames_sorted = sorted(target_satspot_frames, key=lambda f: f.filename)
-            n_per_group = len(target_satspot_frames_sorted) // 3
-            no_offset_frames = target_satspot_frames_sorted[:n_per_group]
-            target_offset_frames = target_satspot_frames_sorted[n_per_group:]
-                
+                satspot_frames_sorted = sorted(satspot_frames, key=lambda f: f.filename)
+            n_per_group = len(satspot_frames_sorted) // 3
+            no_offset_frames = satspot_frames_sorted[:n_per_group]
+            offset_frames = satspot_frames_sorted[n_per_group:]
+            
             img_no_offset = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
-            for frame in data.Dataset(target_offset_frames):
+            for frame in data.Dataset(offset_frames):
                 frame.data = frame.data - img_no_offset
 
-            offset_dataset = data.Dataset(np.concatenate([np.array(refstar_offset_frames),np.array(target_offset_frames)]))
+            all_satspot_frames = np.concatenate([np.array(all_satspot_frames),np.array(offset_frames)])
+
+        offset_dataset = data.Dataset(all_satspot_frames)
 
     else:
-        sat_spot_frames = []
-        for frame in sat_dataset:
-            sat_spot_frames.append(frame)
-        offset_frames = sat_spot_frames
-        offset_dataset = data.Dataset(offset_frames)
+        offset_dataset = sat_dataset
 
     if xcent_guess is not None and ycent_guess is not None:
         n = len(offset_dataset)

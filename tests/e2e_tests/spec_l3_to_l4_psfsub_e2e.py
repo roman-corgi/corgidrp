@@ -1,5 +1,7 @@
 import os
 import glob
+import copy
+import datetime
 import shutil
 import numpy as np
 import astropy.io.fits as fits
@@ -42,6 +44,53 @@ def patch_eacq_to_center_if_missing(filelist):
                 h['EACQ_ROW'] = (n2 - 1) / 2.0
                 h['EACQ_COL'] = (n1 - 1) / 2.0
 
+# Existing satspot data only has +/- offset frames, but find_star expects
+# three equal groups: no-offset, +offset, -offset.  We inject fake no-offset
+# frames (science background data, no DM probe) at L1 so they flow through
+# the full pipeline and sort first (year-2000 timestamps) into the no-offset
+# group at L3.  Frames are grouped by (TARGET, DPAMNAME) — the same split
+# find_star uses — and one real frame is dropped when the count is odd to
+# keep each group size even so that n_fake = K/2 gives a divisible-by-3 total.
+# We do this for all satspots
+
+def create_mock_L1_files(l1_datadir, l1_filelist, logger):
+    """
+    Create mock L1 background satspot (no offset) files using np.zeros.
+
+    Args:
+        l1_datadir (str): Filepath to directory with L1 files.
+        l1_filelist (list): List of L1 files in l1_datadir.
+        logger (logging.Logger): Logger instance for output.
+    """
+
+    if 'refstar_zeropoint' in l1_datadir:  # Different SCTSRT keyword for refstar and targetstar background satspot files
+        fake_base_time = datetime.datetime(2000, 1, 1, 0, 0, 0)
+    else:
+        fake_base_time = datetime.datetime(2000, 1, 1, 0, 0, 1)
+
+    group_files = sorted(glob.glob(os.path.join(l1_datadir, "cgi_*l1_.fits")))
+    if len(group_files) % 2 != 0:
+        logger.info(f'Creating mock L1 background satspot file in {l1_datadir}')
+        group_files = group_files[:-1]  # drop one frame to make count even
+
+        template_img = Image(os.path.join(l1_datadir,group_files[0]))
+        visitid = template_img.pri_hdr.get('VISITID', '')
+        
+        for _ in range(len(group_files) // 2):
+            fake_frame = copy.deepcopy(template_img)
+            fake_frame.data[:] = np.zeros(np.shape(template_img.data))
+            if fake_frame.err is not None:
+                fake_frame.err[:] = np.zeros(np.shape(template_img.data))
+            fake_frame.ext_hdr['SCTSRT'] = fake_base_time.isoformat()
+            time_str = fake_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
+            fake_satspot_filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+
+            fake_frame.save(filedir=l1_datadir, filename=fake_satspot_filename)
+            fake_base_time += datetime.timedelta(seconds=1)
+            l1_filelist.append(os.path.join(l1_datadir, fake_satspot_filename))
+    
+    l1_filelist = sorted(l1_filelist)
+    return l1_filelist
 
 # ================================================================================
 # Main Spec L3 to L4 E2E Test Function PSF subtracted
@@ -96,6 +145,18 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     # Patch EACQ_ROW/EACQ_COL on L1s. TODO: fix this in the sims
     for flist in (psfref_satspot_files, psfref_files, target_satspot_files, target_files):
         patch_eacq_to_center_if_missing(flist)
+    
+    psfref_satspot_files = create_mock_L1_files(psfref_satspot_path, psfref_satspot_files, logger)
+    target_satspot_files = create_mock_L1_files(target_satspot_path, target_satspot_files, logger)
+
+    changed_visitid=False
+    # Artificial change to visitid for target files since both refstar/target corgisim files have same visitid. We need them different for determine_wave_zeropoint
+    if fits.getheader(target_satspot_files[0])['VISITID'] == fits.getheader(psfref_satspot_files[0])['VISITID']:
+        for f in target_satspot_files:
+            fits.setval(f, 'VISITID', value = '0200001001001002001', ext=0)
+        for f in target_files:
+            fits.setval(f, 'VISITID', value = '0200001001001002001', ext=0) 
+        changed_visitid=True
 
     run_l1_to_l3_e2e_test(psfref_satspot_path, ref_spot_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
@@ -199,6 +260,13 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     # Scan for default calibrations
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     
+    # Reverting changed visitids to old values.
+    if changed_visitid:
+        for f in target_satspot_files:
+            fits.setval(f, 'VISITID', value = '0200001001001001001', ext=0)
+        for f in target_files:
+            fits.setval(f, 'VISITID', value = '0200001001001001001', ext=0) 
+
     # ================================================================================
     # (3) Run Processing Pipeline
     # ================================================================================

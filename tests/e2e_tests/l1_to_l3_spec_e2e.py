@@ -2,7 +2,6 @@ import argparse
 import os, sys
 import json
 import pytest
-import copy, datetime
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
@@ -262,51 +261,10 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     input_files = [f for f in all_files if f.endswith('l1_.fits')]
     if not input_files:
         raise FileNotFoundError(f"No files ending in 'l1_.fits' found in {l1_datadir}")
-    
+
+    # If we generate a fake background satspot file in l3->l4, sorts and selects input files so that we only take the previously generated fake file and two corgisim satspot files
     if fits.getheader(os.path.join(l1_datadir,input_files[0]), ext=1)['CFAMNAME'] == '3D':
-        # Existing satspot data only has +/- offset frames, but find_star expects
-        # three equal groups: no-offset, +offset, -offset.  We inject fake no-offset
-        # frames (science background data, no DM probe) at L1 so they flow through
-        # the full pipeline and sort first (year-2000 timestamps) into the no-offset
-        # group at L3.  Frames are grouped by (TARGET, DPAMNAME) — the same split
-        # find_star uses — and one real frame is dropped when the count is odd to
-        # keep each group size even so that n_fake = K/2 gives a divisible-by-3 total.
-        # We do this for all satspots
-
-        fake_l1 = []
-        accepted_real_files = []
-        if 'refstar_zeropoint' in l1_datadir:
-            fake_base_time = datetime.datetime(2000, 1, 1, 0, 0, 0)
-        else:
-            fake_base_time = datetime.datetime(2000, 1, 1, 0, 0, 1)
-
-        group_files = input_files
-        if len(group_files) % 2 != 0:
-            group_files = group_files[:-1]  # drop one frame to make count even
-        accepted_real_files.extend(list(group_files))
-
-        template_img = data.Image(os.path.join(l1_datadir,group_files[0]))
-        visitid = template_img.pri_hdr.get('VISITID', '')
-
-        for _ in range(len(group_files) // 2):
-            fake_frame = copy.deepcopy(template_img)
-            fake_frame.data[:] = np.zeros(np.shape(template_img.data))
-            if fake_frame.err is not None:
-                fake_frame.err[:] = np.zeros(np.shape(template_img.data))
-            fake_frame.ext_hdr['SCTSRT'] = fake_base_time.isoformat()
-            time_str = fake_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
-            fake_satspot_filename = f"cgi_{visitid}_{time_str}_l1_.fits"
-            if os.path.exists(os.path.join(l1_datadir,fake_satspot_filename)): # If we already created a fake file earlier, prevents creation of new files
-                break
-            else:
-                fake_frame.save(filedir=l1_datadir, filename=fake_satspot_filename)
-                fake_l1.append(fake_frame.filename)
-                fake_base_time += datetime.timedelta(seconds=1)
-
-        # Rebuild input list: fake frames first (early timestamps sort them into the
-        # no-offset group), followed by the accepted real frames.
-        input_files = np.concatenate([np.array(fake_l1), np.array(accepted_real_files)])
-        if len(input_files) % 3 != 0:   # If we already created a fake file earlier, sorts and selects input files so that we only take the previously generated fake file and two corgisim satspot files
+        if len(input_files) % 3 != 0:
             input_files = sorted(input_files)
             input_files = input_files[:-1]
 
