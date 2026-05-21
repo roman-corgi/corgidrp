@@ -3890,7 +3890,7 @@ def create_psfsub_dataset(n_sci,n_ref,pa_aper_degs,darkhole_scifiles=None,darkho
         
         # Add WCS header info, if provided
         if wcs_header is None:
-            wcs_header = generate_wcs(pa_aper_degs[i], 
+            wcs_header = generate_wcs(-pa_aper_degs[i], 
                                       [psfcentx,psfcenty],
                                       platescale=0.0218).to_header()
             #Add back in the CD keywords
@@ -4101,7 +4101,7 @@ def generate_coron_dataset_with_companions(
         exthdr['LSAMNAME'] = 'NFOV'
         exthdr['FPAMNAME'] = 'HLC12_C2R1'
         # Optional WCS generation.
-        wcs_obj = generate_wcs(angle_i, [host_star_center[0], host_star_center[1]], platescale=pltscale_as)
+        wcs_obj = generate_wcs(-angle_i, [host_star_center[0], host_star_center[1]], platescale=pltscale_as)
         wcs_header = wcs_obj.to_header()
         exthdr.update(wcs_header)
 
