@@ -262,12 +262,6 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if not input_files:
         raise FileNotFoundError(f"No files ending in 'l1_.fits' found in {l1_datadir}")
 
-    # If we generate a fake background satspot file in l3->l4, sorts and selects input files so that we only take the previously generated fake file and two corgisim satspot files
-    if fits.getheader(os.path.join(l1_datadir,input_files[0]), ext=1)['CFAMNAME'] == '3D':
-        if len(input_files) % 3 != 0:
-            input_files = sorted(input_files)
-            input_files = input_files[:-1]
-
     input_data_filelist = [os.path.join(l1_datadir, f) for f in input_files]
     
     # Create input_data subfolder

@@ -87,6 +87,7 @@ def create_mock_L1_files(l1_datadir, l1_filelist, logger):
             fake_frame.ext_hdr['SCTSRT'] = fake_base_time.isoformat()
             time_str = fake_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
             fake_satspot_filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+            fake_frame.pri_hdr['FILENAME'] = fake_satspot_filename
 
             fake_frame.save(filedir=l1_datadir, filename=fake_satspot_filename)
             fake_base_time += datetime.timedelta(seconds=1)
@@ -161,9 +162,29 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
             fits.setval(f, 'VISITID', value = '0200001001001002001', ext=0) 
         changed_visitid=True
 
-    run_l1_to_l3_e2e_test(psfref_satspot_path, ref_spot_l3_output_dir, processed_cal_path, logger)
+    # If we have generated a fake background satspot file, sorts and selects input L1 files so that we only take the previously generated fake file and two corgisim satspot files.
+    # Those files are copied and saved to a different folder
+    if len(target_satspot_files) % 3 != 0:
+        psfref_satspot_input_path = os.path.join(ref_spot_l3_output_dir,"input_l1")
+        target_satspot_input_path = os.path.join(target_spot_l3_output_dir,"input_l1")
+
+        if os.path.exists(psfref_satspot_input_path): shutil.rmtree(psfref_satspot_input_path)
+        os.makedirs(psfref_satspot_input_path)
+        if os.path.exists(target_satspot_input_path): shutil.rmtree(target_satspot_input_path)
+        os.makedirs(target_satspot_input_path)
+
+        logger.info(f"Copying psfref satspot files used as input to {psfref_satspot_input_path}.")
+        for file in psfref_satspot_files[:-1]:
+            filename = fits.getheader(file)['FILENAME']
+            shutil.copy(file,os.path.join(psfref_satspot_input_path,filename))
+        logger.info(f"Copying target satspot files used as input to {target_satspot_input_path}.")
+        for file in target_satspot_files[:-1]:
+            filename = fits.getheader(file)['FILENAME']
+            shutil.copy(file,os.path.join(target_satspot_input_path,filename))
+
+    run_l1_to_l3_e2e_test(psfref_satspot_input_path, ref_spot_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
-    run_l1_to_l3_e2e_test(target_satspot_path, target_spot_l3_output_dir, processed_cal_path, logger)
+    run_l1_to_l3_e2e_test(target_satspot_input_path, target_spot_l3_output_dir, processed_cal_path, logger)
     run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger)
 
     l3_files = []
