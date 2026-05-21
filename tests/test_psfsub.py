@@ -43,7 +43,7 @@ def test_pyklipdata_ADI():
 
     # Check rotation angle assignments match up for sci dataset
     for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
-        print(pa_aper_deg)
+        #print(pa_aper_deg)
         assert pa_aper_deg == -pa_aper_degs[r]
         assert mock_sci[r].ext_hdr['NORTHANG'] == pa_aper_deg, f"Incorrect NORTHANG assignment for frame {r}."
     
@@ -68,7 +68,7 @@ def test_pyklipdata_RDI():
 
     # Check rotation angle assignments match up for sci dataset
     for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
-        print(pa_aper_deg)
+        #print(pa_aper_deg)
         assert pa_aper_deg == -pa_aper_degs[r]
         assert mock_sci[r].ext_hdr['NORTHANG'] == pa_aper_deg, f"Incorrect NORTHANG assignment for frame {r}."
     
@@ -94,7 +94,7 @@ def test_pyklipdata_ADIRDI():
 
     # Check rotation angle assignments match up for sci dataset
     for r,pa_aper_deg in enumerate(pyklip_dataset._PAs):
-        print(pa_aper_deg)
+        #print(pa_aper_deg)
         assert pa_aper_deg == -pa_aper_degs[r]
         assert mock_sci[r].ext_hdr['NORTHANG'] == pa_aper_deg, f"Incorrect NORTHANG assignment for frame {r}."
     
@@ -595,7 +595,7 @@ def test_psf_sub_ADIRDI():
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
-    import matplotlib.pyplot as plt
+    #import matplotlib.pyplot as plt
     #fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
     #im0 = axes[0].imshow(result[0].data[0],origin='lower')
     #plt.colorbar(im0,ax=axes[0],shrink=0.8)
@@ -642,14 +642,14 @@ def test_psf_sub_ADIRDI():
         wcs_after = WCS(frame.ext_hdr)
     cd12 = wcs_after.wcs.cd[0,1]
     cd22 = wcs_after.wcs.cd[1,1]
-    print(cd12)
-    print(cd22)
-    print(wcs_after.wcs.cd[0,0])
-    print(wcs_after.wcs.cd[1,0])
+    #print(cd12)
+    #print(cd22)
+    #print(wcs_after.wcs.cd[0,0])
+    #print(wcs_after.wcs.cd[1,0])
 
     #angle = np.arctan2(-cd12, cd22)
     angle = np.arctan2(-cd12, cd22)
-    print('Angle',np.rad2deg(angle))
+    #print('Angle',np.rad2deg(angle))
     assert angle == pytest.approx(0.0, abs=1e-6), "WCS CD matrix not properly rotated to North-up East-left."
 
 def test_psf_sub_explicit_klip_kwargs():

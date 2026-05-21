@@ -202,8 +202,8 @@ def generate_test_data(out_dir):
         #yoffset = comp['sep_pix'] * np.sin(np.degrees(comp['pa'] + 90))
         xoffset = comp['sep_pix'] * np.cos(np.radians(comp['pa'] + 90))
         yoffset = comp['sep_pix'] * np.sin(np.radians(comp['pa'] + 90))
-        print('TMC X',xoffset)
-        print('TMC Y',yoffset)
+        #print('TMC X',xoffset)
+        #print('TMC Y',yoffset)
         interp_psfs, _, _ = ct_cal_full_frame.GetPSF(xoffset, yoffset, coron_data, FpamFsamCal)
         nearest_psf = interp_psfs[0]
 
@@ -361,8 +361,8 @@ def _common_measure_companions_test(forward_model_flag):
     (host_star_image, host_star_counts, fluxcal_factor, host_star_mag, ct_cal, FpamFsamCal, nd_cal,
      psf_sub_image, coron_data, ref_data) = generate_or_load_test_data(OUT_DIR, load_from_disk=LOAD_FROM_DISK)
     
-    print(f"Host Star Magnitude: {host_star_mag[0].ext_hdr['APP_MAG']}")
-    print('FORWARD MODEL FLAG ',forward_model_flag)
+    #print(f"Host Star Magnitude: {host_star_mag[0].ext_hdr['APP_MAG']}")
+    #print('FORWARD MODEL FLAG ',forward_model_flag)
 
     cand_locs = []
     for i, comp in enumerate(COMPANION_PARAMS):
