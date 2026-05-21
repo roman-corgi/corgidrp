@@ -513,7 +513,7 @@ def test_determine_zeropoint():
     #test it with optional initial guess and with three satspot frames
     spec_filter_offset = SpecFilterOffset({})
     input_dataset = Dataset(psf_images)
-    dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset, subtract_no_offset_frames=True, xcent_guess = 40., ycent_guess = 32.)
+    dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset, xcent_guess = 40., ycent_guess = 32.)
 
     assert len(dataset_guess) < len(input_dataset)
     for frame in dataset_guess:
@@ -591,7 +591,7 @@ def test_determine_zeropoint():
     for frame in noise_dataset:
         frame.data = np.random.poisson(np.abs(frame.data)/3) + \
         np.random.normal(loc=0, scale=read_noise, size = frame.data.shape)
-    noisci_dataset = l3_to_l4.determine_wave_zeropoint(noise_dataset, spec_filter_offset, subtract_no_offset_frames = True)
+    noisci_dataset = l3_to_l4.determine_wave_zeropoint(noise_dataset, spec_filter_offset)
     for i in range(len(noisci_dataset)):
         x0_noi = noisci_dataset[i].ext_hdr["WV0_X"]
         y0_noi = noisci_dataset[i].ext_hdr["WV0_Y"]

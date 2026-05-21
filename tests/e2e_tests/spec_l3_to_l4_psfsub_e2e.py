@@ -61,6 +61,9 @@ def create_mock_L1_files(l1_datadir, l1_filelist, logger):
         l1_datadir (str): Filepath to directory with L1 files.
         l1_filelist (list): List of L1 files in l1_datadir.
         logger (logging.Logger): Logger instance for output.
+
+    Returns:
+        list: List of L1 filenames for input.
     """
 
     if 'refstar_zeropoint' in l1_datadir:  # Different SCTSRT keyword for refstar and targetstar background satspot files
