@@ -596,19 +596,19 @@ def test_psf_sub_ADIRDI():
                                 measure_1d_core_thrupt=False,
                                 **klip_kwargs)
     import matplotlib.pyplot as plt
-    fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-    im0 = axes[0].imshow(result[0].data[0],origin='lower')
-    plt.colorbar(im0,ax=axes[0],shrink=0.8)
-    axes[0].set_title(f'Output data')
-    im1 = axes[1].imshow(analytical_result,origin='lower')
-    plt.colorbar(im1,ax=axes[1],shrink=0.8)
-    axes[1].set_title('Analytical result')
-    diff = result[0].data[0] - analytical_result
-    im2 = axes[2].imshow(diff,origin='lower')
-    plt.colorbar(im2,ax=axes[2],shrink=0.8)
-    axes[2].set_title('Difference')
-    plt.suptitle(f'PSF Subtraction {result[0].pri_hdr["KLIP_ALG"]} ({result[0].ext_hdr["KLMODE0"]} KL Modes)')
-    plt.show()    
+    #fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    #im0 = axes[0].imshow(result[0].data[0],origin='lower')
+    #plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    #axes[0].set_title(f'Output data')
+    #im1 = axes[1].imshow(analytical_result,origin='lower')
+    #plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    #axes[1].set_title('Analytical result')
+    #diff = result[0].data[0] - analytical_result
+    #im2 = axes[2].imshow(diff,origin='lower')
+    #plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    #axes[2].set_title('Difference')
+    #plt.suptitle(f'PSF Subtraction {result[0].pri_hdr["KLIP_ALG"]} ({result[0].ext_hdr["KLMODE0"]} KL Modes)')
+    #plt.show()    
     
     frame = result[0]
     mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
