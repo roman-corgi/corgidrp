@@ -964,15 +964,17 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     else:
         raise AttributeError("No narrowband frames found in input dataset")
     
+    # Split satspot/science dataset according to VISITID
+    satspot_dataset, visitid = sat_dataset.split_dataset(prihdr_keywords=["VISITID"])
+    if with_science:
+        science_dataset, visitid = sci_dataset.split_dataset(prihdr_keywords=["VISITID"])
+    visitid = np.array(visitid)
 
-    if subtract_no_offset_frames:
-        all_satspot_frames = []
+    all_science_frames = []
 
-        # First we split satspot dataset according to VISITID
-        satspot_dataset, visitid = sat_dataset.split_dataset(prihdr_keywords=["VISITID"])
-        visitid = np.array(visitid)
-
-        for visid in visitid:
+    for visid in visitid:
+        if subtract_no_offset_frames:
+            
             satspot_subset = satspot_dataset[int(np.nonzero(visitid == visid)[0].item())]
             satspot_frames = []
             for frame in satspot_subset:
@@ -989,53 +991,63 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             n_per_group = len(satspot_frames_sorted) // 3
             no_offset_frames = satspot_frames_sorted[:n_per_group]
             offset_frames = satspot_frames_sorted[n_per_group:]
-            
+ 
             img_no_offset = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
             for frame in data.Dataset(offset_frames):
                 frame.data = frame.data - img_no_offset
 
-            all_satspot_frames = np.concatenate([np.array(all_satspot_frames),np.array(offset_frames)])
+            offset_dataset = data.Dataset(offset_frames)
 
-        offset_dataset = data.Dataset(all_satspot_frames)
+        else:
+            satspot_subset = satspot_dataset[int(np.nonzero(visitid == visid)[0].item())]
+            offset_dataset = satspot_subset
 
-    else:
-        offset_dataset = sat_dataset
-
-    if xcent_guess is not None and ycent_guess is not None:
-        n = len(offset_dataset)
-        initial_cent = {"xcent": np.repeat(xcent_guess, n),
-                        "ycent": np.repeat(ycent_guess, n)}
-    else:
-        initial_cent = None
-    spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
+        if xcent_guess is not None and ycent_guess is not None:
+            n = len(offset_dataset)
+            initial_cent = {"xcent": np.repeat(xcent_guess, n),
+                            "ycent": np.repeat(ycent_guess, n)}
+        else:
+            initial_cent = None
+        spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
     
-    nb_filter = offset_dataset[0].ext_hdr["CFAMNAME"]
-    bb_filter = nb_filter[0]
-    cen_wave, _, _, _ = read_cent_wave(nb_filter)
-    xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
-    xoff_bb, yoff_bb = spec_filter_offset.get_offsets(bb_filter)
-    # Correct the centroid for the filter-to-filter image offset, so that
-    # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
-    if bb_nb_dx is not None and bb_nb_dy is not None:
-        x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
-        y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
-    else:
-        x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
-        y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
-    x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
-    y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
-    if return_all or with_science == False:
-        sci_dataset = dataset
+        nb_filter = offset_dataset[0].ext_hdr["CFAMNAME"]
+        bb_filter = nb_filter[0]
+        cen_wave, _, _, _ = read_cent_wave(nb_filter)
+        xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
+        xoff_bb, yoff_bb = spec_filter_offset.get_offsets(bb_filter)
+        # Correct the centroid for the filter-to-filter image offset, so that
+        # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
+        if bb_nb_dx is not None and bb_nb_dy is not None:
+            x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
+            y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
+        else:
+            x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
+            y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
+        x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
+        y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
 
-    for frame in sci_dataset:
-        frame.ext_hdr["WAVLEN0"] = cen_wave
-        frame.ext_hdr["WV0_X"] = x0
-        frame.ext_hdr["WV0_XERR"] = x0err
-        frame.ext_hdr["WV0_Y"] = y0
-        frame.ext_hdr["WV0_YERR"] = y0err
-        frame.ext_hdr["WV0_DIMX"] = offset_dataset[0].ext_hdr['NAXIS1']
-        frame.ext_hdr["WV0_DIMY"] = offset_dataset[0].ext_hdr['NAXIS2']
-                              
+        if return_all or with_science == False:
+            science_subset = offset_dataset
+        
+        if with_science:
+            science_subset = science_dataset[int(np.nonzero(visitid == visid)[0].item())]
+        
+
+        science_frames = []
+        for frame in science_subset:
+            frame.ext_hdr["WAVLEN0"] = cen_wave
+            frame.ext_hdr["WV0_X"] = x0
+            frame.ext_hdr["WV0_XERR"] = x0err
+            frame.ext_hdr["WV0_Y"] = y0
+            frame.ext_hdr["WV0_YERR"] = y0err
+            frame.ext_hdr["WV0_DIMX"] = offset_dataset[0].ext_hdr['NAXIS1']
+            frame.ext_hdr["WV0_DIMY"] = offset_dataset[0].ext_hdr['NAXIS2']
+            science_frames.append(frame)
+
+        all_science_frames = np.concatenate([np.array(all_science_frames),np.array(science_frames)])
+
+    sci_dataset = data.Dataset(all_science_frames)
+
     history_msg = "wavelength zeropoint values added to header"
     sci_dataset.update_after_processing_step(history_msg)
     return sci_dataset
