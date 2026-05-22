@@ -157,20 +157,17 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
                         err=np.zeros((1,) + bp_dat.shape, dtype=float),
                         dq=np.zeros(bp_dat.shape, dtype='uint16'),
                         err_hdr=fits.Header())
-    bp_map_inputs = data.Dataset([bp_dark, flat])
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
-    mocks.rename_files_to_cgi_format(list_of_fits=[bp_map], output_dir=calibrations_dir, level_suffix="bpm_cal")
+    bp_map_inputs=data.Dataset([bp_dark,flat])
+    bp_map=data.BadPixelMap(bp_dat,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset=bp_map_inputs)
+    bp_map.save(filedir=calibrations_dir)
     this_caldb.create_entry(bp_map)
 
     # define the raw science data to process
-
-    l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
+    l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in range(len(os.listdir(l1_datadir)))]
 
     # Update headers for TVAC files
     l1_data_filelist = check.fix_hdrs_for_tvac(l1_data_filelist, input_data_dir)
 
-    # tvac_l2a_filelist = [os.path.join(l2a_datadir, os.listdir(l2a_datadir)[i]) for i in [0,1]] #[os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
-    # tvac_l2b_filelist = [os.path.join(l2b_datadir, os.listdir(l2b_datadir)[i]) for i in [0,1]] #[os.path.join(l2b_datadir, "{0}.fits".format(i)) for i in [90529, 90531]] # just grab the first two files
     tvac_l2a_filelist = []
     tvac_l2b_filelist = []
     bad_pix = np.zeros((1024,1024)) # what is used in DRP
@@ -213,12 +210,16 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
 
     ####### Run the walker on some test_data
-
     # l1 -> l2a processing
-    walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir)
-
-    # l2a -> l2b processing
-    new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')] #[os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    #adjust the detect_cosmics_rays parameter to TVAC analysis software parameters to make a comparison
+    recipe = walker.autogen_recipe(l1_data_filelist, l2a_outputdir)
+    ### Modify they keywords of detect_cosmic_rays
+    for step in recipe['steps']:
+        if step['name'] == "detect_cosmic_rays":
+            step['keywords']['sat_thresh'] = 0.7
+            step['keywords']['plat_thresh'] = 0.7
+    new_l2a_filenames = walker.run_recipe(recipe, save_recipe_file=True)
+    # l2a -> l2b processing              
     walker.walk_corgidrp(new_l2a_filenames, "", test_outputdir)
 
     ##### Check against TVAC data
@@ -288,7 +289,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
+    e2edata_dir = '/home/schreiber/DataCopy/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
