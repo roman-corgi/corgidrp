@@ -279,7 +279,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
             if 'ISPC' in fits_file[1].header:
                 fits_file[1].header['ISPC'] = int(fits_file[1].header['ISPC'])
             fits_file[0].header['VISTYPE'] = 'CGIVST_TDD_OBS'
-            if fits_file[1].header['EMGAIN_C'] == 200:
+            if 'refstar' in l1_datadir:
                 logger.info(f"Filename: {fits_file[0].header['FILENAME']}")
                 logger.info(f"Original exposure time: {fits_file[1].header['EXPTIME']}")
                 if fits_file[1].header['EXPTIME'] >= 100:

@@ -168,9 +168,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         psfref_satspot_input_path = os.path.join(ref_spot_l3_output_dir,"input_l1")
         target_satspot_input_path = os.path.join(target_spot_l3_output_dir,"input_l1")
 
-        if os.path.exists(psfref_satspot_input_path): shutil.rmtree(psfref_satspot_input_path)
         os.makedirs(psfref_satspot_input_path)
-        if os.path.exists(target_satspot_input_path): shutil.rmtree(target_satspot_input_path)
         os.makedirs(target_satspot_input_path)
 
         logger.info(f"Copying psfref satspot files used as input to {psfref_satspot_input_path}.")
