@@ -240,9 +240,25 @@ def autogen_recipe(filelist, outputdir, template=None):
             if i > 0 and chained:
                 pass
             else:
-                for filename in filelist:
-                    recipe["inputs"].append(filename)
+                # add pc and analog inputs separately at L2a level
+                # for L2a to L2b process photon-counting and analog frames separately
+                if first_frame is not None and first_frame.ext_hdr['DATALVL'] == "L2a":
+                    split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=['ISPC'])
+                    if len(unique_vals) > 1:
+                        for partial_dataset, isPc in zip(split_datasets, unique_vals):
+                            if "pc" in recipe["name"] and isPc == 1:
+                                for frame in partial_dataset:
+                                    recipe["inputs"].append(frame.filename)
+                            elif "pc" not in recipe["name"] and isPc == 0:
+                                for frame in partial_dataset:
+                                    recipe["inputs"].append(frame.filename)
 
+                    else:
+                        for filename in filelist:
+                            recipe["inputs"].append(filename)
+                else:
+                    for filename in filelist:
+                        recipe["inputs"].append(filename)
 
             recipe["outputdir"] = outputdir
 
@@ -447,23 +463,39 @@ def guess_template(dataset):
             
             is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']
 
-            if is_spectroscopy:
-                if image.ext_hdr['ISPC'] == 1:
-                    recipe_filename = ["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"] #"l2a_to_l2b_pc_spec.json"
+            _, unique_vals = dataset.split_dataset(exthdr_keywords=['ISPC'])
+
+            if len(unique_vals) > 1: #Satspots are not PC 
+                if is_spectroscopy:
+                    recipe_filename = [["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"], ["l2a_to_l2b_spec.json"]] #"l2a_to_l2b_pc_spec.json"
+                elif is_polarimetry:
+                    recipe_filename = [["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pol_pc_3.json"],["l2a_to_l2b_pol.json"]] #"l2a_to_l2b_pc_pol.json"
                 else:
-                    recipe_filename = "l2a_to_l2b_spec.json"
-            elif is_polarimetry:
-                if image.ext_hdr['ISPC'] == 1:
-                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pol_pc_3.json"] #"l2a_to_l2b_pc_pol.json"
-                    chained = True
-                else: 
-                    recipe_filename = "l2a_to_l2b_pol.json"
+                    recipe_filename = [["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"], ["l2a_to_l2b.json"]]#l2a_to_l2b_pc.json 
+                chained = True
+
+
             else:
-                if image.ext_hdr['ISPC'] == 1:
-                    recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
-                    chained = True
+                if is_spectroscopy:
+                    if image.ext_hdr['ISPC'] == 1:
+                        recipe_filename = ["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"] #"l2a_to_l2b_pc_spec.json"
+                        chained = True
+
+                    else:
+                        recipe_filename = "l2a_to_l2b_spec.json"
+                            
+                elif is_polarimetry:
+                    if image.ext_hdr['ISPC'] == 1:
+                        recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pol_pc_3.json"] #"l2a_to_l2b_pc_pol.json"
+                        chained = True
+                    else: 
+                        recipe_filename = "l2a_to_l2b_pol.json"
                 else:
-                    recipe_filename = "l2a_to_l2b.json"  # science data and all else
+                    if image.ext_hdr['ISPC'] == 1:
+                        recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
+                        chained = True
+                    else:
+                        recipe_filename = "l2a_to_l2b.json"  # science data and all else
     # L2b -> L3 data processing
     elif image.ext_hdr['DATALVL'] == "L2b":
         if image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
