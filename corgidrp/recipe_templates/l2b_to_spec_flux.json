@@ -12,6 +12,9 @@
         "name": "determine_wave_zeropoint",
         "calibs": {
           "SpecFilterOffset": "AUTOMATIC"
+        },
+        "keywords" : {
+          "subtract_no_offset_frames": false
         }
       },
       {
