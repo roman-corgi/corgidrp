@@ -157,6 +157,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     # Artificial change to visitid for target files since both refstar/target corgisim files have same visitid. We need them different for determine_wave_zeropoint
     if fits.getheader(target_satspot_files[0])['VISITID'] == fits.getheader(psfref_satspot_files[0])['VISITID']:
         for f in target_satspot_files:
+            target_visitid = fits.getheader(psfref_satspot_files[0])['VISITID']
             fits.setval(f, 'VISITID', value = '0200001001001002001', ext=0)
         for f in target_files:
             fits.setval(f, 'VISITID', value = '0200001001001002001', ext=0) 
@@ -172,11 +173,11 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         os.makedirs(target_satspot_input_path)
 
         logger.info(f"Copying psfref satspot files used as input to {psfref_satspot_input_path}.")
-        for file in psfref_satspot_files[:-1]:
+        for file in psfref_satspot_files[:-(len(psfref_satspot_files) % 3)]:
             filename = fits.getheader(file)['FILENAME']
             shutil.copy(file,os.path.join(psfref_satspot_input_path,filename))
         logger.info(f"Copying target satspot files used as input to {target_satspot_input_path}.")
-        for file in target_satspot_files[:-1]:
+        for file in target_satspot_files[:-(len(target_satspot_files) % 3)]:
             filename = fits.getheader(file)['FILENAME']
             shutil.copy(file,os.path.join(target_satspot_input_path,filename))
 
@@ -196,7 +197,14 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     l3_files.extend(l3_target_spot)
     l3_dataset = Dataset(l3_files)
     logger.info('')
-    
+
+    # Reverting changed visitids to old values.
+    if changed_visitid:
+        for f in target_satspot_files:
+            fits.setval(f, 'VISITID', value = target_visitid, ext=0)
+        for f in target_files:
+            fits.setval(f, 'VISITID', value = target_visitid, ext=0) 
+            
     # ================================================================================
     # (2) Validate Input Images
     # ================================================================================
@@ -282,13 +290,6 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     # Scan for default calibrations
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     
-    # Reverting changed visitids to old values.
-    if changed_visitid:
-        for f in target_satspot_files:
-            fits.setval(f, 'VISITID', value = '0200001001001001001', ext=0)
-        for f in target_files:
-            fits.setval(f, 'VISITID', value = '0200001001001001001', ext=0) 
-
     # ================================================================================
     # (3) Run Processing Pipeline
     # ================================================================================

@@ -939,6 +939,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     if not dpamname.startswith("PRISM"):
         raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
     if dataset.frames[0].ext_hdr["FPAMNAME"] == 'OPEN_34':
+        print("The dataset has FPAMNAME = OPEN_34, identicating that this is a non-coronagraphic spectroscopy observation, setting subtract_no_offset_frames = False")
         subtract_no_offset_frames = False
 
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
@@ -1044,7 +1045,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             frame.ext_hdr["WV0_DIMY"] = offset_dataset[0].ext_hdr['NAXIS2']
             science_frames.append(frame)
 
-        all_science_frames = np.concatenate([np.array(all_science_frames),np.array(science_frames)])
+        all_science_frames += science_frames
 
     sci_dataset = data.Dataset(all_science_frames)
 
