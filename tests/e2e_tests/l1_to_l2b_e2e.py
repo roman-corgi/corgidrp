@@ -131,6 +131,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     err_hdr['BUNIT'] = 'detected electron'
     ext_hdr['B_O'] = 0.
     ext_hdr['B_O_ERR'] = 0.
+    ext_hdr['DRPNFILE'] = 6 #to avoid warning about number of frames used for noise_map
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
