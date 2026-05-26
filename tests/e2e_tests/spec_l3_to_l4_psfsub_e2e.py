@@ -79,19 +79,19 @@ def create_mock_L1_files(l1_datadir, l1_filelist, logger):
         template_img = Image(os.path.join(l1_datadir,group_files[0]))
         visitid = template_img.pri_hdr.get('VISITID', '')
         
-        for _ in range(len(group_files) // 2):
-            fake_frame = copy.deepcopy(template_img)
-            fake_frame.data[:] = np.zeros(np.shape(template_img.data))
-            if fake_frame.err is not None:
-                fake_frame.err[:] = np.zeros(np.shape(template_img.data))
-            fake_frame.ext_hdr['SCTSRT'] = fake_base_time.isoformat()
-            time_str = fake_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
-            fake_satspot_filename = f"cgi_{visitid}_{time_str}_l1_.fits"
-            fake_frame.pri_hdr['FILENAME'] = fake_satspot_filename
+    for _ in range(len(group_files) // 2):
+        fake_frame = copy.deepcopy(template_img)
+        fake_frame.data[:] = np.zeros(np.shape(template_img.data))
+        if fake_frame.err is not None:
+            fake_frame.err[:] = np.zeros(np.shape(template_img.data))
+        fake_frame.ext_hdr['SCTSRT'] = fake_base_time.isoformat()
+        time_str = fake_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
+        fake_satspot_filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+        fake_frame.pri_hdr['FILENAME'] = fake_satspot_filename
 
-            fake_frame.save(filedir=l1_datadir, filename=fake_satspot_filename)
-            fake_base_time += datetime.timedelta(seconds=1)
-            l1_filelist.append(os.path.join(l1_datadir, fake_satspot_filename))
+        fake_frame.save(filedir=l1_datadir, filename=fake_satspot_filename)
+        fake_base_time += datetime.timedelta(seconds=1)
+        l1_filelist.append(os.path.join(l1_datadir, fake_satspot_filename))
     
     l1_filelist = sorted(l1_filelist)
     return l1_filelist
@@ -149,7 +149,21 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     # Patch EACQ_ROW/EACQ_COL on L1s. TODO: fix this in the sims
     for flist in (psfref_satspot_files, psfref_files, target_satspot_files, target_files):
         patch_eacq_to_center_if_missing(flist)
-    
+
+    # Copy and save all L1 satspot files in output_dir
+    psfref_satspot_path = os.path.join(ref_spot_l3_output_dir,"all_L1")
+    target_satspot_path = os.path.join(target_spot_l3_output_dir,"all_L1")
+    os.makedirs(psfref_satspot_path)
+    os.makedirs(target_satspot_path)
+
+    for file in psfref_satspot_files:
+        filename = fits.getheader(file)['FILENAME']
+        shutil.copy(file,os.path.join(psfref_satspot_path,filename))
+    for file in target_satspot_files:
+        filename = fits.getheader(file)['FILENAME']
+        shutil.copy(file,os.path.join(target_satspot_path,filename))
+
+    # Create fake background satspot files (if required), and save them to L1 folder in output_dir
     psfref_satspot_files = create_mock_L1_files(psfref_satspot_path, psfref_satspot_files, logger)
     target_satspot_files = create_mock_L1_files(target_satspot_path, target_satspot_files, logger)
 
