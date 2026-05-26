@@ -4599,6 +4599,7 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
         
         # Format as YYYYMMDDtHHMMSSd (deciseconds = 1 digit)
         filetime = unique_dt.strftime('%Y%m%dt%H%M%S%f')[:-5]
+        sctsrt = unique_dt.replace(tzinfo=None).isoformat(timespec='milliseconds') # mock sctsrt
         
         # Create new filename with correct convention
         if level_suffix in ['l2a', 'l2b']:
@@ -4627,6 +4628,7 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             # Update headers in the Image object
             file.pri_hdr['FILENAME'] = os.path.basename(new_filename)
             file.pri_hdr['VISITID'] = visitid
+            file.ext_hdr['SCTSRT'] = sctsrt
             
             # Save the Image
             file.save(filedir=output_dir or os.path.dirname(new_filename), 
@@ -4635,6 +4637,7 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             # Update headers in the HDUList object
             fits_file[0].header['FILENAME'] = os.path.basename(new_filename)
             fits_file[0].header['VISITID'] = visitid
+            fits_file[1].header['SCTSRT'] = sctsrt
             
             # Update FITS file with new filename
             fits_file.writeto(new_filename, overwrite=True)
