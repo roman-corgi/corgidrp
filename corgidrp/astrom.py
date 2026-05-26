@@ -70,13 +70,14 @@ def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None):
     x_indices += x_min
 
     # 4) Compute flux-weighted centroid in the subarray
-    total_flux = np.sum(sub_frame)
-    if total_flux == 0:
-        # Edge case: empty or zero frame
-        return peak_x, peak_y
+    # Use nansum to handle NaN pixels from flat field corrections
+    total_flux = np.nansum(sub_frame)
+    if total_flux == 0 or np.isnan(total_flux):
+        # probably should raise error if total flux is 0 or nan
+        raise ValueError(f"Cannot compute centroid: ROI has zero or NaN total flux at position ({peak_x}, {peak_y})")
 
-    xcen = np.sum(x_indices * sub_frame) / total_flux
-    ycen = np.sum(y_indices * sub_frame) / total_flux
+    xcen = np.nansum(x_indices * sub_frame) / total_flux
+    ycen = np.nansum(y_indices * sub_frame) / total_flux
 
     return xcen, ycen
 
