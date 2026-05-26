@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import pytest
 import numpy as np
@@ -403,8 +404,21 @@ def test_cal_file():
     os.mkdir(test_dir) 
     ct_cal_file_in.save(filedir=test_dir)
 
-    # Check that the filename is what we expect
-    ct_cal_filename = dataset_ct[-1].filename.replace("_l2b", "_ctp_cal")
+    # Check that the filename is based on the latest input frame timestamp.
+    sctsrt_values = [frame.ext_hdr.get('SCTSRT') for frame in dataset_ct
+                     if frame.ext_hdr.get('SCTSRT') is not None]
+    if len(sctsrt_values) == len(dataset_ct):
+        latest_frame = max(enumerate(dataset_ct),
+                           key=lambda item: (str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+    else:
+        latest_frame = max(enumerate(dataset_ct),
+                           key=lambda item: (
+                               next((name.split('_')[2]
+                                     for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')]
+                                     if name and len(name.split('_')) > 2), ''),
+                               item[0]))[1]
+    latest_filename = latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+    ct_cal_filename = re.sub('_l[0-9].', '_ctp_cal', latest_filename)
     ct_cal_filepath = os.path.join(test_dir,ct_cal_filename)
     if os.path.exists(ct_cal_filepath) is False:
         raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')

@@ -51,6 +51,7 @@
                 "KGain" : "AUTOMATIC, OPTIONAL"
             },
             "keywords" : {
+                "mode" : "full",
                 "dataset_copy" : false
             }
         },

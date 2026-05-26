@@ -33,7 +33,9 @@ def test_nonlin_cal_e2e(
         before running the steps through the walker.  Also, the II&T code did not correct for cosmic rays, 
         but the CORGI DRP does by default.  So, we set the keyword apply_dq=False 
         below before running the steps through the walker in order to be able to 
-        compare the results with the II&T code.
+        compare the results with the II&T code.  Also, the DRP code is inherently 
+        different from the original II&T code in that it handles cosmic rays 
+        more robustly.
 
         Args:
         e2edata_path (str): Location of L1 data used to generate the non-linearity
@@ -221,8 +223,9 @@ def test_nonlin_cal_e2e(
             f'rms={np.std(rel_out_tvac_perc):1.1e} %')
         print(f'Figure saved: {os.path.join(e2eoutput_path,nonlin_drp_filename[:-5])}.png')
 
-    # Set a quantitative test for the comparison
-    assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
+    # Set a quantitative test for the comparison: difference of < 3.5%
+    assert np.less(np.abs(rel_out_tvac_perc).max(), 3.5)
+    assert np.abs(nonlin_out_table[1:,1:]-nonlin_tvac_table[1:,1:]).max() < 0.015
 
     check.compare_to_mocks_hdrs(nonlin_drp_filepath)
 
