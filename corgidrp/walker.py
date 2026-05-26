@@ -240,7 +240,8 @@ def autogen_recipe(filelist, outputdir, template=None):
                 pass
             else:
                 # add pc and analog inputs separately at L2a level
-                if first_frame.ext_hdr['DATALVL'] == "L2a":
+                # for L2a to L2b process photon-counting and analog frames separately
+                if first_frame is not None and first_frame.ext_hdr['DATALVL'] == "L2a":
                     split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=['ISPC'])
                     if len(unique_vals) > 1:
                         for partial_dataset, isPc in zip(split_datasets, unique_vals):
