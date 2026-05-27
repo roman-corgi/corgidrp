@@ -2092,3 +2092,98 @@ def update_to_l4_pol(input_dataset, corethroughput_cal, flux_cal_pol0, flux_cal_
         frame.ext_hdr['FLXCLF45'] = flux_cal_pol45.filename.split("/")[-1]
 
     return updated_dataset
+
+def combine_frames(input_dataset, collapse="mean", num_frames_per_group=None, num_frames_scaling=False, combine_other_hdus=False):
+    """
+    Combines frames in the input dataset by calling combine_subexposures from combine.py
+    on each unique split of VISITID and polarization state (DPAMNAME). Only works on L3 data.
+    The combination is done with either the mean or median, but the collapsed image can be
+    scaled in order to ~conserve the total number of photons in the input dataset
+    (this essentially turns a median into a sum).
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        collapse (str): "mean" or "median". (default: mean) 
+        num_frames_per_group (int or None): number of consecutive frames to combine
+                                            within each VISITID/DPAMNAME split subset.
+                                            If None, combine all frames in each subset
+                                            into one output frame. If the requested
+                                            grouping would create more than 100 output
+                                            frames in a split subset, it is overridden
+                                            to the nearest exact grouping that keeps the
+                                            per-subset output count at or below 100.
+                                            (default: None)
+        num_frames_scaling (bool): Multiply by number of frames in sequence in order to ~conserve photons (default: False)
+        combine_other_hdus (bool): Whether to combine other HDUs in the same way as the main data, err, DQ.
+                                   Otherwise, uses the HDUs from the first frame in a subset (default: False)
+
+    Returns:
+        corgidrp.data.Dataset: dataset of combined frames. If
+        ``num_frames_per_group`` is None, there is one output frame per split
+        subset, so ``len(output_dataset)`` equals the number of unique VISITID
+        groups or unique ``(VISITID, DPAMNAME)`` groups when ``DPAMNAME`` is
+        present for all frames. If ``num_frames_per_group`` is set, each split
+        subset is further combined in sequential groups of
+        ``num_frames_per_group``. If a requested grouping would create more than
+        100 output frames in a split subset, the grouping is increased so that
+        the output count stays at or below 100 while still dividing the subset
+        length exactly. Each output frame keeps the same internal data cube
+        shape as an input frame; only the dataset/frame axis is collapsed.
+    """
+    # check that we are running this on L3 data
+    for orig_frame in input_dataset:
+        if orig_frame.ext_hdr['DATALVL'] != "L3":
+            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
+            raise ValueError(err_msg)
+    if num_frames_per_group is not None and num_frames_per_group <= 0:
+        raise ValueError("num_frames_per_group must be a positive integer or None")
+
+    split_kwargs = {"prihdr_keywords": ["VISITID"]}
+    if all("DPAMNAME" in frame.ext_hdr for frame in input_dataset):
+        split_kwargs["exthdr_keywords"] = ["DPAMNAME"]
+
+    # Combine each visit/polarization subset independently.
+    split_datasets, _ = input_dataset.split_dataset(**split_kwargs)
+    combined_frames = []
+    any_auto_override = False
+    for split_dataset in split_datasets:
+        effective_num_frames_per_group = num_frames_per_group
+        if num_frames_per_group is not None:
+            requested_output_frames = len(split_dataset) / num_frames_per_group
+            if requested_output_frames > 100:
+                # combine_subexposures requires an exact divisor, so choose the
+                # largest allowed output-frame count that divides the subset length.
+                max_output_frames = 1
+                for candidate_output_frames in range(100, 0, -1):
+                    if len(split_dataset) % candidate_output_frames == 0:
+                        max_output_frames = candidate_output_frames
+                        break
+                effective_num_frames_per_group = len(split_dataset) // max_output_frames
+                any_auto_override = True
+
+        combined_split = combine_subexposures(
+            split_dataset,
+            num_frames_per_group=effective_num_frames_per_group,
+            collapse=collapse,
+            num_frames_scaling=num_frames_scaling,
+            combine_other_hdus=combine_other_hdus,
+        )
+        combined_frames.extend(combined_split.frames.tolist())
+
+    combined_dataset = data.Dataset(combined_frames)
+
+    if num_frames_per_group is None:
+        history_msg = (
+            f"Combined frames by applying {collapse} within each VISITID/DPAMNAME subset, "
+            f"result is a dataset with {len(combined_dataset)} frame(s)"
+        )
+    else:
+        history_msg = (
+            f"Combined frames by applying {collapse} in sequential groups of {num_frames_per_group} "
+            f"within each VISITID/DPAMNAME subset, result is a dataset with "
+            f"{len(combined_dataset)} frame(s)"
+        )
+        if any_auto_override:
+            history_msg += " Automatically increased some group sizes to keep per-subset output frame counts at or below 100."
+    combined_dataset.update_after_processing_step(history_msg)
+    return combined_dataset
