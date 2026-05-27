@@ -269,8 +269,9 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Update L1 headers for sims files
-    input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
+    if 'SPEC-NOM' not in input_data_dir:
+        # Update L1 headers only for old sims files (TVAC data). New corgisim files have all relevant headers.
+        input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
 
     ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
     for file in input_data_filelist:
