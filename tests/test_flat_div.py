@@ -11,24 +11,22 @@ import corgidrp.l2a_to_l2b as l2a_to_l2b
 old_err_tracking = corgidrp.track_individual_errors
 
 np.random.seed(9292)
-def test_flat_div():
+def test_flat_div(tmp_path):
     """
     Generate mock input data and pass into flat division function
     """
     corgidrp.track_individual_errors = True # this test uses individual error components
 
     ###### create simulated data
-    # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir) 
-    
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+
     # simulated images to be checked in flat division
-    simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
+    simflat_dataset = mocks.create_simflat_dataset(filedir=str(datadir))
      
     # creat one dummy flat field perform flat division
     #test data architecture
-    flat_dataset = mocks.create_flatfield_dummy(filedir=datadir)
+    flat_dataset = mocks.create_flatfield_dummy(filedir=str(datadir))
     #check that data is consistently modified
     flat_dataset.all_data[0,0,0] = 1
     assert flat_dataset[0].data[0,0] == 1
@@ -42,15 +40,14 @@ def test_flat_div():
     # check that the error is determined correctly
     assert np.array_equal(np.std(flat_dataset.all_data, axis = 0)/np.sqrt(len(flat_dataset)), flat_frame.err[0])
 	# save flatfield
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    calibdir = tmp_path / "testcalib"
+    calibdir.mkdir(parents=True, exist_ok=True)
     flat_filename = "sim_flat_calib.fits"
-    if not os.path.exists(calibdir):
-        os.mkdir(calibdir)
-    flat_frame.save(filedir=calibdir, filename=flat_filename)
-    
+    flat_frame.save(filedir=str(calibdir), filename=flat_filename)
+
     ###### perform flat division
     # load in the flatfield
-    flat_filepath = os.path.join(calibdir, flat_filename)
+    flat_filepath = str(calibdir / flat_filename)
     flatfield = data.FlatField(flat_filepath)
     # divide the simulated dataset with the dummy flatfield
     flatdivided_dataset = l2a_to_l2b.flat_division(simflat_dataset, flatfield)

@@ -163,7 +163,7 @@ def setup_module():
     min_write = 800
     max_write = 10000
 
-def test_expected_results_nom_sub():
+def test_expected_results_nom_sub(tmp_path):
     """Outputs are as expected for the provided frames with nominal arrays."""
 
     with warnings.catch_warnings():
@@ -211,12 +211,11 @@ def test_expected_results_nom_sub():
         f"Expected norm_val={norm_val}, min_write={min_write}, or max_write={max_write}, but got {actual_val}"
 
     # Test filename follows convention (as of R3.0.2)
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    nonlin_out.save(filedir=datadir)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+    nonlin_out.save(filedir=str(datadir))
     nln_cal_filename = dataset_nl[-1].filename.replace("_l2b", "_nln_cal")
-    nln_cal_filepath = os.path.join(datadir, nln_cal_filename)
+    nln_cal_filepath = str(datadir / nln_cal_filename)
     if os.path.exists(nln_cal_filepath) is False:
         raise IOError(f'NonLinearity calibration file {nln_cal_filepath} does not exist.')
     # Load the calibration file to check it has the same data contents

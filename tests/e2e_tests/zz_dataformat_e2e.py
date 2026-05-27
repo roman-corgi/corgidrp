@@ -12,6 +12,11 @@ import csv
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+# Run serially in a second phase: this file is a pure consumer that reads the
+# output directories produced by the other (parallelized) e2e tests, so it must
+# run after they have all completed.
+pytestmark = pytest.mark.serial
+
 def generate_template(hdulist, dtype_name=None):
     """
     Generates an rst documentation page of the data entries
@@ -454,7 +459,7 @@ def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_output_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_output_dir):
-        os.mkdir(doc_output_dir)
+        os.makedirs(doc_output_dir, exist_ok=True)
 
 
     with fits.open(l2a_data_file) as hdulist:
@@ -485,7 +490,7 @@ def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(l2b_data_file) as hdulist:
@@ -516,7 +521,7 @@ def test_l2b_pc_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(l2b_data_file) as hdulist:
@@ -548,7 +553,7 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(l3_data_file) as hdulist:
@@ -579,7 +584,7 @@ def test_l3_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(l3_spec_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
@@ -609,7 +614,7 @@ def test_l3_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(l3_pol_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
@@ -639,7 +644,7 @@ def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(l4_data_file) as hdulist:
@@ -669,7 +674,7 @@ def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(kgain_data_file) as hdulist:
@@ -700,7 +705,7 @@ def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(l4_pol_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
@@ -730,7 +735,7 @@ def test_l4_spec_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(l4_spec_coron_data_file) as hdulist:
         doc_contents = generate_template(hdulist, dtype_name="L4-Spec-Coronagraphic")
@@ -760,7 +765,7 @@ def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(l4_spec_noncoron_data_file) as hdulist:
         doc_contents = generate_template(hdulist, dtype_name="L4-Spec-Noncoron")
@@ -789,7 +794,7 @@ def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(astrom_data_file) as hdulist:
@@ -820,7 +825,7 @@ def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(bpmap_data_file) as hdulist:
@@ -851,7 +856,7 @@ def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(flat_data_file) as hdulist:
@@ -881,7 +886,7 @@ def test_polflat_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(polflat_data_file) as hdulist:
         doc_contents = generate_template(hdulist, dtype_name="PolFlatField")
@@ -911,7 +916,7 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(ct_data_file) as hdulist:
@@ -941,7 +946,7 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(ctmap_data_file) as hdulist:
@@ -973,7 +978,7 @@ def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(fluxcal_data_file) as hdulist:
@@ -1003,7 +1008,7 @@ def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(kgain_data_file) as hdulist:
@@ -1034,7 +1039,7 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(nonlin_data_file) as hdulist:
@@ -1064,7 +1069,7 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(nd_data_file) as hdulist:
@@ -1094,7 +1099,7 @@ def test_ndfilter_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(nds_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
@@ -1122,7 +1127,7 @@ def test_specfluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(sfl_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
@@ -1150,7 +1155,7 @@ def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(noisemaps_data_file) as hdulist:
@@ -1181,7 +1186,7 @@ def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(dark_data_file) as hdulist:
@@ -1219,7 +1224,7 @@ def test_darks_comparison_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(trad_data_file) as hdulist:
@@ -1246,7 +1251,7 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
 
     with fits.open(tpump_data_file) as hdulist:
@@ -1303,7 +1308,7 @@ def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(polcal_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
@@ -1332,7 +1337,7 @@ def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(polcal_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
@@ -1362,7 +1367,7 @@ def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(spec_linespread_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
@@ -1391,7 +1396,7 @@ def test_spec_prism_disp_dataformat_e2e(e2edata_path, e2eoutput_path):
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
-        os.mkdir(doc_dir)
+        os.makedirs(doc_dir, exist_ok=True)
 
     with fits.open(spec_prism_disp_data_file) as hdulist:
         doc_contents = generate_template(hdulist)

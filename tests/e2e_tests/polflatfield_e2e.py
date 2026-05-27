@@ -1,15 +1,12 @@
 import argparse
-import os
 import glob
 import pytest
 import os, shutil
 import numpy as np
-import scipy.ndimage
 import datetime
 import astropy.time as time
 import astropy.io.fits as fits
 import corgidrp
-import re
 import logging
 import warnings
 import corgidrp.data as data
@@ -17,7 +14,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
-from corgidrp.check import (check_filename_convention, check_dimensions, verify_header_keywords, compare_to_mocks_hdrs)
+from corgidrp.check import (compare_to_mocks_hdrs)
 
 #Get path to this file
 current_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -550,7 +547,7 @@ def test_flat_creation_neptune_POL45(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     
     outputdir = thisfile_dir
-    e2edata_dir =  '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir =  'E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description="run the l2b-> PolFlatfield end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

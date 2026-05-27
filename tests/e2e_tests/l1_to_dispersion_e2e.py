@@ -187,7 +187,7 @@ def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
 
     l2b_outputdir = os.path.join(test_outputdir, "l2b_results")
     if not os.path.exists(l2b_outputdir):
-        os.mkdir(l2b_outputdir)
+        os.makedirs(l2b_outputdir, exist_ok=True)
 
     # clean up by removing old files
     for file in os.listdir(l2b_outputdir):

@@ -98,14 +98,14 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     ctmap_outputdir = os.path.join(e2eoutput_path, 'ctmap_cal_e2e')
     if os.path.exists(ctmap_outputdir):
         shutil.rmtree(ctmap_outputdir)
-    os.mkdir(ctmap_outputdir)
+    os.makedirs(ctmap_outputdir, exist_ok=True)
     
     # Define directory to store the individual frames under the output directory
     output_dir = os.path.join(ctmap_outputdir, 'input_l2b')
-    os.mkdir(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
 
     calibrations_dir = os.path.join(ctmap_outputdir, 'calibrations')
-    os.mkdir(calibrations_dir)
+    os.makedirs(calibrations_dir, exist_ok=True)
     
     renamed_files = mocks.rename_files_to_cgi_format(list_of_fits=list(corDataset), output_dir=output_dir, level_suffix="l2a")
     

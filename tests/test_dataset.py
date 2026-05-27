@@ -127,15 +127,15 @@ def test_split_dataset():
 
 
 
-def test_pickling():
+def test_pickling(tmp_path):
     """
     Test that datasets and images can be pickled
     """
     ###### create simulated data
-    # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
+    # Use tmp_path for test isolation
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+    datadir = str(datadir)
 
     ####### test data architecture
     dark_dataset = create_dark_calib_files(filedir=datadir)

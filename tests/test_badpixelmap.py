@@ -15,25 +15,22 @@ np.random.seed(456)
 FLAG_TO_BIT_MAP = data.get_flag_to_bit_map()
 FLAG_TO_VALUE_MAP = data.get_flag_to_value_map()
 
-def generate_badpixel_map(datadir=None, dthresh=6):
+def generate_badpixel_map(datadir, dthresh=6):
     """
     Create simulated dark and flat calibration data, inject hot and dead pixels,
     and then generate a bad pixel map. Returns the bad pixel map,
     the dark frame, and the flat field frame.
-    
+
     Args:
-        datadir (str, optional): Directory to store simulated data. If None,
-                                 a "simdata" folder in the current directory is used.
+        datadir (str or Path): Directory to store simulated data.
         dthresh (int, optional): Threshold parameter to pass into create_bad_pixel_map.
                                  Defaults to 6.
-    
+
     Returns:
         tuple: (badpixelmap, dark_frame, flat_frame)
     """
-    # Set the data directory.
-    if datadir is None:
-        datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    os.makedirs(datadir, exist_ok=True)
+    # Ensure datadir is a string for legacy API compatibility
+    datadir = str(datadir)
     
     # --- Create and load dark data ---
     dark_dataset = mocks.create_dark_calib_files(filedir=datadir)
@@ -69,7 +66,7 @@ def generate_badpixel_map(datadir=None, dthresh=6):
     return bpm, dark_frame, flat_frame
 
 
-def test_badpixelmap(): 
+def test_badpixelmap(tmp_path):
     '''
 
     Tests the creation of badpixelmaps.
@@ -78,9 +75,11 @@ def test_badpixelmap():
     to create a master bad pixel map. 
 
     '''
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
 
     ###### make the badpixel map (input the flat_dataset just as a dummy):
-    badpixelmap, dark_frame, flat_frame = generate_badpixel_map()
+    badpixelmap, dark_frame, flat_frame = generate_badpixel_map(datadir)
 
     # # Use np.unpackbits to unpack the bits - big endien demical to binary
     badpixelmap_bits = data.unpackbits_64uint(badpixelmap.data[:, :, np.newaxis], axis=2)  # unit64 to binary
@@ -141,12 +140,12 @@ def test_packing_unpacking_uint64():
     assert np.sum(unpacked_bits[0, 0]) == 1, "Only one bit should be set"
 
 
-def test_output_filename_convention():
+def test_output_filename_convention(tmp_path):
     print("**Testing output filename naming conventions**")
 
     bp_fake_data = np.array([
-        [0,  1,  0],   
-        [1,  0, 0],  
+        [0,  1,  0],
+        [1,  0, 0],
         [0, 0, 0]
     ], dtype=float)
 
@@ -172,10 +171,11 @@ def test_output_filename_convention():
     fake_input_dataset = data.Dataset(frames_or_filepaths=[fake_dark, fake_input_image])
 
     bpcal_prihdr, bpcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
-    
-    # Create test output directory
-    test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
-    os.makedirs(test_output_dir, exist_ok=True)
+
+    # Create test output directory using tmp_path
+    test_output_dir = tmp_path / "testcalib"
+    test_output_dir.mkdir(parents=True, exist_ok=True)
+    test_output_dir = str(test_output_dir)
     
     badpixelmap = data.BadPixelMap(bp_fake_data, pri_hdr=bpcal_prihdr, ext_hdr=bpcal_exthdr, input_dataset=fake_input_dataset)
     badpixelmap.save(filedir=test_output_dir)

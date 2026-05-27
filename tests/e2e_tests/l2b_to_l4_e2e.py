@@ -405,7 +405,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     # Organize L3 files into l2b_to_l3 subfolder
     l2b_to_l3_dir = os.path.join(main_output_dir, "l2b_to_l3")
     if not os.path.exists(l2b_to_l3_dir):
-        os.mkdir(l2b_to_l3_dir)
+        os.makedirs(l2b_to_l3_dir, exist_ok=True)
     
     walker.walk_corgidrp(l2b_data_filelist, "",l2b_to_l3_dir)
 

@@ -39,7 +39,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     os.makedirs(input_data_dir)
 
     calibrations_dir = os.path.join(bp_map_outputdir, "calibrations")
-    os.mkdir(calibrations_dir)
+    os.makedirs(calibrations_dir, exist_ok=True)
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
@@ -242,7 +242,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     os.makedirs(input_data_dir)
 
     calibrations_dir = os.path.join(bp_map_outputdir, "calibrations")
-    os.mkdir(calibrations_dir)
+    os.makedirs(calibrations_dir, exist_ok=True)
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")

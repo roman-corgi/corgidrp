@@ -19,12 +19,22 @@ from corgidrp.fluxcal import get_filter_name, read_cal_spec, read_filter_curve
 from corgidrp.check import (check_filename_convention, verify_header_keywords,
     check_dimensions)
 
+# Mark all tests in this file to run serially (not in parallel)
+# This file has complex test chain dependencies with shared module-level state
+pytestmark = pytest.mark.serial
 
-spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy")) 
+
+spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy"))
 test_datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
 template_dir = os.path.join(spec_datadir, "templates")
 output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
+
+# Module-level variables set by earlier tests and used by later tests
+# Initialized to None, will be set by test execution
+disp_dict = None
+disp_model = None
+output_dataset = None
 
 def convert_tvac_to_dataset():
     """

@@ -10,18 +10,16 @@ import corgidrp.l2b_to_l3 as l2b_to_l3
 
 #%%
 
-def test_exptime_normalization():
+def test_exptime_normalization(tmp_path):
     """
     Generate mock input data and pass into exposure_time_normalization function
     """
     ###### create simulated data
-    # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+
     #create simulated data
-    not_normalized_dataset = mocks.create_not_normalized_dataset(filedir=datadir)
+    not_normalized_dataset = mocks.create_not_normalized_dataset(filedir=str(datadir))
 
     # extract the exposure time from each Image and check that it is >0
     exposure_times = np.zeros(len(not_normalized_dataset.frames))

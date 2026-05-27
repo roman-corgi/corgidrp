@@ -34,7 +34,7 @@ def test_hashing():
     new_detparams = data.DetectorParams({'FWC_EM_E' : 200000}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
     assert default_detparams.get_hash() != new_detparams.get_hash()
 
-def test_pickling():
+def test_pickling(caldb_initialized):
     """
     Test detector params can be pickled
     """

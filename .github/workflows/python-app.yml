@@ -30,12 +30,46 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest flake8-docstrings-complete
+        pip install flake8 pytest pytest-xdist flake8-docstrings-complete
         if [ -f requirements.txt ]; then pip install -r requirements.txt .; fi
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82,DCO020,DCO021,DCO022,DCO023,DCO024,DCO030,DCO031,DCO032,DCO060,DCO061,DCO062,DCO063,DCO064,DCO065 --show-source --statistics
-    - name: Test with pytest
+    - name: Start memory monitor
       run: |
-        pytest
+        # log memory every 5s in the background so we can see growth before a cancel/OOM
+        ( while true; do
+            echo "[$(date +%H:%M:%S)] $(free -m | awk '/Mem:/ {print "used="$3"MB free="$4"MB avail="$7"MB"}')";
+            sleep 5;
+          done ) > mem.log 2>&1 &
+        echo "MEM_MON_PID=$!" >> "$GITHUB_ENV"
+    - name: Test with pytest (parallel)
+      env:
+        CORGIDRP_DO_NOT_AUTO_INIT_CALDB: "1"
+        PYTEST_XDIST_WORKER_START_METHOD: fork
+        # cap `-n auto` on the CI runner; local dev leaves this unset to use all cores
+        PYTEST_XDIST_AUTO_NUM_WORKERS: "2"
+      run: |
+        pytest -n auto -vv -ra --durations=20 --max-worker-restart=0 -m "not serial"
+    - name: Test with pytest (serial)
+      env:
+        CORGIDRP_DO_NOT_AUTO_INIT_CALDB: "1"
+      run: |
+        pytest -vv -ra --durations=20 -m "serial"
+    - name: Memory log
+      if: always()
+      run: |
+        echo "===== memory timeline ====="
+        cat mem.log || echo "no mem log"
+        echo "===== peak ====="
+        sort -t= -k2 -n mem.log 2>/dev/null | tail -1 || true
+    - name: Check for OOM kills
+      if: always()
+      run: |
+        echo "===== dmesg OOM check ====="
+        sudo dmesg | grep -iE "killed process|out of memory|oom" || echo "No OOM events found in dmesg"
+    - name: Stop memory monitor
+      if: always()
+      run: |
+        kill "$MEM_MON_PID" 2>/dev/null || true

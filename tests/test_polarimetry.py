@@ -38,7 +38,7 @@ from corgidrp.check import (check_filename_convention, check_dimensions,
 warnings.filterwarnings("ignore", message="File collision detected.*already exists")
 
 
-def test_image_splitting():
+def test_image_splitting(tmp_path):
     """
     Create mock L2b polarimetric images, check that it is split correctly
     """
@@ -63,13 +63,11 @@ def test_image_splitting():
 
     ## checks that saving and loading the image doesn't cause any issues
     ### save
-    test_dir = os.path.join(os.getcwd(), 'pol_output')
-    if os.path.isdir(test_dir):
-        shutil.rmtree(test_dir)
-    os.mkdir(test_dir)
-    output_dataset_autocrop_wfov.save(test_dir, ['wfov_pol_img_{0}.fits'.format(i) for i in range(len(output_dataset_autocrop_wfov))])
+    test_dir = tmp_path / 'pol_output'
+    test_dir.mkdir(parents=True, exist_ok=True)
+    output_dataset_autocrop_wfov.save(str(test_dir), ['wfov_pol_img_{0}.fits'.format(i) for i in range(len(output_dataset_autocrop_wfov))])
     ### load
-    autocrop_wfov_filelist = [os.path.join(test_dir, f) for f in os.listdir(test_dir)]
+    autocrop_wfov_filelist = [str(test_dir / f) for f in os.listdir(test_dir)]
     output_dataset_autocrop_wfov = data.Dataset(autocrop_wfov_filelist)
 
     ## create what the expected output data should look like
@@ -173,7 +171,7 @@ def test_image_splitting():
     with pytest.raises(ValueError):
         invalid_output = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=682)
         
-def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
+def test_calc_pol_p_and_pa_image(tmp_path, n_sim=100, nsigma_tol=3., seed=0,
                                  logger=None, log_head=""):
     """
     Test `calc_pol_p_and_pa_image` using mock L4 Stokes cubes.
@@ -204,10 +202,10 @@ def test_calc_pol_p_and_pa_image(n_sim=100, nsigma_tol=3., seed=0,
     # ================================================================================
     if logger is None:
         # Create output directory for log file
-        output_dir = os.path.join(os.path.dirname(__file__), 'pol_l4_to_tda_VAP_test2')
-        os.makedirs(output_dir, exist_ok=True)
-        
-        log_file = os.path.join(output_dir, 'pol_l4_to_tda_VAP_test2.log')
+        output_dir = tmp_path / 'pol_l4_to_tda_VAP_test2'
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        log_file = str(output_dir / 'pol_l4_to_tda_VAP_test2.log')
         
         # Create a new logger specifically for this test
         logger = logging.getLogger('pol_l4_to_tda_VAP_test2')
@@ -1284,7 +1282,7 @@ def test_calc_stokes_unocculted(n_sim=10, nsigma_tol=3.):
 
     return
 
-def test_compute_QphiUPhi(): 
+def test_compute_QphiUPhi(tmp_path): 
     '''
     Test that the computer_QphiUphi function behaves as expected in three scenarios:
     1) When the input image center is correct, U_phi should be approximately zero.
@@ -1299,17 +1297,13 @@ def test_compute_QphiUPhi():
     ########## Set up VAP Logger ##########
     #######################################
 
-    current_file_path = os.path.dirname(os.path.abspath(__file__))
-
-    output_dir = os.path.join(current_file_path,'l4_to_tda_compute_quphi')
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
+    output_dir = tmp_path / 'l4_to_tda_compute_quphi'
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # set up logging
     global logger
 
-    log_file = os.path.join(output_dir, 'l4_to_tda_compute_QphiUphi.log')
+    log_file = str(output_dir / 'l4_to_tda_compute_QphiUphi.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('l4_to_tda_compute_QphiUphi')

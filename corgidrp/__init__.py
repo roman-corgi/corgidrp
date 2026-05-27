@@ -6,14 +6,20 @@ import numpy as np
 __version__ = "5.0"
 version = __version__ # temporary backwards compatability 
 
-#### Create a configuration file for the corgidrp if it doesn't exist. 
+#### Create a configuration file for the corgidrp if it doesn't exist.
 def create_config_dir():
     """
     Checks if the default .corgidrp directory exists, and if not, it sets it up
     """
     global config_folder
-    homedir = pathlib.Path.home()
-    config_folder = os.path.join(homedir, ".corgidrp")
+
+    # Use worker-specific temp dir if running under pytest-xdist
+    worker_tmp = os.environ.get('CORGIDRP_WORKER_TMP')
+    if worker_tmp:
+        config_folder = os.path.join(worker_tmp, ".corgidrp")
+    else:
+        homedir = pathlib.Path.home()
+        config_folder = os.path.join(homedir, ".corgidrp")
     # replace legacy file with folder if needed
     if os.path.isfile(config_folder):
         oldconfig = configparser.ConfigParser()
@@ -24,12 +30,12 @@ def create_config_dir():
 
     # make folder if doesn't exist
     if not os.path.isdir(config_folder):
-        os.mkdir(config_folder)
+        os.makedirs(config_folder, exist_ok=True)
 
     # make default calibrations folder if it doesn't exist
     default_cal_dir = os.path.join(config_folder, "default_calibs")
     if not os.path.exists(default_cal_dir):
-        os.mkdir(default_cal_dir)
+        os.makedirs(default_cal_dir, exist_ok=True)
 
     # make user templates folder if it doesn't exist
     user_templates_dir = os.path.join(config_folder, "user_templates")
@@ -71,7 +77,7 @@ def update_pipeline_settings():
     global caldb_filepath, default_cal_dir, user_templates_dir, track_individual_errors, chunk_size, image_dtype, dq_dtype, skip_missing_cal_steps, jit_calib_id, enforce_template_structure
     # borrowed from the kpicdrp caldb
     # load in default caldbs based on configuration file
-    config_filepath = os.path.join(pathlib.Path.home(), ".corgidrp", "corgidrp.cfg")
+    config_filepath = os.path.join(config_folder, "corgidrp.cfg")
     config = configparser.ConfigParser()
     config.read(config_filepath)
 
@@ -83,6 +89,13 @@ def update_pipeline_settings():
     caldb_filepath = config.get("PATH", "caldb", fallback=None) # path to calibration db
     default_cal_dir = config.get("PATH", "default_calibs", fallback=None) # path to default calibrations directory
     user_templates_dir = config.get("PATH", "user_templates", fallback=os.path.join(pathlib.Path.home(), ".corgidrp", "user_templates")) # path to user templates directory
+
+    # Override paths for pytest-xdist workers to ensure isolation
+    worker_tmp = os.environ.get('CORGIDRP_WORKER_TMP')
+    if worker_tmp:
+        worker_config_dir = os.path.join(worker_tmp, ".corgidrp")
+        caldb_filepath = os.path.join(worker_config_dir, "caldb.csv")
+        default_cal_dir = os.path.join(worker_config_dir, "default_calibs")
     track_individual_errors = _bool_map[config.get("DATA", "track_individual_errors", fallback='false').lower()] # save each individual error component separately?
     chunk_size = int(float(config.get("DATA", "chunk_size", fallback="200"))) # number of frames to process at a time if pocessing in chunks for RAM conservation
     image_dtype = image_datatype_map[config.get("DATA", "image_dtype", fallback="32")] # bit size for image and error data

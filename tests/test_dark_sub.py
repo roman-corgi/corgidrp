@@ -10,7 +10,10 @@ import corgidrp.detector as detector
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 from corgidrp.darks import build_trad_dark
 
-np.random.seed(456)
+# Mark all tests in this file to run serially (not in parallel)
+# This file uses shared simdata/testcalib directories without worker isolation
+# Also has non-deterministic behavior with random data generation
+pytestmark = pytest.mark.serial
 
 old_err_tracking = corgidrp.track_individual_errors
 # use default parameters
@@ -34,22 +37,17 @@ Cdq = Cerr.copy().astype(int)
 noise_maps = mocks.create_noise_maps(Fd, Ferr, Fdq, Cd,
                                             Cerr, Cdq, Dd, Derr, Ddq)
 
-def test_dark_sub():
+def test_dark_sub(tmp_path):
     """
     Generate mock input data and pass into dark subtraction function
     """
-    # Reset random seed to ensure deterministic behavior regardless of test execution order
-    np.random.seed(456)
+    np.random.seed(456)  # Reset seed at function start for reproducibility
     corgidrp.track_individual_errors = True # this test uses individual error components
 
     ###### create simulated data
-    # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    for name in os.listdir(datadir):
-            path = os.path.join(datadir, name)
-            os.remove(path)
+    # Use worker-isolated temporary directory to avoid race conditions with parallel tests
+    datadir = str(tmp_path / "simdata")
+    os.makedirs(datadir, exist_ok=True)
 
     ####### test data architecture
     dark_dataset = mocks.create_dark_calib_files(filedir=datadir)
@@ -86,10 +84,9 @@ def test_dark_sub():
     assert np.allclose(np.std(dark_dataset_notelem, axis = 0)/np.sqrt(len(dark_dataset_notelem)), dark_frame_full.err[0][0:-1, :], rtol=1e-6)
 
     # save dark
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    calibdir = str(tmp_path / "testcalib")
     dark_filename = "sim_dark_calib.fits"
-    if not os.path.exists(calibdir):
-        os.mkdir(calibdir)
+    os.makedirs(calibdir, exist_ok=True)
     dark_frame_full.save(filedir=calibdir, filename=dark_filename)
 
     ###### perform dark subtraction
@@ -187,15 +184,15 @@ def test_dark_sub():
 
     corgidrp.track_individual_errors = old_err_tracking
 
-def test_dark_sub_multi_config():
+def test_dark_sub_multi_config(tmp_path):
     """
     Verify that dark_subtraction handles a dataset with multiple EMGAIN/EXPTIME
     configurations when noisemaps is provided, and that the traditional-dark path
     still rejects multi-config input.
     """
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
-    if not os.path.exists(calibdir):
-        os.mkdir(calibdir)
+    np.random.seed(789)  # Use different seed to ensure test independence
+    calibdir = str(tmp_path / "testcalib")
+    os.makedirs(calibdir, exist_ok=True)
 
     configs = [
         {"EMGAIN_C": 10, "EXPTIME": 4},
@@ -221,10 +218,8 @@ def test_dark_sub_multi_config():
     multi_config_dataset = data.Dataset(frames)
 
     # use a fresh empty directory so every dark saved by the call is attributable to it
-    darkout = os.path.join(os.path.dirname(__file__), "testcalib_multiconfig")
-    if os.path.exists(darkout):
-        shutil.rmtree(darkout)
-    os.mkdir(darkout)
+    darkout = str(tmp_path / "testcalib_multiconfig")
+    os.makedirs(darkout, exist_ok=True)
 
     # noisemaps path: must succeed and produce ~0 result for each frame
     result = l2a_to_l2b.dark_subtraction(multi_config_dataset, noisemaps=noise_maps, outputdir=darkout)

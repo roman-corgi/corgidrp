@@ -57,7 +57,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     # separate L2a and L2b outputdirs
     l2a_outputdir = os.path.join(test_outputdir, "l1_to_l2a")
     if not os.path.exists(l2a_outputdir):
-        os.mkdir(l2a_outputdir)
+        os.makedirs(l2a_outputdir, exist_ok=True)
     # clean up by removing old files
     for file in os.listdir(l2a_outputdir):
         os.remove(os.path.join(l2a_outputdir, file))

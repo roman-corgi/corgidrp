@@ -8,7 +8,11 @@ import corgidrp.l2a_to_l2b as l2a_to_l2b
 import pytest
 import astropy.io.fits as fits
 
-def test_kgain():
+# Mark all tests in this file to run serially (not in parallel)
+# This file has shared state dependencies that cause race conditions in parallel
+pytestmark = pytest.mark.serial
+
+def test_kgain(tmp_path):
     """
     test the KGain class and the calibration file and the unit conversion
     """
@@ -67,13 +71,12 @@ def test_kgain():
     assert kgain_ptc_copy.err_hdr is not None
     
     # save KGain
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    calibdir = tmp_path / "testcalib"
+    calibdir.mkdir(parents=True, exist_ok=True)
     kgain_filename = "kgain_calib.fits"
-    if not os.path.exists(calibdir):
-        os.mkdir(calibdir)
-    kgain_ptc.save(filedir=calibdir, filename=kgain_filename)        
-        
-    kgain_filepath = os.path.join(calibdir, kgain_filename)
+    kgain_ptc.save(filedir=str(calibdir), filename=kgain_filename)
+
+    kgain_filepath = str(calibdir / kgain_filename)
     kgain_open = data.KGain(kgain_filepath)
     # use isclose to deal with 64 bit vs 32 bit precision 
     assert np.isclose(kgain_open.value, gain_value, rtol=1e-6)

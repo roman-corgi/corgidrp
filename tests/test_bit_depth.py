@@ -6,7 +6,7 @@ import corgidrp
 from corgidrp.mocks import generate_coron_dataset_with_companions
 from corgidrp.data import Image
 
-def test_bit_depth():
+def test_bit_depth(tmp_path):
     """
     Modifies the configuration file with different bit depth settings,
     generate and save mock image, check if image data is of the right type
@@ -32,13 +32,11 @@ def test_bit_depth():
     corgidrp.update_pipeline_settings()
 
     # create output directory
-    output_dir = os.path.join(os.path.dirname(__file__), 'bit_depth_test_data')
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.mkdir(output_dir)
+    output_dir = tmp_path / 'bit_depth_test_data'
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # generate mock image for testing
-    dataset = generate_coron_dataset_with_companions(outdir=output_dir)
+    dataset = generate_coron_dataset_with_companions(outdir=str(output_dir))
     
     # reset configuration file to its original state
     # reset the file before assert statements so that if the test fails the config file will not be affected

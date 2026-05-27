@@ -116,7 +116,7 @@ def get_relgains(frame, em_gain, nonlin_path):
 
     return counts_flat.reshape(frame.shape)
 
-def test_non_linearity_correction():
+def test_non_linearity_correction(tmp_path):
     """
     Generate a non-linearity correction calibration and test the correction 
     
@@ -146,13 +146,11 @@ def test_non_linearity_correction():
     # import IPython; IPython.embed()
 
     ###### create a simulated dataset that is non-linear
-    # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
 
     emgain = 2000
-    nonlinear_dataset = mocks.create_nonlinear_dataset(test_non_linearity_path, filedir=datadir, em_gain=emgain)
+    nonlinear_dataset = mocks.create_nonlinear_dataset(test_non_linearity_path, filedir=str(datadir), em_gain=emgain)
     
     assert len(nonlinear_dataset) == 2
 

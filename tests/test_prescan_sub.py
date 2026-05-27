@@ -1,5 +1,6 @@
 import glob
 import os
+import tempfile
 
 import corgidrp
 import corgidrp.data as data
@@ -15,6 +16,11 @@ from pathlib import Path
 from pytest import approx
 
 old_err_tracking = corgidrp.track_individual_errors
+
+# Per-process scratch dir for simulated data written by this module. A unique temp
+# dir (instead of a shared tests/simdata) prevents pytest-xdist workers running
+# other modules from racing on the same files.
+_scratch_dir = tempfile.mkdtemp(prefix="prescan_sub_")
 
 # make a mock DetectorNoiseMaps instance (to get the bias offset input)
 im_rows, im_cols, _ = unpack_geom('SCI', 'image', detector_areas)
@@ -267,7 +273,7 @@ def test_prescan_sub():
     tol = 0.01
 
     ###### create simulated data
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    datadir = os.path.join(_scratch_dir, "simdata")
 
     for arrtype in ['SCI','ENG']:
         # create simulated data
@@ -370,7 +376,7 @@ def test_bias_zeros_frame():
     tol = 1e-13
 
     ###### create simulated data
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    datadir = os.path.join(_scratch_dir, "simdata")
 
     for arrtype in ['SCI', 'ENG']:
         # create simulated data
@@ -416,7 +422,7 @@ def test_bias_hvoff():
     seed = 12346
 
     ###### create simulated data
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    datadir = os.path.join(_scratch_dir, "simdata")
 
     for arrtype in ['SCI', 'ENG']:
         # create simulated data
@@ -460,7 +466,7 @@ def test_bias_hvon():
     seed = 12346
 
     ###### create simulated data
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    datadir = os.path.join(_scratch_dir, "simdata")
 
     for arrtype in ['SCI', 'ENG']:
         # create simulated dataset
@@ -490,7 +496,7 @@ def test_bias_uniform_value():
     bval = 1.
 
     ###### create simulated dataset
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    datadir = os.path.join(_scratch_dir, "simdata")
 
     for arrtype in ['SCI', 'ENG']:
         # create simulated dataset
@@ -515,7 +521,7 @@ def test_bias_offset():
     tol = 1e-13
 
     ###### create simulated dataset
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    datadir = os.path.join(_scratch_dir, "simdata")
 
     for arrtype in ['SCI', 'ENG']:
         # create simulated dataset with 0 bias offset

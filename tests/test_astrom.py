@@ -18,16 +18,14 @@ def print_pass():
     cprint(' PASS ', "black", "on_green")
 
 
-def test_astrom():
-    """ 
+def test_astrom(tmp_path):
+    """
     Generate a simulated image and test the astrometric calibration computation.
-    
+
     """
     # create a simulated image with source guesses and true positions
-    # check that the simulated image folder exists and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "test_data", "simastrom")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
+    datadir = tmp_path / "simastrom"
+    datadir.mkdir(parents=True, exist_ok=True)
 
     field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
     
@@ -78,16 +76,14 @@ def test_astrom():
     pickled_astrom = pickle.loads(pickled)
     assert np.all((astrom_cal.data == pickled_astrom.data)) # check it is the same as the original
 
-def test_astrom_vignette(vignette_radius=3_460):
-    """ 
+def test_astrom_vignette(tmp_path, vignette_radius=3_460):
+    """
     Generate a simulated image and test the astrometric calibration computation.
-    
+
     """
     # create a simulated image with source guesses and true positions
-    # check that the simulated image folder exists and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "test_data", "simastrom")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
+    datadir = tmp_path / "simastrom"
+    datadir.mkdir(parents=True, exist_ok=True)
 
     field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
     
@@ -130,25 +126,22 @@ def test_astrom_vignette(vignette_radius=3_460):
     assert np.all((astrom_cal.data == pickled_astrom.data))
 
     # save and check it can be pickled after save
-    astrom_cal.save(filedir=datadir, filename="astrom_cal_output.fits")
-    astrom_cal_2 = data.AstrometricCalibration(os.path.join(datadir, "astrom_cal_output.fits"))
+    astrom_cal.save(filedir=str(datadir), filename="astrom_cal_output.fits")
+    astrom_cal_2 = data.AstrometricCalibration(str(datadir / "astrom_cal_output.fits"))
 
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(astrom_cal_2)
     pickled_astrom = pickle.loads(pickled)
     assert np.all((astrom_cal.data == pickled_astrom.data)) # check it is the same as the original
 
-
-def test_distortion():
-    """ 
+def test_distortion(tmp_path):
+    """
     Generate a simulated image and test the distortion map creation as part of the boresight calibration.
-    
+
     """
     # create a simulated image with source guesses and true positions
-    # check that the simulated image folder exists and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "test_data", "simastrom")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
+    datadir = tmp_path / "simastrom"
+    datadir.mkdir(parents=True, exist_ok=True)
 
     field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__), "test_data", "distortion_expected_coeffs.csv")
@@ -246,8 +239,8 @@ def test_distortion():
     assert np.all((astrom_cal.data == pickled_astrom.data))
 
     # save and check it can be pickled after save
-    astrom_cal.save(filedir=datadir, filename="astrom_cal_output.fits")
-    astrom_cal_2 = data.AstrometricCalibration(os.path.join(datadir, "astrom_cal_output.fits"))
+    astrom_cal.save(filedir=str(datadir), filename="astrom_cal_output.fits")
+    astrom_cal_2 = data.AstrometricCalibration(str(datadir / "astrom_cal_output.fits"))
 
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(astrom_cal_2)

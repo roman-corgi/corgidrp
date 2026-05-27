@@ -874,7 +874,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     """
     # Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
-        os.mkdir(filedir)
+        os.makedirs(filedir, exist_ok=True)
 
     frames = []
     for i in range(numfiles):
@@ -913,7 +913,7 @@ def create_simflat_dataset(filedir=None, numfiles=10):
     """
     # Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
-        os.mkdir(filedir)
+        os.makedirs(filedir, exist_ok=True)
 
     frames = []
     for i in range(numfiles):
@@ -1128,7 +1128,7 @@ def create_flatfield_dummy(filedir=None, numfiles=2):
     """
     ## Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
-        os.mkdir(filedir)
+        os.makedirs(filedir, exist_ok=True)
 
     frames=[]
     for i in range(numfiles):
@@ -1166,7 +1166,7 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
 
     # Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
-        os.mkdir(filedir)
+        os.makedirs(filedir, exist_ok=True)
 
     frames = []
     for i in range(numfiles):
@@ -1296,7 +1296,7 @@ def create_prescan_files(filedir=None, numfiles=2, arrtype="SCI"):
     """
     # Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
-        os.mkdir(filedir)
+        os.makedirs(filedir, exist_ok=True)
 
     if arrtype == "SCI":
         size = (1200, 2200)
@@ -1347,7 +1347,7 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     """
     # Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
-        os.mkdir(filedir)
+        os.makedirs(filedir, exist_ok=True)
 
     prihdr, exthdr, errhdr, dqhdr = create_default_calibration_product_headers()
     exthdr['DATATYPE']      = 'BadPixelMap'
@@ -1540,8 +1540,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
 
     # Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
-        os.mkdir(filedir)
-
+        os.makedirs(filedir, exist_ok=True)
+    
     # hard coded image properties
     sim_data = np.zeros(image_shape)
     ny, nx = image_shape
@@ -3000,7 +3000,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
 
     # Create directory if needed
     if filedir is not None and not os.path.exists(filedir):
-        os.mkdir(filedir)
+        os.makedirs(filedir, exist_ok=True)
 
     # Image properties
     size = (1024, 1024)
@@ -3129,7 +3129,7 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
 
     # Create directory if needed
     if filedir is not None and not os.path.exists(filedir):
-        os.mkdir(filedir)
+        os.makedirs(filedir, exist_ok=True)
 
     # Image properties
     size = (1024, 1024)
