@@ -2011,7 +2011,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
                     'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR','WAVELEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR','WV0_DIMX', 'WV0_DIMY']) 
+                    'Z2VAR', 'Z3VAR','WAVELEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR']) 
     #combine frames                       
     dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling, combine_other_hdus=True)
     #certain headers are added in combine_subexposures, we manually add them in

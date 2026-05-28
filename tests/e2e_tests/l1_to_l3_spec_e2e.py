@@ -273,6 +273,12 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger, 
     if fix_headers:
         # Update L1 headers only for old sims files (TVAC data). New corgisim files have all relevant headers.
         input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
+    #Delete COMMENT header keywords in L1 primary header, if present. Those are artifacts from corgisim.
+    for f in input_data_filelist:
+        try:
+            fits.delval(f, 'COMMENT', ext=0)
+        except:
+            pass
 
     ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
     for file in input_data_filelist:
