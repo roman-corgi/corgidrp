@@ -356,12 +356,17 @@ def generate_psf_cube(
                 continue
         except:
             pass
-
+        
+        # Sub-pixel centroid of this PSF on EXCAM, and the integer pixel it falls on
         cx = float(psf_loc[i_psf][0])
         cy = float(psf_loc[i_psf][1])
         cx_round = int(np.round(cx))
         cy_round = int(np.round(cy))
 
+        # Bounding box of size (2*n_pix_psf + 1)^2 around the rounded centroid
+        # pixel. Axis 0 = y (rows), axis 1 = x (cols). max/min clip to the frame
+        # edges so PSFs near the boundary produce smaller cutouts; these are
+        # padded back to uniform size below.
         idx_0_0 = max(cy_round - n_pix_psf, 0)
         idx_0_1 = min(frame.data.shape[0], cy_round + n_pix_psf + 1)
         idx_1_0 = max(cx_round - n_pix_psf, 0)
