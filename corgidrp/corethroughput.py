@@ -46,7 +46,7 @@ def di_over_pil_transmission(
  
       Multiplying the counts of the pupil image by this factor translates them
       into equivalent counts of the direct imaging lens.
-
+ 
     Args:
       cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
       cfam_version (int): version number of the filters (CFAM, pupil, imaging
@@ -63,7 +63,7 @@ def di_over_pil_transmission(
         lambda_pupil_nm = lambda_pupil_A / 10
     except:
         raise Exception('* File with the transmission of the pupil lens not found')
-    
+
     try:
         lambda_imaging_A, trans_imaging = np.loadtxt(os.path.join(here, 'data',
             'filter_curves', f'imaging_lens_v{cfam_version}.txt'),
@@ -99,7 +99,7 @@ def get_psf_pix(
     Args:
       dataset (corgidrp.data.Dataset): a collection of off-axis PSFs.
       roi_radius (int or float): Half-size of the box around the peak,
-        in pixels. Adjust based on desired lambda/D.
+        in pixels. Adjust based on desired λ/D.
 
     Returns:
       Array of pair of values with PSFs position in (fractional) EXCAM pixels
@@ -118,7 +118,7 @@ def get_psf_ct(
 
     Definition of core throughput: The numerator in CT (counts above 50% peak)
     is measured with pupil masks (Lyot stop, SPC pupil mask) in place, DMs at
-    dark hole solution, but no FPM.  The denominator (total stellar flux) is
+    dark hole solution, but no FPM.  The denominator (total stellar flux) is
     measured without any masks in place and an infinite aperture.
 
     NOTE: The FPM are kept in place while measuring the CT because near the
@@ -127,7 +127,7 @@ def get_psf_ct(
     respectively.
 
     See  Journal of Astronomical Telescopes, Instruments, and Systems, Vol. 9,
-    Issue 4, 045002 (October 2023). https://doi.org/10.1117/1.JATIS.9.4.045002
+    Issue 4, 045002 (October 2023). https://doi.org/10.1117/1.JATIS.9.4.045002
     and figures 9-13 for details.
 
     Args:
@@ -152,19 +152,21 @@ def estimate_psf_pix_and_ct(
     cfam_version=0,
     ):
     """
-    1090881 - Given a core throughput dataset consisting of M clean frames
+    1090881 - Given a core throughput dataset consisting of M clean frames
     (nominally 1024x1024) taken at different FSM positions, the CTC GSW shall
     estimate the pixel location and core throughput of each PSF.
+
     NOTE: the list of M clean frames may be a subset of the frames collected during
     core throughput data collection, to allow for the removal of outliers.
+
     Some of the images are pupil images of the unocculted source.
 
     Args:
       dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
         M clean frames (nominally 1024x1024) taken at different FSM positions.
-        It includes some pupil images of the unocculted source. photoelectrons / second / pixel.
+        It includes some pupil images of the unocculted source.  photoelectrons / second / pixel.
       roi_radius (int or float): Half-size of the box around the peak,
-        in pixels. Adjust based on desired lambda/D.
+        in pixels. Adjust based on desired λ/D.
       cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
 
@@ -185,7 +187,7 @@ def estimate_psf_pix_and_ct(
             raise Exception('Frame w/o CFAM specification. All frames must have CFAM specified')
     if len(set(cfam_list)) != 1:
         raise Exception('All frames must have the same CFAM filter')
-        
+    
     # identify the pupil images in the dataset
     pupil_img_frames = []
     for frame in dataset:
@@ -319,7 +321,7 @@ def generate_psf_cube(
         It includes some pupil images of the unocculted source.
       psf_loc (array): Array of pair of values with PSFs position in (fractional)
         EXCAM pixels with respect to the pixel (0,0) in the PSF images.
-        cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
+      cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
       cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
       spline_order (int): Spline order used to shift and center each stamp.
@@ -327,7 +329,7 @@ def generate_psf_cube(
 
     Returns:
       3-d PSF cube of PSF images from a core throughput dataset, including their
--     data quality, and corresponding headers as HDU units.
+      data quality, and corresponding headers as HDU units.
 
     """
     dataset = dataset_in.copy()
@@ -335,7 +337,7 @@ def generate_psf_cube(
     # 3-d cube of PSF images cut around the PSF's location
     psf_cube = []
     dq_cube = []
-    # Pixels arounf PSF's location +/- n_pix_psf in both dimensions that  
+    # Pixels arounf PSF's location +/- n_pix_psf in both dimensions that
     # correspond to 3 lambda/D in units of EXCAM pixels:
     # 3 * lambda_mean_nm * 1e-9 / D * rad_to_mas / EXCAM_pixel_pitch in mas
     n_pix_psf = int(np.ceil(3*get_cfam(cfam_name=cfam_name,
@@ -381,6 +383,7 @@ def generate_psf_cube(
                        x_offset:x_offset+cutout_data.shape[1]] = cutout_data
             padded_dq[y_offset:y_offset+cutout_dq.shape[0],
                      x_offset:x_offset+cutout_dq.shape[1]] = cutout_dq
+            
             cutout_data = padded_data
             cutout_dq = padded_dq
 
@@ -420,6 +423,7 @@ def generate_psf_cube(
     ext_hdr = first_offaxis_frame.ext_hdr
     # Add EXTNAME
     psf_hdu = fits.ImageHDU(data=psf_cube, header=ext_hdr, name='PSFCUBE')
+    
     # Data quality cube
     dq_hdr = first_offaxis_frame.dq_hdr
     # Add specific information
