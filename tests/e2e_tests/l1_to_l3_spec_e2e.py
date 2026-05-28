@@ -45,14 +45,15 @@ def patch_l2b_eacq_to_cropped_center(filelist):
             h['EACQ_COL'] = (n1 - 1) / 2.0
 
 
-def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
+def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger, fix_headers=True):
     """Run the complete L1 to L3 spectroscopy data end-to-end test.
     
     Args:
-        l1_datadir (str): Path to L1 input data directory
-        l3_outputdir (str): Path to output directory
-        processed_cal_path (str): Path to calibration files directory
-        logger (logging.Logger): Logger instance for output
+        l1_datadir (str): Path to L1 input data directory.
+        l3_outputdir (str): Path to output directory.
+        processed_cal_path (str): Path to calibration files directory.
+        logger (logging.Logger): Logger instance for output.
+        fix_headers (bool, optional): Fix headers for sims generated using TVAC data, not required for corgisim generated files. Default is True.
         
     Returns:
         list: List of L3 output filenames
@@ -269,7 +270,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    if 'SPEC-NOM' not in input_data_dir:
+    if fix_headers:
         # Update L1 headers only for old sims files (TVAC data). New corgisim files have all relevant headers.
         input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
 

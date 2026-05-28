@@ -75,7 +75,7 @@ def create_mock_L1_files(l1_datadir, logger):
         logger.info(f'Creating mock L1 background satspot file in {l1_datadir}')
         group_files = group_files[:-1]  # drop one frame to make count even
 
-        template_img = Image(os.path.join(l1_datadir,group_files[0]))
+        template_img = Image(group_files[0])
         visitid = template_img.pri_hdr.get('VISITID', '')
         
     for _ in range(len(group_files) // 2):
@@ -193,10 +193,10 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
             filename = fits.getheader(file)['FILENAME']
             shutil.copy(file,os.path.join(target_satspot_input_path,filename))
     
-    run_l1_to_l3_e2e_test(psfref_satspot_input_path, ref_spot_l3_output_dir, processed_cal_path, logger)
-    run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
-    run_l1_to_l3_e2e_test(target_satspot_input_path, target_spot_l3_output_dir, processed_cal_path, logger)
-    run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger)
+    run_l1_to_l3_e2e_test(psfref_satspot_input_path, ref_spot_l3_output_dir, processed_cal_path, logger, fix_headers=False)
+    run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger, fix_headers=False)
+    run_l1_to_l3_e2e_test(target_satspot_input_path, target_spot_l3_output_dir, processed_cal_path, logger, fix_headers=False)
+    run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger, fix_headers=False)
 
     l3_files = []
     l3_psfref = sorted(glob.glob(os.path.join(ref_l3_output_dir, "cgi_*l3_.fits")))
