@@ -280,12 +280,14 @@ def test_read_cent_wave():
     with pytest.raises(ValueError):
         cen_wave = steps.read_cent_wave('X')[0]
     
+    #3F should be the same as band 3, the broadband
+    f_list = steps.read_cent_wave('3F')
     cen_wave_list = steps.read_cent_wave('3')
     assert len(cen_wave_list) == 4
-    assert cen_wave_list[0] == 729.3
-    assert cen_wave_list[1] == 122.3
-    assert cen_wave_list[2] == 0.725909
-    assert cen_wave_list[3] == -0.09398
+    assert f_list[0] == cen_wave_list[0] == 729.3
+    assert f_list[1] == cen_wave_list[1] == 122.3
+    assert f_list[2] == cen_wave_list[2] == 0.725909
+    assert f_list[3] == cen_wave_list[3] == -0.09398
     
     
 def test_calibrate_dispersion_model():    
@@ -1438,6 +1440,8 @@ def test_filter_offset():
     assert offset.offsets["2A"][1] == 0.2
     assert offset.offsets["3"] == offset.default_offsets["3"]
     assert offset.get_offsets("2a") == offset.offsets["2A"]
+    #CFAMNAME 3F is the same as broadband 3
+    assert offset.get_offsets("3f") ==  offset.get_offsets("3")
     xoff, yoff = offset.get_offsets("2A")
     assert xoff == 0.5
     assert yoff == 0.2
