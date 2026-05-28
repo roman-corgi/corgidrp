@@ -647,7 +647,7 @@ def test_cpgs_satspots():
 
 def test_cpgs_one_satspot():
     """
-    Tests if walker.py can parse CPGS XML to extract satspot info 
+    Tests if walker.py can parse CPGS XML to extract satspot info
     if just one satspot tuple is specified.
     """
 
@@ -659,7 +659,7 @@ def test_cpgs_one_satspot():
     assert sat_spot_info['spot1_angle'] == 45.4
     assert sat_spot_info['spot1_contrast'] == 1.7E-06
     assert sat_spot_info['spot1_filt'] == '3D'
-    
+
 def test_l1_to_l2b_default_calibs():
     """
     Tests that L1 to L2b processing works using only the packaged TVAC default
@@ -703,7 +703,7 @@ def test_l1_to_l2b_default_calibs():
             f"Expected DATALVL='L2b' in {output_file}, got {img.ext_hdr['DATALVL']!r}"
         )
 
-def test_pc_science_analog_satspots(): 
+def test_pc_science_analog_satspots():
     # create dirs
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
@@ -738,7 +738,7 @@ def test_pc_science_analog_satspots():
             )
     satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
     satspot_frame.ext_hdr["SATSPOTS"] = True
-    
+
     for dpamname in ['IMAGING', 'PRISM3', 'POL0']:
         sci_frame.ext_hdr["DPAMNAME"] = dpamname
         visitid = sci_frame.pri_hdr["VISITID"]
@@ -752,12 +752,12 @@ def test_pc_science_analog_satspots():
         unique_time = base_time + time_offset
         time_str = data.format_ftimeutc(unique_time.isoformat())
         satspot_frame.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
-        
+
         all_frames = [sci_frame, satspot_frame]
         dataset = data.Dataset(all_frames)
         dataset.save()
         filelist = [frame.filepath for frame in dataset]
-        
+
         templates, chained = walker.guess_template(dataset)
         assert len(templates)==2
         assert len(templates[0])==3
@@ -772,6 +772,61 @@ def test_pc_science_analog_satspots():
         for file in filelist:
             os.remove(file)
 
+def test_guess_template_l1_absflux_pol():
+    """
+    Tests that L1 ABSFLUX data with polarimetry correctly chains to l2b_to_fluxcal_factor_pol.json
+    """
+    test_cases = [
+        ('CGIVST_CAL_ABSFLUX_FAINT', 'POL0'),
+        ('CGIVST_CAL_ABSFLUX_FAINT', 'POL45'),
+        ('CGIVST_CAL_ABSFLUX_BRIGHT', 'POL0'),
+        ('CGIVST_CAL_ABSFLUX_BRIGHT', 'POL45'),
+    ]
+    for vistype, dpamname in test_cases:
+        l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+        for frame in l1_dataset:
+            frame.pri_hdr['VISTYPE'] = vistype
+            frame.ext_hdr['DATALVL'] = 'L1'
+            frame.ext_hdr['DPAMNAME'] = dpamname
+
+        recipe_filename, chained = walker.guess_template(l1_dataset)
+        expected_chain = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
+        assert recipe_filename == expected_chain
+        assert chained == True
+
+def test_guess_template_l1_absflux_non_pol():
+    """
+    Tests that L1 ABSFLUX data without polarimetry still uses the regular flux calibration recipe
+    """
+    l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+    for frame in l1_dataset:
+        frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_ABSFLUX_FAINT'
+        frame.ext_hdr['DATALVL'] = 'L1'
+        frame.ext_hdr['DPAMNAME'] = 'NFOV'  # Not POL0 or POL45
+
+    recipe_filename, chained = walker.guess_template(l1_dataset)
+    expected_chain = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+    assert recipe_filename == expected_chain
+    assert chained == True
+
+def test_guess_template_l1_pol_setup():
+    """
+    Tests that L1 POL_SETUP data correctly chains through to l2b_to_polcal.json
+    """
+    test_dpamnames = ['POL0', 'POL45']
+
+    for dpamname in test_dpamnames:
+        l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+        for frame in l1_dataset:
+            frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_POL_SETUP'
+            frame.ext_hdr['DATALVL'] = 'L1'
+            frame.ext_hdr['DPAMNAME'] = dpamname
+        recipe_filename, chained = walker.guess_template(l1_dataset)
+
+        expected_chain = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
+        assert recipe_filename == expected_chain
+        assert chained == True
+
 if __name__ == "__main__":#
     test_autoreducing()
     test_auto_template_identification()
@@ -784,5 +839,7 @@ if __name__ == "__main__":#
     test_cpgs_one_satspot()
     test_l1_to_l2b_default_calibs()
     test_pc_science_analog_satspots()
-
+    test_guess_template_l1_absflux_pol()
+    test_guess_template_l1_absflux_non_pol()
+    test_guess_template_l1_pol_setup()
 
