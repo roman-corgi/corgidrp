@@ -267,9 +267,9 @@ def subpixel_center_stamp(
         shifted_data (np.ndarray): Data stamp shifted by (dy, dx) 
         shifted_dq (np.ndarray): DQ stamp shifted by (dy, dx) 
     """
-    # Track NaN regions separately so the spline does not have issues
+    # Track NaN regions separately so the spline does not smear them into PSF data
     nan_mask = np.isnan(cutout_data)
-    data_filled = np.where(nan_mask, 0.0, cutout_data)
+    data_filled = np.where(nan_mask, 0.0, cutout_data) if nan_mask.any() else cutout_data
 
     # Shift the data with a spline. Pixels that get shifted in are marked with 
     # NaN
@@ -278,17 +278,18 @@ def subpixel_center_stamp(
         shift=(dy, dx),
         order=spline_order,
         mode='constant',
-        cval=np.nan,
+        cval=0.0,
     )
-    # Shift the NaN mask as well
-    shifted_nan_mask = ndi_shift(
-        nan_mask.astype(np.float32),
-        shift=(dy, dx),
-        order=spline_order,
-        mode='constant',
-        cval=1.0,
-    ) > 0.5
-    shifted_data = np.where(shifted_nan_mask, np.nan, shifted_data)
+    # Shift the NaN mask as well (skip when no NaN)
+    if nan_mask.any():
+        shifted_nan_mask = ndi_shift(
+            nan_mask.astype(np.float32),
+            shift=(dy, dx),
+            order=spline_order,
+            mode='constant',
+            cval=0.0,
+        ) > 0.5
+        shifted_data = np.where(shifted_nan_mask, np.nan, shifted_data)
 
     # Shift the DQ array with nearest-neighbour interpolation
     shifted_dq = ndi_shift(
@@ -423,7 +424,7 @@ def generate_psf_cube(
     ext_hdr = first_offaxis_frame.ext_hdr
     # Add EXTNAME
     psf_hdu = fits.ImageHDU(data=psf_cube, header=ext_hdr, name='PSFCUBE')
-    
+
     # Data quality cube
     dq_hdr = first_offaxis_frame.dq_hdr
     # Add specific information
@@ -492,7 +493,7 @@ def generate_ct_cal(
         cfam_name=cfam_list[0], cfam_version=cfam_version,
         spline_order=spline_order)
 
-    centered_psf_loc = np.round(psf_loc_est).astype(float)
+    centered_psf_loc = psf_loc_est
 
     # N sets of (x,y, CT measurements)
     # x, y: PSF stamp center on EXCAM (integer pixel since stamps are now

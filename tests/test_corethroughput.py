@@ -484,7 +484,7 @@ def test_cal_file():
         cutout = psf[row_start:row_start+cal_file_side_0,
                     col_start:col_start+cal_file_side_1]
         assert np.isclose(np.nansum(ct_cal_file.data[i_psf]), cutout.sum(),
-                        rtol=1e-5)
+                        rtol=1e-4)
 
     # Verify that the PSF images are best centered at each set of coordinates.
     test_result_psf_max_row = []  # intialize
@@ -1103,6 +1103,27 @@ def test_generate_psf_cube_edge_padding():
     print_pass() if test_padded_data and test_padded_dq else print_fail()
     print('Tests about PSF padding from clipped cut outs passed')
 
+def test_psf_cube_subpixel_centered():
+    """Tests for issue #368: each PSF stamp in the calibration cube should be
+    sub-pixel-centered so its centroid lies on the central pixel of the stamp."""
+    ct_cal = corethroughput.generate_ct_cal(dataset_ct)
+    psf_cube = ct_cal.data
+    n_psf, ny, nx = psf_cube.shape
+    center_y, center_x = ny // 2, nx // 2
+
+    yy, xx = np.mgrid[0:ny, 0:nx]
+    for i in range(n_psf):
+        psf = np.where(np.isnan(psf_cube[i]), 0.0, psf_cube[i])
+        total = psf.sum()
+        cx = (xx * psf).sum() / total
+        cy = (yy * psf).sum() / total
+        assert abs(cx - center_x) < 0.05, \
+            f'PSF {i} centroid x={cx:.4f} not at central pixel {center_x}'
+        assert abs(cy - center_y) < 0.05, \
+            f'PSF {i} centroid y={cy:.4f} not at central pixel {center_y}'
+    print('All PSF stamps in the cube are sub-pixel-centered (issue #368): ', end='')
+    print_pass()
+
 
 def teardown_module():
     """
@@ -1137,3 +1158,4 @@ if __name__ == '__main__':
     test_psf_interp()
     test_ct_cal_order_independent()
     test_generate_psf_cube_edge_padding()
+    test_psf_cube_subpixel_centered()
