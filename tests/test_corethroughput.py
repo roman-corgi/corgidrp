@@ -474,11 +474,17 @@ def test_cal_file():
     cal_file_side_0 = ct_cal_file.data.shape[1]
     cal_file_side_1 = ct_cal_file.data.shape[2]
     n_pix_psf = (cal_file_side_0 - 1) // 2
+    # Each cube slice is now centered on the central pixel (issue #368), so it
+    # no longer equals the exact pixel cutout of the input frame. Check instead
+    # that the cube slice has approximately the same total flux as the
+    # corresponding cutout.
     for i_psf, psf in enumerate(psf_cube_in):
         row_start = max(int(np.round(psf_loc_input[i_psf][1])) - n_pix_psf, 0)
         col_start = max(int(np.round(psf_loc_input[i_psf][0])) - n_pix_psf, 0)
-        assert np.allclose(psf[row_start:row_start+cal_file_side_0,
-            col_start:col_start+cal_file_side_1], ct_cal_file.data[i_psf], rtol=1e-6)
+        cutout = psf[row_start:row_start+cal_file_side_0,
+                    col_start:col_start+cal_file_side_1]
+        assert np.isclose(np.nansum(ct_cal_file.data[i_psf]), cutout.sum(),
+                        rtol=1e-5)
 
     # Verify that the PSF images are best centered at each set of coordinates.
     test_result_psf_max_row = []  # intialize

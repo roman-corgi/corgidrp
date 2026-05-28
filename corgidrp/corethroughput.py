@@ -1,5 +1,4 @@
 import os
-
 import numpy as np
 from scipy.ndimage import shift as ndi_shift
 from astropy.time import Time
@@ -17,12 +16,12 @@ def get_cfam(
     """ Read CFAM filter wavelength in nm and transmission.
 
     Args:
-        cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
-        cfam_version (int): version number of the filters (CFAM, pupil, imaging
-            lens).
+      cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
+      cfam_version (int): version number of the filters (CFAM, pupil, imaging
+        lens).
 
     Returns:
-        CFAM filter wavelength in nm and transmission.
+      CFAM filter wavelength in nm and transmission.
     """
     datadir = os.path.join(here, 'data', 'filter_curves')
     filter_names = os.listdir(datadir)
@@ -32,12 +31,10 @@ def get_cfam(
     filter_name = [name for name in filter_name if f'v{cfam_version}' in name]
     if filter_name == []:
         raise ValueError(f'there is no filter {cfam_name} available with version {cfam_version}')
-
     tab = ascii.read(os.path.join(datadir,filter_name[0]), format='csv',
         header_start = 3, data_start = 4)
     lambda_nm_filter = tab['lambda_nm'].data
     trans_filter = tab['%T'].data / tab['%T'].data.max()
-
     return lambda_nm_filter, trans_filter
 
 def di_over_pil_transmission(
@@ -45,18 +42,18 @@ def di_over_pil_transmission(
     cfam_version=0,
     ):
     """ Derives the relative transmission between the pupil lens and the imaging
-    lens: trans_imaging/trans_pupil.
-
-    Multiplying the counts of the pupil image by this factor translates them
-    into equivalent counts of the direct imaging lens.
+      lens: trans_imaging/trans_pupil.
+ 
+      Multiplying the counts of the pupil image by this factor translates them
+      into equivalent counts of the direct imaging lens.
 
     Args:
-        cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
-        cfam_version (int): version number of the filters (CFAM, pupil, imaging
-            lens).
+      cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
+      cfam_version (int): version number of the filters (CFAM, pupil, imaging
+        lens).
 
     Returns:
-        Ratio trans_imaging/trans_pupil.
+      Ratio trans_imaging/trans_pupil.
     """
     # Read pupil and direct imaging lenses
     try:
@@ -66,6 +63,7 @@ def di_over_pil_transmission(
         lambda_pupil_nm = lambda_pupil_A / 10
     except:
         raise Exception('* File with the transmission of the pupil lens not found')
+    
     try:
         lambda_imaging_A, trans_imaging = np.loadtxt(os.path.join(here, 'data',
             'filter_curves', f'imaging_lens_v{cfam_version}.txt'),
@@ -83,32 +81,29 @@ def di_over_pil_transmission(
         lambda_nm_filter,
         lambda_pupil_nm,
         trans_pupil)
-
     trans_lambda_imaging_band = np.interp(
         lambda_nm_filter,
         lambda_imaging_nm,
         trans_imaging)
-
     # Ratio of both transmissions:
     ratio_imaging_pupil_trans = (np.sum(trans_lambda_imaging_band*trans_lambda_filter)/
         np.sum(trans_lambda_pupil_band*trans_lambda_filter))
-
     return ratio_imaging_pupil_trans
 
 def get_psf_pix(
     dataset,
     roi_radius=3,
     ):
-    """ Estimate the PSF positions of a set of PSF images.
-
+    """ Estimate the PSF positions of a set of PSF images. 
+ 
     Args:
-        dataset (corgidrp.data.Dataset): a collection of off-axis PSFs.
-        roi_radius (int or float): Half-size of the box around the peak,
-            in pixels. Adjust based on desired lambda/D.
+      dataset (corgidrp.data.Dataset): a collection of off-axis PSFs.
+      roi_radius (int or float): Half-size of the box around the peak,
+        in pixels. Adjust based on desired lambda/D.
 
     Returns:
-        Array of pair of values with PSFs position in (fractional) EXCAM pixels
-        with respect to the pixel (0,0) in the PSF images
+      Array of pair of values with PSFs position in (fractional) EXCAM pixels
+      with respect to the pixel (0,0) in the PSF images
     """
     psf_pix = []
     for psf in dataset:
@@ -123,7 +118,7 @@ def get_psf_ct(
 
     Definition of core throughput: The numerator in CT (counts above 50% peak)
     is measured with pupil masks (Lyot stop, SPC pupil mask) in place, DMs at
-    dark hole solution, but no FPM. The denominator (total stellar flux) is
+    dark hole solution, but no FPM.  The denominator (total stellar flux) is
     measured without any masks in place and an infinite aperture.
 
     NOTE: The FPM are kept in place while measuring the CT because near the
@@ -131,18 +126,18 @@ def get_psf_ct(
     one to quantify the effect of the FPM in other areas, near the IWA and OWA,
     respectively.
 
-    See Journal of Astronomical Telescopes, Instruments, and Systems, Vol. 9,
+    See  Journal of Astronomical Telescopes, Instruments, and Systems, Vol. 9,
     Issue 4, 045002 (October 2023). https://doi.org/10.1117/1.JATIS.9.4.045002
     and figures 9-13 for details.
 
     Args:
-        dataset (corgidrp.data.Dataset): a collection of off-axis PSFs.
-        unocc_psf_norm (float): sum of the 2-d array corresponding to the
-            unocculted psf. Default: off-axis PSF are normalized to the unocculted
-            PSF already. That is, unocc_psf_norm equals 1.
+      dataset (corgidrp.data.Dataset): a collection of off-axis PSFs.
+      unocc_psf_norm (float): sum of the 2-d array corresponding to the
+        unocculted psf. Default: off-axis PSF are normalized to the unocculted
+        PSF already. That is, unocc_psf_norm equals 1.
 
     Returns:
-        Array of core throughput values between 0 and 1.
+      Array of core throughput values between 0 and 1.
     """
     psf_ct = []
     for psf in dataset:
@@ -165,19 +160,19 @@ def estimate_psf_pix_and_ct(
     Some of the images are pupil images of the unocculted source.
 
     Args:
-        dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
-            M clean frames (nominally 1024x1024) taken at different FSM positions.
-            It includes some pupil images of the unocculted source. photoelectrons / second / pixel.
-        roi_radius (int or float): Half-size of the box around the peak,
-            in pixels. Adjust based on desired lambda/D.
-        cfam_version (int): version number of the filters (CFAM, pupil, imaging
-            lens).
+      dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
+        M clean frames (nominally 1024x1024) taken at different FSM positions.
+        It includes some pupil images of the unocculted source. photoelectrons / second / pixel.
+      roi_radius (int or float): Half-size of the box around the peak,
+        in pixels. Adjust based on desired lambda/D.
+      cfam_version (int): version number of the filters (CFAM, pupil, imaging
+        lens).
 
     Returns:
-        psf_pix (array): Array with PSF's pixel positions. Units: EXCAM pixels
-            referred to the (0,0) pixel.
-        psf_ct (array): Array with PSF's core throughput values. Units:
-            dimensionless (Values must be within 0 and 1).
+      psf_pix (array): Array with PSF's pixel positions. Units: EXCAM pixels
+        referred to the (0,0) pixel.
+      psf_ct (array): Array with PSF's core throughput values. Units:
+        dimensionless (Values must be within 0 and 1).
     """
     dataset = dataset_in.copy()
 
@@ -190,13 +185,13 @@ def estimate_psf_pix_and_ct(
             raise Exception('Frame w/o CFAM specification. All frames must have CFAM specified')
     if len(set(cfam_list)) != 1:
         raise Exception('All frames must have the same CFAM filter')
-
+        
     # identify the pupil images in the dataset
     pupil_img_frames = []
     for frame in dataset:
         try:
-            # Pupil images of the unocculted source satisfy:
-            # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+        # Pupil images of the unocculted source satisfy:
+        # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
             exthd = frame.ext_hdr
             if (exthd['DPAMNAME']=='PUPIL' and exthd['LSAMNAME']=='OPEN' and
                 exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
@@ -207,7 +202,6 @@ def estimate_psf_pix_and_ct(
         print(f'Found {len(pupil_img_frames)} pupil images for the core throughput estimation.')
     else:
         raise Exception('No pupil image found. At least there must be one pupil image.')
-
     # mean combine the total values (photo-electrons/sec) of the pupil images
     unocc_psf_norm = 0
     for frame in pupil_img_frames:
@@ -217,7 +211,6 @@ def estimate_psf_pix_and_ct(
     # the same cfam filter or an Exception is raised
     unocc_psf_norm *= di_over_pil_transmission(cfam_name=cfam_list[0],
         cfam_version=cfam_version)
-
     # Remove pupil frames
     offaxis_frames = []
     for frame in dataset:
@@ -228,21 +221,17 @@ def estimate_psf_pix_and_ct(
         print(f'Found {len(dataset_offaxis)} off-axis PSFs for the core throughput estimation.')
     else:
         raise Exception('No off-axis PSF found. At least there must be one off-axis PSF.')
-
     # find the PSF positions of the off-axis PSFs
     psf_pix = get_psf_pix(
         dataset_offaxis,
         roi_radius=roi_radius)
-
     # find the PSF corethroughput of the off-axis PSFs
     psf_ct = get_psf_ct(
         dataset_offaxis,
         unocc_psf_norm = unocc_psf_norm)
-
     # same number of estimates. One per PSF
     if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset_offaxis):
         raise Exception('PSF positions and CT values are inconsistent')
-
     return psf_pix, psf_ct
 
 def subpixel_center_stamp(
@@ -325,20 +314,20 @@ def generate_psf_cube(
     # TODO: error data cubes will be added in a release after R3.0.2
 
     Args:
-        dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
-            M clean frames (nominally 1024x1024) taken at different FSM positions.
-            It includes some pupil images of the unocculted source.
-        psf_loc (array): Array of pair of values with PSFs position in (fractional)
-            EXCAM pixels with respect to the pixel (0,0) in the PSF images.
+      dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
+        M clean frames (nominally 1024x1024) taken at different FSM positions.
+        It includes some pupil images of the unocculted source.
+      psf_loc (array): Array of pair of values with PSFs position in (fractional)
+        EXCAM pixels with respect to the pixel (0,0) in the PSF images.
         cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
-        cfam_version (int): version number of the filters (CFAM, pupil, imaging
-            lens).
-        spline_order (int): Spline order used to shift and center each stamp.
-            Default 3 (cubic). Use 1 for linear interpolation.
+      cfam_version (int): version number of the filters (CFAM, pupil, imaging
+        lens).
+      spline_order (int): Spline order used to shift and center each stamp.
+        Default 3 (cubic). Use 1 for linear interpolation.
 
     Returns:
-        3-d PSF cube of PSF images from a core throughput dataset, including their
--       data quality, and corresponding headers as HDU units.
+      3-d PSF cube of PSF images from a core throughput dataset, including their
+-     data quality, and corresponding headers as HDU units.
 
     """
     dataset = dataset_in.copy()
@@ -346,7 +335,7 @@ def generate_psf_cube(
     # 3-d cube of PSF images cut around the PSF's location
     psf_cube = []
     dq_cube = []
-    # Pixels around PSF's location +/- n_pix_psf in both dimensions that 
+    # Pixels arounf PSF's location +/- n_pix_psf in both dimensions that  
     # correspond to 3 lambda/D in units of EXCAM pixels:
     # 3 * lambda_mean_nm * 1e-9 / D * rad_to_mas / EXCAM_pixel_pitch in mas
     n_pix_psf = int(np.ceil(3*get_cfam(cfam_name=cfam_name,
@@ -378,10 +367,10 @@ def generate_psf_cube(
         cutout_dq = frame.dq[idx_0_0:idx_0_1, idx_1_0:idx_1_1]
 
         # PSFs near field stop boundary produce clipped cutouts with varying shapes
-        # (eg not all 15x15). Pad them to uniform size so np.array() can create
-        # the PSF cube. Padded regions are filled with NaN (data) and DQ flag 1
+        # (eg not all 15x15). Pad them to uniform size so np.array() can create 
+        # the PSF cube. Padded regions are filled with NaN (data) and DQ flag 1 
         # (bad pixel).
-        if (cutout_data.shape[0] != expected_size or cutout_data.shape[1] != expected_size):
+        if cutout_data.shape[0] != expected_size or cutout_data.shape[1] != expected_size:
             padded_data = np.full((expected_size, expected_size), np.nan, dtype=cutout_data.dtype)
             padded_dq = np.full((expected_size, expected_size), 1, dtype=cutout_dq.dtype)
             # Place the clipped cutout so the rounded centroid pixel lands at
@@ -389,9 +378,9 @@ def generate_psf_cube(
             y_offset = n_pix_psf - (cy_round - idx_0_0)
             x_offset = n_pix_psf - (cx_round - idx_1_0)
             padded_data[y_offset:y_offset+cutout_data.shape[0],
-                        x_offset:x_offset+cutout_data.shape[1]] = cutout_data
+                       x_offset:x_offset+cutout_data.shape[1]] = cutout_data
             padded_dq[y_offset:y_offset+cutout_dq.shape[0],
-                      x_offset:x_offset+cutout_dq.shape[1]] = cutout_dq
+                     x_offset:x_offset+cutout_dq.shape[1]] = cutout_dq
             cutout_data = padded_data
             cutout_dq = padded_dq
 
@@ -413,7 +402,6 @@ def generate_psf_cube(
 
     psf_cube = np.array(psf_cube)
     dq_cube = np.array(dq_cube)
-
     # Check
     if len(psf_cube) != len(psf_loc):
         raise Exception(('The number of PSFs does not match the number of PSF '+
@@ -427,17 +415,15 @@ def generate_psf_cube(
                 exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12'):
             first_offaxis_frame = frame
             break
-
     if first_offaxis_frame is None:
         raise Exception('No off-axis PSF frame found in dataset')
-
     ext_hdr = first_offaxis_frame.ext_hdr
     # Add EXTNAME
     psf_hdu = fits.ImageHDU(data=psf_cube, header=ext_hdr, name='PSFCUBE')
     # Data quality cube
     dq_hdr = first_offaxis_frame.dq_hdr
     # Add specific information
-    dq_hdr['COMMENT'] = 'Data quality for each image'
+    dq_hdr['COMMENT'] = 'Data quality for each image' 
     # Add EXTNAME
     dq_hdu = fits.ImageHDU(data=dq_cube, header=dq_hdr, name='DQCUBE')
 
@@ -490,37 +476,32 @@ def generate_ct_cal(
     if len(set(cfam_list)) != 1:
         raise Exception('All frames must have the same CFAM filter')
 
-    # Get estimated PSF centers and CT (sub-pixel centroids on EXCAM)
+    # Get estimated PSF centers and CT
     psf_loc_est, ct_est = \
         corgidrp.corethroughput.estimate_psf_pix_and_ct(dataset,
             roi_radius=roi_radius,
             cfam_version=cfam_version)
 
-    # Build the PSF cube. Each stamp is sub-pixel-centered so the PSF
-    # centroid lands on the stamp's central pixel.
-    psf_hdu, dq_hdu = generate_psf_cube(
-        dataset, psf_loc_est,
+    # Build the PSF cube. Each stamp is centered so the PSF lands on 
+    # the stamp's central pixel.
+    psf_hdu, dq_hdu = generate_psf_cube(dataset, psf_loc_est,
         cfam_name=cfam_list[0], cfam_version=cfam_version,
         spline_order=spline_order)
 
-    # PSF stamp center on EXCAM corresponds to the integer-rounded original
-    # sub-pixel position (the centering shift moved each centroid to that
-    # integer pixel by construction).
     centered_psf_loc = np.round(psf_loc_est).astype(float)
 
     # N sets of (x,y, CT measurements)
     # x, y: PSF stamp center on EXCAM (integer pixel since stamps are now
-    #       sub-pixel-centered on their central pixel).
+    #       sub-pixel centered on their central pixel).
     ct_excam = np.array([centered_psf_loc[:,0], centered_psf_loc[:,1], ct_est])
     ct_hdr = fits.Header()
     ct_hdr['COMMENT'] = ('PSF stamp center on EXCAM (0,0). Each stamp is '
         'sub-pixel-centered so the PSF centroid lies on the central pixel; '
-        'the recorded (x,y) is therefore the integer EXCAM position of that '
-        'central pixel. Core throughput value for each PSF. '
+        'the recorded (x,y) is the integer EXCAM position of that central '
+        'pixel. Core throughput value for each PSF. '
         '(x,y,ct)=(data[0], data[1], data[2])')
     ct_hdr['UNITS'] = 'PSF location: EXCAM pixels. Core throughput: values between 0 and 1.'
     ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
-
     # Values of FPAM during CT observations (needed to derive the FPM's center
     # during CT observations given a coronagraphic dataset). The values do not
     # change during CT observations
@@ -552,24 +533,23 @@ def generate_ct_cal(
 def get_1d_ct(ct_cal,frame,seps,
               method='nearest'):
     """Fetches core throughput values at specific separations from the mask center.
-    Currently only the 'nearest' method is configured.
+    Currently only the 'nearest' method is configured. 
 
     Args:
-        ct_cal (corgidrp.data.CoreThroughputCalibration): the core throughput calibration
+        ct_cal (corgidrp.data.CoreThroughputCalibration): the core throughput calibration 
             object.
-        frame (corgidrp.data.Image): data frame containing mask location and detector 0,0 coordinate
+        frame (corgidrp.data.Image): data frame containing mask location and detector 0,0 coordinate 
             in the header
-        seps (np.array of float): separations (pixels from the mask center) at which to sample
+        seps (np.array of float): separations (pixels from the mask center) at which to sample 
             the CT curve.
         method (str, optional): Method of calculating CT at a given separation. Defaults to 'nearest'.
-            'nearest': grabs the core throughput measured at a location nearest to the desired
+            'nearest': grabs the core throughput measured at a location nearest to the desired 
             separation and assumes CT is radially symmetric.
 
     Returns:
-        np.array: Array of shape (2,len(seps)), where the first row is the list of separations
+        np.array: Array of shape (2,len(seps)), where the first row is the list of separations 
             sampled, and the second row is the ct value for each separation.
     """
-
     x, y, ct = ct_cal.ct_excam
 
     # Get location of mask center in CT coordinates
@@ -584,10 +564,9 @@ def get_1d_ct(ct_cal,frame,seps,
             argmin = np.argmin(np.abs(sep-ct_seps))
             ct_out = ct[argmin]
             cts_out.append(ct_out)
-
+        
         ct_arr_out = np.array([seps,cts_out])
         return ct_arr_out
-
     else:
         raise NotImplementedError
 
@@ -604,51 +583,51 @@ def create_ct_map(
     filepath=None,
     save=False):
     """
-    Create a core throughput map: Given a core throughput calibration file and
-    a coronagraphic dataset, derive 3-D list (x,y,ct) where (x,y) are some
-    target locations on EXCAM relative to the FPM's center and with valid
-    values of the throughput.
+      Create a core throughput map: Given a core throughput calibration file and
+      a coronagraphic dataset, derive 3-D list (x,y,ct) where (x,y) are some
+      target locations on EXCAM relative to the FPM's center and with valid
+      values of the throughput.
 
-    The core throughmap may be saved, optionally, as a CSV file.
+        The core throughmap may be saved, optionally, as a CSV file.
 
-    The creation of the core throughput map relies on InterpolateCT(), a
-    method of the CoreThroughputCalibration class in data.py. Valid core
-    throughput values are within the minimum and maxium radial distance from
-    the FPM's center in the core throughput dataset used to generate the
-    core throughput calibration file. Its options are inluded in the call of
-    this method too.
+        The creation of the core throughput map relies on InterpolateCT(), a 
+      method of the CoreThroughputCalibration class in data.py. Valid core
+      throughput values are within the minimum and maxium radial distance from
+      the FPM's center in the core throughput dataset used to generate the
+      core throughput calibration file. Its options are inluded in the call of
+      this method too.
 
-    If an external list of locations is not provided, a default grid of points
-    is condidered.
+      If an external list of locations is not provided, a default grid of points
+      is condidered.
 
     Args:
-        corDataset (corgidrp.data.Dataset): a dataset containing some
-            coronagraphic observations.
-        fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
-            FpamFsamCal class. That is, a FpamFsamCal calibration.
-        ct_cal (corgidrp.data.CoreThroughputCalibration): an instance of the
-            CoreThroughputCalibration class. That is, a core throughput calibration
-            file.
-        x_range (array): Two values [xmin, xmax] specifying the range of pixels to
-            be considered. Units are EXCAM pixels measured with respect the center
-            of the FPM. Notice that [-23,23] is approx. +/-10 l/D in band 1.
-        y_range (array): Two values [ymin, ymax] specifying the range of pixels to
-            be considered. Units are EXCAM pixels measured with respect the center
-            of the FPM. Notice that [-23,23] is approx. +/-10 l/D in band 1.
-        n_gridx (int) (optional): Number of x gridpoints.
-        n_gridy (int) (optional): Number of y gridpoints.
-        target_pix (array) (optional): a user-defined Mx2 array containing the pixel
-            positions for M target pixels where the core throughput will be derived
-            by interpolation. The target pixels are measured with respect the center
-            of the focal plane mask in (fractional) EXCAM pixels. Default is None.
-            In this case, a rectangular grid of pixel positions is used. Using
-            matplotlib.pyplot, target_pix[0] is the horizontal axis (x), and
-            target_pix[1] is the vertical axis (y).
-        logr (bool) (optional): If True, radii are mapped into their logarithmic
-            values before constructing the interpolant.
-        filepath (string) (optional): String with the path and filename of the
-            file that will store the core throughput map as a CSV file.
-        save (bool) (optionla): Whether the core throughput map will be stored or not.
+      corDataset (corgidrp.data.Dataset): a dataset containing some
+        coronagraphic observations.
+      fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+        FpamFsamCal class. That is, a FpamFsamCal calibration.
+      ct_cal (corgidrp.data.CoreThroughputCalibration): an instance of the
+        CoreThroughputCalibration class. That is, a core throughput calibration
+        file.
+      x_range (array): Two values [xmin, xmax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the center
+        of the FPM. Notice that [-23,23] is approx. +/-10 l/D in band 1.
+      y_range (array): Two values [ymin, ymax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the center
+        of the FPM. Notice that [-23,23] is approx. +/-10 l/D in band 1.
+      n_gridx (int) (optional): Number of x gridpoints.
+      n_gridy (int) (optional): Number of y gridpoints.
+      target_pix (array) (optional): a user-defined Mx2 array containing the pixel
+        positions for M target pixels where the core throughput will be derived
+        by interpolation. The target pixels are measured with respect the center
+        of the focal plane mask in (fractional) EXCAM pixels. Default is None.
+        In this case, a rectangular grid of pixel positions is used. Using
+        matplotlib.pyplot, target_pix[0] is the horizontal axis (x), and
+        target_pix[1] is the vertical axis (y).
+      logr (bool) (optional): If True, radii are mapped into their logarithmic
+        values before constructing the interpolant.
+      filepath (string) (optional): String with the path and filename of the 
+        file that will store the core throughput map as a CSV file.
+      save (bool) (optionla): Whether the core throughput map will be stored or not.
 
     Returns:
         A core throughput map with (x,y,ct) where x and y are locations
@@ -660,10 +639,9 @@ def create_ct_map(
         x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
         y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
         target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
-
     # Get interpolated CT values at valid positions
     ct_interp = ct_cal.InterpolateCT(
-        target_pix[0], target_pix[1], corDataset, fpamfsamcal, logr=logr)
+            target_pix[0], target_pix[1], corDataset, fpamfsamcal, logr=logr)
 
     # Generate the core throughput map object
     # Re-order output to match the required order: (x,y,ct)
