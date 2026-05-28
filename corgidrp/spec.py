@@ -617,9 +617,7 @@ def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_fil
     yoff = []
     for band in filters:
         band_str = band.strip()
-        if band_str == ref_cfam:
-            pass
-        elif band_str not in subband_list:
+        if band_str != ref_cfam and band_str not in subband_list:
             warnings.warn("measured band {0} is not in the sub band list {1} of the used prism".format(band_str, subband_list))
         else:
             cen_wave = read_cent_wave(band_str, filter_file = band_center_file)
@@ -629,13 +627,13 @@ def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_fil
             yoff.append(offset_sub[1] - yoff_band)
     if len(center_wavel) < 4:
         raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(center_wavel)))
-    if len(center_wavel) != len(centroid_psf.xfit) -1:
+    if len(center_wavel) != len(centroid_psf.xfit):
         raise ValueError ("number of measured sub-bands {0} does not fit to the measured number of centroids {1}".format(len(center_wavel), len(centroid_psf.xfit)))
     center_wavel = np.array(center_wavel)
-    xfit = centroid_psf.xfit[:-1] - np.array(xoff)
-    yfit = centroid_psf.yfit[:-1] - np.array(yoff)
-    xfit_err = centroid_psf.xfit_err[:-1]
-    yfit_err = centroid_psf.yfit_err[:-1]
+    xfit = centroid_psf.xfit[:] - np.array(xoff)
+    yfit = centroid_psf.yfit[:] - np.array(yoff)
+    xfit_err = centroid_psf.xfit_err[:]
+    yfit_err = centroid_psf.yfit_err[:]
     (clocking_angle,
      clocking_angle_uncertainty) = estimate_dispersion_clocking_angle(xfit, yfit, weights = 1. / yfit_err)
 
