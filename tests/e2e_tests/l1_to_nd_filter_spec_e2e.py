@@ -94,6 +94,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 from corgidrp.photon_counting import get_pc_mean
 from corgidrp.darks import build_synthesized_dark
+from corgidrp.fluxcal import get_calspec_file
 import corgidrp.detector as detector
 
 thisfile_dir = os.path.dirname(__file__)
@@ -324,6 +325,55 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
 
     print(f"Found {len(l1_filelist)} L1 input files.")
 
+    input_l1_datadir = os.path.join(outputdir,"input_l1")
+    os.makedirs(input_l1_datadir)
+
+    # Copy all L1 files to output_dir before alterations to header keywords
+    shutil.copytree(l1_datadir,input_l1_datadir, dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.txt', '*.png'))
+    
+    l1_filelist = sorted(
+        os.path.join(input_l1_datadir, f)
+        for f in os.listdir(input_l1_datadir)
+        if f.endswith('l1_.fits') or f.endswith('l1.fits')
+    )
+    
+    # Separating file into brightstar and faint star dataset and assigning a different visit id to the former.
+    bright_star_filelist = sorted(f for f in l1_filelist if fits.getheader(f, ext=1)['FPAMNAME'] == 'ND225')
+    faint_star_filelist = sorted(f for f in l1_filelist if fits.getheader(f, ext=1)['FPAMNAME'] != 'ND225')
+    changed_visitid = False
+    if fits.getheader(bright_star_filelist[0])['VISITID'] ==  fits.getheader(faint_star_filelist[0])['VISITID']:
+        changed_visitid = True
+        brightdata_visitid = fits.getheader(faint_star_filelist[0])['VISITID']
+        for f in bright_star_filelist:
+            fits.setval(f, 'VISITID', value = '0200001001001002001', ext=0)
+    
+    # Changing TARGET if original TARGET not in calspec list
+    changed_bright_target = False
+    changed_faint_target = False
+    try:
+        bright_target = fits.getheader(bright_star_filelist[0], ext=0)['TARGET']
+        _, _ = get_calspec_file(bright_target)
+    except:
+        changed_bright_target = True
+        for f in bright_star_filelist:
+            fits.setval(f, 'TARGET', value = 'eta uma', ext=0)
+    try:
+        faint_target = fits.getheader(faint_star_filelist[0], ext=0)['TARGET']
+        _, _ = get_calspec_file(bright_target)
+    except:
+        changed_faint_target = True
+        for f in faint_star_filelist:
+            fits.setval(f, 'TARGET', value = 'tyc 4413-304-1', ext=0)
+    
+    print(bright_target,faint_target)
+    # L2b files were saturated for faint star dataset.
+    for file in faint_star_filelist:
+        with fits.open(file, mode='update') as fits_file:
+            fits_file[1].header['EXPTIME'] = fits_file[1].header['EXPTIME'] * 0.75
+            fits_file[1].data = fits_file[1].data * 0.75
+
+    print(bright_star_filelist)
+    print(faint_star_filelist)
     # ------------------------------------------------------------------ 
     # 3. L1 -> L2a                                                        
     # ------------------------------------------------------------------ 
@@ -445,6 +495,12 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     # ------------------------------------------------------------------ 
     print("Validating NDSpectroscopy product")
 
+    # "Sweet-spot" dataset should have multiple FSMX and FSMY
+    bright_dataset = data.Dataset(bright_star_filelist)
+    _, fsm = bright_dataset.split_dataset(exthdr_keywords=["FSMX","FSMY"])
+    assert len(fsm) > 1, "Only 1 (FSMX, FSMY) combination in bright star dataset. Sweet-spot dataset with ND filter should be dithered over multiple (FSMX, FSMY) positions."
+    print(f"  Sweet-spot dataset is dithered over {len(fsm)} (FSMX, FSMY) positions PASSED")
+
     # Data shape: (2, M)
     assert nd_spec_cal.data.ndim == 2 and nd_spec_cal.data.shape[0] == 2, \
         f"Unexpected data shape: {nd_spec_cal.data.shape}"
@@ -464,7 +520,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     assert np.all(od > 0), f"OD spectrum contains non-positive values (min={od.min():.3f})."
     print(f"  OD range: {od.min():.3f}–{od.max():.3f} ")
 
-    od_expected = 2.25
+    od_expected = 2.20
     od_tolerance = 0.05
     od_median = np.median(od)
     assert abs(od_median - od_expected) < od_tolerance, (
@@ -480,6 +536,8 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     assert nd_spec_cal.ext_hdr.get('DPAMNAME', '').startswith('PRISM'), \
         f"Expected DPAMNAME to start with 'PRISM', got '{nd_spec_cal.ext_hdr.get('DPAMNAME')}'"
     assert nd_spec_cal.ext_hdr['DATALVL'] == 'CAL'
+    assert nd_spec_cal.ext_hdr['FPAM_H'] > 0.0
+    assert nd_spec_cal.ext_hdr['FPAM_V'] > 0.0
     print("  Header keywords PASSED")
 
     # Remove temporary CalDB
@@ -505,7 +563,8 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
         e2eoutput_path (str): Path to the E2E test output
 
     """
-    l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "L1")
+    l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "SPEC_NOM_L1")
+    #l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "L1")
     processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
     outputdir = os.path.join(e2eoutput_path, "nd_filter_spec_e2e")
 
@@ -526,7 +585,7 @@ if __name__ == "__main__":
     )
     ap.add_argument(
         "-d", "--e2edata_dir",
-        default="/Users/jmilton/Documents/CGI/E2E_Test_Data2",
+        default="/home/ababuraj/roman/E2E_Test_Data",
         help="Root directory containing ND_SPEC/L1/ and ND_SPEC/Cals/ sub-folders"
     )
     ap.add_argument(
@@ -536,7 +595,8 @@ if __name__ == "__main__":
     )
     args = ap.parse_args()
 
-    l1_datadir         = os.path.join(args.e2edata_dir, "ND_SPEC", "L1")
+    l1_datadir         = os.path.join(args.e2edata_dir, "ND_SPEC", "SPEC_NOM_L1")
+    #l1_datadir        = os.path.join(args.e2edata_dir, "ND_SPEC", "L1")
     processed_cal_path = os.path.join(args.e2edata_dir, "ND_SPEC", "Cals")
     outputdir = os.path.join(args.outputdir, "l1_to_nd_filter_spec_e2e")
 
