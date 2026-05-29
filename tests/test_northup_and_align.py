@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 
-def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figure=False,pol_data = False,test_offset=False):
+def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figure=False,pol_data = False,rot_center='im_center'):
     """
     unit test of the northup function
 
@@ -20,7 +20,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         save_derot_dataset (optional): if you want to save the derotated files at the input directory, turn True
         save_comp_figure (optional): if you want to save a comparison figure of the original mock data and the derotated data
         pol_data (optional): if you want to test the northup function on pol data (Image shape (2,1024,1024), turn True
-
+        rot_center: 'im_center', 'starloc', or manual coordinate (x,y) for nothup. 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header.
     """
 
     def rotate_point(point, center, ang):
@@ -122,7 +122,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
 
     # run northup function
     input_dataset = data.Dataset(updated_datalist)
-    derot_dataset = northup(input_dataset)
+    derot_dataset = northup(input_dataset,rot_center=rot_center)
 
     if save_mock_dataset == True:
         outdir = os.path.join('./', dirname)
@@ -245,7 +245,10 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             sci_hd_derot = derot_data.ext_hdr
             # rotate around the center of the image
             ylen, xlen = sci_input.shape
-            xcen, ycen = xlen / 2, ylen / 2
+            if rot_center == 'im_center':
+                xcen, ycen = xlen / 2, ylen / 2
+            elif rot_center == 'starloc':
+                xcen, ycen = input_dataset[0].ext_hdr['STARLOCX'], input_dataset[0].ext_hdr['STARLOCY']
             # check the angle offset
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
@@ -264,8 +267,12 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             y_test = round(ycen + r * np.sin(np.deg2rad(angle_offset + theta)))
 
             # check if rotation works properly
-            assert (sci_input[y_value1, x_value1] != sci_derot[y_value1, x_value1])
-            assert (dq_input[y_value1, x_value1] != dq_derot[y_value1, x_value1])
+            if rot_center == 'im_center':
+                assert (sci_input[y_value1, x_value1] != sci_derot[y_value1, x_value1])
+                assert (dq_input[y_value1, x_value1] != dq_derot[y_value1, x_value1])
+            elif rot_center == 'starloc':
+                assert (math.isclose(sci_input[y_value1, x_value1], sci_derot[y_value1, x_value1], rel_tol=0.01))
+                assert (dq_input[y_value1, x_value1] == dq_derot[y_value1, x_value1])
 
             assert (math.isclose(sci_derot[y_test, x_test], sci_input[y_value1, x_value1], rel_tol=0.01))
             assert (dq_input[y_value1, x_value1] == dq_derot[y_test, x_test])
@@ -287,8 +294,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             derot_starlocx,derot_starlocy = sci_hd_derot['STARLOCX'], sci_hd_derot['STARLOCY']
             input_crpix1,input_crpix2 = sci_hd['CRPIX1'], sci_hd['CRPIX2']
             derot_crpix1,derot_crpix2 = sci_hd_derot['CRPIX1'], sci_hd_derot['CRPIX2']
-            test_derot_starlocx,test_derot_starlocy = rotate_point([input_starlocx,input_starlocy], [input_crpix1,input_crpix2], np.deg2rad(angle_offset))
-            test_derot_crpix1,test_derot_crpix2 = rotate_point([input_crpix1,input_crpix2], [input_crpix1,input_crpix2],  np.deg2rad(angle_offset))
+            test_derot_starlocx,test_derot_starlocy = rotate_point([input_starlocx,input_starlocy], [xcen, ycen], np.deg2rad(angle_offset))
+            test_derot_crpix1,test_derot_crpix2 = rotate_point([input_crpix1,input_crpix2], [xcen, ycen],  np.deg2rad(angle_offset))
             assert (math.isclose(derot_starlocx, test_derot_starlocx, rel_tol=0.01))
             assert (math.isclose(derot_starlocy, test_derot_starlocy, rel_tol=0.01))
             assert (math.isclose(test_derot_crpix1, derot_crpix1, rel_tol=0.01))
@@ -348,8 +355,17 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
 
     return
 
+def test_northup_starloc():
+    test_northup(rot_center='starloc')
+    return
+
 def test_northup_pol():
     test_northup(pol_data=True)
+    return
+
+def test_northup_pol_starloc():
+    test_northup(pol_data=True, rot_center='starloc')
+    return
 
 def test_wcs_and_offset(save_mock_dataset=False):
    """
