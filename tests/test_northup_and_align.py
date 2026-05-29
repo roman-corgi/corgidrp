@@ -80,8 +80,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             mock_dataset_3d[0].ext_hdr = updated_dataset_temp[0].ext_hdr.copy()
             # inject fake sources for test - for both pol modes
             mock_dataset_3d[0].data[:, 340:360, 340:360] = 5
-            mock_dataset_3d[0].ext_hdr['X_1VAL'] = 350
-            mock_dataset_3d[0].ext_hdr['Y_1VAL'] = 350
+            mock_dataset_3d[0].ext_hdr['STARLOCX'] = 350
+            mock_dataset_3d[0].ext_hdr['STARLOCY'] = 350
             mock_dataset_3d[0].dq[:, 340:360, 340:360] = 1
         else:
             mock_dataset = mock_dataset_ori.copy()
@@ -91,8 +91,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             updated_dataset = create_wcs(mock_dataset, astrom_cal)
             # inject fake sources for test
             updated_dataset[0].data[340:360, 340:360] = 5
-            updated_dataset[0].ext_hdr['X_1VAL'] = 350
-            updated_dataset[0].ext_hdr['Y_1VAL'] = 350
+            updated_dataset[0].ext_hdr['STARLOCX'] = 350
+            updated_dataset[0].ext_hdr['STARLOCY'] = 350
             updated_dataset[0].dq[340:360, 340:360] = 1
         if pol_data == True:
             # update datalist for pol data - expected to be 4d array (shape 6, 2, 1024, 1024 for test)
@@ -142,8 +142,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                     astr_hdr = WCS(sci_hd)
                 angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
                 # the location for test
-                x_value1 = input_dataset[0].ext_hdr['X_1VAL']
-                y_value1 = input_dataset[0].ext_hdr['Y_1VAL']
+                x_value1 = input_dataset[0].ext_hdr['STARLOCX']
+                y_value1 = input_dataset[0].ext_hdr['STARLOCY']
                 r = np.sqrt((x_value1 - xcen) ** 2 + (y_value1 - ycen) ** 2)
                 theta = np.rad2deg(np.arctan2(y_value1 - ycen, x_value1 - xcen))
                 if theta < 0:
@@ -232,8 +232,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 astr_hdr = WCS(sci_hd)
             angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
             # the location for test
-            x_value1 = input_dataset[0].ext_hdr['X_1VAL']
-            y_value1 = input_dataset[0].ext_hdr['Y_1VAL']
+            x_value1 = input_dataset[0].ext_hdr['STARLOCX']
+            y_value1 = input_dataset[0].ext_hdr['STARLOCY']
             r = np.sqrt((x_value1 - xcen) ** 2 + (y_value1 - ycen) ** 2)
             theta = np.rad2deg(np.arctan2(y_value1 - ycen, x_value1 - xcen))
             if theta < 0:
