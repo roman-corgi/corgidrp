@@ -1400,7 +1400,10 @@ class SpecFilterOffset(Image):
         self.dq = None
 
     def get_offsets(self, filter):
-        return self.offsets.get(filter.upper())
+        filt = filter.upper()
+        if filt.endswith("F"):
+            filt = filt[0]
+        return self.offsets.get(filt)
 
     def save(self, filedir=None, filename=None):
         """
