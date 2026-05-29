@@ -1291,6 +1291,8 @@ def align_polarimetry_frames(input_dataset):
             frame.data[1] = shift( frame.data[1], shift_value)
             frame.ext_hdr['STARLOCX'] = starloc0[0]
             frame.ext_hdr['STARLOCY'] = starloc0[1]
+        frame.ext_hdr['CRPIX1'] = starloc0[0]
+        frame.ext_hdr['CRPIX2'] = starloc0[1]
 
     history_msgs = "Images centered on star location."
 
