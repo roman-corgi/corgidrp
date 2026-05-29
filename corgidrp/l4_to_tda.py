@@ -678,7 +678,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         # by amplitude and FWHM used for KLIP throughput calculation.  Amplitude found by doing Gaussian fit.
         star_fr = unocculted_star_dataset.frames[i]
         if unocculted_star_loc is None:
-            peak_row, peak_col = np.where(star_fr.data == star_fr.data.max())
+            peak_row, peak_col = np.where(star_fr.data == np.nanmax(star_fr.data))
             pos = (peak_row[0], peak_col[0])
         else:
             pos = (unocculted_star_loc[0][i], unocculted_star_loc[1][i])
