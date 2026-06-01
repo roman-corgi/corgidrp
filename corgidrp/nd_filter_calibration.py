@@ -542,8 +542,7 @@ def calculate_od_spec_at_new_location(clean_frame_entry, fpamfsamcal,
         clean_frame_entry (corgidrp.Data.Image): A clean frame image.
         fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
               FpamFsamCal calibration class. 
-        ndsweetspot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter 
-            Sweet Spot dataset.
+        ndspectroscopy_dataset (corgidrp.Data.NDSpectroscopy): ND Spectroscopy dataset.
         wave_grid (list of float or np.array, optional): Wavelength grid specfied
             by user. Default to None (wavelength grid taken from image hdu 'SPEC_WAVE').
 

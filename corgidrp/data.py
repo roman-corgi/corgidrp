@@ -4211,7 +4211,8 @@ class NDSpectroscopy(Image):
                 Defaults to None (no remapping applied).
 
         Returns:
-            float: the OD as a function of wavelength at the requested point
+            np.array: Wavelength grid. 
+            np.array: OD as a function of wavelength at the requested point.
         """
         detpix0x = 0
         detpix0y = 0
