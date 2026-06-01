@@ -610,7 +610,7 @@ def calculate_od_spec_at_new_location(clean_frame_entry, fpamfsamcal,
 
     return interp_od
 
-def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath, ref_fpam_name,
+def compute_od_spectrum_for_frame(frame, target, sf_cal, calspec_filepath, ref_fpam_name,
                          ref_fpam_h, ref_fpam_v, ref_dpam_name, ref_cfam_name):
     """
     Compute OD(lambda) for a single bright-star frame observed through the ND
@@ -619,6 +619,7 @@ def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath, ref_fpam_name
     Args:
         frame (corgidrp.data.Image): L3 frame with SPEC, SPEC_WAVE, and SPEC_ERR
             extensions (in units of photoelectron/s/bin) produced by extract_spec.
+        target (str): The target star name.
         sf_cal (corgidrp.data.SpecFluxCal): Spectral flux calibration C(lambda)
             taken from the dim (no-ND) star.  Units: erg/(s*cm^2*AA) / (photoelectron/s/bin).
         calspec_filepath (str): Path to the CALSPEC SED FITS file for the bright
@@ -646,7 +647,7 @@ def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath, ref_fpam_name
         hdr.get('CFAMNAME') != ref_cfam_name or
         hdr.get('DPAMNAME') != ref_dpam_name):
         raise ValueError(
-            f"Inconsistent FPAM/CFAM/DPAM header values in target {target} for file {entry}!"
+            f"Inconsistent FPAM/CFAM/DPAM header values in target {target} for file {frame}!"
         )
 
     # Measured spectrum (e-/s/bin) and wavelength grid (nm) from extract_spec
@@ -699,7 +700,7 @@ def process_bright_target_spec(target, files, sf_cal, calspec_filepath, od_raste
     This allows users to override default settings for functions like aper_phot.
     
     Parameters:
-        target (str): The target star name or the file path to the corresponding (calspec) SED fits file.
+        target (str): The target star name.
         files (corgidrp.data.Dataset): Dataset of bright star images.
         sf_cal (corgidrp.data.SpecFluxCal): Spectral flux calibration C(lambda)
             taken from the dim (no-ND) star.  Units: erg/(s*cm^2*AA) / (photoelectron/s/bin).
@@ -827,11 +828,11 @@ def create_nd_spectroscopy_dataset(aggregated_sweet_spot_data, aggregated_sweet_
     Create an NDSpectroscopy FITS file with the spectroscopy sweet-spot array.
     
     Parameters:
-        aggregated_sweet_spot_data (numpy.ndarray): The aggregated Nxwavex4 array containing 
-            sweet-spot data as a function of wavelength in the format [OD, wave, x, y].
-        aggregated_sweet_spot_err(numpy.ndarray): The aggregated Nxwavex2 array containing 
-            OD_err as a function of wavelength in the format [OD_err, wave].
-        common_metadata (dict): A dictionary containing metadata such as FPAM/CFAM names 
+        aggregated_sweet_spot_data (numpy.ndarray): The aggregated NxN_wavex4 array containing 
+            sweet-spot data as a function of wavelength in the format [wave, OD, x, y].
+        aggregated_sweet_spot_err (numpy.ndarray): The aggregated NxN_wavex4 array containing 
+            OD_err as a function of wavelength in the format [wave_err, OD_err, x_err, y_err].
+        common_metadata (dict): A dictionary containing metadata such as FPAM/DPAM/CFAM names 
             and offsets.
         od_var_flag (Bool): A flag that is passed in if the OD variance is too high among 
             rasters.
