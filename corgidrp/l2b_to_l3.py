@@ -40,11 +40,12 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
         corrected_ra, corrected_dec = target_ra - ra_offset, target_dec - dec_offset
         pa_aper_deg = image.pri_hdr['PA_APER']
         #roll_offset_deg = pa_aper_deg - pa_aper_deg_astrom  #Define a roll offset using the pa_aper for the image frame and astrom cal frame
-        roll_offset_deg = - (pa_aper_deg - pa_aper_deg_astrom)  #Define a roll offset using the pa_aper for the image frame and astrom cal frame
+        roll_offset_deg = pa_aper_deg - pa_aper_deg_astrom  #Define a roll offset using the pa_aper for the image frame and astrom cal frame
 
         #TO DO: double check this. northangle may be defined as the full rotation angle, 
         # not north offset, in which case, adding the two below would be adding two absolute rotation angles from north
-        vert_ang = np.radians(northangle - roll_offset_deg)
+        #vert_ang = np.radians(northangle - roll_offset_deg)
+        vert_ang = np.radians(northangle + roll_offset_deg)
         pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
         cdmatrix = pc * (platescale * 0.001) / 3600.
 
@@ -68,8 +69,8 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
         wcs_info['CRVAL2'] = float(corrected_dec)
 
         wcs_info['PLTSCALE'] = platescale  ## [mas] / pixel
-        wcs_info['NORTHANG'] = northangle - roll_offset_deg  ## deg
-        #wcs_info['NORTHANG'] = northangle + roll_offset_deg  ## deg
+        #wcs_info['NORTHANG'] = northangle - roll_offset_deg  ## deg
+        wcs_info['NORTHANG'] = northangle + roll_offset_deg  ## deg
 
         # update the image header with wcs information
         for key, value in wcs_info.items():
