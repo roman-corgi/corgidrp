@@ -64,20 +64,25 @@ B. Spectroscopy calibrations (loaded automatically from corgidrp.default_cal_dir
 Output
 ------
 A single NDSpectroscopy FITS product (*_nds_cal.fits) containing:
-    data[0, :]  — wavelength grid (nm)
-    data[1, :]  — OD(lambda) spectrum
-    err[0, 0, :] — wavelength uncertainty (nm)
-    err[0, 1, :] — OD uncertainty (1-sigma)
+    data[:, :, 0]  — OD(lambda) spectrum
+    data[:, :, 1]  — wavelength grid (nm)
+    data[:, :, 2]  - EXCAM star position in x-direction
+    data[:, :, 3]  - EXCAM star position in y-direction
+    err[0, :, :, 0] — OD uncertainty (1-sigma)
+    err[0, :, :, 1] — wavelength uncertainty (nm)
+    err[0, :, :, 2]  - Star position uncertainty in x-direction
+    err[0, :, :, 3]  - Star position uncertainty in y-direction
+    
 
 
 The test here does:
-    FPAM  : ND225  (OD ~ 2.25)
+    FPAM  : ND225  (OD ~ 2.20)
     Band  : 3  (CFAMNAME = 3F / 3D)
     DPAM  : PRISM3
-    Stars : TYC 4424-1286-1 (dim, Vmag~12) + 109 Vir (bright, Vmag~3.7)
+    Stars : TYC 4413-304-1 (dim, Vmag~12.8) + eta Uma (bright, Vmag~1.9)
 """
 import argparse
-import os
+import os, sys
 import shutil
 import warnings
 
@@ -286,7 +291,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     2. L1 -> L2a  via walker 
     3. Optionally build a PC dark from L2a frames (photon-counting only)
     4. L2a -> L2b  via walker
-    5. L2b -> NDSpectroscopy  via walker 
+    5. L2b -> NDSpectroscopy via walker 
     6. Validate the output NDSpectroscopy product (shape, wavelength range,
        positive OD values, header keywords)
 
@@ -299,9 +304,10 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     Returns: 
     nd_spec_cal (corgidrp.data.NDSpectroscopy): Spectroscopy ND filter calibration 
         product with:
-            .wavelengths  — wavelength grid (nm), shape (M,)
-            .od_spectrum  — OD(lambda),           shape (M,)
-            .od_err       — 1-sigma OD error,     shape (M,)
+            .wavelengths  — wavelength grid (nm),         shape (M, N)
+            .od_spectra   — OD(lambda),                   shape (M, N)
+            .x_values     — EXCAM star position in x,     shape (M, N)
+            .y_values     — EXCAM star position in y,     shape (M, N)
     """
     # ------------------------------------------------------------------ 
     # 1. Caldb                                             
@@ -365,15 +371,14 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
         for f in faint_star_filelist:
             fits.setval(f, 'TARGET', value = 'tyc 4413-304-1', ext=0)
     
-    print(bright_target,faint_target)
+
     # L2b files were saturated for faint star dataset.
     for file in faint_star_filelist:
         with fits.open(file, mode='update') as fits_file:
             fits_file[1].header['EXPTIME'] = fits_file[1].header['EXPTIME'] * 0.75
             fits_file[1].data = fits_file[1].data * 0.75
 
-    print(bright_star_filelist)
-    print(faint_star_filelist)
+
     # ------------------------------------------------------------------ 
     # 3. L1 -> L2a                                                        
     # ------------------------------------------------------------------ 
@@ -488,7 +493,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
         )
 
     nd_spec_cal = data.NDSpectroscopy(nd_spec_files[0])
-    print(f"NDSpectroscopy product loaded: {nd_spec_files[0]}")
+    print(f"NDSpectroscopy loaded: {nd_spec_files[0]}")
 
     # ------------------------------------------------------------------ 
     # 7. Validation                                                       
@@ -501,24 +506,27 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     assert len(fsm) > 1, "Only 1 (FSMX, FSMY) combination in bright star dataset. Sweet-spot dataset with ND filter should be dithered over multiple (FSMX, FSMY) positions."
     print(f"  Sweet-spot dataset is dithered over {len(fsm)} (FSMX, FSMY) positions PASSED")
 
-    # Data shape: (2, M)
-    assert nd_spec_cal.data.ndim == 2 and nd_spec_cal.data.shape[0] == 2, \
+    # Data shape: (M, N, 4)
+    assert nd_spec_cal.data.ndim == 3 and nd_spec_cal.data.shape[2] == 4, \
         f"Unexpected data shape: {nd_spec_cal.data.shape}"
-    M = nd_spec_cal.data.shape[1]
-    print(f"  Data shape: (2, {M})  PASSED")
+    M = nd_spec_cal.data.shape[0]
+    N = nd_spec_cal.data.shape[1]
+    print(f"  Data shape: ({M}, {N}, 4)  PASSED")
 
     # Wavelengths should be monotonically increasing and in the band 3 range
     wave = nd_spec_cal.wavelengths
-    assert np.all(np.diff(wave) > 0), "Wavelength grid is not monotonically increasing."
-    assert wave[0] > 500 and wave[-1] < 1100, \
-        f"Wavelengths {wave[0]:.1f}–{wave[-1]:.1f} nm outside expected range."
-    print(f"  Wavelength range: {wave[0]:.1f}–{wave[-1]:.1f} nm PASSED")
+    for i, wv in enumerate(wave):
+        assert np.all(np.diff(wv) > 0), f"Wavelength grid for dither {i+1} is not monotonically increasing."
+        assert wv[0] > 500 and wv[-1] < 1100, \
+            f"Wavelengths {wv[0]:.1f}–{wv[-1]:.1f} nm for dither {i+1} outside expected range."
+        print(f"  Wavelength range: {wv[0]:.1f}–{wv[-1]:.1f} nm for dither {i+1} PASSED")
 
     # OD values should be positive and finite
-    od = nd_spec_cal.od_spectrum
-    assert np.all(np.isfinite(od)), "OD spectrum contains non-finite values."
-    assert np.all(od > 0), f"OD spectrum contains non-positive values (min={od.min():.3f})."
-    print(f"  OD range: {od.min():.3f}–{od.max():.3f} ")
+    od_all = nd_spec_cal.od_spectra
+    for i, od in enumerate(od_all):
+        assert np.all(np.isfinite(od)), f"OD spectrum for dither {i+1} contains non-finite values."
+        assert np.all(od > 0), f"OD spectrum for dither {i+1} contains non-positive values (min={od.min():.3f})."
+        print(f"  OD range: {od.min():.3f}–{od.max():.3f} for dither {i+1}")
 
     od_expected = 2.20
     od_tolerance = 0.05
@@ -564,7 +572,6 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
 
     """
     l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "SPEC_NOM_L1")
-    #l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "L1")
     processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
     outputdir = os.path.join(e2eoutput_path, "nd_filter_spec_e2e")
 
@@ -596,7 +603,6 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     l1_datadir         = os.path.join(args.e2edata_dir, "ND_SPEC", "SPEC_NOM_L1")
-    #l1_datadir        = os.path.join(args.e2edata_dir, "ND_SPEC", "L1")
     processed_cal_path = os.path.join(args.e2edata_dir, "ND_SPEC", "Cals")
     outputdir = os.path.join(args.outputdir, "l1_to_nd_filter_spec_e2e")
 
