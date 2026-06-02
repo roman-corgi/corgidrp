@@ -498,17 +498,16 @@ def generate_ct_cal(
         cfam_name=cfam_list[0], cfam_version=cfam_version,
         spline_order=spline_order)
 
-    centered_psf_loc = psf_loc_est
+    centered_psf_loc = np.round(psf_loc_est)
 
     # N sets of (x,y, CT measurements)
-    # x, y: PSF stamp center on EXCAM (integer pixel since stamps are now
-    #       sub-pixel centered on their central pixel).
+    # x, y: Centroided location to sub-pixel accuracy on EXCAM. Each stamp has been
+    #       sub-pixel-shifted so the PSF centroid lands at these rounded pixel positions.
     ct_excam = np.array([centered_psf_loc[:,0], centered_psf_loc[:,1], ct_est])
     ct_hdr = fits.Header()
     ct_hdr['COMMENT'] = ('PSF stamp center on EXCAM (0,0). Each stamp is '
         'sub-pixel-centered so the PSF centroid lies on the central pixel; '
-        'the recorded (x,y) is the integer EXCAM position of that central '
-        'pixel. Core throughput value for each PSF. '
+        'the recorded (x,y) is the location of the centroid to sub-pixel accuracy. '
         '(x,y,ct)=(data[0], data[1], data[2])')
     ct_hdr['UNITS'] = 'PSF location: EXCAM pixels. Core throughput: values between 0 and 1.'
     ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
