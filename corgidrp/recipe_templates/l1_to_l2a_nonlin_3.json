@@ -9,8 +9,11 @@
     "outputdir" : "",
     "steps" : [
         {
+            "name" : "frame_select"
+        },
+        {
             "name" : "calibrate_nonlin",
-              "keywords": {"n_cal":20}
+            "keywords": {"n_cal":20}
         },
         {
             "name" : "save"

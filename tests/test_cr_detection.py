@@ -888,10 +888,10 @@ def test_oversaturated_frames_are_marked_not_removed():
     """
     Tests that oversaturated frames are kept, marked bad, and skipped by CR detection.
     """
-    #mock dataset, saturate a frame
+    # mock dataset, saturate enough of one frame to exceed pct_oversat_lim
     dataset = mocks.create_cr_dataset(nonlin_fits_filepath, filedir=datadir, numfiles=2, numCRs=0)
-    dataset[0].data[:] = 1e9
-
+    num_oversat_rows = int(np.ceil(dataset[0].data.shape[0] * 0.25))
+    dataset[0].data[:num_oversat_rows, :] = 1e9
 
     output_dataset = detect_cosmic_rays(dataset, detector_params, k_gain, pct_oversat_lim=20)
     # saturated frame should stay in the dataset, but be marked bad for later rejection.
@@ -899,8 +899,9 @@ def test_oversaturated_frames_are_marked_not_removed():
     assert output_dataset[0].ext_hdr['IS_BAD'] is True
     assert output_dataset[1].ext_hdr.get('IS_BAD', False) is False
 
-    # since CR detection was skipped for this frame it should only have saturation DQ
-    assert np.all(output_dataset[0].dq > 0)
+    # since CR detection was skipped for this frame it should only flag saturated pixels
+    assert np.any(output_dataset[0].dq > 0)
+    assert not np.all(output_dataset[0].dq > 0)
     assert np.all(np.bitwise_and(output_dataset[0].dq, 128) == 0)
 
 if __name__ == "__main__":

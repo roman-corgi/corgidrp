@@ -8,6 +8,9 @@
     "outputdir" : "",
     "steps" : [
         {
+            "name" : "frame_select"
+        },
+        {
             "name" : "convert_to_electrons",
             "calibs" : {
                 "KGain" : "AUTOMATIC"

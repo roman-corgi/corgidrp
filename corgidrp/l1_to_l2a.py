@@ -159,7 +159,8 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
                        plat_thresh=0.85, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image', detector_regions=None, pct_oversat_lim=20, dataset_copy=True):
+                       mode='image', detector_regions=None, pct_oversat_lim=20,
+                       dataset_copy=True, discard_oversat=False):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -205,9 +206,11 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
-            and will be discarded. Frame saturations equal to this argument are not discarded.
+            and will be marked bad or discarded. Frame saturations equal to this argument are not flagged.
         dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
+        discard_oversat (bool): if True, discard frames that exceed pct_oversat_lim, preserving the previous behavior.
+            If False, keep them, mark IS_BAD, and skip cosmic ray identification for those frames. Defaults to False.
 
     Returns:
         corgidrp.data.Dataset:
@@ -255,26 +258,34 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         frame.ext_hdr['FWC_EM_E'] = fwcem_e_arr[i]
         frame.ext_hdr['SAT_DN'] = initial_sat_fwcs[i]
 
-
-    crmasked_dataset = initial_dataset
-    crmasked_cube = crmasked_dataset.all_data
-    sat_fwcs = initial_sat_fwcs
-
-    # keep oversaturated frames, but mark them bad and skip the expensive CR search.
     oversat_frames = set()
-    for i, frame in enumerate(crmasked_dataset.frames):
-        pct_frame_sat = ((frame.data > sat_fwcs[i]).sum() / frame.data.size) * 100
-        if pct_frame_sat > pct_oversat_lim:
-            frame.ext_hdr['IS_BAD'] = True
-            oversat_frames.add(i)
+    if discard_oversat:
+        # Preserve previous behavior as an option.
+        crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim, dataset_copy=False)
+    else:
+        crmasked_dataset = initial_dataset
+        sat_fwcs = initial_sat_fwcs
+
+        # Keep oversaturated frames, but mark them bad and skip the expensive CR search.
+        for i, frame in enumerate(crmasked_dataset.frames):
+            pct_frame_sat = ((frame.data > sat_fwcs[i]).sum() / frame.data.size) * 100
+            if pct_frame_sat > pct_oversat_lim:
+                frame.ext_hdr['IS_BAD'] = True
+                frame.ext_hdr.add_history(
+                    "Marked IS_BAD because frame exceeded pct_oversat_lim in detect_cosmic_rays."
+                )
+                frame.ext_hdr.add_history(
+                    "Cosmic ray identification skipped for this oversaturated frame."
+                )
+                oversat_frames.add(i)
+
+    crmasked_cube = crmasked_dataset.all_data
 
     sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])
 
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
     m1 = (crmasked_cube >= sat_fwcs_array) * sat_dqval
-    for i in oversat_frames:
-        m1[i, :, :] = sat_dqval
     # Mask 2:  captures cosmic rays.  If EM gain is 1, no cosmic tails made since 
     # those are only made in gain register.  
     # Do a for loop since it's calling a for loop in the sub-routine anyway

@@ -9,6 +9,9 @@
     "outputdir" : "",
     "steps" : [
         {
+            "name" : "frame_select"
+        },
+        {
             "name" : "calibrate_trap_pump"
         },
         {

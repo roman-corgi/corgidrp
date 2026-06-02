@@ -55,11 +55,14 @@
 				"mode" : "full",
                 "dataset_copy" : false
             }
-	},
-	{
-	    "name" : "calibrate_kgain",
-	    "keywords" : {
-	        "detector_regions" : {
+		},
+		{
+		    "name" : "frame_select"
+		},
+		{
+		    "name" : "calibrate_kgain",
+		    "keywords" : {
+		        "detector_regions" : {
 		    "SCI" : {
 		        "frame_rows" : 1200,
 			"frame_cols" : 2200,
