@@ -492,23 +492,20 @@ def generate_ct_cal(
             roi_radius=roi_radius,
             cfam_version=cfam_version)
 
-    # Build the PSF cube. Each stamp is centered so the PSF lands on 
+    # Build the PSF cube. Each stamp is centered so the PSF lands on
     # the stamp's central pixel.
     psf_hdu, dq_hdu = generate_psf_cube(dataset, psf_loc_est,
         cfam_name=cfam_list[0], cfam_version=cfam_version,
         spline_order=spline_order)
 
-    centered_psf_loc = np.round(psf_loc_est)
-
     # N sets of (x,y, CT measurements)
-    # x, y: Centroided location to sub-pixel accuracy on EXCAM. Each stamp has been
-    #       sub-pixel-shifted so the PSF centroid lands at these rounded pixel positions.
-    ct_excam = np.array([centered_psf_loc[:,0], centered_psf_loc[:,1], ct_est])
+    # x, y: PSF centers wrt EXCAM's (0,0) pixel
+    ct_excam = np.array([psf_loc_est[:,0], psf_loc_est[:,1], ct_est])
     ct_hdr = fits.Header()
-    ct_hdr['COMMENT'] = ('PSF stamp center on EXCAM (0,0). Each stamp is '
-        'sub-pixel-centered so the PSF centroid lies on the central pixel; '
-        'the recorded (x,y) is the location of the centroid to sub-pixel accuracy. '
-        '(x,y,ct)=(data[0], data[1], data[2])')
+    # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
+    # wrt FPM's center
+    ct_hdr['COMMENT'] = ('PSF location with respect to EXCAM (0,0) pixel. '
+        'Core throughput value for each PSF. (x,y,ct)=(data[0], data[1], data[2])')
     ct_hdr['UNITS'] = 'PSF location: EXCAM pixels. Core throughput: values between 0 and 1.'
     ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
     # Values of FPAM during CT observations (needed to derive the FPM's center

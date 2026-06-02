@@ -506,9 +506,9 @@ def test_cal_file():
     # Check EXTNAME is as expected
     if ct_cal_file.ct_excam_hdr['EXTNAME'] != 'CTEXCAM':
         raise ValueError('The extension name of the CT values on EXCAM is not correct')
-    # x location wrt FPM (use allclose for float32 precision differences)
+    # x location wrt FPM - compare fractional positions (PSF stamps are sub-pixel shifted, but CT values stored at original fractional coords)
     assert np.allclose(psf_loc_input[:,0], ct_cal_file.ct_excam[0], rtol=1e-6, atol=1e-8)
-    # y location wrt FPM
+    # y location wrt FPM - compare fractional positions (PSF stamps are sub-pixel shifted, but CT values stored at original fractional coords)
     assert np.allclose(psf_loc_input[:,1], ct_cal_file.ct_excam[1], rtol=1e-6, atol=1e-8)
     # CT map
     assert np.allclose(ct_input, ct_cal_file.ct_excam[2], rtol=1e-6, atol=1e-8)
