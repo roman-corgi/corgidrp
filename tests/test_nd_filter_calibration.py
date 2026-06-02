@@ -15,7 +15,7 @@ import corgidrp.nd_filter_calibration as nd_filter_calibration
 import corgidrp.l2b_to_l3 as l2b_tol3
 import corgidrp.data as data 
 from corgidrp.data import (Image, Dataset, FluxcalFactor,
-    NDFilterSweetSpotDataset, FpamFsamCal)
+    NDFilterSweetSpotDataset, NDSpectroscopy, FpamFsamCal)
 import corgidrp.mocks as mocks
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -702,6 +702,100 @@ def test_calculate_od_at_new_location(output_dir):
         f"test_calculate_od_at_new_location PASSED: "
         f"estimated OD = {interpolated_od}, expected OD = {expected_value}"
     )
+
+def test_calculate_od_spec_at_new_location(output_dir):
+    """
+    Test calculate_od_spec_at_new_location with:
+      1) A real NDSpectroscopy containing NxN_wavex4 data = [wave, OD, x, y]
+      2) A mock clean_spec_image with a wavelength zeropoint at a known location
+      3) Known FPAM offsets in headers
+      4) An identity transformation matrix file
+    """
+    
+    # Create a small NxN_wavex4 sweet spot array, each row is [wave, OD, x, y].
+    # Interpolate at the center (5,5).
+    # The OD values at corners are 2.0, 3.0, 4.0, 5.0 => a bilinear interpolation at (5,5) => 3.5 at each wavelength.
+    wavelengths = np.linspace(729, 782, num=19, dtype=float)
+    wave_grid = np.repeat(wavelengths,4)
+    wave_grid = wave_grid.reshape(len(wavelengths),4)
+    sweetspot_data = np.array([
+        [2.0,  0.0,  0.0],   # OD=2.0 at (x=0,y=0)
+        [3.0,  0.0, 10.0],   # OD=3.0 at (x=0,y=10)
+        [4.0, 10.0,  0.0],   # OD=4.0 at (x=10,y=0)
+        [5.0, 10.0, 10.0]    # OD=5.0 at (x=10,y=10)
+    ], dtype=float)
+    specsweetspot_data = []
+    for i, wv in enumerate(wave_grid):
+        specsweetspot_data.append(np.column_stack((wv, sweetspot_data)))
+    specsweetspot_data = np.swapaxes(np.array(specsweetspot_data),0,1)
+
+    # Create a fake input dataset to set the filename
+    input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
+    fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
+    fake_input_image.filename = f"cgi_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l2b.fits".replace(":", ".")
+    fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
+
+    # Build the NDSpectroscopy
+    ndcal_prihdr, ndcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
+    ndspectroscopy_dataset = NDSpectroscopy(data_or_filepath=specsweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
+                                                    input_dataset=fake_input_dataset)
+    # Set FPAM_H/V after construction, since merge_headers invalidates them (this is done in create_nd_spectroscopy_datset in nd_filter_calibration.py as well)
+    ndspectroscopy_dataset.ext_hdr["FPAM_H"] = 0.0
+    ndspectroscopy_dataset.ext_hdr["FPAM_V"] = 0.0
+ 
+    # Make a 5x5 mock 'clean_spec_image' with the wavelength zeropoint at (2,2)
+    # Shift it by (3,3) => final location (5,5).
+    spec_values = np.ones_like(wavelengths, dtype=float)
+    spec_err = 0.1*np.ones_like(wavelengths, dtype=float)
+    spec_wave = np.linspace(730, 781, num=19, dtype=float)
+    
+    clean_spec_image = mocks.make_1d_spec_image(spec_values, spec_err, spec_wave, pa_aper_deg=0, exp_time=30)
+    # Choosing some values that will help predict the expected value of the OD
+    # when using the bilinear OD interpolation in nd_filter_calibration.interpolate_od()
+    # These values ensure that the shift in EXCAM pixels is (3,3)
+    clean_spec_image.ext_hdr["FPAM_H"] = -24.42
+    clean_spec_image.ext_hdr["FPAM_V"] = 24.42
+    clean_spec_image.ext_hdr["WV0_X"] = 2.0
+    clean_spec_image.ext_hdr["WV0_Y"] = 2.0
+
+    # Default FPAM/FSAM transformations (use mock instead of loading from file which
+    # seems to be inconsistent)
+    fpamfsamcal = mocks.create_mock_fpamfsam_cal(save_file=False)    
+
+    # Call the function under test
+    interpolated_od = nd_filter_calibration.calculate_od_spec_at_new_location(
+        clean_spec_image=clean_spec_image,
+        fpamfsamcal=fpamfsamcal,
+        ndspectroscopy_dataset=ndspectroscopy_dataset)
+
+    # Expect the final location = (2+3, 2+3) = (5,5).
+    fpam2excam_matrix = fits.getdata(os.path.join(here, 'test_data',
+        'fpam_to_excam_modelbased.fits'))
+    # Check final position is (5,5)
+    final_excam_pos = (np.array([2,2]) + fpam2excam_matrix @
+        np.array([clean_spec_image.ext_hdr["FPAM_H"],clean_spec_image.ext_hdr["FPAM_V"]]))
+    # Single precision because the FPAM_H/V values were set to be close to
+    # produce a change of 3 EXCAM pixels within single precision
+    assert np.all(np.abs(final_excam_pos - np.array([5,5])) < 1e-7)
+
+    # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5
+    # This will be the same at each wavelength
+    expected_value = 3.5
+    
+    atol_nd = 1e-6
+    for i, wave in enumerate(wavelengths):
+        test_result_od_accuracy = abs(interpolated_od[i] - expected_value) < atol_nd
+        print(f'calculate_od_spec_at_new_location() estimates OD as {expected_value} +/- {atol_nd}: at wavelength {wave} nm', end='')
+        print_pass() if test_result_od_accuracy else print_fail()
+
+        assert test_result_od_accuracy, (
+            f"Expected OD={expected_value}, got {interpolated_od[i]}"
+        )
+        print('')
+        print(
+            f"test_calculate_od_at_new_location PASSED: "
+            f"estimated OD = {interpolated_od[i]}, expected OD = {expected_value}"
+        )
 
 '''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"

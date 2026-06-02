@@ -4052,12 +4052,12 @@ class NDFilterSweetSpotDataset(Image):
 class NDSpectroscopy(Image):
     """
     Class for an ND spectroscopy sweet spot dataset product.
-    Typically stores multiple data arrays as different HDUs for each 
-    measurement. Data (HDU0) is a N x wave x 4 array of [N_wave, OD, x, y], err (HDU1) is a 
-    1 x N x N_wave x 4 array of [wave_err, OD_err, x_err, y_err].
+    Typically stores data arrays for a given set of calibrations.
+    Data (HDU0) is a N×N_wave×4 array of [wave, OD, x, y], err (HDU1) is a 
+    1×N×N_wave×4 array of [wave_err, OD_err, x_err, y_err].
     Args:
         data_or_filepath (str or np.array): Either the filepath to the FITS file 
-            to read in OR the 2D array of ND spectroscopy sweet-spot data (N×N_wavex4).
+            to read in OR the 2D array of ND spectroscopy sweet-spot data (N×N_wave×4).
         pri_hdr (astropy.io.fits.Header): The primary header (required only if 
             raw 2D data is passed in).
         ext_hdr (astropy.io.fits.Header): The image extension header (required 
@@ -4069,11 +4069,10 @@ class NDSpectroscopy(Image):
         dq (np.array): Optional 2D data-quality mask for the data.
         err_hdr (astropy.io.fits.Header): Optional error extension header.
     Attributes:
-        wavelengths (np.array): 2D array of wavelengths (NxN_wave)
-        od_spectra (np.array): 2D array of OD measurements with wavelength (NxN_wave).
-        x_values (np.array): 2D array of x-centroid positions (NxN_wave).
-        y_values (np.array): 2D array of y-centroid positions (NxN_wave).
-        od_error (np.array): 2D array of error in OD measurements across wavelength grid (NxN_wave).
+        wavelengths (np.array): 2D array of wavelengths (N×N_wave)
+        od_spectra (np.array): 2D array of OD measurements with wavelength (N×N_wave).
+        x_values (np.array): 2D array of x-centroid positions (N×N_wave).
+        y_values (np.array): 2D array of y-centroid positions (N×N_wave).
     """
 
     def __init__(
@@ -4132,17 +4131,11 @@ class NDSpectroscopy(Image):
             dq_hdr=dq_hdr
         )
 
-
-        # 1. Check data shape: expect N×wavex4 array for the sweet-spot dataset.
+        # 1. Check data shape: expect N×N_wave×4 array for the sweet-spot dataset.
         if self.data.ndim != 3 or self.data.shape[2] != 4:
             raise ValueError(
                 "NDSpectroscopy HDU0 must be a 3D array of shape (N, N_wave, 4). "
                 f"Received shape {self.data.shape}."
-            )
-        if self.err.ndim != 4 or self.err.shape[3] != 4:
-            raise ValueError(
-                "NDSpectroscopy HDU1 must be a 3D array of shape (1, N, N_wave, 4). "
-                f"Received shape {self.err.shape}."
             )
 
         # 2. Parse the columns into convenient attributes.
@@ -4151,7 +4144,6 @@ class NDSpectroscopy(Image):
         self.od_spectra  = self.data[:, :, 1]
         self.x_values    = self.data[:, :, 2]
         self.y_values    = self.data[:, :, 3]
-        self.od_error    = self.err[0, :, :, 1]
 
         # 3. If creating a new product (i.e. ext_hdr was passed in), record metadata.
         if ext_hdr is not None:
@@ -4230,50 +4222,37 @@ class NDSpectroscopy(Image):
         if wave_grid is None and image is None:
             if self.od_spectra.shape[0] == 1:
                 od_stack  = self.od_spectra[0,:]
-                err_stack = self.od_error[0,:]
             else:
                 od_stack  = [self.od_spectra[0,:]]
-                err_stack = [self.od_error[0,:]]
             
                 for i in range(1,self.od_spectra.shape[0]):
                     od = self.od_spectra[i,:]
                     wave = self.wavelengths[i,:]
-                    oderr = self.od_error[i,:]
                     if not np.allclose(wave, common_wave, atol=0.01):
                         remap_od  = interp1d(wave, od,    kind='linear',
                                             bounds_error=False, fill_value=np.nan)
-                        remap_err = interp1d(wave, oderr, kind='linear',
-                                            bounds_error=False, fill_value=np.nan)
                         od    = remap_od(common_wave)
-                        oderr = remap_err(common_wave)
                     
                     od_stack.append(od)
-                    err_stack.append(oderr)
         else:
-            od_stack, err_stack = [], []
+            od_stack = []
             for i in range(self.od_spectra.shape[0]):
                 od = self.od_spectra[i,:]
                 wave = self.wavelengths[i,:]
-                oderr = self.od_error[i,:]
                 if not np.allclose(wave, common_wave, atol=0.01):
                     remap_od  = interp1d(wave, od,    kind='linear',
                                         bounds_error=False, fill_value=np.nan)
-                    remap_err = interp1d(wave, oderr, kind='linear',
-                                        bounds_error=False, fill_value=np.nan)
                     od    = remap_od(common_wave)
-                    oderr = remap_err(common_wave)
                     
                 od_stack.append(od)
-                err_stack.append(oderr)
 
         od_array = np.array(od_stack)
-        err_array = np.array(err_stack)
 
         interp_od = np.zeros(len(common_wave))
         
         for i in range(len(common_wave)):
-            interpolator = LinearNDInterpolator(list(zip(self.x_values[:,i],self.y_values[:,i])), od_array[:,i])
-            interp_od[i] = interpolator(x + detpix0x, y + detpix0y)
+            interpolator = LinearNDInterpolator(np.array([self.x_values[:,i], self.y_values[:,i]]).T, od_array[:,i])
+            interp_od[i] = interpolator([x + detpix0x, y + detpix0y])
 
         return common_wave, interp_od
 

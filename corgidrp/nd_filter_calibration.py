@@ -532,19 +532,19 @@ def create_nd_filter_cal(stars_dataset,
 # =============================================================================
 # Spectroscopy ND Filter Calibration 
 # =============================================================================
-def calculate_od_spec_at_new_location(clean_frame_entry, fpamfsamcal, 
+def calculate_od_spec_at_new_location(clean_spec_image, fpamfsamcal, 
                                  ndspectroscopy_dataset, wave_grid=None):
     """
     Use the NDSpectroscopy Dataset to calculate the OD at a new location for an input 
     image, using an FpamFsamCal calibration instance.
     
     Parameters:
-        clean_frame_entry (corgidrp.Data.Image): A clean frame image.
+        clean_spec_image (corgidrp.Data.Image): A clean spec image with 'SPEC' extension hdus.
         fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
               FpamFsamCal calibration class. 
         ndspectroscopy_dataset (corgidrp.Data.NDSpectroscopy): ND Spectroscopy dataset.
         wave_grid (list of float or np.array, optional): Wavelength grid specfied
-            by user. Default to None (wavelength grid taken from image hdu 'SPEC_WAVE').
+            by user. Defaults to None (wavelength grid taken from image hdu 'SPEC_WAVE').
 
     Returns:
         interp_od (np.array): OD as a function of wavelength that is interpolated at the new star location.
@@ -553,12 +553,11 @@ def calculate_od_spec_at_new_location(clean_frame_entry, fpamfsamcal,
     wav_val = ndspectroscopy_dataset.wavelengths
     x_val   = ndspectroscopy_dataset.x_values
     y_val   = ndspectroscopy_dataset.y_values
-    oderr_val = ndspectroscopy_dataset.od_error
 
     fpam2excam_matrix, _ = fpamfsamcal.data
 
-    if (clean_frame_entry is not None) and (fpam2excam_matrix is not None):
-        cframe_hdr = clean_frame_entry.ext_hdr
+    if (clean_spec_image is not None) and (fpam2excam_matrix is not None):
+        cframe_hdr = clean_spec_image.ext_hdr
         sweetspot_hdr = ndspectroscopy_dataset.ext_hdr
         x_clean = cframe_hdr.get('WV0_X',0.0)
         y_clean = cframe_hdr.get('WV0_Y',0.0)
@@ -574,34 +573,30 @@ def calculate_od_spec_at_new_location(clean_frame_entry, fpamfsamcal,
         excam_offset = fpam2excam_matrix @ fpam_offset
         x_adj = x_clean + excam_offset[0]
         y_adj = y_clean + excam_offset[1]
-
+        
         if wave_grid is not None:
             common_wave = np.array(wave_grid)
         else:
-            common_wave = clean_frame_entry.hdu_list['SPEC_WAVE'].data
+            common_wave = clean_spec_image.hdu_list['SPEC_WAVE'].data
         
-        od_stack, err_stack = [], []
+        od_stack = []
         for i in range(od_val.shape[0]):
             od = od_val[i,:]
             wave = wav_val[i,:]
-            oderr = oderr_val[i,:]
             if not np.allclose(wave, common_wave, atol=0.01):
                 remap_od  = interp1d(wave, od,    kind='linear',
-                                    bounds_error=False, fill_value=np.nan)
-                remap_err = interp1d(wave, oderr, kind='linear',
                                     bounds_error=False, fill_value=np.nan)
                 od    = remap_od(common_wave)
                     
             od_stack.append(od)
-            err_stack.append(oderr)
         od_array = np.array(od_stack)
-        err_array = np.array(err_stack)
         interp_od = np.zeros(len(common_wave))
         for i in range(len(common_wave)):
-            monochromatic_sweet_spot_data = np.column_stack(
+            monochromatic_sweet_spot_data = np.column_stack((
+                                            od_array[:,i],
                                             x_val[:,i],
-                                            y_val[:,i],
-                                            od_array[:,i])
+                                            y_val[:,i]
+                                            ))
             # Interpolate OD at that new location
             interp_od[i] = interpolate_od(monochromatic_sweet_spot_data, x_adj, y_adj)
 
@@ -640,6 +635,7 @@ def compute_od_spectrum_for_frame(frame, target, sf_cal, calspec_filepath, ref_f
         ValueError: If FPAM/DPAM/CFAM metadata do not match the reference values.
     """
     hdr = frame.ext_hdr
+
     # Metadata checks
     if (hdr.get('FPAMNAME') != ref_fpam_name or 
         abs(hdr.get('FPAM_H') - ref_fpam_h) > 1.2 or    # within non-repeatability tolerance of 1.2 um
@@ -731,7 +727,7 @@ def process_bright_target_spec(target, files, sf_cal, calspec_filepath, od_raste
 
         od_spectra, wave_spectra, oderr_spectra = [], [], []
         for frame in grouped_subset:
-            od_spectrum, wave_spectrum, oderr_spectrum = compute_od_spectrum_for_frame(frame, sf_cal, 
+            od_spectrum, wave_spectrum, oderr_spectrum = compute_od_spectrum_for_frame(frame, target, sf_cal, 
                                                     calspec_filepath, common_fpam_name, common_fpam_h, common_fpam_v, 
                                                     common_dpam_name, ref_cfam_name)        
             # Skip if centroid was not valid
@@ -822,29 +818,33 @@ def process_bright_target_spec(target, files, sf_cal, calspec_filepath, od_raste
         'yerr_values': yerr_values
     }
 
-def create_nd_spectroscopy_dataset(aggregated_sweet_spot_data, aggregated_sweet_spot_err,
-                                 common_metadata, od_var_flag, input_dataset):
+def create_nd_spectroscopy_dataset(aggregated_sweet_spot_data, common_metadata, od_var_flag, 
+                                    input_dataset, aggregated_sweet_spot_err = None):
     """
     Create an NDSpectroscopy FITS file with the spectroscopy sweet-spot array.
     
     Parameters:
-        aggregated_sweet_spot_data (numpy.ndarray): The aggregated NxN_wavex4 array containing 
+        aggregated_sweet_spot_data (numpy.ndarray): The aggregated N×N_wave×4 array containing 
             sweet-spot data as a function of wavelength in the format [wave, OD, x, y].
-        aggregated_sweet_spot_err (numpy.ndarray): The aggregated NxN_wavex4 array containing 
-            OD_err as a function of wavelength in the format [wave_err, OD_err, x_err, y_err].
         common_metadata (dict): A dictionary containing metadata such as FPAM/DPAM/CFAM names 
             and offsets.
         od_var_flag (Bool): A flag that is passed in if the OD variance is too high among 
             rasters.
         input_dataset (corgidrp.data.Dataset): input dataset used to create the ND Spec 
             calibration.
+        aggregated_sweet_spot_err (numpy.ndarray, optional): The aggregated N×N_wave×4 array containing 
+            OD_err as a function of wavelength in the format [wave_err, OD_err, x_err, y_err].
+            Defaults to None.
 
     Returns:
         tuple:
             NDSpectroscopy: The generated ND spectroscopy sweet spot dataset.
     """
     final_sweet_spot_data = aggregated_sweet_spot_data.copy()
-    final_sweet_spot_err = aggregated_sweet_spot_err.copy()
+    try:
+        final_sweet_spot_err = aggregated_sweet_spot_err.copy()
+    except:
+        final_sweet_spot_err = None
     
     # Create the NDSpectroscopy, merge_headers is called inside __init__ 
     ndspectroscopy_dataset = NDSpectroscopy(
@@ -983,7 +983,7 @@ def create_nd_filter_cal_spec(stars_dataset, od_raster_threshold = 0.1, spec_flu
 
         od_var_flag = star_data['flag']
 
-        # Convert to an Nxwavex4 array [OD, wave, x, y], and a Nxwavex4 array [OD_err, wave, x, y]
+        # Convert to an N×N_wave×4 array [wave, OD, x, y], and a N×N_wave×4 array [wave_err, OD_err, x_err, y_err]
         target_sweet_spot = np.dstack((
             star_data['wave_grid'],
             star_data['od_values'],
