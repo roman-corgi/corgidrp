@@ -13,6 +13,7 @@ def step_1_initialize():
     """
     corgidrp.create_config_dir()
     corgidrp.update_pipeline_settings()
+    corgidrp.enforce_template_structure = True
     caldb.initialize()
     this_caldb = caldb.CalDB()
     return this_caldb
