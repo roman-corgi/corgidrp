@@ -21,11 +21,15 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         save_comp_figure (optional): if you want to save a comparison figure of the original mock data and the derotated data
         pol_data (optional): if you want to test the northup function on pol data (Image shape (2,1024,1024), turn True
         rot_center: 'im_center', 'starloc', or manual coordinate (x,y) for nothup. 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header.
+        point: (x,y) coordinates of the point to be rotated in rotate_point function
+        center: (x,y) coordinates of the center of the point to be rotated in rotate_point function
+        ang: angle of rotation in radians, positive for counterclockwise rotation in rotate_point function
     """
 
     def rotate_point(point, center, ang):
         """
         Basic rotation algorithm to test behavior of the northup function when updating CRPIX/STARLOC
+
         Args:
             point: (x,y) coordinates of the point to be rotated
             center: (x,y) coordinates of the center of the point to be rotated
