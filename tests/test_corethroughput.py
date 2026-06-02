@@ -598,10 +598,10 @@ def test_ct_interp():
     for idx in range(n_random):
         random_index_radius = rng.choice(np.arange(1, n_radii-1), 1)
         random_index_az = rng.choice(np.arange(1, n_azimuths-1), 1)
-
+                      
         #Convert these to flattned indices
         random_indices_flat = random_index_radius + random_index_az*n_radii
-
+                                  
         # Record the missing value
         missing_x = x_grid[random_indices_flat]
         missing_y = y_grid[random_indices_flat]
@@ -623,7 +623,7 @@ def test_ct_interp():
         print('') if test_result_ct else print_fail()
         assert test_result_ct, 'Error more than 5% (linear radii mapping)'
         # Test with radii mapped into their logarithmic values before
-        # constructing the interpolant
+        # constructing the interpolant 
         interpolated_value_log = ct_cal_in.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
         # Good to within 2%
@@ -643,8 +643,8 @@ def test_ct_interp():
     radii = np.sqrt(x_grid**2 + y_grid**2)
     with pytest.raises(ValueError):
         # Too Big
-        ct_cal_in.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal)
-
+        ct_cal_in.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal) 
+                                                       
     with pytest.raises(ValueError):
         #Too small
         ct_cal_in.InterpolateCT(0.9*radii.min(), 0, dataset_cor, fpam_fsam_cal)
