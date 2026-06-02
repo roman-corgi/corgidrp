@@ -101,6 +101,7 @@ from corgidrp.photon_counting import get_pc_mean
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.fluxcal import get_calspec_file
 import corgidrp.detector as detector
+import corgidrp.nd_filter_calibration as nd_filter_calibration
 
 thisfile_dir = os.path.dirname(__file__)
 
@@ -370,7 +371,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
         changed_faint_target = True
         for f in faint_star_filelist:
             fits.setval(f, 'TARGET', value = 'tyc 4413-304-1', ext=0)
-    
+
 
     # L2b files were saturated for faint star dataset.
     for file in faint_star_filelist:
@@ -547,6 +548,57 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     assert nd_spec_cal.ext_hdr['FPAM_H'] > 0.0
     assert nd_spec_cal.ext_hdr['FPAM_V'] > 0.0
     print("  Header keywords PASSED")
+
+    # Make a 5x5 mock 'clean_spec_image' with the wavelength zeropoint at (2,2)
+    # Shift it by (3,3) => final location (5,5).
+    spec_wave = np.linspace(np.max(nd_spec_cal.wavelengths[:,0]), np.min(nd_spec_cal.wavelengths[:,-1]), num=nd_spec_cal.wavelengths.shape[1], dtype=float)
+    spec_values = np.ones_like(spec_wave, dtype=float)
+    spec_err = 0.1*np.ones_like(spec_wave, dtype=float)
+    
+    clean_spec_image = mocks.make_1d_spec_image(spec_values, spec_err, spec_wave, pa_aper_deg=0, exp_time=30)
+    # Choosing some values that will help predict the expected value of the OD
+    # when using the bilinear OD interpolation in nd_filter_calibration.interpolate_od()
+    # These values ensure that the shift in EXCAM pixels is (3,3)
+    clean_spec_image.ext_hdr["FPAM_H"] = -24.42 + nd_spec_cal.ext_hdr["FPAM_H"]
+    clean_spec_image.ext_hdr["FPAM_V"] = 24.42 + nd_spec_cal.ext_hdr["FPAM_V"]
+    clean_spec_image.ext_hdr["WV0_X"] = 509.
+    clean_spec_image.ext_hdr["WV0_Y"] = 514.
+
+    # Default FPAM/FSAM transformations (use mock instead of loading from file which
+    # seems to be inconsistent)
+    fpamfsamcal = mocks.create_mock_fpamfsam_cal(save_file=False)    
+
+    # Call the function under test
+    interpolated_od = nd_filter_calibration.calculate_od_spec_at_new_location(
+        clean_spec_image=clean_spec_image,
+        fpamfsamcal=fpamfsamcal,
+        ndspectroscopy_dataset=nd_spec_cal)
+
+    # Expect the final location = (512+3, 516+3) = (515,519).
+    fpam2excam_matrix = fits.getdata(os.path.join(os.path.dirname(__file__), '../test_data',
+        'fpam_to_excam_modelbased.fits'))
+    # Check final position is (5,5)
+    final_excam_pos = (np.array([clean_spec_image.ext_hdr["WV0_X"],clean_spec_image.ext_hdr["WV0_Y"]]) + fpam2excam_matrix @
+        np.array([-24.42,24.42]))
+    # Single precision because the FPAM_H/V values were set to be close to
+    # produce a change of 3 EXCAM pixels within single precision
+    assert np.all(np.abs(final_excam_pos - np.array([512,517])) < 1e-7), \
+    f"Final EXCAM position should be (512.,517.), but is ({final_excam_pos[0]:.1f},{final_excam_pos[1]:.1f})."
+    print("Final EXCAM position is (512.,517.) as expected PASSED")
+
+    expected_value = 2.17
+    atol_nd = 0.05
+    for i, wave in enumerate(spec_wave):
+        test_result_od_accuracy = abs(interpolated_od[i] - expected_value) < atol_nd
+
+        assert test_result_od_accuracy, (
+            f"Expected OD={expected_value} +/- {atol_nd}, got {interpolated_od[i]:.3f} at wavelength {wave:.3f} nm"
+        )
+        print('')
+        print(
+            f"test_calculate_od_spec_at_new_location PASSED: "
+            f"estimated OD = {interpolated_od[i]:.3f} at wavelength {wave:.3f} nm, expected OD = {expected_value} +/- {atol_nd}"
+        )
 
     # Remove temporary CalDB
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_nd_spec_e2e_caldb.csv')
