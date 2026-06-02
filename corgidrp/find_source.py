@@ -13,7 +13,7 @@ def make_snmap(image, psf_binarymask, image_without_planet=None, coronagraph=Tru
         coronagraph (bool, optional): If True, an IWA is applied to derive the snmap. Defaults to True.
         N_threads (int, optional): Number of threads for multiprocessing. If -1, runs sequentially without multiprocessing.
                                    If None (default), uses all available CPU cores.
-
+                  
     Returns:
         ndarray: The computed S/N map.
     """

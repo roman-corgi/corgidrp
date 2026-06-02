@@ -72,7 +72,7 @@ def replace_bad_pixels(input_dataset, kernelsize=3, dq_thresh=1, vectorized_thre
     im_err = dataset.all_err
 
     im_dq_bool = dataset.all_dq >= dq_thresh
-
+        
     im_data[im_dq_bool] = np.nan
     # Broadcast dq mask across the error-layer axis (axis 1 of im_err)
     im_err[:] = np.where(im_dq_bool[:, np.newaxis], np.nan, im_err)
