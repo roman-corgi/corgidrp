@@ -183,6 +183,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                     assert (sci_input[y_value1, x_value1] != sci_derot[y_value1, x_value1])
                     assert (dq_input[y_value1, x_value1] != dq_derot[y_value1, x_value1])
                 elif rot_center == 'starloc':
+                    #When rotating around STALOC, with STARLOC as reference and not im_center,
+                    #the value at STARLOC location should be the same before and after
+                    #(compared to the case 'im_center' when instead it need to be different).
                     assert (math.isclose(sci_input[y_value1, x_value1], sci_derot[y_value1, x_value1], rel_tol=0.01))
                     assert (dq_input[y_value1, x_value1] == dq_derot[y_value1, x_value1])
 
