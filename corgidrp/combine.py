@@ -253,11 +253,6 @@ def combine_frames_per_visit(input_dataset, collapse="mean", num_frames_per_grou
         axis is collapsed.
     """
   
-    for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATALVL'] != "L3":
-            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
-            raise ValueError(err_msg)
-
     if num_frames_per_group is not None and num_frames_per_group <= 0:
         raise ValueError("num_frames_per_group must be a positive integer or None")
     if max_combined <= 0:
