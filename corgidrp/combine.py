@@ -188,6 +188,134 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     return new_dataset
 
 
+def _append_unique(default_keywords, input_keywords):
+    """
+    Append input keywords after default keywords while preserving order and
+    removing duplicates.
+    """
+    combined_keywords = []
+    for keyword in default_keywords + list(input_keywords):
+        if keyword not in combined_keywords:
+            combined_keywords.append(keyword)
+    return combined_keywords
+
+
+def combine_frames_per_visit(input_dataset, collapse="mean", num_frames_per_group=None, num_frames_scaling=False,
+                             combine_other_hdus=False, max_combined=100, pri_split_keywords=['VISITID'],
+                             ext_split_keywords=['DPAMNAME']):
+    """
+    Combines frames in the input dataset by calling combine_subexposures on each
+    unique split of VISITID and polarization state (DPAMNAME). The combination is done 
+    with either the mean or median, but the collapsed image can be scaled in order to ~conserve
+    the total number of photons in the input dataset (this essentially turns a median into a sum).
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        collapse (str): "mean" or "median". (default: mean)
+        num_frames_per_group (int or None): number of consecutive frames to combine
+                                            within each VISITID/DPAMNAME split subset.
+                                            If None, combine all frames in each subset
+                                            into one output frame. If the requested
+                                            grouping would create more than ``max_combined`` output
+                                            frames in a split subset, it is overridden
+                                            with the smallest group size that keeps the
+                                            per-subset output count at or below
+                                            ``max_combined``; trailing remainder frames
+                                            are left out.
+                                            (default: None)
+        num_frames_scaling (bool): Multiply by number of frames in sequence in order to ~conserve photons (default: False)
+        combine_other_hdus (bool): Whether to combine other HDUs in the same way as the main data, err, DQ.
+                                   Otherwise, uses the HDUs from the first frame in a subset (default: False)
+        max_combined (int): maximum number of output frames allowed per split subset
+                            before ``num_frames_per_group`` is automatically increased.
+                            (default: 100)
+        pri_split_keywords (list of str): Additional primary header keywords to use
+                            for splitting the dataset into subsets. The default split
+                            keyword ['VISITID'] is always included, and input values
+                            are appended. (default: ['VISITID'])
+        ext_split_keywords (list of str): Additional extension header keywords to use
+                            for splitting the dataset into subsets. The default split
+                            keyword ['DPAMNAME'] is always included, and input values
+                            are appended. (default: ['DPAMNAME'])
+
+    Returns:
+        corgidrp.data.Dataset: dataset of combined frames. If
+        ``num_frames_per_group`` is None, there is one output frame per split
+        subset, so ``len(output_dataset)`` equals the number of unique VISITID
+        groups or unique ``(VISITID, DPAMNAME)`` groups when ``DPAMNAME`` is
+        present for all frames. If ``num_frames_per_group`` is set, each split
+        subset is further combined in sequential groups of
+        ``num_frames_per_group``. If a requested grouping would create more than
+        ``max_combined`` output frames in a split subset, the grouping is
+        increased so that the output count stays at or below ``max_combined``
+        and trailing remainder frames are left out. Each output frame keeps the
+        same internal data cube shape as an input frame; only the dataset/frame
+        axis is collapsed.
+    """
+  
+    for orig_frame in input_dataset:
+        if orig_frame.ext_hdr['DATALVL'] != "L3":
+            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
+            raise ValueError(err_msg)
+
+    if num_frames_per_group is not None and num_frames_per_group <= 0:
+        raise ValueError("num_frames_per_group must be a positive integer or None")
+    if max_combined <= 0:
+        raise ValueError("max_combined must be a positive integer")
+
+    default_pri_split_keywords = ['VISITID']
+    default_ext_split_keywords = ['DPAMNAME']
+    if pri_split_keywords is None:
+        pri_split_keywords = []
+    if ext_split_keywords is None:
+        ext_split_keywords = []
+
+    pri_split_keywords = _append_unique(default_pri_split_keywords, pri_split_keywords)
+    ext_split_keywords = _append_unique(default_ext_split_keywords, ext_split_keywords)
+
+    split_keywords = list(pri_split_keywords) + list(ext_split_keywords)
+    split_description = "/".join(split_keywords) if split_keywords else "input"
+
+    # Combine each split subset independently.
+    split_datasets, _ = input_dataset.split_dataset(prihdr_keywords=pri_split_keywords, exthdr_keywords=ext_split_keywords)
+    combined_frames = []
+    any_auto_override = False
+    for split_dataset in split_datasets:
+        effective_num_frames_per_group = num_frames_per_group
+        if num_frames_per_group is not None:
+            requested_output_frames = len(split_dataset) / num_frames_per_group
+            if requested_output_frames > max_combined:
+                effective_num_frames_per_group = -(-len(split_dataset) // max_combined)
+                any_auto_override = True
+
+        combined_split = combine_subexposures(
+            split_dataset,
+            num_frames_per_group=effective_num_frames_per_group,
+            collapse=collapse,
+            num_frames_scaling=num_frames_scaling,
+            combine_other_hdus=combine_other_hdus,
+        )
+        combined_frames.extend(combined_split.frames.tolist())
+
+    combined_dataset = data.Dataset(combined_frames)
+
+    if num_frames_per_group is None:
+        history_msg = (
+            f"Combined frames by applying {collapse} within each {split_description} subset, "
+            f"result is a dataset with {len(combined_dataset)} frame(s)"
+        )
+    else:
+        history_msg = (
+            f"Combined frames by applying {collapse} in sequential groups of {num_frames_per_group} "
+            f"within each {split_description} subset, result is a dataset with "
+            f"{len(combined_dataset)} frame(s)"
+        )
+        if any_auto_override:
+            history_msg += f" Automatically increased some group sizes to keep per-subset output frame counts at or below {max_combined}."
+    combined_dataset.update_after_processing_step(history_msg)
+    return combined_dataset
+
+
 def derotate_arr(data_arr,northang_deg, xcen,ycen,new_center=None,astr_hdr=None,
                  is_dq=False,dq_round_threshold=0.05):
     """Derotates an array based on the provided NORTHANG angle, about the provided

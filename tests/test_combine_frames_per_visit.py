@@ -1,5 +1,5 @@
 """
-Test the combine_frames function in l3_to_l4
+Test the combine_frames_per_visit function in combine
 """
 import pytest
 import numpy as np
@@ -7,12 +7,12 @@ import corgidrp.mocks as mocks
 import corgidrp.l1_to_l2a as l1_to_l2a
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 import corgidrp.l2b_to_l3 as l2b_to_l3
-import corgidrp.l3_to_l4 as l3_to_l4
+import corgidrp.combine as combine
 from corgidrp.data import Dataset, Image
 
-def test_combine_frames_split_groups():
+def test_combine_frames_per_visit_split_groups():
     """
-    Tests that combine_frames combines each VISITID/DPAMNAME subset independently.
+    Tests that combine_frames_per_visit combines each VISITID/DPAMNAME subset independently.
     """
     group_specs = [
         ("1111111111111111111", "POL0", [1.0, 2.0], ["v1_pol0_a.fits", "v1_pol0_b.fits"]),
@@ -46,7 +46,7 @@ def test_combine_frames_split_groups():
             image.pri_hdr["FILENAME"] = filename
             frames.append(image)
             
-    combined_dataset = l3_to_l4.combine_frames(
+    combined_dataset = combine.combine_frames_per_visit(
         Dataset(frames),
         collapse="mean",
         num_frames_scaling=False,
@@ -66,9 +66,9 @@ def test_combine_frames_split_groups():
         assert {frame.ext_hdr["FILE0"], frame.ext_hdr["FILE1"]} == expected["filenames"]
 
 
-def test_combine_frames_num_frames_within_split_groups():
+def test_combine_frames_per_visit_num_frames_within_split_groups():
     """
-    Tests that combine_frames applies num_frames_per_group within each
+    Tests that combine_frames_per_visit applies num_frames_per_group within each
     VISITID/DPAMNAME subset.
     """
     group_specs = [
@@ -117,7 +117,7 @@ def test_combine_frames_num_frames_within_split_groups():
             image.pri_hdr["FILENAME"] = filename
             frames.append(image)
 
-    combined_dataset = l3_to_l4.combine_frames(
+    combined_dataset = combine.combine_frames_per_visit(
         Dataset(frames),
         collapse="mean",
         num_frames_per_group=2,
@@ -137,10 +137,65 @@ def test_combine_frames_num_frames_within_split_groups():
         assert {frame.ext_hdr["FILE0"], frame.ext_hdr["FILE1"]} == expected["filenames"]
 
 
-def test_combine_frames_auto_override_num_frames_per_group():
+def test_combine_frames_per_visit_custom_split_keywords():
     """
-    Tests that combine_frames increases num_frames_per_group when a split subset
-    would otherwise produce more than 100 output frames.
+    Tests that combine_frames_per_visit adds caller-provided split keywords.
+    """
+    group_specs = [
+        ("1111111111111111111", "POL0", "target_a", "FILT1", [1.0, 3.0], ["visit1_target_a_filt1_a.fits", "visit1_target_a_filt1_b.fits"]),
+        ("2222222222222222222", "POL0", "target_a", "FILT1", [10.0, 14.0], ["visit2_target_a_filt1_a.fits", "visit2_target_a_filt1_b.fits"]),
+        ("1111111111111111111", "POL45", "target_a", "FILT1", [100.0, 200.0], ["visit1_pol45_target_a_filt1_a.fits", "visit1_pol45_target_a_filt1_b.fits"]),
+        ("1111111111111111111", "POL0", "target_b", "FILT2", [1000.0, 2000.0], ["visit1_target_b_filt2_a.fits", "visit1_target_b_filt2_b.fits"]),
+    ]
+
+    frames = []
+    expected_by_group = {}
+    for visitid, dpamname, target, filter_name, values, filenames in group_specs:
+        expected_by_group[(visitid, dpamname, target, filter_name)] = np.mean(values)
+        for value, filename in zip(values, filenames):
+            pri_hdr, ext_hdr, err_hdr, dq_hdr = mocks.create_default_L3_headers()
+            pri_hdr["VISITID"] = visitid
+            pri_hdr["TARGET"] = target
+            ext_hdr["DPAMNAME"] = dpamname
+            ext_hdr["CFAMNAME"] = filter_name
+            image = Image(
+                np.full((4, 4), value),
+                err=np.ones((1, 4, 4)),
+                dq=np.zeros((4, 4), dtype=np.uint16),
+                pri_hdr=pri_hdr,
+                ext_hdr=ext_hdr,
+                err_hdr=err_hdr,
+                dq_hdr=dq_hdr,
+            )
+            image.filename = filename
+            image.pri_hdr["FILENAME"] = filename
+            frames.append(image)
+
+    combined_dataset = combine.combine_frames_per_visit(
+        Dataset(frames),
+        collapse="mean",
+        num_frames_scaling=False,
+        pri_split_keywords=["TARGET"],
+        ext_split_keywords=["CFAMNAME"],
+    )
+
+    assert len(combined_dataset) == len(group_specs)
+    for frame in combined_dataset:
+        group_key = (
+            frame.pri_hdr["VISITID"],
+            frame.ext_hdr["DPAMNAME"],
+            frame.pri_hdr["TARGET"],
+            frame.ext_hdr["CFAMNAME"],
+        )
+        assert np.all(frame.data == pytest.approx(expected_by_group[group_key]))
+        assert frame.ext_hdr["NUM_FR"] == 2
+        assert frame.ext_hdr["DRPNFILE"] == 2
+
+
+def test_combine_frames_per_visit_auto_override_num_frames_per_group():
+    """
+    Tests that combine_frames_per_visit increases num_frames_per_group when a split subset
+    would otherwise produce more than max_combined output frames.
     """
     frames = []
     visitid = "3333333333333333333"
@@ -163,7 +218,7 @@ def test_combine_frames_auto_override_num_frames_per_group():
         image.pri_hdr["FILENAME"] = filename
         frames.append(image)
 
-    combined_dataset = l3_to_l4.combine_frames(
+    combined_dataset = combine.combine_frames_per_visit(
         Dataset(frames),
         collapse="mean",
         num_frames_per_group=2,
@@ -198,8 +253,22 @@ def test_combine_frames_auto_override_num_frames_per_group():
         "big_pol0_239.fits",
     }
 
+    max_combined_dataset = combine.combine_frames_per_visit(
+        Dataset(frames),
+        collapse="mean",
+        num_frames_per_group=2,
+        num_frames_scaling=False,
+        max_combined=60,
+    )
+
+    assert len(max_combined_dataset) == 60
+    for frame in max_combined_dataset:
+        assert frame.ext_hdr["NUM_FR"] == 4
+        assert frame.ext_hdr["DRPNFILE"] == 4
+
 
 if __name__ == "__main__":
-    test_combine_frames_split_groups()
-    test_combine_frames_num_frames_within_split_groups()
-    test_combine_frames_auto_override_num_frames_per_group()
+    test_combine_frames_per_visit_split_groups()
+    test_combine_frames_per_visit_num_frames_within_split_groups()
+    test_combine_frames_per_visit_custom_split_keywords()
+    test_combine_frames_per_visit_auto_override_num_frames_per_group()
