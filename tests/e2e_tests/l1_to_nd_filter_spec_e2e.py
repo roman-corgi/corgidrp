@@ -574,7 +574,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
         fpamfsamcal=fpamfsamcal,
         ndspectroscopy_dataset=nd_spec_cal)
 
-    # Expect the final location = (512+3, 516+3) = (515,519).
+    # Expect the final location = (509+3, 514+3) = (512,517).
     fpam2excam_matrix = fits.getdata(os.path.join(os.path.dirname(__file__), '../test_data',
         'fpam_to_excam_modelbased.fits'))
     # Check final position is (5,5)
