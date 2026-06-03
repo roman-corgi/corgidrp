@@ -179,7 +179,6 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 x_test = round(xcen + r * np.cos(np.deg2rad(angle_offset + theta)))
                 y_test = round(ycen + r * np.sin(np.deg2rad(angle_offset + theta)))
                 # check if rotation works properly
-                # check if rotation works properly
                 if rot_center == 'im_center':
                     assert (sci_input[y_value1, x_value1] != sci_derot[y_value1, x_value1])
                     assert (dq_input[y_value1, x_value1] != dq_derot[y_value1, x_value1])
