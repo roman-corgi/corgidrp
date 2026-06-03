@@ -17,7 +17,10 @@
             }
         },
         {
-            "name": "find_star"
+            "name": "find_star",
+            "keywords": {
+                 "pri_split_keywords": []
+            }
         },
         {
             "name": "combine_frames_per_visit",

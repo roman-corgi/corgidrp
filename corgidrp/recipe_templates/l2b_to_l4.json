@@ -41,7 +41,10 @@
             }
         },
         {
-            "name": "find_star"
+            "name": "find_star",
+            "keywords": {
+                 "pri_split_keywords": []
+            }
         },
         {
             "name": "do_psf_subtraction"

@@ -119,8 +119,11 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     istart = 0
 
     big_array_size = [1024,1024]
+    science_visitid = "1111111111111111111"
+    reference_visitid = "2222222222222222222"
 
     image_list = []
+    last_sci_image = None
     for ibatch in range(nbatch): 
         # iend = istart + nframes_per_batch
         iend = istart + nframes[ibatch] 
@@ -171,14 +174,18 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
         #If Reference star then flag it. 
         if star[ibatch] == 2:
+            new_image.pri_hdr.set('VISITID', reference_visitid)
             new_image.pri_hdr.set('PSFREF', 1)
+        else:
+            new_image.pri_hdr.set('VISITID', science_visitid)
+            new_image.pri_hdr.set('PSFREF', 0)
 
         # Generate proper filename with visitid and current time
         unique_time = (datetime.now() + timedelta(milliseconds=ibatch*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
         new_image.filename = f"cgi_{new_image.pri_hdr['VISITID']}_{unique_time}_l2b.fits"
         #Save the last science filename for later. 
         if star[ibatch] == 1:
-            last_sci_filename = new_image.filename
+            last_sci_image = copy.deepcopy(new_image)
 
 
         image_list.append(new_image)
@@ -200,6 +207,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = satellite_spot_image
 
     mock_satspot_pri_header, mock_satspot_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    mock_satspot_pri_header['VISITID'] = science_visitid
+    mock_satspot_pri_header['PSFREF'] = 0
     mock_satspot_ext_header['SATSPOTS'] = True
     mock_satspot_ext_header['FSMPRFL'] = 'NFOV'
 
@@ -208,7 +217,9 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     # No-offset frame: copy of the last science frame with SATSPOTS=True.
     # It represents the DM-unprobed state (no satellite spots, only speckles).
-    sat_spot_nooffset = copy.deepcopy(image_list[-1])
+    if last_sci_image is None:
+        raise ValueError("No science frames were found for the no-offset satellite-spot frame.")
+    sat_spot_nooffset = copy.deepcopy(last_sci_image)
     sat_spot_nooffset.ext_hdr['SATSPOTS'] = True
     sat_spot_nooffset.ext_hdr['SCTSRT'] = satspot_base_time.isoformat()
     nooffset_time_str = satspot_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
@@ -227,6 +238,11 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     sat_spot_neg.filename = f"cgi_{sat_spot_neg.pri_hdr['VISITID']}_{neg_time_str}_l2b.fits"
 
     image_list.extend([sat_spot_nooffset, sat_spot_pos, sat_spot_neg])
+    science_visitids = {image.pri_hdr['VISITID'] for image in image_list if image.pri_hdr['PSFREF'] == 0}
+    reference_visitids = {image.pri_hdr['VISITID'] for image in image_list if image.pri_hdr['PSFREF'] == 1}
+    assert science_visitids == {science_visitid}
+    assert reference_visitids == {reference_visitid}
+    assert science_visitids.isdisjoint(reference_visitids)
 
     #########################################
     #### Save the dataset to a directory ####
