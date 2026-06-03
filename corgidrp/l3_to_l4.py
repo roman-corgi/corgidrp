@@ -938,15 +938,15 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         processed_data.ext_hdr = sci_hd
 
         #update CPIX/STARLOC
-        crpix1_rot, crpix2_rot = corgidrp.spec.rotate_points((sci_hd['CRPIX1'], sci_hd['CRPIX2']), np.deg2rad(rotation_angle), (xcen, ycen))
-        sci_hd['CRPIX1'] = crpix1_rot
-        sci_hd['CRPIX2'] = crpix2_rot
-        try:
+        if sci_hd['CRPIX1'] != xcen or sci_hd['CRPIX2'] != ycen:
+            crpix1_rot, crpix2_rot = corgidrp.spec.rotate_points((sci_hd['CRPIX1'], sci_hd['CRPIX2']), np.deg2rad(rotation_angle), (xcen, ycen))
+            sci_hd['CRPIX1'] = crpix1_rot
+            sci_hd['CRPIX2'] = crpix2_rot
+        if 'STARLOCX' in sci_hd and 'STARLOCY' in sci_hd:
             starlocx_rot, starlocy_rot = corgidrp.spec.rotate_points((sci_hd['STARLOCX'], sci_hd['STARLOCY']), np.deg2rad(rotation_angle), (xcen, ycen))
             sci_hd['STARLOCX'] = starlocx_rot
             sci_hd['STARLOCY'] = starlocy_rot
-        except KeyError:
-            warnings.warn('"STARLOCX/Y" missing from ext_hdr. Not possible to update header.')
+
         #############
         ## HDU ERR ##
         err_data = processed_data.err
