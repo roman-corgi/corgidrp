@@ -289,8 +289,36 @@ def generate_psf_cube(
         idx_1_0 = max(int(np.round(psf_loc[i_psf][0])) - n_pix_psf,0)
         idx_1_1 = min(frame.data.shape[1],
             int(np.round(psf_loc[i_psf][0])) + n_pix_psf + 1)
-        psf_cube += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
-        dq_cube += [frame.dq[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
+
+        cutout_data = frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]
+        cutout_dq = frame.dq[idx_0_0:idx_0_1, idx_1_0:idx_1_1]
+
+        # PSFs near field stop boundary produce clipped cutouts with varying shapes
+        # (eg not all 15x15). Pad them to uniform size so np.array() can create 
+        # the PSF cube. Padded regions are filled with NaN (data) and DQ flag 1 
+        # (bad pixel).
+        expected_size = 2*n_pix_psf + 1
+        if cutout_data.shape[0] != expected_size or cutout_data.shape[1] != expected_size:
+            # Create full-size arrays filled with NaN/bad-pixel flags
+            padded_data = np.full((expected_size, expected_size), np.nan, dtype=cutout_data.dtype)
+            padded_dq = np.full((expected_size, expected_size), 1, dtype=cutout_dq.dtype)
+
+            # Calculate where to place the clipped cutout within the padded array
+            # so the PSF center remains at (n_pix_psf, n_pix_psf)
+            y_offset = n_pix_psf - (int(np.round(psf_loc[i_psf][1])) - idx_0_0)
+            x_offset = n_pix_psf - (int(np.round(psf_loc[i_psf][0])) - idx_1_0)
+
+            # Insert the clipped cutout into the correct position
+            padded_data[y_offset:y_offset+cutout_data.shape[0],
+                       x_offset:x_offset+cutout_data.shape[1]] = cutout_data
+            padded_dq[y_offset:y_offset+cutout_dq.shape[0],
+                     x_offset:x_offset+cutout_dq.shape[1]] = cutout_dq
+
+            cutout_data = padded_data
+            cutout_dq = padded_dq
+
+        psf_cube += [cutout_data]
+        dq_cube += [cutout_dq]
         i_psf += 1
 
     psf_cube = np.array(psf_cube)
@@ -300,13 +328,22 @@ def generate_psf_cube(
         raise Exception(('The number of PSFs does not match the number of PSF '+
             ' locations.'))
 
-    # PSF cube header
-    ext_hdr = dataset[0].ext_hdr
+    # PSF cube header: use first off-axis frame so pupil headers don't propagate
+    first_offaxis_frame = None
+    for frame in dataset:
+        exthd = frame.ext_hdr
+        if not (exthd['DPAMNAME'] == 'PUPIL' and exthd['LSAMNAME'] == 'OPEN' and
+                exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12'):
+            first_offaxis_frame = frame
+            break
+    if first_offaxis_frame is None:
+        raise Exception('No off-axis PSF frame found in dataset')
+    ext_hdr = first_offaxis_frame.ext_hdr
     # Add EXTNAME
     psf_hdu = fits.ImageHDU(data=psf_cube, header=ext_hdr, name='PSFCUBE')
 
     # Data quality cube
-    dq_hdr = dataset[0].dq_hdr
+    dq_hdr = first_offaxis_frame.dq_hdr
     # Add specific information
     dq_hdr['COMMENT'] = 'Data quality for each image' 
     # Add EXTNAME

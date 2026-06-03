@@ -1,4 +1,4 @@
-import os
+import os, copy
 import numpy as np
 import pytest
 import logging
@@ -280,12 +280,14 @@ def test_read_cent_wave():
     with pytest.raises(ValueError):
         cen_wave = steps.read_cent_wave('X')[0]
     
+    #3F should be the same as band 3, the broadband
+    f_list = steps.read_cent_wave('3F')
     cen_wave_list = steps.read_cent_wave('3')
     assert len(cen_wave_list) == 4
-    assert cen_wave_list[0] == 729.3
-    assert cen_wave_list[1] == 122.3
-    assert cen_wave_list[2] == 0.725909
-    assert cen_wave_list[3] == -0.09398
+    assert f_list[0] == cen_wave_list[0] == 729.3
+    assert f_list[1] == cen_wave_list[1] == 122.3
+    assert f_list[2] == cen_wave_list[2] == 0.725909
+    assert f_list[3] == cen_wave_list[3] == -0.09398
     
     
 def test_calibrate_dispersion_model():    
@@ -459,17 +461,26 @@ def test_determine_zeropoint():
     slit_x = initial_cent.get("xcent")[12]
     slit_y = initial_cent.get("ycent")[12]
 
+    frame_time = datetime(2024, 1, 1, 0, 0, 0)
     ext_hdr['DPAMNAME'] = 'PRISM3'
     ext_hdr['FSAMNAME'] = 'R1C2'
     psf_images = []
     for i in range(psf_array.shape[0]):
         data_2d = np.copy(psf_array[i])
+        frame_time += timedelta(seconds=3)
         ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
         ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
         ext_hdr['CFAMNAME'] = '3'
-        if i == 12:
+        ext_hdr['SCTSRT'] = frame_time.isoformat()
+        # We need three satspot frames, with no offset/+offset/-offset. Test dataset has just one satspot frame, which has +offset (possibly).
+        # We create a fake no_offset (background) satspot frame using np.zeros and a second offset satspot frame by duplicating the pre-existing satspot frame in the test dataset
+        # In next few lines, we only create the data_2d_copy needed for frame faking/duplication
+        if i == 11: 
+            data_2d_copy = np.zeros_like(data_2d)
+        elif i == 12:
             ext_hdr["SATSPOTS"] = True
             ext_hdr['CFAMNAME'] = '3D'
+            data_2d_copy = np.copy(data_2d)
         else:
             ext_hdr["SATSPOTS"] = False
         err = np.zeros_like(data_2d)
@@ -482,13 +493,26 @@ def test_determine_zeropoint():
             dq=dq
         )
         psf_images.append(image)
+        if i in [11,12]: # Actually generating the additional satspot frames using data_2d_copy
+            frame_time += timedelta(seconds=3)
+            ext_hdr['SCTSRT'] = frame_time.isoformat()
+            ext_hdr["SATSPOTS"] = True
+            ext_hdr['CFAMNAME'] = '3D'
+            image_copy = Image(
+                data_or_filepath=data_2d_copy,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr.copy(),
+                err=err,
+                dq=dq
+            )
+            psf_images.append(image_copy)
 
     # Load the filter-to-filter image offsets to correct for the location of the narrowband centroid
     # with respect to the broadband filter.
     (xoff_nb, yoff_nb) = (steps.read_cent_wave('3D')[2], steps.read_cent_wave('3D')[3])
     (xoff_bb, yoff_bb) = (steps.read_cent_wave('3')[2], steps.read_cent_wave('3')[3])
 
-    #test it with optional initial guess and with one satspot frame
+    #test it with optional initial guess and with three satspot frames
     spec_filter_offset = SpecFilterOffset({})
     input_dataset = Dataset(psf_images)
     dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset, xcent_guess = 40., ycent_guess = 32.)
@@ -513,12 +537,16 @@ def test_determine_zeropoint():
         assert y0err < errortol_pix
     
     psf_images = []
+    frame_time = datetime(2024, 1, 1, 0, 0, 0)
     for i in range(psf_array.shape[0]):
         data_2d = np.copy(psf_array[i])
+        frame_time += timedelta(seconds=3)
         ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
         ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
         ext_hdr['CFAMNAME'] = '3D'
+        ext_hdr["FPAMNAME"] = 'OPEN_34'
         ext_hdr["SATSPOTS"] = False
+        ext_hdr['SCTSRT'] = frame_time.isoformat()
         err = np.zeros_like(data_2d)
         dq = np.zeros_like(data_2d, dtype=int)
         image = Image(
@@ -532,12 +560,12 @@ def test_determine_zeropoint():
 
     #test it as non-coronagraphic observation of only psf narrowband, so no science frames, a print statement should be raised
     input_dataset2 = Dataset(psf_images)
-    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset)
+    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset, subtract_no_offset_frames=False)
     assert len(dataset) > 0
     
     #only 1 fake science dataset frame
     input_dataset2.frames[0].ext_hdr['CFAMNAME'] = '3'
-    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset)
+    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset, subtract_no_offset_frames=False)
     assert len(dataset) == 1
     for frame in dataset:
         assert frame.ext_hdr["SATSPOTS"] == False
@@ -559,7 +587,7 @@ def test_determine_zeropoint():
     
     #to test the accuracy add noise to the dataset frames
     read_noise = 200
-    np.random.seed(0)
+    np.random.seed(2)
 
     noise_dataset = input_dataset.copy()
     for frame in noise_dataset:
@@ -1438,6 +1466,8 @@ def test_filter_offset():
     assert offset.offsets["2A"][1] == 0.2
     assert offset.offsets["3"] == offset.default_offsets["3"]
     assert offset.get_offsets("2a") == offset.offsets["2A"]
+    #CFAMNAME 3F is the same as broadband 3
+    assert offset.get_offsets("3f") ==  offset.get_offsets("3")
     xoff, yoff = offset.get_offsets("2A")
     assert xoff == 0.5
     assert yoff == 0.2
@@ -1445,6 +1475,7 @@ def test_filter_offset():
     load_offset = SpecFilterOffset(os.path.join(output_dir, "SpecFilterOffset_test.fits"))
     assert load_offset.offsets == offset.offsets
     assert load_offset.get_offsets("2A") == [0.5, 0.2]
+    os.remove(os.path.join(output_dir, "SpecFilterOffset_test.fits"))
     offset2 = SpecFilterOffset({})
     assert offset2.offsets == offset2.default_offsets
     

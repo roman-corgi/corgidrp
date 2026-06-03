@@ -20,7 +20,6 @@ from corgidrp.mocks import (make_fluxmap_image, nonlin_coefs)
 from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params_default)
 
 
-
 ######################## function definitions ###############################
 
 def count_contiguous_repeats(arr):
@@ -104,8 +103,9 @@ def setup_module():
     for j in range(n_mean):
         image_sim = make_fluxmap_image(fluxMap,bias,kgain_in,rn_in, 1, 7.0,coeffs_1,
             nonlin_flag=nonlin_flag)
-        # Datetime cannot be duplicated
+        # Timestamp cannot be duplicated
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
+        image_sim.ext_hdr['SCTSRT'] = time_stack_arr0[j]
         # Temporary keyword value. Mean frame is TBD
         image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
         if j == 1:
@@ -133,6 +133,7 @@ def setup_module():
                                 exp_time,coeffs,nonlin_flag=nonlin_flag,
                                 divide_em=True)
             image_sim.ext_hdr['DATETIME'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
+            image_sim.ext_hdr['SCTSRT'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
             # OBSNAME has no KGAIN value, but NONLIN
             image_sim.pri_hdr['OBSNAME'] = 'NONLIN'
             #to test the correct handling of cosmic ray flags

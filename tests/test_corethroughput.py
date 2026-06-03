@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import pytest
 import numpy as np
@@ -403,8 +404,21 @@ def test_cal_file():
     os.mkdir(test_dir) 
     ct_cal_file_in.save(filedir=test_dir)
 
-    # Check that the filename is what we expect
-    ct_cal_filename = dataset_ct[-1].filename.replace("_l2b", "_ctp_cal")
+    # Check that the filename is based on the latest input frame timestamp.
+    sctsrt_values = [frame.ext_hdr.get('SCTSRT') for frame in dataset_ct
+                     if frame.ext_hdr.get('SCTSRT') is not None]
+    if len(sctsrt_values) == len(dataset_ct):
+        latest_frame = max(enumerate(dataset_ct),
+                           key=lambda item: (str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+    else:
+        latest_frame = max(enumerate(dataset_ct),
+                           key=lambda item: (
+                               next((name.split('_')[2]
+                                     for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')]
+                                     if name and len(name.split('_')) > 2), ''),
+                               item[0]))[1]
+    latest_filename = latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+    ct_cal_filename = re.sub('_l[0-9].', '_ctp_cal', latest_filename)
     ct_cal_filepath = os.path.join(test_dir,ct_cal_filename)
     if os.path.exists(ct_cal_filepath) is False:
         raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')
@@ -578,10 +592,10 @@ def test_ct_interp():
     for idx in range(n_random):
         random_index_radius = rng.choice(np.arange(1, n_radii-1), 1)
         random_index_az = rng.choice(np.arange(1, n_azimuths-1), 1)
-
+                      
         #Convert these to flattned indices
         random_indices_flat = random_index_radius + random_index_az*n_radii
-
+                                  
         # Record the missing value
         missing_x = x_grid[random_indices_flat]
         missing_y = y_grid[random_indices_flat]
@@ -603,7 +617,7 @@ def test_ct_interp():
         print('') if test_result_ct else print_fail()
         assert test_result_ct, 'Error more than 5% (linear radii mapping)'
         # Test with radii mapped into their logarithmic values before
-        # constructing the interpolant
+        # constructing the interpolant 
         interpolated_value_log = ct_cal_in.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
         # Good to within 2%
@@ -623,8 +637,8 @@ def test_ct_interp():
     radii = np.sqrt(x_grid**2 + y_grid**2)
     with pytest.raises(ValueError):
         # Too Big
-        ct_cal_in.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal)
-
+        ct_cal_in.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal) 
+                                                       
     with pytest.raises(ValueError):
         #Too small
         ct_cal_in.InterpolateCT(0.9*radii.min(), 0, dataset_cor, fpam_fsam_cal)
@@ -965,6 +979,129 @@ def test_psf_interp():
 
     print('Tests about PSF interpolation passed')
 
+def test_ct_cal_order_independent():
+    """Test that FPAMNAME in CT cal file is independent of frame ordering in input dataset.
+
+    When pupil images appear first in the dataset, FPAMNAME should reflect
+    the off-axis PSF FPM setting, not 'OPEN_12' from the pupil image header.
+    Regression test for issue #624.
+    """
+    # Separate pupil and off-axis frames from the synthetic dataset.
+    # dataset_ct_syn has PSF first then pupils; we reverse to make pupil-first.
+    pupil_frames = []
+    offaxis_frames = []
+    for frame in dataset_ct_syn:
+        exthd = frame.ext_hdr
+        if (exthd['DPAMNAME'] == 'PUPIL' and exthd['LSAMNAME'] == 'OPEN' and
+                exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12'):
+            pupil_frames.append(frame)
+        else:
+            offaxis_frames.append(frame)
+
+    dataset_psf_first = Dataset(offaxis_frames + pupil_frames)
+    dataset_pupil_first = Dataset(pupil_frames + offaxis_frames)
+
+    ct_cal_psf_first = corethroughput.generate_ct_cal(dataset_psf_first)
+    ct_cal_pupil_first = corethroughput.generate_ct_cal(dataset_pupil_first)
+
+    assert ct_cal_psf_first.ext_hdr['FPAMNAME'] != 'OPEN_12', \
+        "CT cal FPAMNAME should not be 'OPEN_12' when PSF is first"
+    assert ct_cal_pupil_first.ext_hdr['FPAMNAME'] != 'OPEN_12', \
+        "CT cal FPAMNAME is 'OPEN_12' when pupil image is first (issue #624)"
+    assert ct_cal_psf_first.ext_hdr['FPAMNAME'] == ct_cal_pupil_first.ext_hdr['FPAMNAME'], \
+        "CT cal FPAMNAME differs depending on input frame ordering (issue #624)"
+
+    print(f"FPAMNAME is '{ct_cal_psf_first.ext_hdr['FPAMNAME']}' regardless of frame ordering")
+    print('Tests about CT cal order independence passed')
+
+def test_generate_psf_cube_edge_padding():
+    """
+    Regression test for PR #893. PSFs near the field-stop / detector edge
+    produce clipped cutouts smaller than the expected (2*n_pix_psf + 1) box.
+    Verify that generate_psf_cube pads those cutouts to a uniform size,
+    fills padded data with NaN and padded DQ with 1, keeps the PSF center
+    at (n_pix_psf, n_pix_psf), and preserves the unclipped pixel values.
+    """
+    # Build a CT-style dataset with one off-axis PSF placed near the 
+    # corner so the cutout gets clipped on both sides, plus the
+    # pupil images so generate_psf_cube can run
+    prhd, exthd, _, _ = create_default_L3_headers()
+    exthd['DRPCTIME'] = time.Time.now().isot
+    exthd['DRPVERSN'] = corgidrp.__version__
+    exthd['CFAMNAME'] = cfam_name
+    exthd['FPAM_H'] = FPAM_H_CT
+    exthd['FPAM_V'] = FPAM_V_CT
+    exthd['FSAM_H'] = FSAM_H_CT
+    exthd['FSAM_V'] = FSAM_V_CT
+
+    # Synthetic PSF is a 3x3 block near the corner which guarantees
+    # the cutout extends past the edges and gets clipped
+    psf_x, psf_y = 2, 3
+    psf_frame = np.zeros([1024, 1024])
+    psf_frame[psf_y-1:psf_y+2, psf_x-1:psf_x+2] = 1
+    psf_frame[psf_y, psf_x] = 4  # peak at center
+    err = np.ones([1024, 1024])
+
+    # Pupil image (so generate_psf_cube has something to skip too)
+    pupil_image = np.zeros([1024, 1024])
+    pupil_image[510:530, 510:530] = 1
+    exthd_pupil = exthd.copy()
+    exthd_pupil['DPAMNAME'] = 'PUPIL'
+    exthd_pupil['LSAMNAME'] = 'OPEN'
+    exthd_pupil['FSAMNAME'] = 'OPEN'
+    exthd_pupil['FPAMNAME'] = 'OPEN_12'
+
+    dataset_edge = Dataset([
+        Image(psf_frame, pri_hdr=prhd, ext_hdr=exthd, err=err),
+        Image(pupil_image, pri_hdr=prhd, ext_hdr=exthd_pupil, err=err),
+    ])
+
+    # Run generate_psf_cube with the known PSF location
+    psf_hdu, dq_hdu = corethroughput.generate_psf_cube(
+        dataset_edge, psf_loc=np.array([[psf_x, psf_y]]),
+        cfam_name=cfam_name)
+
+    # Expected box size matches the formula inside generate_psf_cube
+    n_pix_psf = int(np.ceil(
+        3 * corethroughput.get_cfam(cfam_name=cfam_name)[0].mean()
+        * 1e-9 / 2.36 * 180 / np.pi * 3600e3 / 21.8))
+    expected_size = 2 * n_pix_psf + 1
+
+    psf_cube = psf_hdu.data
+    dq_cube = dq_hdu.data
+
+    # 1) Uniform shape even though the cutout was clipped
+    assert psf_cube.shape == (1, expected_size, expected_size)
+    assert dq_cube.shape == (1, expected_size, expected_size)
+
+    # 2) Original clipped values land at the right offset, so the PSF center
+    #    stays at (n_pix_psf, n_pix_psf)
+    idx_0_0 = max(psf_y - n_pix_psf, 0)
+    idx_0_1 = min(1024, psf_y + n_pix_psf + 1)
+    idx_1_0 = max(psf_x - n_pix_psf, 0)
+    idx_1_1 = min(1024, psf_x + n_pix_psf + 1)
+    y_off = n_pix_psf - (psf_y - idx_0_0)
+    x_off = n_pix_psf - (psf_x - idx_1_0)
+    clip = psf_frame[idx_0_0:idx_0_1, idx_1_0:idx_1_1]
+    assert np.array_equal(
+        psf_cube[0, y_off:y_off + clip.shape[0],
+                    x_off:x_off + clip.shape[1]], clip)
+    # PSF peak ends up at the cube center
+    assert psf_cube[0, n_pix_psf, n_pix_psf] == 4
+
+    # 3) Padded regions are NaN in data and flagged 1 in DQ
+    mask = np.ones((expected_size, expected_size), dtype=bool)
+    mask[y_off:y_off + clip.shape[0], x_off:x_off + clip.shape[1]] = False
+    test_padded_data = np.all(np.isnan(psf_cube[0][mask]))
+    test_padded_dq = np.all(dq_cube[0][mask] == 1)
+    assert test_padded_data
+    assert test_padded_dq
+
+    print('Clipped PSF cutout is padded to uniform size with NaN/DQ=1: ', end='')
+    print_pass() if test_padded_data and test_padded_dq else print_fail()
+    print('Tests about PSF padding from clipped cut outs passed')
+
+
 def teardown_module():
     """
     Deletes variables
@@ -996,3 +1133,5 @@ if __name__ == '__main__':
     test_get_1d_ct()
     test_ct_map()
     test_psf_interp()
+    test_ct_cal_order_independent()
+    test_generate_psf_cube_edge_padding()

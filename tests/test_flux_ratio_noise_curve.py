@@ -97,11 +97,8 @@ def test_expected_flux_ratio_noise():
     sig_x = 4
     sig_y = 4
     FWHM_star = 2*np.sqrt(2*np.log(2))*sig_x
-    # expected flux of star, same for each frame of input dataset to compute_flux_ratio_noise:
-    # integral under Gaussian times ND transmission
-    Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 1e-2
     star_PSF = np.reshape(gauss_spot(XY,star_amp,x0,y0,sig_x,sig_y), X.shape)
-    # add some noise to the star 
+    # add some noise to the star
     np.random.seed(987)
     star_PSF += np.random.poisson(lam=star_PSF.mean(), size=star_PSF.shape)
     prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
@@ -111,11 +108,14 @@ def test_expected_flux_ratio_noise():
     nd_x, nd_y = np.meshgrid(np.linspace(0, data_shape[1], 5), np.linspace(0, data_shape[0], 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
-    nd_od = np.ones(nd_y.shape) * 1e-2
+    nd_od_val = 2  # OD=2 → T=10**(-2)=1% transmission, physically realistic ND filter
+    nd_od = np.ones(nd_y.shape) * nd_od_val
+    # expected flux of star: Gaussian integral corrected for ND filter (true_flux = measured * 10**OD)
+    Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 10**nd_od_val
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     nd_cal = data.NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
                                       ext_hdr=ext_hdr)
-    
+
     # now see what the step function gives, with and without a supplied star location guess:
     frn_dataset_nostarloc = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=3)
     frn_dataset_starloc = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, unocculted_star_loc=np.array([[17],[15]]), halfwidth=3)
@@ -295,13 +295,10 @@ def test_expected_flux_ratio_noise_pol():
     # Use fwhm_pix to calculate sigma for consistency with the PSF subtraction dataset
     # FWHM = 2*sqrt(2*ln(2)) * sigma, so sigma = FWHM / (2*sqrt(2*ln(2)))
     sig_x = fwhm_pix / (2 * np.sqrt(2 * np.log(2)))
-    sig_y = sig_x 
+    sig_y = sig_x
     FWHM_star = 2*np.sqrt(2*np.log(2))*sig_x
-    # expected flux of star, same for each frame of input dataset to compute_flux_ratio_noise:
-    # integral under Gaussian times ND transmission
-    Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 1e-2
     star_PSF = np.reshape(gauss_spot(XY,star_amp,x0,y0,sig_x,sig_y), X.shape)
-    # add some noise to the star 
+    # add some noise to the star
     np.random.seed(987)
     star_PSF += np.random.poisson(lam=star_PSF.mean(), size=star_PSF.shape)
     prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
@@ -311,7 +308,10 @@ def test_expected_flux_ratio_noise_pol():
     nd_x, nd_y = np.meshgrid(np.linspace(0, data_shape[1], 5), np.linspace(0, data_shape[0], 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
-    nd_od = np.ones(nd_y.shape) * 1e-2
+    nd_od_val = 2  # OD=2 → T=10**(-2)=1% transmission, physically realistic ND filter
+    nd_od = np.ones(nd_y.shape) * nd_od_val
+    # expected flux of star: Gaussian integral corrected for ND filter (true_flux = measured * 10**OD)
+    Fs_expected = np.pi*star_amp*FWHM_star**2/(4*np.log(2)) * 10**nd_od_val
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     nd_cal = data.NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
                                       ext_hdr=ext_hdr)
@@ -627,7 +627,75 @@ def test_flux_ratio_noise_nsigma_and_correction():
         assert np.all(vals_corr >= vals_5 - 1e-15)
 
 
+def test_detpix_coordinate_remap():
+    """Regression test for issue #880: verify that DETPIX0X/Y is used to convert
+    cropped-frame star coordinates to absolute EXCAM coordinates before ND interpolation.
+
+    When the unocculted star frame is a small cutout (DETPIX0X/Y != 0), the star's
+    position in the frame differs from its absolute detector position.  The ND
+    calibration is stored in absolute EXCAM coordinates, so the two must be reconciled
+    before calling interpolate_od.  Without the fix, interpolate_od returns NaN because
+    the query point (e.g. (15, 17)) falls outside the calibration box (~(477, 479)).
+    """
+    mode = 'RDI'
+    nsci, nref = (1, 1)
+    rolls = [0, 15., 0, 0]
+    numbasis = [1]
+    data_shape = (101, 101)
+    mock_sci_rdi, mock_ref_rdi = create_psfsub_dataset(nsci, nref, rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=100.,
+                                            noise_amp=1e-3,
+                                            pl_contrast=0.,
+                                            data_shape=data_shape)
+    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F', cenx=25., ceny=30., nx=21, ny=21)
+    psfsub_dataset_rdi = do_psf_subtraction(mock_sci_rdi, ctcal,
+                                reference_star_dataset=mock_ref_rdi,
+                                fileprefix='test_KL_THRU_detpix',
+                                measure_klip_thrupt=True,
+                                measure_1d_core_thrupt=True,
+                                numbasis=numbasis)
+
+    # Star at (x0=15, y0=17) inside the 101x101 cutout
+    x0, y0, sig_x, sig_y = 15, 17, 4, 4
+    x = np.arange(data_shape[1])
+    y = np.arange(data_shape[0])
+    X, Y = np.meshgrid(x, y)
+    XY = np.vstack([X.ravel(), Y.ravel()])
+    def gauss_spot(xy, A, x0, y0, sx, sy):
+        (x, y) = xy
+        return A * np.e**(-((x-x0)**2/(2*sx**2) + (y-y0)**2/(2*sy**2)))
+    star_PSF = np.reshape(gauss_spot(XY, 100, x0, y0, sig_x, sig_y), X.shape)
+    np.random.seed(42)
+    star_PSF += np.random.poisson(lam=star_PSF.mean(), size=star_PSF.shape)
+
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
+    # Simulate a crop: the frame's (0,0) pixel corresponds to absolute EXCAM (462, 462)
+    detpix0x, detpix0y = 462, 462
+    exthdr['DETPIX0X'] = detpix0x
+    exthdr['DETPIX0Y'] = detpix0y
+    star_image = data.Image(star_PSF, prihdr, exthdr)
+    star_dataset = data.Dataset([star_image for _ in range(len(psfsub_dataset_rdi))])
+
+    # ND calibration covers absolute EXCAM coords around (477, 479) = (15+462, 17+462)
+    nd_x, nd_y = np.meshgrid(np.linspace(440, 520, 5), np.linspace(440, 520, 5))
+    nd_x = nd_x.ravel()
+    nd_y = nd_y.ravel()
+    nd_od_val = 2
+    nd_od = np.ones(nd_y.shape) * nd_od_val
+    pri_hdr, ext_hdr, errhdr_nd, dqhdr_nd, biashdr = mocks.create_default_L2b_headers()
+    nd_cal = data.NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T,
+                                           pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+    frn_dataset = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=3)
+    for frame in frn_dataset:
+        frn_vals = frame.hdu_list['FRN_CRV'].data[2:]
+        assert not np.any(np.isnan(frn_vals)), \
+            "FRN curve contains NaN — coordinate remapping via DETPIX0X/Y likely failed"
+
+
 if __name__ == '__main__':
     test_expected_flux_ratio_noise()
     test_expected_flux_ratio_noise_pol()
     test_flux_ratio_noise_nsigma_and_correction()
+    test_detpix_coordinate_remap()

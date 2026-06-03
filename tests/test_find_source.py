@@ -214,8 +214,9 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
 
         ##### ##### #####
         # Run the source detection algorithm
+        # Use N_threads=-1 to disable multiprocessing for test performance (avoids pool creation overhead)
         nsigma_threshold = 5.
-        image_with_point_source = find_source(image_with_point_source, psf=psf, fwhm=fwhm, nsigma_threshold=nsigma_threshold, image_without_planet=image)
+        image_with_point_source = find_source(image_with_point_source, psf=psf, fwhm=fwhm, nsigma_threshold=nsigma_threshold, image_without_planet=image, N_threads=-1)
         ##### ##### #####
 
         

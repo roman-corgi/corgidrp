@@ -72,7 +72,7 @@ def replace_bad_pixels(input_dataset, kernelsize=3, dq_thresh=1, vectorized_thre
     im_err = dataset.all_err
 
     im_dq_bool = dataset.all_dq >= dq_thresh
-
+        
     im_data[im_dq_bool] = np.nan
     # Broadcast dq mask across the error-layer axis (axis 1 of im_err)
     im_err[:] = np.where(im_dq_bool[:, np.newaxis], np.nan, im_err)
@@ -246,25 +246,43 @@ def find_star(input_dataset,
               thetaOffsetGuess=0,
               satellite_spot_parameters=None,
               drop_satspots_frames=True,
+              subtract_no_offset_frames=True,
               pri_split_keywords = None,
               ext_split_keywords = None):
     """
-    Determines the star position within a coronagraphic dataset by analyzing frames that 
-    contain satellite spots (indicated by ``SATSPOTS=True`` in the image header). The 
-    function computes the median of all science frames (``SATSPOTS=False``) and the median 
-    of all satellite spot frames (``SATSPOTS=True``), then estimates the star location 
-    based on these median images and the initial guess provided.
+    Determines the star position within a coronagraphic dataset by analyzing frames that
+    contain satellite spots (indicated by ``SATSPOTS=1`` in the image header). The
+    function computes the median of all science frames (``SATSPOTS=0``) and the median
+    of the DM-offset satellite spot frames (``SATSPOTS=1``), then estimates the star
+    location based on these median images and the initial guess provided.
 
-    The star's (x, y) location is stored in each frame's extension header under 
+    When ``subtract_no_offset_frames=True`` (default), satellite spot data is expected in
+    three sequential equal-sized groups, all tagged ``SATSPOTS=1`` and ordered by their
+    ``SCTSRT`` header timestamp (filename order is used as a fallback):
+
+        1. No-offset frames (first third): DM has no probe offset; no satellite spots,
+           only speckles/PSF.
+        2. Positive-offset frames (middle third): DM at +1.0 probe offset; spots present.
+        3. Negative-offset frames (last third): DM at -1.0 probe offset; spots present.
+
+    The median of the no-offset frames is passed as ``img_ref`` to
+    ``star_center_from_satellite_spots``, which uses it to suppress static speckles and
+    astrophysical sources when estimating the star center.
+
+    When ``subtract_no_offset_frames=False``, all ``SATSPOTS=1`` frames are treated as
+    offset (spot-bearing) frames and ``img_ref`` is set to zeros (no background
+    subtraction). No three-group structure is assumed or required.
+
+    The star's (x, y) location is stored in each frame's extension header under
     ``STARLOCX`` and ``STARLOCY``.
 
-    In case of polarimetric data, the star location is estimated on the first slice and 
-    the second slice is aligned on it. POL 0 and POL 45 are processed independantly 
+    In case of polarimetric data, the star location is estimated on the first slice and
+    the second slice is aligned on it. POL 0 and POL 45 are processed independantly
 
-    You can replace many of the default settings for by adjusting the satellite_spot_parameters 
-    dictionary. You only need to replace the parameters of interest and the rest will stay as defaults. 
+    You can replace many of the default settings for by adjusting the satellite_spot_parameters
+    dictionary. You only need to replace the parameters of interest and the rest will stay as defaults.
 
-    satellite_spot_parameters of the form: 
+    satellite_spot_parameters of the form:
          offset : dict
                 Parameters for estimating the offset of the star center:
 
@@ -307,29 +325,39 @@ def find_star(input_dataset,
                 nIter : int
                     Number of iterations refining the radial separation.
 
-    
+
 
     Args:
         input_dataset (corgidrp.data.Dataset):
-            A dataset of L3-level frames. Frames should be labeled in their primary 
-            headers with ``SATSPOTS=False`` (science frames) or ``SATSPOTS=True`` 
-            (satellite spot frames).
+            A dataset of L3-level frames. Frames should be labeled in their primary
+            headers with ``SATSPOTS=0`` (science frames) or ``SATSPOTS=1``
+            (satellite spot frames). When ``subtract_no_offset_frames=True``, the total
+            number of ``SATSPOTS=1`` frames must be divisible by 3, reflecting the
+            no-offset / positive-offset / negative-offset acquisition groups.
         star_coordinate_guess (tuple of float or None, optional):
             Initial guess for the star's (x, y) location as absolute coordinates.
             If ``None``, defaults to the center of the median satellite spot image.
             Defaults to None.
         thetaOffsetGuess (float, optional):
-            Initial guess for any angular rotation of the star center 
+            Initial guess for any angular rotation of the star center
             (in degrees, for example). Defaults to 0.
         satellite_spot_parameters (dict, optional):
             Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
             can contain the following keys and structure. Only provided parameters will be changed,
             otherwise defaults for the mode will be used:
-            If None, default parameters corresponding to the specified observing_mode will be used.     
+            If None, default parameters corresponding to the specified observing_mode will be used.
         drop_satspots_frames (bool, optional):
-            If True, frames with satellite spots (``SATSPOTS=True``) will be removed from 
+            If True, frames with satellite spots (``SATSPOTS=1``) will be removed from
             the returned dataset. Defaults to True.
-        pri_split_keywords (list of str, optional): 
+        subtract_no_offset_frames (bool, optional):
+            If True, the ``SATSPOTS=1`` frames are assumed to follow the three-group
+            acquisition structure (no-offset / +offset / -offset). The median of the
+            no-offset frames is passed as ``img_ref`` to
+            ``star_center_from_satellite_spots`` so that it can suppress static speckles
+            and astrophysical sources internally. If False, all ``SATSPOTS=1`` frames are
+            used as the offset median and ``img_ref`` is set to zeros; no three-group
+            structure is assumed. Defaults to True.
+        pri_split_keywords (list of str, optional):
             List of primary header keywords to use for splitting the dataset into subsets.
             If None, defaults to ['VISITID']. Defaults to None.
         ext_split_keywords (list of str, optional):
@@ -340,23 +368,24 @@ def find_star(input_dataset,
 
     Returns:
         corgidrp.data.Dataset:
-            The original dataset, augmented with the star's (x, y) location stored in 
-            the extension header (``ext_hdr``) of each frame under the keys 
+            The original dataset, augmented with the star's (x, y) location stored in
+            the extension header (``ext_hdr``) of each frame under the keys
             ``STARLOCX`` and ``STARLOCY``.
 
     Raises:
         AssertionError:
-            If any frames have an invalid ``SATSPOTS`` keyword (not 0 or 1), or if 
-            the frames do not all share the same observing mode (as determined by 
+            If any frames have an invalid ``SATSPOTS`` keyword (not 0 or 1), or if
+            the frames do not all share the same observing mode (as determined by
             the ``FSMPRFL`` keyword).
+        ValueError:
+            If ``subtract_no_offset_frames=True`` and the number of ``SATSPOTS=1``
+            frames is not divisible by 3.
 
     Notes:
-        • This function merges the science frames (for reference) and the satellite 
-          spot frames (for analysis) by taking a median image of each set.
-        • The star center is computed using the median images and the 
+        • This function merges the science frames (for reference) and the DM-offset
+          satellite spot frames (for analysis) by taking a median image of each set.
+        • The star center is computed using the median images and the
           ``star_center.star_center_from_satellite_spots`` routine.
-        • Future enhancements may include separate handling of positive vs. negative 
-          satellite spot frames once the relevant metadata keywords are defined.
         • This routine can fail, if the guess position is off by more than a few pixels.
           More than 2 pixels on any axis leads almost systematically to failure
           A significantly wrong guess of the angle offset can also lead to failure.
@@ -370,7 +399,7 @@ def find_star(input_dataset,
 
     if pri_split_keywords is None:
         pri_split_keywords = ['VISITID']
-    
+
     if ext_split_keywords is None:
         ext_split_keywords = ['DPAMNAME']
 
@@ -383,10 +412,10 @@ def find_star(input_dataset,
         sat_spot_frames = []
         for frame in split_dataset.frames:
             satspots = frame.ext_hdr["SATSPOTS"]
-            if satspots == False:
+            if satspots == 0:
                 sci_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
-            elif satspots == True:
+            elif satspots == 1:
                 sat_spot_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
             else:
@@ -397,16 +426,39 @@ def find_star(input_dataset,
 
         observing_mode = observing_mode[0]
 
+        if subtract_no_offset_frames:
+            # Split sat spot frames into the three acquisition groups by SCTSRT order.
+            # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
+            if len(sat_spot_frames) % 3 != 0:
+                raise ValueError(
+                    f"Expected the number of SATSPOTS=1 frames to be divisible by 3 "
+                    f"(no-offset / +offset / -offset groups), but got {len(sat_spot_frames)}."
+                )
+            if all('SCTSRT' in f.ext_hdr for f in sat_spot_frames):
+                sat_spot_frames_sorted = sorted(sat_spot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
+            else:
+                sat_spot_frames_sorted = sorted(sat_spot_frames, key=lambda f: f.filename)
+            n_per_group = len(sat_spot_frames_sorted) // 3
+            no_offset_frames = sat_spot_frames_sorted[:n_per_group]
+            offset_frames = sat_spot_frames_sorted[n_per_group:]
+        else:
+            offset_frames = sat_spot_frames
+
         sci_dataset = data.Dataset(sci_frames)
-        sat_spot_dataset = data.Dataset(sat_spot_frames)
+        offset_dataset = data.Dataset(offset_frames)
 
         tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
         # See if the satellite spot parameters are provided, if not used defaults
         if satellite_spot_parameters is not None:
             tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
-        # Compute median images
-        img_ref = np.nanmedian(sci_dataset.all_data, axis=0)
-        img_sat_spot = np.nanmedian(sat_spot_dataset.all_data, axis=0)
+        # Compute median images. When subtract_no_offset_frames is True, use the
+        # no-offset median as img_ref so star_center_from_satellite_spots handles
+        # the background subtraction internally; otherwise use the science median.
+        img_sat_spot = np.nanmedian(offset_dataset.all_data, axis=0)
+        if subtract_no_offset_frames:
+            img_ref = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
+        else:
+            img_ref = np.zeros_like(img_sat_spot)
 
         # if polarimetry
         if 'POL0' in val  or 'POL45' in val: 
@@ -431,7 +483,7 @@ def find_star(input_dataset,
             #align second slice on first slice and drop satellite spot images if necessary
             shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
                     aligned_slice = shift(frame.data[1], shift_value)
                     frame.data[1] = aligned_slice
                     frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]
@@ -460,7 +512,7 @@ def find_star(input_dataset,
                 processed_dataset = sci_dataset
 
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
                     frame.ext_hdr['STARLOCX'] =star_xy[0]
                     frame.ext_hdr['STARLOCY'] =star_xy[1]
                     frame.ext_hdr['HISTORY'] = (
@@ -721,10 +773,10 @@ def do_psf_subtraction(input_dataset,
     # average/delete header keywords as L4 involves combination of multiple frames
     pri_hdr, ext_hdr, _, _ = check.merge_headers(
         collapsed_dataset,
-        last_frame_keywords = ['VISITID', 'MJDEND'],
+        last_frame_keywords = ['VISITID', 'MJDEND', 'SCTEND'],
         # the first frame in collapsed dataset seems to contain the correct WCS, so
         # propagate that one
-        first_frame_keywords = ['MJDSRT', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+        first_frame_keywords = ['MJDSRT', 'SCTSRT', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
                                 'CRPIX1', 'CRPIX2','NORTHANG'],
         invalid_keywords=[
             # Primary header keywords
@@ -962,7 +1014,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     return processed_dataset
 
 
-def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
+def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
     """ 
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -972,6 +1024,10 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         spec_filter_offset (corgidrp.data.SpecFilterOffset): instance of SpecFilterOffset calibration class
         template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
                                                   path is taken
+        subtract_no_offset_frames (bool, optional): If True, the ''SATSPOTS=1'' frames are assumed to follow the three-group acquisition structure 
+        (no-offset / +offset / -offset). The no-offset median is subtracted from the offset median before star-center estimation to suppress static speckles and 
+        astrophysical sources. If False, all ''SATSPOTS=1'' frames are used directly as the offset (spot-bearing) median with no background subtraction and no 
+        three-group structure assumed. Defaults to True.
         xcent_guess (float): initial x guess for the centroid fit for all frames
         ycent_guess (float): initial y guess for the centroid fit for all frames
         bb_nb_dx (float): horizontal image offset between the narrowband and broadband filters, in EXCAM pixels. 
@@ -988,6 +1044,9 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     dpamname = dataset.frames[0].ext_hdr["DPAMNAME"]
     if not dpamname.startswith("PRISM"):
         raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
+    if dataset.frames[0].ext_hdr["FPAMNAME"] == 'OPEN_34':
+        warnings.warn("The dataset has FPAMNAME = OPEN_34, identicating that this is a non-coronagraphic spectroscopy observation, setting subtract_no_offset_frames = False")
+        subtract_no_offset_frames = False
 
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
@@ -1012,41 +1071,90 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     else:
         raise AttributeError("No narrowband frames found in input dataset")
     
-    if xcent_guess is not None and ycent_guess is not None:
-        n = len(sat_dataset)
-        initial_cent = {"xcent": np.repeat(xcent_guess, n),
-                        "ycent": np.repeat(ycent_guess, n)}
-    else:
-        initial_cent = None
-    spot_centroids = compute_psf_centroid(dataset = sat_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
-    
-    nb_filter = sat_dataset[0].ext_hdr["CFAMNAME"]
-    bb_filter = nb_filter[0]
-    cen_wave, _, _, _ = read_cent_wave(nb_filter)
-    xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
-    xoff_bb, yoff_bb = spec_filter_offset.get_offsets(bb_filter)
-    # Correct the centroid for the filter-to-filter image offset, so that
-    # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
-    if bb_nb_dx is not None and bb_nb_dy is not None:
-        x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
-        y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
-    else:
-        x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
-        y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
-    x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
-    y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
-    if return_all or with_science == False:
-        sci_dataset = dataset
+    # Split satspot/science dataset according to VISITID
+    satspot_dataset, visitid = sat_dataset.split_dataset(prihdr_keywords=["VISITID"])
+    if with_science:
+        science_dataset, visitid = sci_dataset.split_dataset(prihdr_keywords=["VISITID"])
+    visitid = np.array(visitid)
 
-    for frame in sci_dataset:
-        frame.ext_hdr["WAVLEN0"] = cen_wave
-        frame.ext_hdr["WV0_X"] = x0
-        frame.ext_hdr["WV0_XERR"] = x0err
-        frame.ext_hdr["WV0_Y"] = y0
-        frame.ext_hdr["WV0_YERR"] = y0err
-        frame.ext_hdr["WV0_DIMX"] = sat_dataset[0].ext_hdr['NAXIS1']
-        frame.ext_hdr["WV0_DIMY"] = sat_dataset[0].ext_hdr['NAXIS2']
-                              
+    all_science_frames = []
+
+    for visid in visitid:
+        if subtract_no_offset_frames:
+            
+            satspot_subset = satspot_dataset[int(np.nonzero(visitid == visid)[0].item())]
+            satspot_frames = []
+            for frame in satspot_subset:
+                satspot_frames.append(frame)
+            # Split sat spot frames into the three acquisition groups by SCTSRT order.
+            # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
+            if len(satspot_frames) % 3 != 0:
+                raise ValueError(f"Expected the number of refstar SATSPOTS=1 frames to be divisible by 3 "
+                    f"(no-offset / +offset / -offset groups), but got {len(satspot_frames)}.")
+            if all('SCTSRT' in f.ext_hdr for f in satspot_frames):
+                satspot_frames_sorted = sorted(satspot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
+            else:
+                satspot_frames_sorted = sorted(satspot_frames, key=lambda f: f.filename)
+            n_per_group = len(satspot_frames_sorted) // 3
+            no_offset_frames = satspot_frames_sorted[:n_per_group]
+            offset_frames = satspot_frames_sorted[n_per_group:]
+ 
+            img_no_offset = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
+            for frame in data.Dataset(offset_frames):
+                frame.data = frame.data - img_no_offset
+
+            offset_dataset = data.Dataset(offset_frames)
+
+        else:
+            satspot_subset = satspot_dataset[int(np.nonzero(visitid == visid)[0].item())]
+            offset_dataset = satspot_subset
+
+        if xcent_guess is not None and ycent_guess is not None:
+            n = len(offset_dataset)
+            initial_cent = {"xcent": np.repeat(xcent_guess, n),
+                            "ycent": np.repeat(ycent_guess, n)}
+        else:
+            initial_cent = None
+        spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
+    
+        nb_filter = offset_dataset[0].ext_hdr["CFAMNAME"]
+        bb_filter = nb_filter[0]
+        cen_wave, _, _, _ = read_cent_wave(nb_filter)
+        xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
+        xoff_bb, yoff_bb = spec_filter_offset.get_offsets(bb_filter)
+        # Correct the centroid for the filter-to-filter image offset, so that
+        # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
+        if bb_nb_dx is not None and bb_nb_dy is not None:
+            x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
+            y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
+        else:
+            x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
+            y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
+        x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
+        y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+
+        if return_all or with_science == False:
+            science_subset = offset_dataset
+        
+        if with_science:
+            science_subset = science_dataset[int(np.nonzero(visitid == visid)[0].item())]
+        
+
+        science_frames = []
+        for frame in science_subset:
+            frame.ext_hdr["WAVLEN0"] = cen_wave
+            frame.ext_hdr["WV0_X"] = x0
+            frame.ext_hdr["WV0_XERR"] = x0err
+            frame.ext_hdr["WV0_Y"] = y0
+            frame.ext_hdr["WV0_YERR"] = y0err
+            frame.ext_hdr["WV0_DIMX"] = offset_dataset[0].ext_hdr['NAXIS1']
+            frame.ext_hdr["WV0_DIMY"] = offset_dataset[0].ext_hdr['NAXIS2']
+            science_frames.append(frame)
+
+        all_science_frames += science_frames
+
+    sci_dataset = data.Dataset(all_science_frames)
+
     history_msg = "wavelength zeropoint values added to header"
     sci_dataset.update_after_processing_step(history_msg)
     return sci_dataset
@@ -1737,14 +1845,18 @@ def combine_polarization_states(input_dataset,
     return updated_dataset
 
 
-def spec_psf_subtraction(input_dataset):
+def spec_psf_subtraction(input_dataset,mask_pl_pixels=3,bg_threshold=5,poly_order=5,sigma_injplanet=1.5):
     '''
     RDI PSF subtraction for spectroscopy mode.
     Assumes the reference images are marked with PSFREF=True in the primary header
     and that they all have the same alignment.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): L3 dataset containing the science and reference images
+        input_dataset (corgidrp.data.Dataset): L3 dataset containing the science and reference images.
+        mask_pl_pixels (int, optional): No. of pixels to mask on either side of planet position. Default value is 3 pixels.
+        bg_threshold (int, optional): Threshold to identify detector rows with reference psf using no. of std deviations from median. Default value is 5.
+        poly_order (int, optional): Order of polynomial used to scale down reference star psf to target star psf. Default value is 5. 
+        sigma_injplanet (float, optional): Standard deviation of injected gaussian planet for throughput calcs from injection-recovery tests. Default value is 1.5 pixels.
     
     Returns:
         corgidrp.data.Dataset: dataset containing the PSF-subtracted science images
@@ -1782,9 +1894,73 @@ def spec_psf_subtraction(input_dataset):
         # rescale wavelengh bands to match
         ref_col_mean = np.mean(shifted_ref,axis=1)
         ref_col_mean[ref_col_mean==0] = 1 # prevent div by 0
-        scale = np.mean(frame.data,axis=1)/ref_col_mean
-        shifted_scaled_ref = shifted_ref*scale[:,None]
 
+        frame_datcopy = np.copy(frame.data)
+        ref_copy = np.copy(shifted_ref)
+
+        #Identify planet position
+        planet_pos = int(frame.ext_hdr['WV0_X'])
+        # Masking pixels about planet location for dataset copy and reference.
+        if mask_pl_pixels > 0:
+            frame_datcopy[:,planet_pos-mask_pl_pixels:planet_pos+mask_pl_pixels+1] = np.nan
+            ref_copy[:,planet_pos-mask_pl_pixels:planet_pos+mask_pl_pixels+1] = np.nan
+
+        #Calculate mean for each row for both ref and science.
+        avg_peak_ref = np.nanmean(ref_copy,axis=1)
+        avg_peak_dat = np.nanmean(frame_datcopy,axis=1)
+        #Find background median and std deviation from first 10 rows/wvs at top and bottom edge of image
+        bg_std = np.std(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
+        bg_median = np.median(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
+
+        #Use boxcar mean of row-by-row avg to identify wavelengths with the ref star speckles.
+        cumulatsum = np.cumsum(np.insert(avg_peak_ref, 0, 0))
+        boxcar_mean = (cumulatsum[5:] - cumulatsum[:-5]) / 5
+        ref_psf_wvs = np.where(boxcar_mean > (bg_median + bg_threshold * bg_std))[0] 
+        try:
+            start = ref_psf_wvs[0]
+            end = ref_psf_wvs[-1]
+        except:
+            raise Exception('Background threshold is too high. Algorithm could not identify rows/wavelengths with reference psf')
+        if start==end:
+            raise Exception('Found only one row/wavelength with reference psf. Please check your background threshold.')
+
+        #Find rows where peak of ref star psf lies between start and end wavelengths. Next, we find col with brightest speckle in each row. 
+        #Rank the cols such that col with brightest peak across most rows is #1, brightest peak across second-most rows is #2, and so on. We prefer to use brightest col, but that might be difficult if that col is at edge of image.
+        #Reference was masked earlier to ensure chosen slice is not on same slices as masked planet psf.
+        row_peak_arr = np.nanargmax(ref_copy[start:end,:], axis=1)
+        values, counts = np.unique(row_peak_arr, return_counts=True)
+        best_peak = values[np.argmax(counts)]
+        if best_peak < 5 or best_peak > frame_datcopy.shape[1]-5:  #If reference star speckles peak at edge of image, raise exception
+            warnings.warn("Ref star speckles are brightest at edge of image. Please manually verify if reference is shifted properly. Regardless, proceeding with a less-optimal psf subtraction using adjacent speckles which may be fainter.")
+            if best_peak < 5:
+                delta_peak = 5-best_peak
+                best_peak = best_peak + delta_peak
+            elif best_peak > frame_datcopy.shape[1]-5:
+                delta_peak = best_peak - (frame_datcopy.shape[1]-5)
+                best_peak = best_peak - delta_peak
+        
+        #Now calculate mean for 10-pixel centered on best slice for each wav for both ref and science. This mean is used to scale down ref star psf for psfsub.
+        avg_peak_ref = np.nanmean(ref_copy[:,best_peak-5:best_peak+5],axis=1)
+        avg_peak_dat = np.nanmean(frame_datcopy[:,best_peak-5:best_peak+5],axis=1)
+
+        #Improve median background estimate. Used to identify sites for injection/recovery tests
+        bg_median = np.median(np.concatenate((avg_peak_ref[:10],avg_peak_ref[-10:])))
+
+        if poly_order < 4:
+            warnings.warn("NOTE: Order of scaling polynomial seems too low, psf subtraction might be poor.")
+        # Fit a nth order function to mean across wavelengths to scale down ref star psf. Only do this for wvs identified above
+        pixel_arr = np.arange(start,end)
+        polyfn_dat = np.polyfit(pixel_arr,avg_peak_dat[start:end],deg=poly_order)
+        polyarr_dat = np.polyval(polyfn_dat, pixel_arr)
+
+        polyfn_ref = np.polyfit(pixel_arr,avg_peak_ref[start:end],deg=poly_order)
+        polyarr_ref = np.polyval(polyfn_ref, pixel_arr)
+        polyarr_ref[polyarr_ref==0] = 1 # prevent div by 0
+
+        scale = np.nanmean(frame_datcopy,axis=1)/ref_col_mean
+        scale[start:end] = polyarr_dat/polyarr_ref
+        shifted_scaled_ref = shifted_ref*scale[:,None]
+    
         shifted_refdq = np.roll(mean_ref.dq, (shift[0], shift[1]), axis=(0,1))
         # at this point in the pipeline, the err is mainly shot noise, so multiplying the err is appropriate
         # shifting may throw off err at the edges of the frame, but those pixels aren't used anyways
@@ -1794,12 +1970,33 @@ def spec_psf_subtraction(input_dataset):
         orig_frame = frame.data.copy()
         frame.data -= shifted_scaled_ref
 
+        amplitude = np.max(frame.data[:,planet_pos]) #Amplitude of planet psf test for injection-recovery tests for throughput calculation
+
+        # Find best position for injection/recovery tests. Since planet is already masked in frame_datcopy, we only need to mask the slices that correspond with peak reference psf.
+        frame_datcopy[:,best_peak-5:best_peak+5] = np.nan
+        col_avg = np.nanmean(frame_datcopy,axis=0)
+        
+        injection_cols = np.where(np.logical_and(np.isfinite(col_avg), col_avg > bg_median))[0]
+        cols_mask = (abs(injection_cols-planet_pos)>mask_pl_pixels) * (abs(injection_cols-best_peak)>5) * (injection_cols-mask_pl_pixels > 0) * (injection_cols + mask_pl_pixels < frame_datcopy.shape[1])
+        injection_cols = injection_cols[cols_mask]
+        if len(injection_cols) == 0:
+            warnings.warn("Choosing columns with speckle flux lower than median background for injection-recovery tests. This could bias throughput calculations.")
+            injection_cols = np.where(np.isfinite(col_avg))[0]
+            cols_mask = (abs(injection_cols-planet_pos)>mask_pl_pixels) * (abs(injection_cols-best_peak)>5) * (injection_cols-mask_pl_pixels > 0) * (injection_cols + mask_pl_pixels < frame_datcopy.shape[1])
+            injection_cols = injection_cols[cols_mask]
+        
         # determine the throughput at the estimated source position
         # This is a rough guess at the throughput. Want to make this more accurate
         with warnings.catch_warnings():
             # catch divide by zero warnings
             warnings.filterwarnings('ignore', category=RuntimeWarning)
-            through = 1 - np.nansum(frame.data * shifted_scaled_ref, axis=1)/np.nansum(shifted_scaled_ref * shifted_scaled_ref, axis=1)**0.5/np.nansum(frame.data*frame.data, axis=1)**0.5
+            through = []
+            for i in range(0,min(len(injection_cols),5)):
+                injection_site = injection_cols[i]
+                through.append(spec_throughput(orig_frame, shifted_ref, injection_site = injection_site, sigma_injplanet = sigma_injplanet, best_peak_col = best_peak, start_row=start, end_row=end, poly_order=poly_order, amplitude=amplitude, mask_pl_pixels=mask_pl_pixels))
+            through = np.array(through)
+            through = np.nanmedian(through,axis=0)
+            through[through>1] = 1
         # Save algorithm throughput as an extension on the psf-subtracted Image
         frame.add_extension_hdu('ALGO_THRU', data = np.array(through), header = algothru_hdr)
 
@@ -1813,7 +2010,6 @@ def spec_psf_subtraction(input_dataset):
 
     out_dataset = data.Dataset(image_list)
     
-
     # Add history msg
     thru_msg = f'Algorithm throughput measured and saved to Image class HDU List extension ALGO_THRU. '
     
@@ -1823,6 +2019,68 @@ def spec_psf_subtraction(input_dataset):
         history_msg = thru_msg + f'RDI PSF subtraction applied using averaged reference image. Files used to make the reference image: {0}'.format(str(mean_ref_dset[0].ext_hdr['FILE*']))
         out_dataset.update_after_processing_step(history_msg)
     return out_dataset
+
+def spec_throughput(orig_frame, shifted_ref, injection_site, sigma_injplanet, best_peak_col, start_row, end_row, poly_order=5, amplitude=0.02, mask_pl_pixels=3):
+    '''
+    Calculates spectroscopy PSF subtraction algorithmic throughput.
+    
+    Args:
+        orig_frame (corgidrp.data.Image): Science data frame from spec_psf_subtraction.
+        shifted_ref (corgidrp.data.Image): Shifted reference frame from spec_psf_subtraction.
+        injection_site (int): Column with peak of injected planet psf.
+        sigma_injplanet (float): Standard deviation of injected gaussian planet for throughput calcs from injection-recovery tests.
+        best_peak_col (int): Column with peak of reference star speckles.
+        start_row (int): Start row location of ref star speckles.
+        end_row (int): End row location of ref star speckles.
+        poly_order (int, optional): Order of polynomial used to scale down reference star psf to target star psf. Default value is 5.
+        amplitude (float, optional): Amplitude of planet psf. Default value is 0.02.
+        mask_pl_pixels (int, optional): No. of pixels to mask on either side of planet position. Also used to define pixels where planet is injected. Default value is 3 pixels. 
+
+    Returns:
+        Algorithmic throughput as a function of wavelength.
+    '''
+
+    sigma = sigma_injplanet
+    x0 = injection_site
+
+    #Inject fake gaussian to dataset copy to determine throughput
+    x = np.arange(x0 - mask_pl_pixels,x0 + mask_pl_pixels)
+    gaussian_planet = amplitude * np.exp(-((x - x0)**2) / (2 * sigma**2))
+
+    frame_copy = np.copy(orig_frame)
+
+    orig_frame[:,x0-mask_pl_pixels:x0+mask_pl_pixels] = orig_frame[:,x0-mask_pl_pixels:x0+mask_pl_pixels] + gaussian_planet
+    frame_copy[:,x0-mask_pl_pixels:x0+mask_pl_pixels] = frame_copy[:,x0-mask_pl_pixels:x0+mask_pl_pixels] + gaussian_planet
+    inj_planet = np.ones(frame_copy.shape[0]) * np.max(frame_copy[:,x0-mask_pl_pixels:x0+mask_pl_pixels],axis=1)
+
+    if mask_pl_pixels > 0:
+        frame_copy[:,x0-mask_pl_pixels:x0+mask_pl_pixels] = np.nan
+
+    avg_peak_ref = np.nanmean(shifted_ref[:,best_peak_col-5:best_peak_col+5],axis=1)
+    avg_peak_dat = np.nanmean(frame_copy[:,best_peak_col-5:best_peak_col+5],axis=1)
+
+    pixel_arr = np.arange(start_row,end_row)
+    polyfn_dat = np.polyfit(pixel_arr,avg_peak_dat[start_row:end_row],deg=poly_order)
+    polyarr_dat = np.polyval(polyfn_dat, pixel_arr)
+
+    polyfn_ref = np.polyfit(pixel_arr,avg_peak_ref[start_row:end_row],deg=poly_order)
+    polyarr_ref = np.polyval(polyfn_ref, pixel_arr)
+
+    ref_col_mean = np.mean(shifted_ref,axis=1)
+    ref_col_mean[ref_col_mean==0] = 1 # prevent div by 0
+    polyarr_ref[polyarr_ref==0] = 1 # prevent div by 0
+
+    scale = np.nanmean(frame_copy,axis=1)/ref_col_mean
+    scale[start_row:end_row]= polyarr_dat/polyarr_ref
+    shifted_scaled_ref = shifted_ref*scale[:,None]
+
+    # make same 
+    orig_frame-= shifted_scaled_ref
+    postimg_signal = np.max(orig_frame[:,x0-mask_pl_pixels:x0+mask_pl_pixels],axis=1)
+
+    through = (postimg_signal/inj_planet)
+    return through
+
 
 def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     '''
@@ -1843,8 +2101,8 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
     # Here we change header keywords for both spec mode datasets (coron/non-coron)
     # average/delete header keywords as L4 involves combination of multiple frames
     pri_hdr_comb, ext_hdr_comb, _, _ = corgidrp.check.merge_headers(input_dataset, 
-    last_frame_keywords=['VISITID', 'MJDEND'],
-    first_frame_keywords=['MJDSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2','NORTHANG'],
+    last_frame_keywords=['VISITID', 'MJDEND', 'SCTEND'],
+    first_frame_keywords=['MJDSRT','SCTSRT','CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CRPIX1', 'CRPIX2','NORTHANG'],
     deleted_keywords=['CDELT1','CDELT2','FILE0'] + corgidrp.check.deleted_keywords_default, #we re-add FILE0 below
     invalid_keywords=[
                     #Primary header keywords
@@ -1859,7 +2117,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
                     'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR']) 
+                    'Z2VAR', 'Z3VAR','WAVELEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR']) 
     #combine frames                       
     dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling, combine_other_hdus=True)
     #certain headers are added in combine_subexposures, we manually add them in
