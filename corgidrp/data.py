@@ -4099,7 +4099,7 @@ class NDSpectroscopy(Image):
                     # Extension header keywords
                     'BITPIX', 'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
                     'STATUS', 'HVCBIAS', 'OPMODE',
-                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR',
+                    'EXPTIME', 'EMGAIN_A','EMGAIN_C', 'KGAINPAR',
                     'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
                     'PROXET',
                     'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',

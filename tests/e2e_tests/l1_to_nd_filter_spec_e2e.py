@@ -625,7 +625,7 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
     """
     l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "SPEC_NOM_L1")
     processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
-    outputdir = os.path.join(e2eoutput_path, "nd_filter_spec_e2e")
+    outputdir = os.path.join(e2eoutput_path, "l1_to_nd_filter_spec_e2e")
 
     if os.path.exists(outputdir):
         shutil.rmtree(outputdir)
