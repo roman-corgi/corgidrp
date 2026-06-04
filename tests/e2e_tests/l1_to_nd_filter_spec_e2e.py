@@ -619,9 +619,9 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     logger.info('Test Case 3: CGI-REQT-5478 - ND Filter Calibration at new location')
     logger.info('='*80)
 
-    # Make a 5x5 mock 'clean_spec_image' with the wavelength zeropoint at (2,2)
-    # Shift it by (3,3) => final location (5,5).
-    spec_wave = np.linspace(np.max(nd_spec_cal.wavelengths[:,0]), np.min(nd_spec_cal.wavelengths[:,-1]), num=nd_spec_cal.wavelengths.shape[1], dtype=float)
+    # Make a mock 'clean_spec_image' with the wavelength zeropoint at (509,514)
+    # Shift it by (3,3) => final location (512,517).
+    spec_wave = np.linspace(728, 784, num=nd_spec_cal.wavelengths.shape[1], dtype=float)
     spec_values = np.ones_like(spec_wave, dtype=float)
     spec_err = 0.1*np.ones_like(spec_wave, dtype=float)
     
@@ -778,8 +778,8 @@ if __name__ == "__main__":
     )
     ap.add_argument(
         "-d", "--e2edata_dir",
-        default="/Users/jmilton/Documents/CGI/E2E_Test_Data2",
-        help="Root directory containing ND_SPEC/L1/ and ND_SPEC/Cals/ sub-folders"
+        default="/home/ababuraj/roman/E2E_Test_Data",
+        help="Root directory containing ND_SPEC/SPEC_NOM_L1/ and ND_SPEC/Cals/ sub-folders"
     )
     ap.add_argument(
         "-o", "--outputdir",

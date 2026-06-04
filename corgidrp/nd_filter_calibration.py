@@ -584,9 +584,18 @@ def calculate_od_spec_at_new_location(clean_spec_image, fpamfsamcal,
             od = od_val[i,:]
             wave = wav_val[i,:]
             if not np.allclose(wave, common_wave, atol=0.01):
-                remap_od  = interp1d(wave, od,    kind='linear',
-                                    bounds_error=False, fill_value=np.nan)
-                od    = remap_od(common_wave)
+                if common_wave[0] < wave[0] or common_wave[-1] > wave[-1]:
+                    if wave_grid is not None:
+                        print(f"WARNING: Input wavelength grid has points outside wavelength range of dither {i+1}. Attempting to extrapolate OD at these points.")
+                    else:
+                        print(f"WARNING: Wavelength grid of input spec image has points outside wavelength range of dither {i+1}. Attempting to extrapolate OD at these points.")
+                    remap_od  = interp1d(wave, od,    kind='linear',
+                                        bounds_error=False, fill_value="extrapolate")
+                    od    = remap_od(common_wave)
+                else:
+                    remap_od  = interp1d(wave, od,    kind='linear',
+                                        bounds_error=False, fill_value=np.nan)
+                    od    = remap_od(common_wave)
                     
             od_stack.append(od)
         od_array = np.array(od_stack)
