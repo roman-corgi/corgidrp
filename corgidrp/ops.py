@@ -1,18 +1,22 @@
 import corgidrp
 import corgidrp.caldb as caldb
 import corgidrp.walker as walker
-import argparse
 
 
-def step_1_initialize():
+def step_1_initialize(user_templates_dir=None):
     """
     Initialize corgidrp and it's caldb again
+
+    Args:
+        user_templates_dir (str): the path to the user recipe template directory (optional)
 
     Returns: 
         caldb.CalDB: an instance of an initialized caldb object
     """
     corgidrp.create_config_dir()
     corgidrp.update_pipeline_settings()
+    if user_templates_dir is not None:
+        corgidrp.user_templates_dir = user_templates_dir
     corgidrp.enforce_template_structure = True
     caldb.initialize()
     this_caldb = caldb.CalDB()

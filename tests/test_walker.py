@@ -4,6 +4,7 @@ Test the walker infrastructure to read and execute recipes
 import os
 import glob
 import json
+import tempfile
 import warnings
 import shutil
 import pytest
@@ -1088,6 +1089,77 @@ def test_user_template_in_autogen_recipe():
         finally:
             corgidrp.user_templates_dir = original_user_templates
 
+def test_user_template_wrong_name_loads_without_validation():
+    """
+    User template with non-existent default name loads fine when validation disabled.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        wrong_template = {
+            "name": "nonexistent_recipe",
+            "template": True,
+            "inputs": [],
+            "outputdir": "",
+            "drpconfig": {},
+            "steps": [{"name": "save"}]
+        }
+        template_path = os.path.join(tmpdir, "nonexistent_recipe.json")
+        with open(template_path, 'w') as f:
+            json.dump(wrong_template, f)
+
+        template, loaded_path, is_user = walker._load_recipe_template(
+            "nonexistent_recipe.json", user_templates_dir=tmpdir
+        )
+        assert is_user == True
+        assert template['name'] == "nonexistent_recipe"
+
+
+def test_user_template_wrong_name_rejected_with_validation():
+    """
+    User template with non-existent default name raises FileNotFoundError
+    when enforce_template_structure=True.
+    """
+    original_enforce = corgidrp.enforce_template_structure
+    original_user_templates = corgidrp.user_templates_dir
+
+    try:
+        corgidrp.enforce_template_structure = True
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wrong_template = {
+                "name": "nonexistent_recipe",
+                "template": True,
+                "inputs": [],
+                "outputdir": "",
+                "drpconfig": {},
+                "steps": [{"name": "save"}]
+            }
+            template_path = os.path.join(tmpdir, "nonexistent_recipe.json")
+            with open(template_path, 'w') as f:
+                json.dump(wrong_template, f)
+
+            datadir = os.path.join(os.path.dirname(__file__), "simdata")
+            os.makedirs(datadir, exist_ok=True)
+            l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=1)
+            l1_dataset[0].filename = "test_l1_.fits"
+            l1_dataset.save(filedir=datadir)
+            filelist = [l1_dataset[0].filepath]
+
+            outputdir = os.path.join(os.path.dirname(__file__), "test_output")
+            os.makedirs(outputdir, exist_ok=True)
+
+            corgidrp.user_templates_dir = tmpdir
+
+            with pytest.raises(FileNotFoundError) as exc_info:
+                walker.autogen_recipe(filelist, outputdir, template="nonexistent_recipe.json")
+
+            assert "nonexistent_recipe.json" in str(exc_info.value)
+            assert "default" in str(exc_info.value).lower()
+
+    finally:
+        corgidrp.enforce_template_structure = original_enforce
+        corgidrp.user_templates_dir = original_user_templates
+
+
 if __name__ == "__main__":#
     test_autoreducing()
     test_auto_template_identification()
@@ -1110,4 +1182,6 @@ if __name__ == "__main__":#
     test_validation_mode_mismatched_structure_raises()
     test_validation_mode_disabled_allows_mismatch()
     test_user_template_in_autogen_recipe()
+    test_user_template_wrong_name_loads_without_validation()
+    test_user_template_wrong_name_rejected_with_validation()
 

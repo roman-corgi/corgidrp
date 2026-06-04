@@ -180,10 +180,25 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     Returns:
         json or list: the JSON recipe (or list of JSON recipes) that was used for processing
     """
+    recipe_filepath = None
     if isinstance(template, str):
         if os.path.sep not in template:
             # this is just a template name. check user_templates first, then defaults
             template, recipe_filepath, is_user_template = _load_recipe_template(template)
+
+            # Validate user template structure if enabled
+            if is_user_template and corgidrp.enforce_template_structure:
+                default_template_path = os.path.join(recipe_dir, os.path.basename(recipe_filepath))
+                if not os.path.exists(default_template_path):
+                    raise FileNotFoundError(
+                        f"Cannot validate user template '{os.path.basename(recipe_filepath)}': "
+                        f"no corresponding default template found at {default_template_path}. "
+                        f"User templates must have same filename as a default template when "
+                        f"enforce_template_structure=True."
+                    )
+                with open(default_template_path, 'r') as f:
+                    default_template = json.load(f)
+                _validate_template_structure(template, default_template, os.path.basename(recipe_filepath))
         else:
             recipe_filepath = template
             template = json.load(open(recipe_filepath, 'r'))
@@ -191,6 +206,17 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
 
     # generate recipe
     recipes = autogen_recipe(filelist, outputdir, template=template)
+
+    if recipe_filepath is not None:
+        if isinstance(recipes, list):
+            for r in recipes:
+                if isinstance(r, list):
+                    for sub_r in r:
+                        sub_r["RECIPE_SRC"] = recipe_filepath
+                else:
+                    r["RECIPE_SRC"] = recipe_filepath
+        else:
+            recipes["RECIPE_SRC"] = recipe_filepath
 
 
     if not isinstance(recipes, list):
