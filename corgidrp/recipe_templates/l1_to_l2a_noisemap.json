@@ -44,7 +44,10 @@
             "name" : "save"
         },
         {
-            "name" : "frame_select"
+            "name" : "frame_select",
+            "keywords" : {
+                "record_selection" : false
+            }
         },
         {
             "name" : "convert_to_electrons",

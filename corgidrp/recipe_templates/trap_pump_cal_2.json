@@ -9,7 +9,10 @@
     "outputdir" : "",
     "steps" : [
         {
-            "name" : "frame_select"
+            "name" : "frame_select",
+            "keywords" : {
+                "record_selection" : false
+            }
         },
         {
             "name" : "calibrate_trap_pump"

@@ -279,7 +279,8 @@ def flat_division_pol(input_dataset, flat_fieldPOL0, flat_fieldPOL45):
 
     return output_dataset
 
-def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_rms_thres=None, tt_bias_thres=None, discard_bad=True):
+def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_rms_thres=None,
+                 tt_bias_thres=None, discard_bad=True, record_selection=True):
     """
 
     Selects the frames that we want to use for further processing.
@@ -294,6 +295,7 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
         tt_rms_thres (float): maximum allowed RMS tip or tilt in image to be considered good. Default: None (not used)
         tt_bias_thres (float): maximum allowed bias in tip/tilt over the course of an image to be consdiered good. Default: None (not used)
         discard_bad (bool): if True, drops the bad frames rather than keeping them through processing
+        record_selection (bool): if True, records frame selection criteria in FRMSEL header keywords.
         
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
@@ -320,13 +322,15 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                 reject_flags[i] += 1
                 reject_reasons[i].append("bad pix frac {0:.5f} > {1:.5f}"
                                          .format(frame_badpix_frac, bpix_frac))
-        frame.ext_hdr['FRMSEL01'] = (bpix_frac, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to {0}".format(allowed_bpix)) # record selection criteria
+        if record_selection:
+            frame.ext_hdr['FRMSEL01'] = (bpix_frac, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to {0}".format(allowed_bpix)) # record selection criteria
 
         if overexp:
             if frame.ext_hdr['OVEREXP']:
                 reject_flags[i] += 2 # use distinct bits in case it's useful
                 reject_reasons[i].append("OVEREXP = T")
-        frame.ext_hdr['FRMSEL02'] = (overexp, "Are we selecting on the OVEREXP flag?") # record selection criteria
+        if record_selection:
+            frame.ext_hdr['FRMSEL02'] = (overexp, "Are we selecting on the OVEREXP flag?") # record selection criteria
 
         if tt_rms_thres is not None:
             if frame.ext_hdr['Z2VAR'] > tt_rms_thres:
@@ -341,8 +345,9 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
             tt_rms_thres_hdr = -999. # to keep type consistency
         else:
             tt_rms_thres_hdr = tt_rms_thres
-        frame.ext_hdr['FRMSEL03'] = (tt_rms_thres_hdr, "tip rms (Z2VAR) threshold") # record selection criteria
-        frame.ext_hdr['FRMSEL04'] = (tt_rms_thres_hdr, "tilt rms (Z3VAR) threshold") # record selection criteria
+        if record_selection:
+            frame.ext_hdr['FRMSEL03'] = (tt_rms_thres_hdr, "tip rms (Z2VAR) threshold") # record selection criteria
+            frame.ext_hdr['FRMSEL04'] = (tt_rms_thres_hdr, "tilt rms (Z3VAR) threshold") # record selection criteria
         
         if tt_bias_thres is not None:
             if frame.ext_hdr['Z2RES'] > tt_bias_thres:
@@ -357,8 +362,9 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
             tt_bias_thres_hdr = -999. # to keep type consistency
         else:
             tt_bias_thres_hdr = tt_bias_thres
-        frame.ext_hdr['FRMSEL05'] = (tt_bias_thres_hdr, "tip bias (Z2RES) threshold") # record selection criteria
-        frame.ext_hdr['FRMSEL06'] = (tt_bias_thres_hdr, "tilt bias (Z3RES) threshold") # record selection criteria
+        if record_selection:
+            frame.ext_hdr['FRMSEL05'] = (tt_bias_thres_hdr, "tip bias (Z2RES) threshold") # record selection criteria
+            frame.ext_hdr['FRMSEL06'] = (tt_bias_thres_hdr, "tilt bias (Z3RES) threshold") # record selection criteria
                 
         # if rejected, mark as bad in the header
         if reject_flags[i] > 0:

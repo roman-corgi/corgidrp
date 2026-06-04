@@ -56,7 +56,10 @@
             }
         },
         {
-            "name" : "frame_select"
+            "name" : "frame_select",
+            "keywords" : {
+                "record_selection" : false
+            }
         },
         {
             "name" : "calibrate_nonlin",
