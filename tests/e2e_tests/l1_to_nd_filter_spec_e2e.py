@@ -85,6 +85,8 @@ import argparse
 import os, sys
 import shutil
 import warnings
+import logging
+import traceback
 
 import astropy.io.fits as fits
 import astropy.time as time
@@ -110,14 +112,14 @@ thisfile_dir = os.path.dirname(__file__)
 # Helpers
 # ---------------------------------------------------------------------------
 
-def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
+def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir, logger):
     """
     Make a temporary CalDB populated with detector calibrations and the
     default spectroscopy calibrations.
 
     Args:
-        l1_datadir (str): Directory containing the L1 input files. 
-        processed_cal_path (str):  Directory containing flat detector calibration files.  
+        l1_datadir (str): Directory containing the L1 input files.
+        processed_cal_path (str):  Directory containing flat detector calibration files.
             The following filenames are expected:
                 nonlin_table.txt    — nonlinearity correction table (CSV)
                 dark_current.fits   — per-pixel dark current image
@@ -125,11 +127,12 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
                 fpn.fits            — fixed-pattern noise image
                 cic.fits            — clock-induced charge image
                 bad_pix.fits        — bad pixel map image
-        calibrations_dir (str): Output directory where the built calibration FITS files 
+        calibrations_dir (str): Output directory where the built calibration FITS files
             are saved.
+        logger (logging.Logger): Logger instance for output
 
     Returns:
-        this_caldb (corgidrp.caldb.CalDB): Populated temporary calibration database 
+        this_caldb (corgidrp.caldb.CalDB): Populated temporary calibration database
             containing:
                 NonLinearityCalibration, KGain, DetectorNoiseMaps,
                 SynthesizedDark (analog mode only), FlatField, BadPixelMap,
@@ -144,9 +147,9 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
-    # Get default spectroscopy calibrations 
+    # Get default spectroscopy calibrations
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
-    print(f"Loaded default calibrations from {corgidrp.default_cal_dir}")
+    logger.info(f"Loaded default calibrations from {corgidrp.default_cal_dir}")
 
     # Paths to detector calibration files
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table.txt")
@@ -242,9 +245,9 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
             dark_cal = build_synthesized_dark(tmp_ds, noise_map)
             mocks.rename_files_to_cgi_format([dark_cal], calibrations_dir, "drk_cal")
             this_caldb.create_entry(dark_cal)
-            print(f"Analog dark created: EXPTIME={exptime}s, EMGAIN_C={emgain_c}.")
+            logger.info(f"Analog dark created: EXPTIME={exptime}s, EMGAIN_C={emgain_c}.")
     else:
-        print("PC dark will be created from L2a frames.")
+        logger.info("PC dark will be created from L2a frames.")
 
     # Flat field
     flat = data.FlatField(
@@ -275,7 +278,8 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
     mocks.rename_files_to_cgi_format([bp_map], calibrations_dir, "bpm_cal")
     this_caldb.create_entry(bp_map)
 
-    print("Calibration database populated.")
+    logger.info("Calibration database populated.")
+    logger.info("")
     return this_caldb, is_pc_data
 
 
@@ -283,45 +287,54 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
 # Test 
 # ---------------------------------------------------------------------------
 
-def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
+def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     """
     Run and validate the ND filter spectroscopy calibration pipeline.
 
     1. Build a temporary CalDB from detector files + corgidrp default
-       spectroscopy calibrations 
-    2. L1 -> L2a  via walker 
+       spectroscopy calibrations
+    2. L1 -> L2a  via walker
     3. Optionally build a PC dark from L2a frames (photon-counting only)
     4. L2a -> L2b  via walker
-    5. L2b -> NDSpectroscopy via walker 
+    5. L2b -> NDSpectroscopy via walker
     6. Validate the output NDSpectroscopy product (shape, wavelength range,
        positive OD values, header keywords)
 
     Args:
     l1_datadir (str): Directory containing L1 FITS files
     processed_cal_path (str): Directory containing detector calibration files
-    outputdir (str): Root output directory.  Intermediate L2a/L2b files and the 
+    outputdir (str): Root output directory.  Intermediate L2a/L2b files and the
         final NDSpectroscopy product are written here.
+    logger (logging.Logger): Logger instance for output
 
-    Returns: 
-    nd_spec_cal (corgidrp.data.NDSpectroscopy): Spectroscopy ND filter calibration 
+    Returns:
+    nd_spec_cal (corgidrp.data.NDSpectroscopy): Spectroscopy ND filter calibration
         product with:
             .wavelengths  — wavelength grid (nm),         shape (M, N)
             .od_spectra   — OD(lambda),                   shape (M, N)
             .x_values     — EXCAM star position in x,     shape (M, N)
             .y_values     — EXCAM star position in y,     shape (M, N)
     """
-    # ------------------------------------------------------------------ 
-    # 1. Caldb                                             
-    # ------------------------------------------------------------------ 
+    # ------------------------------------------------------------------
+    # 1. Caldb
+    # ------------------------------------------------------------------
+    logger.info('='*80)
+    logger.info('Pre-test: Set up calibration files')
+    logger.info('='*80)
+
     calibrations_dir = os.path.join(outputdir, 'calibrations')
     os.makedirs(calibrations_dir, exist_ok=True)
 
     this_caldb, is_pc_data = setup_caldb(
-        l1_datadir, processed_cal_path, calibrations_dir)
+        l1_datadir, processed_cal_path, calibrations_dir, logger)
 
     # ------------------------------------------------------------------
     # 2. Prepare L1 input files
     # ------------------------------------------------------------------
+    logger.info('='*80)
+    logger.info('Test Case 1: Input L1 Image Data Format and Content')
+    logger.info('='*80)
+
     l1_filelist = sorted(
         os.path.join(l1_datadir, f)
         for f in os.listdir(l1_datadir)
@@ -330,7 +343,8 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
     if not l1_filelist:
         raise FileNotFoundError(f"No L1 files found in {l1_datadir}")
 
-    print(f"Found {len(l1_filelist)} L1 input files.")
+    logger.info(f"Found {len(l1_filelist)} L1 input files.")
+    logger.info("")
 
     input_l1_datadir = os.path.join(outputdir,"input_l1")
     os.makedirs(input_l1_datadir)
@@ -380,10 +394,13 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
             fits_file[1].data = fits_file[1].data * 0.75
 
 
-    # ------------------------------------------------------------------ 
-    # 3. L1 -> L2a                                                        
-    # ------------------------------------------------------------------ 
-    print("Running L1 -> L2a …")
+    # ------------------------------------------------------------------
+    # 3. L1 -> L2a
+    # ------------------------------------------------------------------
+    logger.info('='*80)
+    logger.info('Running L1 -> L2a -> L2b -> NDSpectroscopy pipeline')
+    logger.info('='*80)
+    logger.info("Step 1: Running L1 -> L2a …")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
         walker.walk_corgidrp(l1_filelist, "", outputdir,
@@ -393,7 +410,8 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
         os.path.join(outputdir, f)
         for f in os.listdir(outputdir) if f.endswith('_l2a.fits')
     )
-    print(f"L1 -> L2a complete: {len(l2a_filelist)} L2a files produced.")
+    logger.info(f"L1 -> L2a complete: {len(l2a_filelist)} L2a files produced.")
+    logger.info("")
 
     # PC dark (only needed for photon-counted data)
     if is_pc_data and l2a_filelist:
@@ -419,12 +437,13 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
         pc_dark = get_pc_mean(data.Dataset(dark_l2a_files), inputmode='darks')
         mocks.rename_files_to_cgi_format([pc_dark], calibrations_dir, "drk_cal")
         this_caldb.create_entry(pc_dark)
-        print("PC dark created.")
+        logger.info("PC dark created.")
+        logger.info("")
 
     # ------------------------------------------------------------------ #
     # 4. L2a -> L2b (spectroscopy recipe)                                 #
     # ------------------------------------------------------------------ #
-    print("Running L2a → L2b (spec) …")
+    logger.info("Step 2: Running L2a → L2b (spec) …")
     if is_pc_data:
         # get_pc_mean requires a single VISTYPE per run.  Split by VISTYPE
         # (CGIVST_CAL_ABSFLUX_FAINT / CGIVST_CAL_ABSFLUX_BRIGHT) and run
@@ -435,7 +454,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
             group_files = [f.filepath for f in group.frames]
             vt = group.frames[0].pri_hdr['VISTYPE']
             group_ispc = int(group.frames[0].ext_hdr.get('ISPC', 1))
-            print(f"  L2a→L2b: VISTYPE={vt}, ISPC={group_ispc} ({len(group_files)} files)")
+            logger.info(f"  L2a→L2b: VISTYPE={vt}, ISPC={group_ispc} ({len(group_files)} files)")
             if group_ispc == 1:
                 # Photon-counting path (dim star, ISPC=1)
                 recipe = walker.autogen_recipe(group_files, outputdir)
@@ -470,12 +489,13 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
         os.path.join(outputdir, f)
         for f in os.listdir(outputdir) if f.endswith('_l2b.fits')
     )
-    print(f"L2a -> L2b complete: {len(l2b_filelist)} L2b files produced.")
+    logger.info(f"L2a -> L2b complete: {len(l2b_filelist)} L2b files produced.")
+    logger.info("")
 
-    # ------------------------------------------------------------------ 
-    # 5. L2b -> NDSpectroscopy calibration product                                                 
-    # ------------------------------------------------------------------ 
-    print("Running L2b -> NDSpectroscopy …")
+    # ------------------------------------------------------------------
+    # 5. L2b -> NDSpectroscopy calibration product
+    # ------------------------------------------------------------------
+    logger.info("Step 3: Running L2b -> NDSpectroscopy …")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
         walker.walk_corgidrp(l2b_filelist, "", outputdir)
@@ -494,60 +514,110 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
         )
 
     nd_spec_cal = data.NDSpectroscopy(nd_spec_files[0])
-    print(f"NDSpectroscopy loaded: {nd_spec_files[0]}")
+    logger.info(f"NDSpectroscopy loaded: {nd_spec_files[0]}")
+    logger.info("")
 
-    # ------------------------------------------------------------------ 
-    # 7. Validation                                                       
-    # ------------------------------------------------------------------ 
-    print("Validating NDSpectroscopy product")
+    # ------------------------------------------------------------------
+    # 7. Validation
+    # ------------------------------------------------------------------
+    logger.info('='*80)
+    logger.info('Test Case 2: CGI-REQT-5477 - Sweet-spot dataset validation')
+    logger.info('='*80)
 
     # "Sweet-spot" dataset should have multiple FSMX and FSMY
     bright_dataset = data.Dataset(bright_star_filelist)
     _, fsm = bright_dataset.split_dataset(exthdr_keywords=["FSMX","FSMY"])
-    assert len(fsm) > 1, "Only 1 (FSMX, FSMY) combination in bright star dataset. Sweet-spot dataset with ND filter should be dithered over multiple (FSMX, FSMY) positions."
-    print(f"  Sweet-spot dataset is dithered over {len(fsm)} (FSMX, FSMY) positions PASSED")
+    if len(fsm) > 1:
+        logger.info(f"Input L2b images: Sweet-spot dataset is dithered over {len(fsm)} (FSMX, FSMY) positions. PASS")
+    else:
+        logger.info(f"Input L2b images: Only 1 (FSMX, FSMY) combination found. FAIL")
+        assert False, "Sweet-spot dataset with ND filter should be dithered over multiple (FSMX, FSMY) positions."
 
     # Data shape: (M, N, 4)
-    assert nd_spec_cal.data.ndim == 3 and nd_spec_cal.data.shape[2] == 4, \
-        f"Unexpected data shape: {nd_spec_cal.data.shape}"
     M = nd_spec_cal.data.shape[0]
     N = nd_spec_cal.data.shape[1]
-    print(f"  Data shape: ({M}, {N}, 4)  PASSED")
+    if nd_spec_cal.data.ndim == 3 and nd_spec_cal.data.shape[2] == 4:
+        logger.info(f"Output NDSpectroscopy product: Data shape is ({M}, {N}, 4) where M = {M} dither positions. PASS")
+    else:
+        logger.info(f"Output NDSpectroscopy product: Unexpected data shape {nd_spec_cal.data.shape}. FAIL")
+        assert False, f"Expected shape (M, N, 4), got {nd_spec_cal.data.shape}"
 
     # Wavelengths should be monotonically increasing and in the band 3 range
     wave = nd_spec_cal.wavelengths
+    logger.info("")
+    logger.info("Baseline performance checks (per dither position):")
     for i, wv in enumerate(wave):
-        assert np.all(np.diff(wv) > 0), f"Wavelength grid for dither {i+1} is not monotonically increasing."
-        assert wv[0] > 500 and wv[-1] < 1100, \
-            f"Wavelengths {wv[0]:.1f}–{wv[-1]:.1f} nm for dither {i+1} outside expected range."
-        print(f"  Wavelength range: {wv[0]:.1f}–{wv[-1]:.1f} nm for dither {i+1} PASSED")
+        if np.all(np.diff(wv) > 0):
+            logger.info(f"  Dither {i+1}: Wavelength grid is monotonically increasing. PASS")
+        else:
+            logger.info(f"  Dither {i+1}: Wavelength grid is not monotonically increasing. FAIL")
+            assert False, f"Wavelength grid for dither {i+1} is not monotonically increasing."
+
+        if wv[0] > 500 and wv[-1] < 1100:
+            logger.info(f"  Dither {i+1}: Wavelength range {wv[0]:.1f}–{wv[-1]:.1f} nm within expected Band 3 range (500-1100 nm). PASS")
+        else:
+            logger.info(f"  Dither {i+1}: Wavelength range {wv[0]:.1f}–{wv[-1]:.1f} nm outside expected range. FAIL")
+            assert False, f"Wavelengths for dither {i+1} outside expected range."
 
     # OD values should be positive and finite
     od_all = nd_spec_cal.od_spectra
-    for i, od in enumerate(od_all):
-        assert np.all(np.isfinite(od)), f"OD spectrum for dither {i+1} contains non-finite values."
-        assert np.all(od > 0), f"OD spectrum for dither {i+1} contains non-positive values (min={od.min():.3f})."
-        print(f"  OD range: {od.min():.3f}–{od.max():.3f} for dither {i+1}")
+    x_all = nd_spec_cal.x_values
+    y_all = nd_spec_cal.y_values
+    for i, (od, x_pos, y_pos) in enumerate(zip(od_all, x_all, y_all)):
+        if np.all(np.isfinite(od)) and np.all(od > 0):
+            logger.info(f"  Dither {i+1}: OD values are positive and finite. PASS")
+            logger.info(f"  Dither {i+1}: OD range (min/max): {od.min():.3f}–{od.max():.3f}")
+        else:
+            if not np.all(np.isfinite(od)):
+                logger.info(f"  Dither {i+1}: OD spectrum contains non-finite values. FAIL")
+                assert False, f"OD spectrum for dither {i+1} contains non-finite values."
+            if not np.all(od > 0):
+                logger.info(f"  Dither {i+1}: OD spectrum contains non-positive values (min={od.min():.3f}). FAIL")
+                assert False, f"OD spectrum for dither {i+1} contains non-positive values."
+
+        # x_pos and y_pos are arrays - take the mean for display
+        x_mean = np.mean(x_pos) if isinstance(x_pos, np.ndarray) else x_pos
+        y_mean = np.mean(y_pos) if isinstance(y_pos, np.ndarray) else y_pos
+        logger.info(f"  Dither {i+1}: Star position (x, y): ({x_mean:.2f}, {y_mean:.2f}) pixels")
 
     od_expected = 2.20
     od_tolerance = 0.05
-    od_median = np.median(od)
-    assert abs(od_median - od_expected) < od_tolerance, (
-        f"Median OD {od_median:.3f} is more than {od_tolerance} away from "
-        f"nominal ND225 value of {od_expected}."
-    )
-    print(f"  Median OD: {od_median:.3f} (nominal {od_expected}, tol ±{od_tolerance})  PASSED")
+    od_median = np.median(od_all)
+    logger.info("")
+    if abs(od_median - od_expected) < od_tolerance:
+        logger.info(f"Overall median OD: {od_median:.3f} (nominal {od_expected}, tol ±{od_tolerance}). PASS")
+    else:
+        logger.info(f"Overall median OD: {od_median:.3f} deviates from nominal {od_expected} by more than {od_tolerance}. FAIL")
+        assert False, f"Median OD {od_median:.3f} is more than {od_tolerance} away from nominal ND225 value."
 
     # Headers
-    assert nd_spec_cal.ext_hdr['DATATYPE'] == 'NDSpectroscopy'
-    assert nd_spec_cal.ext_hdr.get('FPAMNAME', '').startswith('ND'), \
-        f"Expected FPAMNAME to start with 'ND', got '{nd_spec_cal.ext_hdr.get('FPAMNAME')}'"
-    assert nd_spec_cal.ext_hdr.get('DPAMNAME', '').startswith('PRISM'), \
-        f"Expected DPAMNAME to start with 'PRISM', got '{nd_spec_cal.ext_hdr.get('DPAMNAME')}'"
-    assert nd_spec_cal.ext_hdr['DATALVL'] == 'CAL'
-    assert nd_spec_cal.ext_hdr['FPAM_H'] > 0.0
-    assert nd_spec_cal.ext_hdr['FPAM_V'] > 0.0
-    print("  Header keywords PASSED")
+    logger.info("")
+    header_checks = [
+        (nd_spec_cal.ext_hdr['DATATYPE'] == 'NDSpectroscopy', f"DATATYPE = '{nd_spec_cal.ext_hdr['DATATYPE']}'"),
+        (nd_spec_cal.ext_hdr['DATALVL'] == 'CAL', f"DATALVL = '{nd_spec_cal.ext_hdr['DATALVL']}'"),
+        (nd_spec_cal.ext_hdr.get('FPAMNAME', '').startswith('ND'), f"FPAMNAME starts with 'ND' ('{nd_spec_cal.ext_hdr.get('FPAMNAME')}')"),
+        (nd_spec_cal.ext_hdr.get('DPAMNAME', '').startswith('PRISM'), f"DPAMNAME starts with 'PRISM' ('{nd_spec_cal.ext_hdr.get('DPAMNAME')}')"),
+        (nd_spec_cal.ext_hdr['FPAM_H'] > 0.0, f"FPAM_H > 0.0 ({nd_spec_cal.ext_hdr['FPAM_H']})"),
+        (nd_spec_cal.ext_hdr['FPAM_V'] > 0.0, f"FPAM_V > 0.0 ({nd_spec_cal.ext_hdr['FPAM_V']})"),
+    ]
+
+    all_passed = True
+    for check, desc in header_checks:
+        if check:
+            logger.info(f"Output NDSpectroscopy product: {desc}. PASS")
+        else:
+            logger.info(f"Output NDSpectroscopy product: {desc}. FAIL")
+            all_passed = False
+
+    assert all_passed, "One or more header keyword checks failed"
+    logger.info("")
+
+    # ==================================================================
+    # Test CGI-REQT-5478: ND Filter Calibration at new location
+    # ==================================================================
+    logger.info('='*80)
+    logger.info('Test Case 3: CGI-REQT-5478 - ND Filter Calibration at new location')
+    logger.info('='*80)
 
     # Make a 5x5 mock 'clean_spec_image' with the wavelength zeropoint at (2,2)
     # Shift it by (3,3) => final location (5,5).
@@ -582,30 +652,51 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir):
         np.array([-24.42,24.42]))
     # Single precision because the FPAM_H/V values were set to be close to
     # produce a change of 3 EXCAM pixels within single precision
-    assert np.all(np.abs(final_excam_pos - np.array([512,517])) < 1e-7), \
-    f"Final EXCAM position should be (512.,517.), but is ({final_excam_pos[0]:.1f},{final_excam_pos[1]:.1f})."
-    print("Final EXCAM position is (512.,517.) as expected PASSED")
+
+    # Log FPAM and EXCAM offsets
+    fpam_offset_h = -24.42
+    fpam_offset_v = 24.42
+    excam_offset = final_excam_pos - np.array([509., 514.])
+    logger.info(f"FPAM offset: (ΔFPAM_H, ΔFPAM_V) = ({fpam_offset_h:.2f}, {fpam_offset_v:.2f})")
+    logger.info(f"EXCAM offset (after transformation): (Δx, Δy) = ({excam_offset[0]:.2f}, {excam_offset[1]:.2f}) pixels")
+
+    if np.all(np.abs(final_excam_pos - np.array([512,517])) < 1e-7):
+        logger.info(f"Final EXCAM position is (512., 517.) as expected. PASS")
+    else:
+        logger.info(f"Final EXCAM position ({final_excam_pos[0]:.1f}, {final_excam_pos[1]:.1f}) differs from expected (512., 517.). FAIL")
+        assert False, f"Final EXCAM position should be (512.,517.), but is ({final_excam_pos[0]:.1f},{final_excam_pos[1]:.1f})."
+    logger.info("")
 
     expected_value = 2.17
     atol_nd = 0.05
+
+    logger.info("Baseline performance checks:")
+    logger.info(f"OD(λ) range (min/max) for interpolated spectrum: {interpolated_od.min():.3f}–{interpolated_od.max():.3f}")
+    logger.info(f"Wavelength range covered: {spec_wave[0]:.1f}–{spec_wave[-1]:.1f} nm")
+    logger.info("")
+
+    all_od_passed = True
     for i, wave in enumerate(spec_wave):
         test_result_od_accuracy = abs(interpolated_od[i] - expected_value) < atol_nd
+        if test_result_od_accuracy:
+            logger.info(f"Wavelength {wave:.1f} nm: Interpolated OD = {interpolated_od[i]:.3f}, expected {expected_value} ± {atol_nd}. PASS")
+        else:
+            logger.info(f"Wavelength {wave:.1f} nm: Interpolated OD = {interpolated_od[i]:.3f}, expected {expected_value} ± {atol_nd}. FAIL")
+            all_od_passed = False
 
-        assert test_result_od_accuracy, (
-            f"Expected OD={expected_value} +/- {atol_nd}, got {interpolated_od[i]:.3f} at wavelength {wave:.3f} nm"
-        )
-        print('')
-        print(
-            f"test_calculate_od_spec_at_new_location PASSED: "
-            f"estimated OD = {interpolated_od[i]:.3f} at wavelength {wave:.3f} nm, expected OD = {expected_value} +/- {atol_nd}"
-        )
+    assert all_od_passed, f"One or more OD interpolation checks failed"
+    logger.info("")
+    logger.info("OD values are within physically reasonable range. PASS")
 
     # Remove temporary CalDB
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_nd_spec_e2e_caldb.csv')
     if os.path.exists(tmp_caldb_csv):
         os.remove(tmp_caldb_csv)
 
-    print("NDSpectroscopy E2E test PASSED.")
+    logger.info('='*80)
+    logger.info('END-TO-END TEST COMPLETE')
+    logger.info('='*80)
+    logger.info("NDSpectroscopy E2E test PASSED.")
     return nd_spec_cal
 
 
@@ -631,7 +722,50 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
         shutil.rmtree(outputdir)
     os.makedirs(outputdir)
 
-    run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir)
+    log_file = os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log')
+
+    # Create a new logger specifically for this test
+    logger = logging.getLogger('l1_to_nd_filter_spec_e2e')
+    logger.setLevel(logging.INFO)
+
+    # Clear any existing handlers to avoid duplicates
+    logger.handlers.clear()
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    # Create formatter
+    formatter = logging.Formatter('%(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    logger.info('='*80)
+    logger.info('L1 TO ND FILTER SPECTROSCOPY CALIBRATION END-TO-END TEST')
+    logger.info('='*80)
+    logger.info("")
+
+    try:
+        run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger)
+        print('e2e test for L1 to ND filter spectroscopy passed')
+    except Exception as e:
+        logger.error('='*80)
+        logger.error('END-TO-END TEST FAILED')
+        logger.error('='*80)
+        logger.error(f"Error: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error("Full traceback:")
+        logger.error(traceback.format_exc())
+        print(f'e2e test for L1 to ND filter spectroscopy FAILED: {str(e)}')
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -644,7 +778,7 @@ if __name__ == "__main__":
     )
     ap.add_argument(
         "-d", "--e2edata_dir",
-        default="/home/ababuraj/roman/E2E_Test_Data",
+        default="/Users/jmilton/Documents/CGI/E2E_Test_Data2",
         help="Root directory containing ND_SPEC/L1/ and ND_SPEC/Cals/ sub-folders"
     )
     ap.add_argument(
@@ -662,4 +796,47 @@ if __name__ == "__main__":
         shutil.rmtree(outputdir)
     os.makedirs(outputdir)
 
-    run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir)
+    log_file = os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log')
+
+    # Create a new logger specifically for this test
+    logger = logging.getLogger('l1_to_nd_filter_spec_e2e')
+    logger.setLevel(logging.INFO)
+
+    # Clear any existing handlers to avoid duplicates
+    logger.handlers.clear()
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    # Create formatter
+    formatter = logging.Formatter('%(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    logger.info('='*80)
+    logger.info('L1 TO ND FILTER SPECTROSCOPY CALIBRATION END-TO-END TEST')
+    logger.info('='*80)
+    logger.info("")
+
+    try:
+        run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger)
+        print('e2e test for L1 to ND filter spectroscopy passed')
+    except Exception as e:
+        logger.error('='*80)
+        logger.error('END-TO-END TEST FAILED')
+        logger.error('='*80)
+        logger.error(f"Error: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error("Full traceback:")
+        logger.error(traceback.format_exc())
+        print(f'e2e test for L1 to ND filter spectroscopy FAILED: {str(e)}')
+        raise
