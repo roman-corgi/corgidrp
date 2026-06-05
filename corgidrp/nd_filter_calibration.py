@@ -1025,7 +1025,7 @@ def apply_od_spec_correction_to_image(clean_spec_image, fpamfsamcal, ndspectrosc
     if 'SPEC_ERR' not in clean_spec_image.hdu_list:
         raise Exception("L4 image should have hdu 'SPEC_ERR' in hdulist")
 
-    #Calculate OD as function of wavelength at image zeropoint
+    #Calculate OD as function of wavelength at image zeropoint. If no wave_grid passed, common_wave = spec_wave.
     common_wave, od_spec = calculate_od_spec_at_new_location(clean_spec_image = clean_spec_image, \
             fpamfsamcal = fpamfsamcal, ndspectroscopy_dataset = ndspectroscopy_dataset, wave_grid=wave_grid)
     
@@ -1035,7 +1035,9 @@ def apply_od_spec_correction_to_image(clean_spec_image, fpamfsamcal, ndspectrosc
     spec_wave = corrected_image.hdu_list['SPEC_WAVE'].data
     spec_err = corrected_image.hdu_list['SPEC_ERR'].data
     
-    #Interpolate SPEC values on new wavelength grid
+    # Interpolate SPEC values on new wavelength grid. This is only done if a wave_grid with wavelength points 
+    # significantly different from spec_wave (delta_wave > 0.01 nm) is passed by user into calculate_od_spec_at_new_location().
+    # Else common_wave = spec_wave, and no interpolation of SPEC values is performed.
     if not np.allclose(spec_wave, common_wave, atol=0.01):
         if common_wave[0] < spec_wave[0] or common_wave[-1] > spec_wave[-1]:
             print(f"WARNING: Custom wavelength grid has points outside wavelengths in input L4 image 'SPEC_WAVE' hdu. Attempting to extrapolate 'SPEC' values at these points.")
