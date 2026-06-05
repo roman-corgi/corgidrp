@@ -214,7 +214,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                 raise PhotonCountException('\'ISPC\' header value must be 1 if these frames are to be processed as photon-counted.')
 
         dataset = datasets[0]
-        
+        if len(dataset) <= 1:
+            raise PhotonCountException('Photon counting requires more than 1 frame.')
         pc_means = []
         errs = []
         dqs = []
@@ -236,6 +237,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
 
         # now get threshold to use for photon-counting
         read_noise = test_dataset[0].frames[0].ext_hdr['RN']
+
         # Ensure RN is numeric (FITS headers can sometimes preserve string values)
         # if isinstance(read_noise, str): NOTE shouldn't need this when default RN is float, like -999.0
         #     try:

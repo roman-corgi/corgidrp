@@ -130,7 +130,7 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=False, plot_outdir='figures', show_plot=False,
-                     verbose=False, nonlin_params=None, apply_dq = True, percent_pupil=0.9):
+                     verbose=False, nonlin_params=None, apply_dq = True, percent_pupil=0.99):
     """
     Function that derives the non-linearity calibration table for a set of DN
     and EM values.
@@ -228,7 +228,7 @@ def calibrate_nonlin(dataset_nl,
         (rowback11, colback12), etc. Defaults to nonlin_params_default specified in this file.
       apply_dq (bool): consider the dq mask (from cosmic ray detection, saturation) or not. Defaults to True.
       percent_pupil (float): (Optional) the fraction of the pupil that must be not masked in order to have good statistics 
-        for the mean signal for each exposure time set for each EM gain. Default is 0.9, meaning that at least 90% of the pixels 
+        for the mean signal for each exposure time set for each EM gain. Default is 0.99, meaning that at least 99% of the pixels 
         in the pupil area must be included in the unmasked pixels to calculate the mean signal for each frame.
       
     Returns:

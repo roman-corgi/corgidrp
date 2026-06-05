@@ -158,7 +158,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     return output_dataset
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
-                       plat_thresh=0.85, cosm_filter=1, cosm_box=3, cosm_tail=10,
+                       plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10,
                        mode='image', detector_regions=None, pct_oversat_lim=20, dataset_copy=True):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
@@ -178,9 +178,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             plateau. Interval 0 to 1, defaults to 0.85. Lower numbers are more aggressive in flagging cosmic
             ray hits.
         cosm_filter (int):
-            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 1.  For EM gain = 1, 
-            this should probaly be 1 since no serial streaking is expected to occur, so a cosmic head could just
-            be in 1 pixel.
+            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 2.
         cosm_box (int):
             Number of pixels out from an identified cosmic head (i.e., beginning of
             the plateau) to mask out.

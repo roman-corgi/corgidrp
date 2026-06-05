@@ -1840,6 +1840,7 @@ class DetectorParams(Image):
         'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
         'PCECNTMX': 0.25,       # Maximum allowed electrons/pixel/frame for photon counting
         'TFACTOR': 5,           # number of read noise standard deviations at which to set the photon-counting threshold
+        'READ_N': 165               # current best estimate
     }
 
     back_compat_mapping = {
@@ -4297,15 +4298,16 @@ def selective_dq(dq, val=128):
     '''
     selected_dq = np.zeros_like(dq).astype(float)
     temp_dq = dq.copy().astype(float)
-    nan_rows = np.array([]) # initialize
-    while nan_rows.size < temp_dq.size:
-        bad_rows, bad_cols = np.where(temp_dq == 0)
-        temp_dq[bad_rows, bad_cols] = np.nan
+    nan_inds = np.array([]) # initialize
+    while nan_inds.size < temp_dq.size:
+        bad_inds = np.where(temp_dq == 0)
+        temp_dq[bad_inds] = np.nan
         highest_power = np.floor(np.log(temp_dq)/np.log(2))
-        cosmic_rows, cosmic_cols = np.where(2**(highest_power) == val)
-        selected_dq[cosmic_rows,cosmic_cols] = val
+        selected_inds = np.where(2**(highest_power) == val)
+        selected_dq[selected_inds] = val
         temp_dq = temp_dq - 2**(highest_power)
-        nan_rows, nan_cols = np.where(np.isnan(temp_dq))
+        nans = np.where(np.isnan(temp_dq))
+        nan_inds = nans[0]
     return selected_dq
 
 

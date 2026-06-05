@@ -54,7 +54,10 @@
             "name" : "desmear",
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC"
-            }
+            },
+            "keywords" : {
+				"auto_decide" : true
+			}
         },
         {
             "name" : "save"
