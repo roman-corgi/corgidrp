@@ -639,7 +639,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     fpamfsamcal = mocks.create_mock_fpamfsam_cal(save_file=False)    
 
     # Call the function under test
-    interpolated_od = nd_filter_calibration.calculate_od_spec_at_new_location(
+    _, interpolated_od = nd_filter_calibration.calculate_od_spec_at_new_location(
         clean_spec_image=clean_spec_image,
         fpamfsamcal=fpamfsamcal,
         ndspectroscopy_dataset=nd_spec_cal)

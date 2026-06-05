@@ -710,6 +710,7 @@ def test_calculate_od_spec_at_new_location(output_dir):
       2) A mock clean_spec_image with a wavelength zeropoint at a known location
       3) Known FPAM offsets in headers
       4) An identity transformation matrix file
+      5) Applies OD correction to clean_spec_image and checks output
     """
     
     # Create a small NxN_wavex4 sweet spot array, each row is [wave, OD, x, y].
@@ -763,11 +764,11 @@ def test_calculate_od_spec_at_new_location(output_dir):
     fpamfsamcal = mocks.create_mock_fpamfsam_cal(save_file=False)    
 
     # Call the function under test
-    interpolated_od = nd_filter_calibration.calculate_od_spec_at_new_location(
+    common_wave, interpolated_od = nd_filter_calibration.calculate_od_spec_at_new_location(
         clean_spec_image=clean_spec_image,
         fpamfsamcal=fpamfsamcal,
         ndspectroscopy_dataset=ndspectroscopy_dataset)
-
+    
     # Expect the final location = (2+3, 2+3) = (5,5).
     fpam2excam_matrix = fits.getdata(os.path.join(here, 'test_data',
         'fpam_to_excam_modelbased.fits'))
@@ -783,7 +784,7 @@ def test_calculate_od_spec_at_new_location(output_dir):
     expected_value = 3.5
     
     atol_nd = 1e-6
-    for i, wave in enumerate(wavelengths):
+    for i, wave in enumerate(common_wave):
         test_result_od_accuracy = abs(interpolated_od[i] - expected_value) < atol_nd
         print(f'calculate_od_spec_at_new_location() estimates OD as {expected_value} +/- {atol_nd}: at wavelength {wave} nm', end='')
         print_pass() if test_result_od_accuracy else print_fail()
@@ -792,10 +793,30 @@ def test_calculate_od_spec_at_new_location(output_dir):
             f"Expected OD={expected_value}, got {interpolated_od[i]}"
         )
         print('')
-        print(
-            f"test_calculate_od_at_new_location PASSED: "
-            f"estimated OD = {interpolated_od[i]}, expected OD = {expected_value}"
+        print(f"estimated OD = {interpolated_od[i]}, expected OD = {expected_value}")
+
+    corrected_image = nd_filter_calibration.apply_od_spec_correction_to_image(
+        clean_spec_image=clean_spec_image,
+        fpamfsamcal=fpamfsamcal,
+        ndspectroscopy_dataset=ndspectroscopy_dataset
+    )
+
+    output_spec = corrected_image.hdu_list['SPEC'].data
+    output_wave = corrected_image.hdu_list['SPEC_WAVE'].data
+
+    expected_value = 1/10**(3.5)
+
+    for i, wave in enumerate(output_wave):
+        test_result_spec_accuracy = abs(output_spec[i] - expected_value) < atol_nd
+        print(f'apply_od_spec_correction_to_image() estimates corrected flux as {expected_value} +/- {atol_nd}: at wavelength {wave} nm', end='')
+        print_pass() if test_result_spec_accuracy else print_fail()
+
+        assert test_result_spec_accuracy, (
+            f"Expected flux={expected_value}, got {output_spec[i]}"
         )
+        print('')
+        print(f"estimated flux = {output_spec[i]}, expected flux = {expected_value}")
+    print(f"test_calculate_od_spec_at_new_location PASSED")
 
 '''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"

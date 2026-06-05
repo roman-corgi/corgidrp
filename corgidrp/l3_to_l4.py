@@ -1024,18 +1024,16 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     ext_keys = additional_frame_sep_extkeys
     if additional_frame_sep_prikeys is not None:
         pri_keys = ["VISITID"] + additional_frame_sep_prikeys
-    satspot_dataset, keywords = sat_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
+    satspot_dataset, keywords_sat = sat_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
     if with_science:
-        science_dataset, keywords = sci_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
+        science_dataset, keywords_sci = sci_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
 
     all_science_frames = []
 
-    for keyword in keywords:
-
-        matched_index = [i for i, key in enumerate(keywords) if key == keyword]
+    for matched_index, keyword in enumerate(keywords_sat):
 
         if subtract_no_offset_frames:    
-            satspot_subset = satspot_dataset[int(matched_index[0])]
+            satspot_subset = satspot_dataset[int(matched_index)]
             satspot_frames = []
             for frame in satspot_subset:
                 satspot_frames.append(frame)
@@ -1059,7 +1057,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             offset_dataset = data.Dataset(offset_frames)
 
         else:
-            satspot_subset = satspot_dataset[int(matched_index[0])]
+            satspot_subset = satspot_dataset[int(matched_index)]
             offset_dataset = satspot_subset
 
         if xcent_guess is not None and ycent_guess is not None:
@@ -1090,7 +1088,8 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             science_subset = offset_dataset
         
         if with_science:
-            science_subset = science_dataset[int(matched_index[0])]
+            matched_index_sci = [i for i, key in enumerate(keywords_sci) if key == keyword]
+            science_subset = science_dataset[int(matched_index_sci[0])]
         
 
         science_frames = []

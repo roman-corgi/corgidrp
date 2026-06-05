@@ -11,7 +11,7 @@ from astropy.table import Table
 import pyklip
 from pyklip.instruments.Instrument import Data as pyKLIP_Data
 from pyklip.instruments.utils.wcsgen import generate_wcs
-from scipy.interpolate import LinearNDInterpolator, interp1d
+from scipy.interpolate import LinearNDInterpolator, interp1d, griddata
 from astropy import wcs
 import copy
 import corgidrp
@@ -4177,7 +4177,7 @@ class NDSpectroscopy(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDSpectroscopy':
             raise ValueError("File that was loaded is not labeled as an NDSpectroscopy file.")
 
-    def interpolate_od(self, x, y, method="nearest", wave_grid=None, image=None):
+    def interpolate_od(self, x_query, y_query, method="linear", wave_grid=None, spec_image=None):
         """
         Interpolates the data to get the OD as a function of wavelength at the requested x/y location.
 
@@ -4191,16 +4191,18 @@ class NDSpectroscopy(Image):
         so the call is also correct for full-frame (uncropped) images.
 
         Args:
-            x (float): x pixel location in the science frame's own coordinate system.
-            y (float): y pixel location in the science frame's own coordinate system.
-            method (str): only "nearest" supported currently.
+            x_query (float or np.array): x pixel location/s at which to interpolate.
+            y_query (float or np.array): y pixel location/s at which to interpolate.
+            method (str, optional): Interpolation method, can be "linear", "nearest", 
+            or "cubic". Default is "linear".
             wave_grid (list of float or np.array, optional): Wavelength grid specfied
-            by user. Default to None (wavelength grid taken from image hdu 'SPEC_WAVE').
-            image (corgidrp.data.Image, optional): the science Image whose pixel
+            by user. Defaults to None (wavelength grid taken from image hdu 'SPEC_WAVE').
+            spec_image (corgidrp.data.Image, optional): the science Image whose pixel
                 coordinates ``x``/``y`` were measured in.  When provided,
                 ``DETPIX0X`` and ``DETPIX0Y`` are read from its extension
                 header to remap frame coordinates to absolute EXCAM coordinates.
-                Defaults to None (no remapping applied).
+                Defaults to None (no remapping applied). Wavelength grid also taken from
+                image hdu 'SPEC_WAVE' unless the "wave_grid" keyword specifies otherwise.
 
         Returns:
             np.array: Wavelength grid. 
@@ -4211,48 +4213,44 @@ class NDSpectroscopy(Image):
 
         if wave_grid is not None:
             common_wave = np.array(wave_grid)
-        elif image is not None:
-            detpix0x = image.ext_hdr.get('DETPIX0X', 0)
-            detpix0y = image.ext_hdr.get('DETPIX0Y', 0)
-            common_wave = image.hdu_list['SPEC_WAVE'].data
+        elif spec_image is not None:
+            detpix0x = spec_image.ext_hdr.get('DETPIX0X', 0)
+            detpix0y = spec_image.ext_hdr.get('DETPIX0Y', 0)
+            common_wave = spec_image.hdu_list['SPEC_WAVE'].data
         else:
             warnings.warn("Wavelength grid not specified through user input. Interpolating wavelengths onto wavelength grid of first dither of NDSpectroscopy calibration product.")
             common_wave = self.wavelengths[0,:]
 
-        if wave_grid is None and image is None:
-            if self.od_spectra.shape[0] == 1:
-                od_stack  = self.od_spectra[0,:]
-            else:
-                od_stack  = [self.od_spectra[0,:]]
-            
-                for i in range(1,self.od_spectra.shape[0]):
-                    od = self.od_spectra[i,:]
-                    wave = self.wavelengths[i,:]
-                    if not np.allclose(wave, common_wave, atol=0.01):
-                        remap_od  = interp1d(wave, od,    kind='linear',
-                                            bounds_error=False, fill_value=np.nan)
-                        od    = remap_od(common_wave)
-                    
-                    od_stack.append(od)
-        else:
-            od_stack = []
-            for i in range(self.od_spectra.shape[0]):
-                od = self.od_spectra[i,:]
-                wave = self.wavelengths[i,:]
-                if not np.allclose(wave, common_wave, atol=0.01):
+        od_stack = []
+        for i in range(self.od_spectra.shape[0]):
+            od = self.od_spectra[i,:]
+            wave = self.wavelengths[i,:]
+            if not np.allclose(wave, common_wave, atol=0.01):
+                if common_wave[0] < wave[0] or common_wave[-1] > wave[-1]:
+                    if wave_grid is not None:
+                        print(f"WARNING: Input wavelength grid has points outside wavelength range of dither {i+1}. Attempting to extrapolate OD at these points.")
+                    else:
+                        print(f"WARNING: Wavelength grid of input spec image has points outside wavelength range of dither {i+1}. Attempting to extrapolate OD at these points.")
+                    remap_od  = interp1d(wave, od,    kind='linear',
+                                        bounds_error=False, fill_value="extrapolate")
+                    od    = remap_od(common_wave)
+                else:
                     remap_od  = interp1d(wave, od,    kind='linear',
                                         bounds_error=False, fill_value=np.nan)
-                    od    = remap_od(common_wave)
-                    
-                od_stack.append(od)
+                    od    = remap_od(common_wave)    
+            od_stack.append(od)
 
         od_array = np.array(od_stack)
-
         interp_od = np.zeros(len(common_wave))
         
+        # Prepare interpolation coordinates
+        if np.isscalar(x_query) and np.isscalar(y_query):
+            xi = (x_query, y_query)
+        else:
+            xi = np.column_stack((x_query, y_query))
+
         for i in range(len(common_wave)):
-            interpolator = LinearNDInterpolator(np.array([self.x_values[:,i], self.y_values[:,i]]).T, od_array[:,i])
-            interp_od[i] = interpolator([x + detpix0x, y + detpix0y])
+            interp_od[i] = griddata(points=np.array([self.x_values[:,i], self.y_values[:,i]]).T, values=od_array[:,i], xi=xi, method=method)
 
         return common_wave, interp_od
 
