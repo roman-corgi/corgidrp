@@ -91,7 +91,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
         os.makedirs(trap_pump_outputdir)
 
     # Create separate directory for trap pump mock data (for tpump_analysis)
-    trap_pump_datadir = os.path.join(e2edata_path, "TPUMP_RAM_TEST")
+    trap_pump_datadir = os.path.join(e2edata_path, "TPUMP_RAM_TEST2")
     # if not os.path.exists(trap_pump_datadir):
     #     os.mkdir(trap_pump_datadir)
 
@@ -219,6 +219,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
+    corgidrp.chunk_size = 500 #XXX
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
         os.remove(tmp_caldb_csv)
@@ -253,8 +254,8 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
             if step['name'] == "calibrate_trap_pump":
                 step['keywords'] = {}
                 step['keywords']['bin_size'] = None
-        # output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
-        recipe[1]['inputs'] = recipe[0]['inputs'] #output_filepaths XXX
+        output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+        recipe[1]['inputs'] = output_filepaths
         #only run the trap-pump step, part 2 of recipe chain, simply for RAM testing, not accuracy of results
         walker.run_recipe(recipe[1], save_recipe_file=True)
 
