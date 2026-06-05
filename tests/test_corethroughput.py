@@ -474,11 +474,17 @@ def test_cal_file():
     cal_file_side_0 = ct_cal_file.data.shape[1]
     cal_file_side_1 = ct_cal_file.data.shape[2]
     n_pix_psf = (cal_file_side_0 - 1) // 2
+    # Each cube slice is now centered on the central pixel (issue #368), so it
+    # no longer equals the exact pixel cutout of the input frame. Check instead
+    # that the cube slice has approximately the same total flux as the
+    # corresponding cutout.
     for i_psf, psf in enumerate(psf_cube_in):
         row_start = max(int(np.round(psf_loc_input[i_psf][1])) - n_pix_psf, 0)
         col_start = max(int(np.round(psf_loc_input[i_psf][0])) - n_pix_psf, 0)
-        assert np.allclose(psf[row_start:row_start+cal_file_side_0,
-            col_start:col_start+cal_file_side_1], ct_cal_file.data[i_psf], rtol=1e-6)
+        cutout = psf[row_start:row_start+cal_file_side_0,
+                    col_start:col_start+cal_file_side_1]
+        assert np.isclose(np.nansum(ct_cal_file.data[i_psf]), cutout.sum(),
+                        rtol=1e-4)
 
     # Verify that the PSF images are best centered at each set of coordinates.
     test_result_psf_max_row = []  # intialize
@@ -500,9 +506,9 @@ def test_cal_file():
     # Check EXTNAME is as expected
     if ct_cal_file.ct_excam_hdr['EXTNAME'] != 'CTEXCAM':
         raise ValueError('The extension name of the CT values on EXCAM is not correct')
-    # x location wrt FPM (use allclose for float32 precision differences)
+    # x location wrt FPM - compare fractional positions (PSF stamps are sub-pixel shifted, but CT values stored at original fractional coords)
     assert np.allclose(psf_loc_input[:,0], ct_cal_file.ct_excam[0], rtol=1e-6, atol=1e-8)
-    # y location wrt FPM
+    # y location wrt FPM - compare fractional positions (PSF stamps are sub-pixel shifted, but CT values stored at original fractional coords)
     assert np.allclose(psf_loc_input[:,1], ct_cal_file.ct_excam[1], rtol=1e-6, atol=1e-8)
     # CT map
     assert np.allclose(ct_input, ct_cal_file.ct_excam[2], rtol=1e-6, atol=1e-8)
@@ -1101,6 +1107,27 @@ def test_generate_psf_cube_edge_padding():
     print_pass() if test_padded_data and test_padded_dq else print_fail()
     print('Tests about PSF padding from clipped cut outs passed')
 
+def test_psf_cube_subpixel_centered():
+    """Tests for issue #368: each PSF stamp in the calibration cube should be
+    sub-pixel-centered so its centroid lies on the central pixel of the stamp."""
+    ct_cal = corethroughput.generate_ct_cal(dataset_ct)
+    psf_cube = ct_cal.data
+    n_psf, ny, nx = psf_cube.shape
+    center_y, center_x = ny // 2, nx // 2
+
+    yy, xx = np.mgrid[0:ny, 0:nx]
+    for i in range(n_psf):
+        psf = np.where(np.isnan(psf_cube[i]), 0.0, psf_cube[i])
+        total = psf.sum()
+        cx = (xx * psf).sum() / total
+        cy = (yy * psf).sum() / total
+        assert abs(cx - center_x) < 0.05, \
+            f'PSF {i} centroid x={cx:.4f} not at central pixel {center_x}'
+        assert abs(cy - center_y) < 0.05, \
+            f'PSF {i} centroid y={cy:.4f} not at central pixel {center_y}'
+    print('All PSF stamps in the cube are sub-pixel-centered (issue #368): ', end='')
+    print_pass()
+
 
 def teardown_module():
     """
@@ -1135,3 +1162,4 @@ if __name__ == '__main__':
     test_psf_interp()
     test_ct_cal_order_independent()
     test_generate_psf_cube_edge_padding()
+    test_psf_cube_subpixel_centered()
