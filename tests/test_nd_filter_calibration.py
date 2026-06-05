@@ -804,11 +804,12 @@ def test_calculate_od_spec_at_new_location(output_dir):
     output_spec = corrected_image.hdu_list['SPEC'].data
     output_wave = corrected_image.hdu_list['SPEC_WAVE'].data
 
-    expected_value = 1/10**(3.5)
+    expected_value = 1 * 10**(3.5)
 
+    atol_spec = 1e-2
     for i, wave in enumerate(output_wave):
-        test_result_spec_accuracy = abs(output_spec[i] - expected_value) < atol_nd
-        print(f'apply_od_spec_correction_to_image() estimates corrected flux as {expected_value} +/- {atol_nd}: at wavelength {wave} nm', end='')
+        test_result_spec_accuracy = abs(output_spec[i] - expected_value) < atol_spec
+        print(f'apply_od_spec_correction_to_image() estimates corrected flux as {expected_value} +/- {atol_spec}: at wavelength {wave} nm', end='')
         print_pass() if test_result_spec_accuracy else print_fail()
 
         assert test_result_spec_accuracy, (

@@ -1054,12 +1054,12 @@ def apply_od_spec_correction_to_image(clean_spec_image, fpamfsamcal, ndspectrosc
             spec    = remap_spec(common_wave)
             spec_err = remap_spec_err(common_wave)       
     
-    corr_spec = spec/10**(od_spec)
-    corr_spec_err = spec_err/10**(od_spec)
+    corr_spec = spec * 10**(od_spec)
+    corr_spec_err = spec_err * 10**(od_spec)
 
     corrected_image.hdu_list['SPEC'].data = corr_spec
     corrected_image.hdu_list['SPEC_ERR'].data = corr_spec_err
-    if wave_grid is not None:  #Update wavelength grid if we provided custom wavelengths
+    if not np.allclose(spec_wave, common_wave, atol=0.01):  #Update wavelength grid if spec_wave and common_wave are different
         corrected_image.hdu_list['SPEC_WAVE'].data = common_wave
         corrected_image.hdu_list['SPEC_WAVE_ERR'].data = np.zeros_like(common_wave)
 
