@@ -926,16 +926,20 @@ def test_validation_mode_matching_structure():
             {'name': 'step3'}
         ]
     }
-
-    # Save original setting
-    original_enforce = corgidrp.enforce_template_structure
-
-    try:
-        corgidrp.enforce_template_structure = True
-        # Should not raise
-        walker._validate_template_structure(user_template, default_template, "test.json")
-    finally:
-        corgidrp.enforce_template_structure = original_enforce
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Write template to temp directory
+        default_template_path = os.path.join(tmpdir, "test_template.json")
+        with open(default_template_path, 'w') as f:
+            json.dump(default_template, f)
+        # Save original setting
+        original_enforce = corgidrp.enforce_template_structure
+    
+        try:
+            corgidrp.enforce_template_structure = True
+            # Should not raise
+            walker._validate_template_structure(user_template, default_template_path, "test.json")
+        finally:
+            corgidrp.enforce_template_structure = original_enforce
 
 def test_validation_mode_mismatched_structure_raises():
     """
@@ -958,20 +962,24 @@ def test_validation_mode_mismatched_structure_raises():
             {'name': 'step3'}
         ]
     }
-
-    # Save original setting
-    original_enforce = corgidrp.enforce_template_structure
-
-    try:
-        corgidrp.enforce_template_structure = True
-        with pytest.raises(ValueError) as exc_info:
-            walker._validate_template_structure(user_template, default_template, "test.json")
-
-        error_msg = str(exc_info.value)
-        assert "different step structure" in error_msg.lower()
-        assert "test.json" in error_msg
-    finally:
-        corgidrp.enforce_template_structure = original_enforce
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Write template to temp directory
+        default_template_path = os.path.join(tmpdir, "test_template.json")
+        with open(default_template_path, 'w') as f:
+            json.dump(default_template, f)
+        # Save original setting
+        original_enforce = corgidrp.enforce_template_structure
+    
+        try:
+            corgidrp.enforce_template_structure = True
+            with pytest.raises(ValueError) as exc_info:
+                walker._validate_template_structure(user_template, default_template_path, "test.json")
+    
+            error_msg = str(exc_info.value)
+            assert "different step structure" in error_msg.lower()
+            assert "test.json" in error_msg
+        finally:
+            corgidrp.enforce_template_structure = original_enforce
 
 def test_validation_mode_disabled_allows_mismatch():
     """
@@ -993,16 +1001,21 @@ def test_validation_mode_disabled_allows_mismatch():
             {'name': 'step3'}
         ]
     }
-
-    # Save original setting
-    original_enforce = corgidrp.enforce_template_structure
-
-    try:
-        corgidrp.enforce_template_structure = False
-        # Should not raise even with mismatched structure
-        walker._validate_template_structure(user_template, default_template, "test.json")
-    finally:
-        corgidrp.enforce_template_structure = original_enforce
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Write template to temp directory
+        default_template_path = os.path.join(tmpdir, "test_template.json")
+        with open(default_template_path, 'w') as f:
+            json.dump(default_template, f)
+            
+        # Save original setting
+        original_enforce = corgidrp.enforce_template_structure
+    
+        try:
+            corgidrp.enforce_template_structure = False
+            # Should not raise even with mismatched structure
+            walker._validate_template_structure(user_template, default_template_path, "test.json")
+        finally:
+            corgidrp.enforce_template_structure = original_enforce
 
 def test_user_template_in_autogen_recipe():
     """

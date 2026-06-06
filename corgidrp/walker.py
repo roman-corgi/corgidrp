@@ -128,14 +128,14 @@ def _load_recipe_template(recipe_filename, user_templates_dir=None):
         f"({user_templates_dir}) or default templates ({recipe_dir})"
     )
 
-def _validate_template_structure(user_template, default_template, recipe_filename):
+def _validate_template_structure(user_template, default_template_path, recipe_filename):
     """
     Validate that user template has same step names/order as default.
     Raises ValueError if mismatch found when enforce_template_structure=True.
 
     Args:
         user_template (dict): User-provided template
-        default_template (dict): Default template from repo
+        default_template_path (str): Path of the default template from repo
         recipe_filename (str): Template name for error messages
 
     Raises:
@@ -144,23 +144,33 @@ def _validate_template_structure(user_template, default_template, recipe_filenam
     if not corgidrp.enforce_template_structure:
         return  # Validation disabled
 
-    # Extract step names from both templates
-    user_steps = [step['name'] for step in user_template.get('steps', [])]
-    default_steps = [step['name'] for step in default_template.get('steps', [])]
-
-    # Check if step names and order match
-    if user_steps != default_steps:
-        error_msg = (
-            f"User template '{recipe_filename}' has different step structure than default.\n"
-            f"User template steps: {user_steps}\n"
-            f"Default template steps: {default_steps}\n"
-            f"When enforce_template_structure=True, user templates must have the same "
-            f"step names in the same order as default templates. You can modify step "
-            f"keywords and calibs, but not add/remove/reorder steps.\n"
-            f"To allow different step structures, set enforce_template_structure=False "
-            f"in your config file or via environment variable."
+    if not os.path.exists(default_template_path):
+        raise FileNotFoundError(
+            f"Cannot validate user template '{recipe_filename}': "
+            f"no corresponding default template found at {default_template_path}. "
+            f"User templates must have same filename as a default template when "
+            f"enforce_template_structure=True."
         )
-        raise ValueError(error_msg)
+    with open(default_template_path, 'r') as f:
+        default_template = json.load(f)
+
+        # Extract step names from both templates
+        user_steps = [step['name'] for step in user_template.get('steps', [])]
+        default_steps = [step['name'] for step in default_template.get('steps', [])]
+    
+        # Check if step names and order match
+        if user_steps != default_steps:
+            error_msg = (
+                f"User template '{recipe_filename}' has different step structure than default.\n"
+                f"User template steps: {user_steps}\n"
+                f"Default template steps: {default_steps}\n"
+                f"When enforce_template_structure=True, user templates must have the same "
+                f"step names in the same order as default templates. You can modify step "
+                f"keywords and calibs, but not add/remove/reorder steps.\n"
+                f"To allow different step structures, set enforce_template_structure=False "
+                f"in your config file or via environment variable."
+            )
+            raise ValueError(error_msg)
 
 def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     """
@@ -185,20 +195,10 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
         if os.path.sep not in template:
             # this is just a template name. check user_templates first, then defaults
             template, recipe_filepath, is_user_template = _load_recipe_template(template)
-
             # Validate user template structure if enabled
             if is_user_template and corgidrp.enforce_template_structure:
                 default_template_path = os.path.join(recipe_dir, os.path.basename(recipe_filepath))
-                if not os.path.exists(default_template_path):
-                    raise FileNotFoundError(
-                        f"Cannot validate user template '{os.path.basename(recipe_filepath)}': "
-                        f"no corresponding default template found at {default_template_path}. "
-                        f"User templates must have same filename as a default template when "
-                        f"enforce_template_structure=True."
-                    )
-                with open(default_template_path, 'r') as f:
-                    default_template = json.load(f)
-                _validate_template_structure(template, default_template, os.path.basename(recipe_filepath))
+                _validate_template_structure(template, default_template_path, os.path.basename(recipe_filepath))
         else:
             recipe_filepath = template
             template = json.load(open(recipe_filepath, 'r'))
@@ -318,17 +318,7 @@ def autogen_recipe(filelist, outputdir, template=None):
                 if is_user_template and corgidrp.enforce_template_structure:
                     # Load default template for comparison
                     default_template_path = os.path.join(recipe_dir, recipe_filename)
-                    if not os.path.exists(default_template_path):
-                        raise FileNotFoundError(
-                            f"Cannot validate user template '{recipe_filename}': "
-                            f"no corresponding default template found at {default_template_path}. "
-                            f"User templates must have same filename as a default template when "
-                            f"enforce_template_structure=True."
-                        )
-                    with open(default_template_path, 'r') as f:
-                        default_template = json.load(f)
-                    _validate_template_structure(template, default_template, recipe_filename)
-
+                    _validate_template_structure(template, default_template_path, recipe_filename)
                 recipe_template_list.append(template)
                 template_sources.append((recipe_filename, template_path, is_user_template))
             recipe_template_list_list.append(recipe_template_list)
@@ -343,16 +333,7 @@ def autogen_recipe(filelist, outputdir, template=None):
             if is_user_template and corgidrp.enforce_template_structure:
                 # Load default template for comparison
                 default_template_path = os.path.join(recipe_dir, template)
-                if not os.path.exists(default_template_path):
-                    raise FileNotFoundError(
-                        f"Cannot validate user template '{template}': "
-                        f"no corresponding default template found at {default_template_path}. "
-                        f"User templates must have same filename as a default template when "
-                        f"enforce_template_structure=True."
-                    )
-                with open(default_template_path, 'r') as f:
-                    default_template = json.load(f)
-                _validate_template_structure(template_dict, default_template, template)
+                _validate_template_structure(template_dict, default_template_path, template)
 
             recipe_template_list = [template_dict]
             template_sources = [(template, template_path, is_user_template)]
