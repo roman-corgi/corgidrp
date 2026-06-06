@@ -922,7 +922,8 @@ class FlatField(Image):
                     'FSMSG1', 'FSMSG2', 'FSMSG3', 'FSMX', 'FSMY','SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY','DMZLOOP','1SVALID',
                     'Z2AVG','Z2RES','Z2VAR','Z3AVG','Z3RES','Z3VAR','10SVALID','Z4AVG','Z4RES','Z5AVG','Z5RES','Z6AVG','Z6RES',
                     'Z7AVG','Z7RES','Z8AVG','Z8RES','Z9AVG','Z9RES','Z10AVG','Z10RES','Z11AVG','Z11RES','Z12AVG','Z13AVG', 'Z14AVG'],
-                    calculated_value_keywords = ['DATETIME','FTIMEUTC','FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']+ 
+                    calculated_value_keywords = ['DATETIME','FTIMEUTC','FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE', 'NRECIPES']+
+                    [f'RECIPE{i}' for i in range(2, 100)] +
                     [f'FILE{i}' for i in range(100)]
                     )
             

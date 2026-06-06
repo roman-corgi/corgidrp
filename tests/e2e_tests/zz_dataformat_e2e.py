@@ -317,6 +317,10 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                         continue
                     if name.startswith("HIERARCH FILE_") and len(name) > 14 and name[14:].isdigit():
                         continue
+                    if name == "NRECIPES":
+                        continue
+                    if name.startswith("RECIPE") and len(name) > 6 and name[6:].isdigit():
+                        continue
                     # Skip table header/delimiter rows
                     if name and dtype and name != 'Keyword' and name != '=' * len(name) and name != '-' * len(name) and not name.isdigit():
                         # Store keyword name, datatype, and HDU

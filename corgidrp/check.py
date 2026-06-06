@@ -806,7 +806,8 @@ invalid_keywords_default = ['FTIMEUTC', 'PROXET', 'DATETIME']
 # FILETIME is the only one calculated in merge_heades, the others are calculated elsewhere in the
 # pipeline but are included here so that they are exempt from the identical check
 calculated_value_keywords_default = (
-    ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']
+    ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE', 'NRECIPES']
+    + [f'RECIPE{i}' for i in range(2, 100)]
     + [f'FILE{i}' for i in range(100)]
 )
 any_true_keywords_default = ['OVEREXP']

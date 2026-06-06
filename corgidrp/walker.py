@@ -93,6 +93,141 @@ all_steps = {
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
 
+def _recipe_keyword(recipe_index):
+    """
+    Return the FITS header keyword for a recipe history entry.
+    """
+    if recipe_index < 1:
+        raise ValueError("Recipe index must be at least 1")
+    if recipe_index == 1:
+        return "RECIPE"
+    return "RECIPE{0}".format(recipe_index)
+
+
+def _recipe_index_from_keyword(keyword):
+    """
+    Return the recipe history index represented by a FITS header keyword.
+    """
+    keyword = keyword.upper()
+    if keyword == "RECIPE":
+        return 1
+    if keyword.startswith("RECIPE") and keyword[6:].isdigit():
+        return int(keyword[6:])
+    return None
+
+
+def _read_recipe_history(header):
+    """
+    Read RECIPE, RECIPE2, RECIPE3, ... cards from a FITS header.
+    """
+    indexed_recipes = []
+    for keyword in header.keys():
+        recipe_index = _recipe_index_from_keyword(keyword)
+        if recipe_index is not None:
+            recipe_value = header[keyword]
+            try:
+                json.loads(recipe_value)
+            except (TypeError, json.JSONDecodeError):
+                continue
+            indexed_recipes.append((recipe_index, recipe_value))
+    indexed_recipes.sort(key=lambda item: item[0])
+    return [recipe for _, recipe in indexed_recipes]
+
+
+def _write_recipe_history(header, recipe_history):
+    """
+    Write complete recipe history into RECIPE, RECIPE2, ... and NRECIPES.
+    """
+    for keyword in list(header.keys()):
+        if keyword == "NRECIPES" or _recipe_index_from_keyword(keyword) is not None:
+            del header[keyword]
+
+    for recipe_index, recipe_value in enumerate(recipe_history, start=1):
+        keyword = _recipe_keyword(recipe_index)
+        header.set(
+            keyword,
+            recipe_value,
+            "DRP recipe #{0} used to generate this data product".format(recipe_index),
+        )
+    header.set("NRECIPES", len(recipe_history), "# of DRP recipes recorded")
+
+
+def _append_recipe_to_header(header, recipe_value):
+    recipe_history = _read_recipe_history(header)
+    recipe_history.append(recipe_value)
+    _write_recipe_history(header, recipe_history)
+
+
+def _replace_latest_recipe_in_header(header, recipe_value):
+    recipe_history = _read_recipe_history(header)
+    if len(recipe_history) == 0:
+        recipe_history = [recipe_value]
+    else:
+        recipe_history[-1] = recipe_value
+    _write_recipe_history(header, recipe_history)
+
+
+def _as_frame_list(dataset_or_image):
+    if isinstance(dataset_or_image, data.Dataset):
+        return list(dataset_or_image)
+    if isinstance(dataset_or_image, data.Image):
+        return [dataset_or_image]
+    return []
+
+
+def _recipe_value_for_frame(recipe, recipe_temp, frame_index, num_frames):
+    if frame_index == num_frames - 1:
+        return json.dumps(recipe)
+    return json.dumps(recipe_temp)
+
+
+def _append_recipe_to_frames(frames, recipe, recipe_temp):
+    num_frames = len(frames)
+    for frame_index, frame in enumerate(frames):
+        recipe_value = _recipe_value_for_frame(
+            recipe, recipe_temp, frame_index, num_frames
+        )
+        _append_recipe_to_header(frame.ext_hdr, recipe_value)
+
+
+def _replace_latest_recipe_in_frames(frames, recipe, recipe_temp):
+    num_frames = len(frames)
+    for frame_index, frame in enumerate(frames):
+        recipe_value = _recipe_value_for_frame(
+            recipe, recipe_temp, frame_index, num_frames
+        )
+        _replace_latest_recipe_in_header(frame.ext_hdr, recipe_value)
+
+
+def _collect_recipe_histories(frames):
+    return [_read_recipe_history(frame.ext_hdr) for frame in frames]
+
+
+def _fallback_recipe_history(recipe_histories, frame_index, num_frames):
+    if len(recipe_histories) == 0:
+        return []
+    if len(recipe_histories) == num_frames:
+        return recipe_histories[frame_index]
+    return recipe_histories[-1]
+
+
+def _ensure_recipe_history(frames, recipe_histories):
+    """
+    Re-apply accumulated recipe history to outputs that dropped it during a step.
+    """
+    num_frames = len(frames)
+    for frame_index, frame in enumerate(frames):
+        fallback_history = _fallback_recipe_history(
+            recipe_histories, frame_index, num_frames
+        )
+        current_history = _read_recipe_history(frame.ext_hdr)
+        if (
+            len(current_history) < len(fallback_history)
+            or current_history[:len(fallback_history)] != fallback_history
+        ):
+            _write_recipe_history(frame.ext_hdr, fallback_history)
+
+
 def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     """
     Automatically create a recipe and process the input filelist.
@@ -610,6 +745,9 @@ def run_recipe(recipe, save_recipe_file=True):
         save_step = False
         output_filepaths = []
         for filelist in filelist_chunks:
+            recipe_histories = []
+            recipe_recorded = False
+            recipe_temp = recipe
             if recipe["inputs"]:
                 if ram_heavy_bool:
                     curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
@@ -620,10 +758,10 @@ def run_recipe(recipe, save_recipe_file=True):
                     curr_dataset = data.Dataset(filelist)
                     recipe_temp = recipe
                 # write the recipe into the image extension header
-                curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                if len(curr_dataset) > 1:
-                    for frame in curr_dataset[:-1]:
-                        frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                curr_frames = _as_frame_list(curr_dataset)
+                _append_recipe_to_frames(curr_frames, recipe, recipe_temp)
+                recipe_histories = _collect_recipe_histories(curr_frames)
+                recipe_recorded = True
             # execute each pipeline step
             print('Executing recipe: {0}'.format(recipe['name']))
             if isinstance(filelist, list):
@@ -684,10 +822,10 @@ def run_recipe(recipe, save_recipe_file=True):
                                 recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
                             else:
                                 recipe_temp = recipe
-                            list_of_frames[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                            if len(list_of_frames) > 1:
-                                for frame in list_of_frames[:-1]:
-                                    frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                            list_of_frames = _as_frame_list(curr_dataset)
+                            _replace_latest_recipe_in_frames(list_of_frames, recipe, recipe_temp)
+                            recipe_histories = _collect_recipe_histories(list_of_frames)
+                            recipe_recorded = True
 
                         # load the calibration files in from disk
                         for calib in step["calibs"]:
@@ -710,12 +848,14 @@ def run_recipe(recipe, save_recipe_file=True):
                     curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
 
                     # make sure RECIPE header is propagated to output
-                    if isinstance(curr_dataset, data.Dataset):
-                        for frame in curr_dataset:
-                            if "RECIPE" not in frame.ext_hdr:
-                                frame.ext_hdr["RECIPE"] = json.dumps(recipe)
-                    elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
-                        curr_dataset.ext_hdr["RECIPE"] = json.dumps(recipe)
+                    curr_frames = _as_frame_list(curr_dataset)
+                    if len(curr_frames) > 0:
+                        if len(recipe_histories) > 0:
+                            _ensure_recipe_history(curr_frames, recipe_histories)
+                        elif not recipe_recorded:
+                            _append_recipe_to_frames(curr_frames, recipe, recipe_temp)
+                            recipe_recorded = True
+                        recipe_histories = _collect_recipe_histories(curr_frames)
 
         if not save_step:
             output_filepaths = None

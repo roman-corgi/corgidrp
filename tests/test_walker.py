@@ -291,6 +291,49 @@ def test_saving():
     this_caldb.remove_entry(new_nonlinearity)
 
 
+def test_chained_recipes_written_to_incrementing_headers():
+    """
+    Tests that chained recipes are retained as RECIPE, RECIPE2, ...
+    """
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+    testdatadir = os.path.join(os.path.dirname(__file__), "test_data")
+    save_recipe_path = os.path.join(testdatadir, "saving_only.json")
+
+    l1_dataset = mocks.create_dark_calib_files(filedir=datadir, numfiles=2)
+    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_chain_l1_.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+    l1_dataset.save(filedir=datadir)
+
+    recipe1 = json.load(open(save_recipe_path, 'r'))
+    recipe1["name"] = "saving_first"
+    recipe1["inputs"] = [frame.filepath for frame in l1_dataset]
+    recipe1["outputdir"] = outputdir
+    recipe1["steps"][0]["keywords"]["suffix"] = "first"
+    first_outputs = walker.run_recipe(recipe1, save_recipe_file=False)
+
+    recipe2 = json.load(open(save_recipe_path, 'r'))
+    recipe2["name"] = "saving_second"
+    recipe2["inputs"] = first_outputs
+    recipe2["outputdir"] = outputdir
+    recipe2["steps"][0]["keywords"]["suffix"] = "second"
+    second_outputs = walker.run_recipe(recipe2, save_recipe_file=False)
+
+    output_dataset = data.Dataset(second_outputs)
+    assert len(output_dataset) == len(l1_dataset)
+    for frame in output_dataset:
+        assert frame.ext_hdr["NRECIPES"] == 2
+        assert json.loads(frame.ext_hdr["RECIPE"])["name"] == "saving_first"
+        assert json.loads(frame.ext_hdr["RECIPE2"])["name"] == "saving_second"
+        assert "RECIPE3" not in frame.ext_hdr
+
+
 
 def test_skip_missing_calib():
     """
@@ -699,5 +742,4 @@ if __name__ == "__main__":#
     test_generate_multiple_recipes()
     test_cpgs_satspots()
     test_l1_to_l2b_default_calibs()
-
 
