@@ -1,5 +1,6 @@
 import argparse
 import copy
+import json
 import os
 import shutil
 import numpy as np
@@ -119,11 +120,31 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     istart = 0
 
     big_array_size = [1024,1024]
-    science_visitid = "1111111111111111111"
+    science_visitids = ("1111111111111111101", "1111111111111111201")
     reference_visitid = "2222222222222222222"
 
+    def visitid_by_pa_aper(pa_aper_values, visitids):
+        """
+        Assign one visit ID to science frames based on each PA_APER value.
+
+        The unique PA_APER values are rounded, sorted, and paired with the
+        provided visit IDs in order. The returned list has the same length and
+        order as pa_aper_values.
+        """
+        pa_aper_values = [round(float(pa_aper), 10) for pa_aper in pa_aper_values]
+        unique_pa_apers = sorted(set(pa_aper_values))
+        if len(unique_pa_apers) != len(visitids):
+            raise ValueError(
+                f"Expected {len(visitids)} PA_APER values, but found "
+                f"{len(unique_pa_apers)}: {unique_pa_apers}"
+            )
+        return [visitids[unique_pa_apers.index(pa_aper)] for pa_aper in pa_aper_values]
+
+    science_visitids_by_frame = visitid_by_pa_aper(rotation[star != 2], science_visitids)
+
     image_list = []
-    last_sci_image = None
+    last_sci_image_by_pa = {}
+    science_frame_index = 0
     for ibatch in range(nbatch): 
         # iend = istart + nframes_per_batch
         iend = istart + nframes[ibatch] 
@@ -177,15 +198,17 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
             new_image.pri_hdr.set('VISITID', reference_visitid)
             new_image.pri_hdr.set('PSFREF', 1)
         else:
-            new_image.pri_hdr.set('VISITID', science_visitid)
+            visitid = science_visitids_by_frame[science_frame_index]
+            science_frame_index += 1
+            new_image.pri_hdr.set('VISITID', visitid)
             new_image.pri_hdr.set('PSFREF', 0)
 
         # Generate proper filename with visitid and current time
         unique_time = (datetime.now() + timedelta(milliseconds=ibatch*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
         new_image.filename = f"cgi_{new_image.pri_hdr['VISITID']}_{unique_time}_l2b.fits"
         #Save the last science filename for later. 
-        if star[ibatch] == 1:
-            last_sci_image = copy.deepcopy(new_image)
+        if star[ibatch] != 2:
+            last_sci_image_by_pa[round(float(new_image.pri_hdr['PA_APER']), 10)] = copy.deepcopy(new_image)
 
 
         image_list.append(new_image)
@@ -207,42 +230,72 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = satellite_spot_image
 
     mock_satspot_pri_header, mock_satspot_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    mock_satspot_pri_header['VISITID'] = science_visitid
     mock_satspot_pri_header['PSFREF'] = 0
     mock_satspot_ext_header['SATSPOTS'] = True
     mock_satspot_ext_header['FSMPRFL'] = 'NFOV'
 
     # Base time for ascending SCTSRT across the three satspot groups.
     satspot_base_time = datetime(2024, 1, 2, 0, 0, 0)
+    science_pa_apers = sorted({round(float(pa_aper), 10) for pa_aper in rotation[star != 2]})
+    science_visitids_for_pa = visitid_by_pa_aper(science_pa_apers, science_visitids)
+    if set(last_sci_image_by_pa) != set(science_pa_apers):
+        raise ValueError("No science frames were found for one or more PA_APER satellite-spot groups.")
 
-    # No-offset frame: copy of the last science frame with SATSPOTS=True.
-    # It represents the DM-unprobed state (no satellite spots, only speckles).
-    if last_sci_image is None:
-        raise ValueError("No science frames were found for the no-offset satellite-spot frame.")
-    sat_spot_nooffset = copy.deepcopy(last_sci_image)
-    sat_spot_nooffset.ext_hdr['SATSPOTS'] = True
-    sat_spot_nooffset.ext_hdr['SCTSRT'] = satspot_base_time.isoformat()
-    nooffset_time_str = satspot_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
-    sat_spot_nooffset.filename = f"cgi_{sat_spot_nooffset.pri_hdr['VISITID']}_{nooffset_time_str}_l2b.fits"
+    ### This block creates the mock satellite-spot frames needed for each science PA_APER / science VISITID.
+    ### In short: for each science visit, it creates 3 extra frames:
+    ###   - a no-offset frame
+    ###   - a positive-offset satellite-spot frame
+    ###   - a negative-offset satellite-spot frame
+    ### So if there are 2 science PA_APER values, this creates 6 satellite-spot frames total.
+    satspot_frames_by_group = [[], [], []]
+    for pa_aper, visitid in zip(science_pa_apers, science_visitids_for_pa):
+        # No-offset frame: copy of the last science frame for this PA_APER with SATSPOTS=True.
+        # It represents the DM-unprobed state (no satellite spots, only speckles).
+        sat_spot_nooffset = copy.deepcopy(last_sci_image_by_pa[pa_aper])
+        sat_spot_nooffset.ext_hdr['SATSPOTS'] = True
+        satspot_frames_by_group[0].append(sat_spot_nooffset)
 
-    # Positive-offset frame.
-    sat_spot_pos = Image(big_array.copy(), mock_satspot_pri_header, mock_satspot_ext_header, err_hdr=errhdr, dq_hdr=dqhdr)
-    sat_spot_pos.ext_hdr['SCTSRT'] = (satspot_base_time + timedelta(seconds=1)).isoformat()
-    pos_time_str = (satspot_base_time + timedelta(seconds=1)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-    sat_spot_pos.filename = f"cgi_{sat_spot_pos.pri_hdr['VISITID']}_{pos_time_str}_l2b.fits"
+        for satspot_group in [1, 2]:
+            satspot_pri_header = mock_satspot_pri_header.copy()
+            satspot_ext_header = mock_satspot_ext_header.copy()
+            satspot_pri_header['VISITID'] = visitid
+            satspot_pri_header['PA_APER'] = pa_aper
+            sat_spot = Image(
+                big_array.copy(),
+                satspot_pri_header,
+                satspot_ext_header,
+                err_hdr=errhdr.copy(),
+                dq_hdr=dqhdr.copy(),
+            )
+            satspot_frames_by_group[satspot_group].append(sat_spot)
 
-    # Negative-offset frame (identical to positive for mock purposes).
-    sat_spot_neg = Image(big_array.copy(), mock_satspot_pri_header, mock_satspot_ext_header, err_hdr=errhdr, dq_hdr=dqhdr)
-    sat_spot_neg.ext_hdr['SCTSRT'] = (satspot_base_time + timedelta(seconds=2)).isoformat()
-    neg_time_str = (satspot_base_time + timedelta(seconds=2)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-    sat_spot_neg.filename = f"cgi_{sat_spot_neg.pri_hdr['VISITID']}_{neg_time_str}_l2b.fits"
+    satellite_spot_frames = []
+    for group_index, satspot_frames in enumerate(satspot_frames_by_group):
+        for i_frame, satspot_frame in enumerate(satspot_frames):
+            frame_time = satspot_base_time + timedelta(
+                seconds=group_index * len(science_pa_apers) + i_frame
+            )
+            satspot_frame.ext_hdr['SCTSRT'] = frame_time.isoformat()
+            time_str = frame_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
+            satspot_frame.filename = f"cgi_{satspot_frame.pri_hdr['VISITID']}_{time_str}_l2b.fits"
+            satellite_spot_frames.append(satspot_frame)
 
-    image_list.extend([sat_spot_nooffset, sat_spot_pos, sat_spot_neg])
-    science_visitids = {image.pri_hdr['VISITID'] for image in image_list if image.pri_hdr['PSFREF'] == 0}
-    reference_visitids = {image.pri_hdr['VISITID'] for image in image_list if image.pri_hdr['PSFREF'] == 1}
-    assert science_visitids == {science_visitid}
-    assert reference_visitids == {reference_visitid}
-    assert science_visitids.isdisjoint(reference_visitids)
+    image_list.extend(satellite_spot_frames)
+    science_visitids_found = {image.pri_hdr['VISITID'] for image in image_list if image.pri_hdr['PSFREF'] == 0}
+    reference_visitids_found = {image.pri_hdr['VISITID'] for image in image_list if image.pri_hdr['PSFREF'] == 1}
+    assert science_visitids_found == set(science_visitids)
+    assert reference_visitids_found == {reference_visitid}
+    assert science_visitids_found.isdisjoint(reference_visitids_found)
+    science_images = [image for image in image_list if image.pri_hdr['PSFREF'] == 0]
+    expected_science_visitids = visitid_by_pa_aper(
+        [image.pri_hdr['PA_APER'] for image in science_images],
+        science_visitids,
+    )
+    for image, expected_visitid in zip(science_images, expected_science_visitids):
+        assert image.pri_hdr['VISITID'] == expected_visitid
+    for image in image_list:
+        if image.pri_hdr['PSFREF'] == 1:
+            assert image.pri_hdr['VISITID'] == reference_visitid
 
     #########################################
     #### Save the dataset to a directory ####
@@ -415,7 +468,13 @@ def test_l3_to_l4(e2eoutput_path):
 
     l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
-    walker.walk_corgidrp(l3_data_filelist, "", main_output_dir)
+    with open(os.path.join(walker.recipe_dir, "l3_to_l4.json"), "r") as recipe_file:
+        l3_to_l4_template = json.load(recipe_file)
+    for step in l3_to_l4_template["steps"]:
+        if step["name"] == "find_star":
+            step.setdefault("keywords", {})["pri_split_keywords"] = []
+
+    walker.walk_corgidrp(l3_data_filelist, "", main_output_dir, template=l3_to_l4_template)
 
     ########################################################################
     #### Read in the psf_subtracted images and test for source detection ###
