@@ -1007,7 +1007,7 @@ def apply_od_spec_correction_to_image(clean_spec_image, fpamfsamcal, ndspectrosc
               FpamFsamCal calibration class. 
         ndspectroscopy_dataset (corgidrp.Data.NDSpectroscopy): ND Spectroscopy dataset.
         wave_grid (list of float or np.array, optional): Wavelength grid specfied
-            by user. Defaults to None.
+            by user. Defaults to None (wavelength grid taken from spec image hdu 'SPEC_WAVE').
 
     Returns:
         corrected_image (corgidrp.Data.Image): A spec image with the OD-corrected spectrum and spec errors.
