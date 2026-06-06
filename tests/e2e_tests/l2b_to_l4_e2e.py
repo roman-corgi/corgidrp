@@ -130,6 +130,13 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         The unique PA_APER values are rounded, sorted, and paired with the
         provided visit IDs in order. The returned list has the same length and
         order as pa_aper_values.
+
+        Args:
+            pa_aper_values: PA_APER values, one per science frame.
+            visitids: Visit IDs to assign to the sorted unique PA_APER values.
+
+        Returns:
+            Visit ID for each PA_APER value in the input order.
         """
         pa_aper_values = [round(float(pa_aper), 10) for pa_aper in pa_aper_values]
         unique_pa_apers = sorted(set(pa_aper_values))
