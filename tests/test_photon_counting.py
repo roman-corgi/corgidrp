@@ -72,6 +72,7 @@ def test_pc():
     dark_dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dark = get_pc_mean(dark_dataset_err, inputmode='darks')
     assert pc_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark'
+    assert pc_dark.data.ndim == 2
     # now process illuminated frames and subtract the PC dark
     dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dataset_err = get_pc_mean(dataset_err, pc_master_dark=pc_dark)
@@ -175,8 +176,8 @@ def test_pc_subsets():
     # process darks and check NUM_FR
     dark_dataset_bin[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dark = get_pc_mean(dark_dataset_bin, inputmode='darks', bin_size=40)
-    assert pc_dark.ext_hdr['NUM_FR'] == 40 # The 2 remainder frames ignored for consistent statistics among the PC-averaged output frames
-    assert 'Number of subsets: 4' in pc_dark.ext_hdr['HISTORY'][-4]
+    assert pc_dark.ext_hdr['NUM_FR'] == len(dark_dataset_bin) # binning not used for 'darks' mode 
+    assert pc_dark.data.ndim == 2
     # now process illuminated frames and subtract the PC dark
     dataset_bin[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dataset = get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=40)

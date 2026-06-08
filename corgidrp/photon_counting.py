@@ -456,8 +456,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]
         ext_hdr['PCTHRESH'] = thresh
         ext_hdr['NUM_FR'] = len(sub_dataset) 
-        ext_hdr['HISTORY'] = "Photon-counted {0} dark frames for each master dark of the output dataset.  Number of subsets: {1}.  Total number of master darks in input dataset: {2}. Using T_factor={3} and niter={4}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter)
-        pc_dark = data.Dark(np.stack(list_new_image), pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err]), dq=np.stack(list_dq), err_hdr=err_hdr, dq_hdr=dq_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
+        ext_hdr['HISTORY'] = "Photon-counted {0} dark frames for master dark of the output dataset. Using T_factor={1} and niter={2}.".format(len(sub_dataset), T_factor, niter)
+        pc_dark = data.Dark(list_new_image[0], pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err]), dq=list_dq[0], err_hdr=err_hdr, dq_hdr=dq_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
         return pc_dark
 
 def corr_photon_count(nobs, nfr, t, g, mask_indices, niter=2):

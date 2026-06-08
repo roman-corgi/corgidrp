@@ -26,9 +26,10 @@ import corgidrp.sorting
 import corgidrp.fluxcal
 import corgidrp.spec
 
-import psutil
-import tracemalloc
-from datetime import date
+#for RAM testing
+#import psutil
+#import tracemalloc
+#from datetime import date
 #from memory_profiler import profile
 
 all_steps = {
