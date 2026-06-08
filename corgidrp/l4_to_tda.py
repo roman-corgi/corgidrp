@@ -870,7 +870,7 @@ def update_to_tda(input_dataset):
 
 
 def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
-                image_without_planet=None):
+                image_without_planet=None, N_threads=None):
     """
     Detects sources in an image based on a specified SNR threshold and save their approximate pixel locations and SNRs into the header.
     
@@ -880,6 +880,8 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
         fwhm (float, optional): Full-width at half-maximum of the PSF in pixels.
         nsigma_threshold (float, optional): The SNR threshold for source detection.
         image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
+        N_threads (int, optional): Number of threads for multiprocessing. If -1, runs sequentially without multiprocessing.
+                                   If None (default), uses all available CPU cores.
 
     Returns:
         corgidrp.data.Image: A copy of the input image with the detected sources and their SNRs saved in the header.
@@ -907,7 +909,7 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
 
     # Compute the SNR map using cross-correlation
     image_residual = np.zeros_like(new_image.data) + new_image.data
-    image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
+    image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet, N_threads=N_threads)
     
     sn_source, xy_source = [], []
 
@@ -925,7 +927,7 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
             image_residual = psf_scalesub(image_residual, xy, psf, fwhm)
                 
             # Update the SNR map after source removal
-            image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
+            image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet, N_threads=N_threads)
         
     # Store detected sources in FITS header
     for i in range(len(sn_source)):
