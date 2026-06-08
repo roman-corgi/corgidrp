@@ -118,7 +118,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             Defaults to True.
         inputmode (str):  If 'illuminated', the frames are assumed to be illuminated frames.  If 'darks', frames are assumed to be dark frames input for creation of a photon-counted master dark. 
             This flag shows the user's intention with the input, and this input is checked against the file type of the dataset for compatibility (e.g., if this input is 'darks' while 'VISTYPE' is not equal 
-            to 'DARK', an exception is raised).
+            to 'DARK', an exception is raised). If inputmode is 'darks', all frames in input_dataset will be used to construct the PC master dark, regardless of the specification for bin_size. 
+            Forcing the PC master dark to be made from all the input darks is all the better for the fidelity of the PC master dark.
         bin_size (int):  If one wishes to break up the input dataset into subsets of frames to photon-count separately (e.g., for testing the balancing act between 
             good SNR with many frames vs countering speckle time variability with fewer frames), one specifies this number for the size of each subset. If the number does not evenly divide the 
             number of frames in input_dataset, the remainder frames are ignored.  The output is the a dataset containing the more than 1 photon-counted mean-combined frame. Defaults to None, in which case 
@@ -173,7 +174,11 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     if bin_size > len(input_dataset):
         raise ValueError('bin_size must be less than the number of frames in input_dataset.')
         
-    num_bins = len(input_dataset)//bin_size 
+    if inputmode == 'darks':
+        num_bins = 1
+        bin_size = len(input_dataset)
+    else:
+        num_bins = len(input_dataset)//bin_size 
 
     lines = []
     for line in input_dataset[0].ext_hdr['HISTORY']:

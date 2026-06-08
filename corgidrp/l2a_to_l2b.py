@@ -5,7 +5,7 @@ import copy
 import warnings
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
-from corgidrp.detector import detector_areas, ENF
+from corgidrp.detector import detector_areas, ENF, slice_section
 
 
 def add_shot_noise_to_err(input_dataset, kgain, detector_params):
@@ -521,7 +521,7 @@ def correct_bad_pixels(input_dataset, bp_mask):
 
     return data
 
-def desmear(input_dataset, detector_params, auto_decide=False, nbins=21, signal_factor=5):
+def desmear(input_dataset, detector_params, detector_regions=None, auto_decide=False, nbins=21, rn_factor=2):
     """
     EXCAM has no shutter, and so continues to illuminate the detector during
     readout. This creates a "smearing" effect into the resulting images. The
@@ -531,101 +531,83 @@ def desmear(input_dataset, detector_params, auto_decide=False, nbins=21, signal_
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
         detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
+        detector_regions: (dict):  
+            A dictionary of detector geometry properties.  Keys should be as 
+            found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         auto_decide (bool): If True, the function will decide whether desmearing is appropriate given the current best estimate of 
             the read noise.  If the main signal in the frame is not adequately higher than the read noise (which is not smeared), then 
             desmearing should not be performed.  Defaults to False.
         nbins (int): If auto_decide is True, this is the number of bins used in the histogram of the data, which is used to determine 
-            the pixel values which are not merely background.  Defaults to 21.
-        signal_factor (float): If auto_decide is True, the relevant signal from the frame must stand out signal_factor times above the read noise.
-            Defaults to 5.
+            the pixel values which are not merely background.  Should be >= 3.  Defaults to 21.
+        rn_factor (float): If auto_decide is True, the mean of the relevant signal from the frame
+            must stand out rn_factor times above the read noise.
+            Defaults to 2.
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with desmear applied
 
     """
-
-    frames_data = input_dataset.copy() #XXX desmear only for image-area pixels; desmear only when above read noise level substantially
-    # we don't want to desmear things that were not smeared, like cosmic rays and their tails
-    # Best we can do:  take value of closest unmasked pixel to get an estimate of the true signal 
-    # and use that for the desmearing calculation.  
-    # For saturated non-cosmic-ray pixels, 
-    # best we can do:  assume the flux incident on that physical region is comparable to what's represented in the counts there. 
-    # This way, we at least partially correct for the smearing in those regions.
-    cosmic_mask = data.selective_dq(frames_data.all_dq, val=128)
+    if detector_regions is None:
+        detector_regions = detector_areas
+    
+    frames_data = input_dataset.copy() 
     data_cube = frames_data.all_data
-    #XXX needs additional unit tests, including ones with cosmics at all 4 edges of frame
-    #XXX remove apply_dq and tweak that via percent_pupil (if it is 0, that is equivalent to apply_dq=False)
     #XXX check other assigned issues (like PC dark issue; or is that just from my task list?)
     rowreadtime_sec = detector_params.params['ROWREADT']
 
     for i in range(data_cube.shape[0]):
-        rows, cols = np.where(cosmic_mask[i] > 0)
+        # Physically, smearing only happens in the area exposed to light, the image area:
+        arrtype = frames_data[i].ext_hdr['ARRTYPE']
+        # Changes to the two below (image_data and image_dq) change their original arrays as well
+        image_data = slice_section(data_cube[i], arrtype, 'image', detector_regions)
+        image_dq = slice_section(frames_data.all_dq[i], arrtype, 'image', detector_regions)
+        # we don't want to desmear things that were not smeared, like cosmic rays and their tails
+        # Best we can do:  take value of closest unmasked pixel to get an estimate of the true signal 
+        # and use that for the desmearing calculation.  
+        # For saturated non-cosmic-ray pixels, 
+        # best we can do:  assume the flux incident on that physical region is comparable to what's represented in the counts there. 
+        # This way, we at least partially correct for the smearing in those regions.
+        cosmic_mask = data.selective_dq(image_dq, val=128)
+        rows, cols = np.where(cosmic_mask > 0)
         # fill in cosmic ray pixels with value from nearest valid pixel for desmearing purposes; restore the originals afterwards
-        data_cube[i][rows,cols] = np.nan
+        image_data[rows,cols] = np.nan
         shift = 1
         temp_rows = rows.copy()
         temp_cols = cols.copy()
-        max_shift = max(data_cube[i].shape[0], data_cube[i].shape[1])
+        max_shift = max(image_data.shape[0], image_data.shape[1])
         while temp_rows.size > 0 and shift < max_shift:
-            for row_shift in range(-shift, shift+1):
+            #This places row_shift of 0 first to give preference to a replacement from 
+            # same row for the same amount of smear, all other things equal
+            for row_shift in np.roll(range(-shift, shift+1), -shift): 
                 for col_shift in range(-shift, shift+1):
                     # shift to seek replacements for nan'ed pixels
-                    if row_shift != 0:
-                        temp_del_inds = np.where(rows == (data_cube[i].shape[0]-row_shift)%data_cube[i].shape[0])
-                        temp_rows = np.delete(temp_rows, temp_del_inds)
-                        temp_cols = np.delete(temp_cols, temp_del_inds)
-                    if col_shift != 0:
-                        temp_del_inds = np.where(cols == (data_cube[i].shape[1]-col_shift)%data_cube[i].shape[1])
-                        temp_rows = np.delete(temp_rows, temp_del_inds)
-                        temp_cols = np.delete(temp_cols, temp_del_inds)
-                    data_cube[i][temp_rows, temp_cols] = data_cube[i][temp_rows + row_shift, temp_cols + col_shift]
-                    temp_rows, temp_cols = np.where(np.isnan(data_cube[i]))
+                    if row_shift != 0: #removes cases where shifts will give out-of-bounds indices
+                        temp_del_inds_r1 = np.where(temp_rows + row_shift >= image_data.shape[0])
+                        temp_del_inds_r2 = np.where(temp_rows + row_shift < 0)
+                        temp_del_inds_r = np.union1d(temp_del_inds_r1, temp_del_inds_r2)
+                        temp_rows = np.delete(temp_rows, temp_del_inds_r)
+                        temp_cols = np.delete(temp_cols, temp_del_inds_r)
+                    if col_shift != 0: #removes cases where shifts will give out-of-bounds indices
+                        temp_del_inds_c1 = np.where(temp_cols + col_shift >= image_data.shape[1])
+                        temp_del_inds_c2 = np.where(temp_cols + col_shift < 0)
+                        temp_del_inds_c = np.union1d(temp_del_inds_c1, temp_del_inds_c2)
+                        temp_rows = np.delete(temp_rows, temp_del_inds_c)
+                        temp_cols = np.delete(temp_cols, temp_del_inds_c)
+                    
+                    image_data[temp_rows, temp_cols] = image_data[temp_rows + row_shift, temp_cols + col_shift]
+                    temp_rows, temp_cols = np.where(np.isnan(image_data))
                     if temp_rows.size == 0:
                         break
             shift += 1
 
-            # # go backwards by shift rows to seek replacements
-            # temp_del_inds = np.where(rows == shift-1)
-            # temp_rows = np.delete(rows, temp_del_inds)
-            # temp_cols = np.delete(cols, temp_del_inds)
-            # data_cube[i][temp_rows, temp_cols] = data_cube[i][temp_rows-shift, temp_cols]
-            # if np.where(np.isnan(data_cube[i]))[0].size == 0:
-            #     break
-            # # go forwards by shift cols to seek replacements
-            # temp_del_inds = np.where(cols == data_cube[i].shape[1]-shift)
-            # temp_rows = np.delete(rows, temp_del_inds)
-            # temp_cols = np.delete(cols, temp_del_inds)
-            # data_cube[i][temp_rows, temp_cols] = data_cube[i][temp_rows, temp_cols+shift]
-            # if np.where(np.isnan(data_cube[i]))[0].size == 0:
-            #     break
-            # # go backwards by shift cols to seek replacements
-            # temp_del_inds = np.where(cols == shift-1)
-            # temp_rows = np.delete(rows, temp_del_inds)
-            # temp_cols = np.delete(cols, temp_del_inds)
-            # data_cube[i][temp_rows, temp_cols] = data_cube[i][temp_rows, temp_cols-shift]
-            # if np.where(np.isnan(data_cube[i]))[0].size == 0:
-            #     break
-
-
-            # shift_down_row = np.roll(data_cube[i], shift, axis=0)[1:,:]
-            # shift_down_row
-
-        # for r, c in zip(rows, cols):
-        #     delta_r = valid_rows - r
-        #     delta_c = valid_cols - c
-        #     distances = delta_r**2 + delta_c**2
-        #     nearest_idx = np.argmin(distances)
-        #     nearest_r = valid_rows[nearest_idx]
-        #     nearest_c = valid_cols[nearest_idx]
-        #     data_cube[i, r, c] = data_cube[i, nearest_r, nearest_c]
-
         # frames that have already been photon-counted do not have read noise 
-        # in them; they are purely photo-electrons in theory, so shouldn't desmear those
-        desmear_flag = True
+        # in them; they are purely photo-electrons in theory, so shouldn't desmear those.
+        desmear_flag = True # desmears if auto_decide is False
         if auto_decide and frames_data[i].ext_hdr['ISPC'] == 0:
+            if nbins < 3:
+                raise ValueError('nbins should be 3 or more in order to determine a local minimum in the histogram.')
             # if these are calibration pupil images, they won't have RN and KGAINPAR yet
             # b/c convert_to_electrons hasn't been performed
-            detector_params = data.DetectorParams({})
             if 'RN' in frames_data[i].ext_hdr:
                 read_noise_cbe = frames_data[i].ext_hdr['RN']
             else:
@@ -639,7 +621,8 @@ def desmear(input_dataset, detector_params, auto_decide=False, nbins=21, signal_
             # Read noise and CIC are not smeared, and read noise swamps CIC. 
             # Desmear only if signal of frame is sufficiently above the read noise.
             # use histogram of intensities to choose threshold:
-            Icount, IbinEdges = np.histogram(data_cube[i], bins=nbins)
+            
+            Icount, IbinEdges = np.histogram(image_data, bins=nbins)
 
             # find the minima in the histogram
             bV = np.logical_and(Icount[1:-1] <= Icount[:-2],
@@ -656,31 +639,35 @@ def desmear(input_dataset, detector_params, auto_decide=False, nbins=21, signal_
             # with greater intensity must be "signal". 
             if np.size(binVal) > 0:
                 thresh = binVal[0]
-                data_signal = data_cube[i][data_cube[i] > thresh]
+                data_signal = image_data[image_data > thresh]
             # If binVal is empty, the histogram has no minima except at an endpoint. 
             else:
-                data_signal = data_cube[i].copy()
-
-            if data_signal.mean() > signal_factor * rn:
+                data_signal = image_data
+            if np.mean(data_signal) >= rn_factor * rn:
                 desmear_flag = True
             else:
                 desmear_flag = False
 
         if desmear_flag:
             exptime_sec = float(frames_data[i].ext_hdr['EXPTIME'])
-            smear = np.zeros_like(data_cube[i])
+            smear = np.zeros_like(image_data)
             m = len(smear)
             for r in range(m):
                 columnsum = 0
                 for s in range(r+1):
                     columnsum = columnsum + rowreadtime_sec/exptime_sec*((1
-                    + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*data_cube[i,s,:]
+                    + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*image_data[s,:]
                 smear[r,:] = columnsum
-            data_cube[i] -= smear
+            orig_data = slice_section(input_dataset[i].data.copy(), arrtype, 'image', detector_regions)
+            image_data -= smear
         
         frames_data[i].ext_hdr['DESMEAR'] = desmear_flag
         # now restore original values in cosmic ray pixels
-        data_cube[i, rows, cols] = input_dataset[i].copy().data[rows, cols]
+        orig_data = slice_section(input_dataset[i].copy().data, arrtype, 'image', detector_regions)
+        if desmear_flag:
+            image_data[rows, cols] = orig_data[rows, cols] - smear[rows, cols]
+        else:
+            image_data[rows, cols] = orig_data[rows, cols]
 
     history_msg = "Desmear function applied to data"
     frames_data.update_after_processing_step(history_msg, new_all_data=data_cube)

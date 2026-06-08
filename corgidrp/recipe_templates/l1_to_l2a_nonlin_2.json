@@ -47,7 +47,8 @@
             },
             "keywords" : {
                 "mode" : "full",
-                "dataset_copy" : false
+                "dataset_copy" : false,
+                "cosm_filter" : 1
             }
         },
         {

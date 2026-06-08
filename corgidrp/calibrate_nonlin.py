@@ -619,7 +619,9 @@ def calibrate_nonlin(dataset_nl,
         
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
-                        positive_means = frame_mean0[frame_mean0 > 0]
+                        pupil_inds = np.where(mask==1)
+                        positive_means = frame_mean0[pupil_inds]
+                        #XXX positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
                         mean_frame_index += 1
 
@@ -669,7 +671,9 @@ def calibrate_nonlin(dataset_nl,
         
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
-                        positive_means = frame_mean0[frame_mean0 > 0]
+                        pupil_inds = np.where(mask==1)
+                        positive_means = frame_mean0[pupil_inds]
+                        #XXX positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan                        
                         mean_frame_index += 1
 
@@ -711,7 +715,9 @@ def calibrate_nonlin(dataset_nl,
                         frame_count0 = np.sum(roi_frame)
                         frame_mean0 = frame_1 - frame_back
                         frame_mean0 *= mask
-                        positive_means = frame_mean0[frame_mean0 > 0]
+                        pupil_inds = np.where(mask==1)
+                        positive_means = frame_mean0[pupil_inds]
+                        #XXX positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan        
                         mean_frame_index += 1
 
@@ -777,6 +783,7 @@ def calibrate_nonlin(dataset_nl,
         
         # Fit a polynomial to selected points (excluding some points)
         good_inds = np.where(~np.isnan(corr_mean_signal_sorted))
+        #print('For gain of ', actual_gain_arr[gain_index], ':  ', len(good_inds[0]), ' good_inds out of ', len(corr_mean_signal_sorted))
         filt_exp_times_sorted = filt_exp_times_sorted[good_inds[0]]
         corr_mean_signal_sorted = corr_mean_signal_sorted[good_inds[0]]
         p0 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
