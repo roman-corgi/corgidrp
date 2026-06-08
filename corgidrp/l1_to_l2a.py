@@ -1,5 +1,6 @@
 # A file that holds the functions that transmogrify l1 data to l2a data
 from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc, imaging_slice, imaging_area_geom
+import re
 import numpy as np
 import corgidrp.data as data
 import corgidrp.check as check
@@ -433,22 +434,49 @@ def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20, dataset_copy=
 
     return pruned_dataset, pruned_fwcs
 
+def update_to_intermediate(input_dataset, intermediate_level=1):
+    """
+    Updates the data level to an intermediate level (IM1, IM2, ...) for chained
+    recipe outputs that are not final data products.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): dataset to mark as intermediate
+        intermediate_level (int): which intermediate level (1, 2, ...)
+
+    Returns:
+        corgidrp.data.Dataset: dataset with DATALVL set to IM# and filename updated
+    """
+    updated_dataset = input_dataset.copy(copy_data=False)
+
+    im_tag = f"im{intermediate_level}"
+    for frame in updated_dataset:
+        frame.ext_hdr['DATALVL'] = f"IM{intermediate_level}"
+        # Replace existing data level marker in filename.
+        # Handles _l1_, _l2a, _l2b, _l3_, _l4_, or existing _im#
+        frame.filename = re.sub(r'_(?:l[1234][ab]?_?|im\d+)', f'_{im_tag}', frame.filename, count=1)
+        frame.pri_hdr['FILENAME'] = frame.filename
+
+    history_msg = f"Updated Data Level to IM{intermediate_level} (intermediate)"
+    updated_dataset.update_after_processing_step(history_msg)
+
+    return updated_dataset
+
 def update_to_l2a(input_dataset):
     """
-    Updates the data level to L2a. Only works on L1 data.
+    Updates the data level to L2a. Works on L1 or intermediate (IM#) data.
 
     Applies merge_headers to each frame (removes deleted keywords, applies other
     header rules), then sets DATALVL to L2a and updates filenames.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L1-level)
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L1 or IM-level)
 
     Returns:
         corgidrp.data.Dataset: same dataset now at L2a level
     """
-    # check that we are running this on L1 data
+    # check that we are running this on L1 or intermediate data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATALVL'] != "L1":
+        if not re.match(r'^(L1|IM\d+)$', orig_frame.ext_hdr['DATALVL']):
             err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
             raise ValueError(err_msg)
 
@@ -457,7 +485,7 @@ def update_to_l2a(input_dataset):
 
     for frame in updated_dataset:
         # Merge_headers is called here to delete a subset of keywords that should not be carried past L1
-        
+
         pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(data.Dataset([frame]), invalid_keywords=[])
         frame.pri_hdr = pri_hdr
         frame.ext_hdr = ext_hdr
@@ -465,8 +493,8 @@ def update_to_l2a(input_dataset):
         frame.dq_hdr = dq_hdr
         frame.ext_hdr['DATALVL'] = "L2a"
         # update filename convention. The file convention should be
-        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_l1_", "_l2a", 1)
+        # "CGI_[datalevel_*]" so we replace the first data level marker
+        frame.filename = re.sub(r'_(?:l1_|im\d+)', '_l2a', frame.filename, count=1)
         #updating filename in the primary header
         frame.pri_hdr['FILENAME'] = frame.filename
 
