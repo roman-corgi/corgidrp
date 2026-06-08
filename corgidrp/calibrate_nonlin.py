@@ -621,7 +621,6 @@ def calibrate_nonlin(dataset_nl,
                         frame_mean0 *= mask
                         pupil_inds = np.where(mask==1)
                         positive_means = frame_mean0[pupil_inds]
-                        #XXX positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
                         mean_frame_index += 1
 
@@ -673,7 +672,6 @@ def calibrate_nonlin(dataset_nl,
                         frame_mean0 *= mask
                         pupil_inds = np.where(mask==1)
                         positive_means = frame_mean0[pupil_inds]
-                        #XXX positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan                        
                         mean_frame_index += 1
 
@@ -717,7 +715,6 @@ def calibrate_nonlin(dataset_nl,
                         frame_mean0 *= mask
                         pupil_inds = np.where(mask==1)
                         positive_means = frame_mean0[pupil_inds]
-                        #XXX positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan        
                         mean_frame_index += 1
 
@@ -857,7 +854,7 @@ def calibrate_nonlin(dataset_nl,
         
         # Interpolate/extrapolate the relative gain values
         interp_func = interp1d(corr_mean_signal_sorted, 
-                        rel_gain_smoothed, kind='linear', fill_value='extrapolate')
+                        rel_gain_smoothed, kind='linear', fill_value=(rel_gain_smoothed[0], rel_gain_smoothed[-1]))#'extrapolate')
         rel_gain_interp = interp_func(mean_linspace)
         
         # Normalize the relative gain to the value at norm_val DN

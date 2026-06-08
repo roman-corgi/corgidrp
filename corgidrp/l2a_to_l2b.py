@@ -552,7 +552,6 @@ def desmear(input_dataset, detector_params, detector_regions=None, auto_decide=F
     
     frames_data = input_dataset.copy() 
     data_cube = frames_data.all_data
-    #XXX check other assigned issues (like PC dark issue; or is that just from my task list?)
     rowreadtime_sec = detector_params.params['ROWREADT']
 
     for i in range(data_cube.shape[0]):
