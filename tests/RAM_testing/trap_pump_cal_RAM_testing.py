@@ -349,13 +349,13 @@ if __name__ == "__main__":
 
     #e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2' #'/home/jwang/Desktop/CGI_TVAC_Data/'
 
-    if False: # making e2e simulated data, which is ENG and includes nonlinearity
-        nonlin_path = os.path.join(e2edata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
-        #nonlin_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'test_data', "nonlin_table_TVAC.txt")
-        metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..','test_data', "metadata_eng.yaml")
-        output_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/simulated_e2e_trap_pumped_frames/"
-        np.random.seed(39)
-        mocks.generate_mock_pump_trap_data(output_dir, metadata_file, e2emode=True, nonlin_path=nonlin_path, EMgain=1.5, read_noise=100, arrtype='ENG')
+    # making e2e simulated data, which is ENG and includes nonlinearity
+    # nonlin_path = os.path.join(e2edata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
+    # #nonlin_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'test_data', "nonlin_table_TVAC.txt")
+    # metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..','test_data', "metadata_eng.yaml")
+    # output_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/simulated_e2e_trap_pumped_frames/"
+    # np.random.seed(39)
+    # mocks.generate_mock_pump_trap_data(output_dir, metadata_file, e2emode=True, nonlin_path=nonlin_path, EMgain=1.5, read_noise=100, arrtype='ENG')
 
     outputdir = r'E:\E2E_tests'#thisfile_dir
     e2edata_dir =  r'E:\E2E_Test_Data3\E2E_Test_Data3'
