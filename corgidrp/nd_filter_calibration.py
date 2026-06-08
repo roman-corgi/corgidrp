@@ -532,8 +532,53 @@ def create_nd_filter_cal(stars_dataset,
 # =============================================================================
 # Spectroscopy ND Filter Calibration 
 # =============================================================================
+def calculate_od_spec_at_new_location(clean_spec_image, fpamfsamcal, 
+                                 ndspectroscopy_dataset, wave_grid=None):
+    """
+    Use the NDSpectroscopy Dataset to calculate the OD at a new location for an input 
+    image, using an FpamFsamCal calibration instance.
+    
+    Parameters:
+        clean_spec_image (corgidrp.Data.Image): A clean spec image with 'SPEC' extension hdus.
+        fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal calibration class. 
+        ndspectroscopy_dataset (corgidrp.Data.NDSpectroscopy): ND Spectroscopy dataset.
+        wave_grid (list of float or np.array, optional): Wavelength grid specfied
+            by user. Defaults to None (wavelength grid taken from image hdu 'SPEC_WAVE').
 
-def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath):
+    Returns:
+        common_wave (np.array): Wavelength grid on which OD values are computed.
+        interp_od (np.array): OD as a function of wavelength that is interpolated at the new star location.
+    """
+    fpam2excam_matrix, _ = fpamfsamcal.data
+
+    if (clean_spec_image is not None) and (fpam2excam_matrix is not None):
+        cframe_hdr = clean_spec_image.ext_hdr
+        sweetspot_hdr = ndspectroscopy_dataset.ext_hdr
+        x_clean = cframe_hdr.get('WV0_X',0.0)
+        y_clean = cframe_hdr.get('WV0_Y',0.0)
+
+        # Compute FPAM offset
+        clean_fpam_h = cframe_hdr.get('FPAM_H', 0.0)
+        clean_fpam_v = cframe_hdr.get('FPAM_V', 0.0)
+        sp_fpam_h    = sweetspot_hdr.get('FPAM_H', 0.0)
+        sp_fpam_v    = sweetspot_hdr.get('FPAM_V', 0.0)
+        fpam_offset  = np.array([clean_fpam_h - sp_fpam_h, clean_fpam_v - sp_fpam_v])
+
+        # Transform to EXCAM offset
+        excam_offset = fpam2excam_matrix @ fpam_offset
+        x_adj = x_clean + excam_offset[0]
+        y_adj = y_clean + excam_offset[1]
+    
+        common_wave, interp_od = ndspectroscopy_dataset.interpolate_od(x_adj,y_adj,spec_image=clean_spec_image)
+            
+    # TO DO: add in interpolated od into the header of the file and re-save? determine how the OD 
+    # will be propagated
+
+    return common_wave, interp_od
+
+def compute_od_spectrum_for_frame(frame, target, sf_cal, calspec_filepath, ref_fpam_name,
+                         ref_fpam_h, ref_fpam_v, ref_dpam_name, ref_cfam_name):
     """
     Compute OD(lambda) for a single bright-star frame observed through the ND
     filter with the prism in.
@@ -541,17 +586,38 @@ def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath):
     Args:
         frame (corgidrp.data.Image): L3 frame with SPEC, SPEC_WAVE, and SPEC_ERR
             extensions (in units of photoelectron/s/bin) produced by extract_spec.
+        target (str): The target star name.
         sf_cal (corgidrp.data.SpecFluxCal): Spectral flux calibration C(lambda)
             taken from the dim (no-ND) star.  Units: erg/(s*cm^2*AA) / (photoelectron/s/bin).
         calspec_filepath (str): Path to the CALSPEC SED FITS file for the bright
             star being observed through the ND filter.
+        ref_fpam_name (str): The reference FPAM name for validation.
+        ref_fpam_h (float): The reference FPAM horizontal position.
+        ref_fpam_v (float): The reference FPAM vertical position.
+        ref_dpam_name (str): The reference DPAM name for validation.
+        ref_cfam_name (str): The reference CFAM name for validation.
 
     Returns:
-        tuple:
-            od_spectrum (np.array): OD(lambda) at each wavelength bin, length M.
-            spec_wave (np.array): Wavelength grid in nm, length M.
-            od_err (np.array): 1-sigma OD uncertainty at each bin, length M.
+        tuple of arrays:
+            numpy.array: The computed optical depth (OD) as a function of wavelength.
+            numpy.array: The wavelength grid.
+            numpy.array: The error in OD measurements across the wavelength grid.
+
+    Raises:
+        ValueError: If FPAM/DPAM/CFAM metadata do not match the reference values.
     """
+    hdr = frame.ext_hdr
+
+    # Metadata checks
+    if (hdr.get('FPAMNAME') != ref_fpam_name or 
+        abs(hdr.get('FPAM_H') - ref_fpam_h) > 1.2 or    # within non-repeatability tolerance of 1.2 um
+        abs(hdr.get('FPAM_V') - ref_fpam_v) > 1.2 or 
+        hdr.get('CFAMNAME') != ref_cfam_name or
+        hdr.get('DPAMNAME') != ref_dpam_name):
+        raise ValueError(
+            f"Inconsistent FPAM/CFAM/DPAM header values in target {target} for file {frame}!"
+        )
+
     # Measured spectrum (e-/s/bin) and wavelength grid (nm) from extract_spec
     counts_nd = frame.hdu_list['SPEC'].data.astype(float)
     spec_wave  = frame.hdu_list['SPEC_WAVE'].data.astype(float)
@@ -580,7 +646,7 @@ def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath):
 
     # Expected e-/s/bin with no ND filter in beam
     expected_counts = sed_bright / c_at_wave
-
+    
     # Transmission and OD (suppress warnings in case it encounters nan or 0)
     with np.errstate(divide='ignore', invalid='ignore'):
         transmission = counts_nd / expected_counts
@@ -592,8 +658,167 @@ def compute_od_spectrum_for_frame(frame, sf_cal, calspec_filepath):
 
     return od_spectrum, spec_wave, od_err
 
+def process_bright_target_spec(target, files, sf_cal, calspec_filepath, od_raster_threshold):
+    """
+    Process bright star files for one target to compute optical density (OD)
+    and (x, y) centroids for each dithered observation.
+    Checks that FPAM keywords are consistent across all files.
+    
+    Additional photometry options are passed via phot_kwargs.
+    This allows users to override default settings for functions like aper_phot.
+    
+    Parameters:
+        target (str): The target star name.
+        files (corgidrp.data.Dataset): Dataset of bright star images.
+        sf_cal (corgidrp.data.SpecFluxCal): Spectral flux calibration C(lambda)
+            taken from the dim (no-ND) star.  Units: erg/(s*cm^2*AA) / (photoelectron/s/bin).
+        calspec_filepath (str): Path to the CALSPEC SED FITS file for the bright
+            star being observed through the ND filter.
+        od_raster_threshold (float): Threshold for flagging OD variations.
+    
+    Returns:
+        dict: A dictionary containing computed OD values, wavelengths, centroids, and other metadata.
+    """
 
-def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=None, outputdir=None):
+    first_hdr = files[0].ext_hdr
+    ref_cfam_name = first_hdr['CFAMNAME']
+    common_dpam_name = first_hdr.get('DPAMNAME')
+    common_fpam_name = first_hdr.get('FPAMNAME')
+    common_fpam_h    = first_hdr.get('FPAM_H')
+    common_fpam_v    = first_hdr.get('FPAM_V')
+    exptime          = first_hdr.get('EXPTIME')
+
+    od_all_spectra, wave_grids, od_all_err, x_values, y_values, xerr_values, yerr_values = [], [], [], [], [], [], []
+
+    target_dataset = Dataset(files)
+    grouped_dataset, fsmpos = target_dataset.split_dataset(exthdr_keywords=["FSMX","FSMY"])
+
+    for fsm in fsmpos:
+        matched_index = [i for i, key in enumerate(fsmpos) if key == fsm]
+        grouped_subset = grouped_dataset[int(matched_index[0])]
+
+        od_spectra, wave_spectra, oderr_spectra = [], [], []
+        for frame in grouped_subset:
+            od_spectrum, wave_spectrum, oderr_spectrum = compute_od_spectrum_for_frame(frame, target, sf_cal, 
+                                                    calspec_filepath, common_fpam_name, common_fpam_h, common_fpam_v, 
+                                                    common_dpam_name, ref_cfam_name)        
+            # Skip if centroid was not valid
+            if od_spectrum is None:
+                continue
+            
+            od_spectra.append(od_spectrum)
+            wave_spectra.append(wave_spectrum)
+            oderr_spectra.append(oderr_spectrum)
+        
+        # EXCAM star position from wavelength zeropoint, it is same for all frames in a specific dither.
+        x_center = grouped_subset[0].ext_hdr['WV0_X']
+        y_center = grouped_subset[0].ext_hdr['WV0_Y']
+        xcen_err = grouped_subset[0].ext_hdr['WV0_XERR']
+        ycen_err = grouped_subset[0].ext_hdr['WV0_YERR']
+
+        od_spectra = np.array(od_spectra)
+        wave_spectra = np.array(wave_spectra)
+        oderr_spectra = np.array(oderr_spectra)
+        x_center = x_center * np.ones_like(wave_spectrum)
+        y_center = y_center * np.ones_like(wave_spectrum)
+        xcen_err = xcen_err * np.ones_like(wave_spectrum)
+        ycen_err = ycen_err * np.ones_like(wave_spectrum)
+
+        od_all_spectra.append(np.mean(od_spectra, axis=0))
+        wave_grids.append(np.mean(wave_spectra, axis=0))
+        od_all_err.append(np.sqrt(np.nansum(oderr_spectra ** 2, axis=0)) / len(oderr_spectra))
+        x_values.append(x_center)
+        y_values.append(y_center)
+        xerr_values.append(xcen_err)
+        yerr_values.append(ycen_err)
+
+    od_stack, wave_stack, err_stack = [], [], []
+    for od, wave, oderr in zip(od_all_spectra[:], wave_grids[:], od_all_err[:]):
+        od_stack.append(od)
+        wave_stack.append(wave)
+        err_stack.append(oderr)
+
+    od_array = np.array(od_stack)
+    wave_array = np.array(wave_stack)
+    err_array = np.array(err_stack)
+
+    # Check for wide variation in OD values
+    if od_array.size > 0:
+        od_std = np.std(od_array)
+        if od_std >= od_raster_threshold:
+            warnings.warn(
+                f"OD variation is high for target '{target}': "
+                f"Standard deviation ({od_std:.3f}) exceeds threshold ({od_raster_threshold:.3f})."
+            )
+    else:
+        od_std = np.nan
+
+    average_od = np.nanmean(od_array) if od_array.size > 0 else np.nan
+
+    return {
+        'od_values': od_array,
+        'wave_grid': wave_array,
+        'od_err_values': err_array,
+        'average_od': average_od,
+        'FPAMNAME': common_fpam_name,
+        'FPAM_H': common_fpam_h,
+        'FPAM_V': common_fpam_v,
+        'CFAMNAME': ref_cfam_name,
+        'DPAMNAME': common_dpam_name,
+        'flag': (od_std >= od_raster_threshold if not np.isnan(od_std) else False),
+        'x_values': x_values,
+        'y_values': y_values,
+        'xerr_values': xerr_values,
+        'yerr_values': yerr_values
+    }
+
+def create_nd_spectroscopy_dataset(aggregated_sweet_spot_data, common_metadata, od_var_flag, 
+                                    input_dataset, aggregated_sweet_spot_err = None):
+    """
+    Create an NDSpectroscopy FITS file with the spectroscopy sweet-spot array.
+    
+    Parameters:
+        aggregated_sweet_spot_data (numpy.ndarray): The aggregated NxN_wavex4 array containing 
+            sweet-spot data as a function of wavelength in the format [wave, OD, x, y].
+        common_metadata (dict): A dictionary containing metadata such as FPAM/DPAM/CFAM names 
+            and offsets.
+        od_var_flag (Bool): A flag that is passed in if the OD variance is too high among 
+            rasters.
+        input_dataset (corgidrp.data.Dataset): input dataset used to create the ND Spec 
+            calibration.
+        aggregated_sweet_spot_err (numpy.ndarray, optional): The aggregated NxN_wavex4 array containing 
+            OD_err as a function of wavelength in the format [wave_err, OD_err, x_err, y_err].
+            Defaults to None.
+
+    Returns:
+        tuple:
+            NDSpectroscopy: The generated ND spectroscopy sweet spot dataset.
+    """
+    final_sweet_spot_data = aggregated_sweet_spot_data.copy()
+    if aggregated_sweet_spot_err is not None:
+        final_sweet_spot_err = aggregated_sweet_spot_err.copy()
+    
+    # Create the NDSpectroscopy, merge_headers is called inside __init__ 
+    ndspectroscopy_dataset = NDSpectroscopy(
+        data_or_filepath=final_sweet_spot_data,
+        err=final_sweet_spot_err,
+        input_dataset=input_dataset
+    )
+
+    # Set ND-filter-specific metadata (want to overwrite the FPAM info with ND filter info)
+    ndspectroscopy_dataset.ext_hdr['BUNIT'] = ''  # dimensionless
+    ndspectroscopy_dataset.ext_hdr['DATALVL'] = 'CAL'
+    ndspectroscopy_dataset.ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
+    ndspectroscopy_dataset.ext_hdr['FPAM_H'] = common_metadata.get('FPAM_H')
+    ndspectroscopy_dataset.ext_hdr['FPAM_V'] = common_metadata.get('FPAM_V')
+    ndspectroscopy_dataset.ext_hdr['CFAMNAME'] = common_metadata.get('CFAMNAME')
+    ndspectroscopy_dataset.ext_hdr['DPAMNAME'] = common_metadata.get('DPAMNAME')
+    ndspectroscopy_dataset.ext_hdr['ODFLAG'] = od_var_flag
+    ndspectroscopy_dataset.ext_hdr['HISTORY'] = "Combined ND spec sweet-spot dataset from bright star dithers"
+
+    return ndspectroscopy_dataset
+
+def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, od_raster_threshold = 0.1, calspec_files=None, outputdir=None):
     """
     Create the spectroscopy ND filter calibration product.
 
@@ -619,9 +844,11 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=No
         spec_fluxcal (corgidrp.data.SpecFluxCal, optional): Pre-computed spectral
             flux calibration product.  When supplied, dim-star frames in the
             dataset are ignored.
-        calspec_files (str or list, optional): CALSPEC filepath(s) for the
-            bright-star target(s).  A single string is used for all bright
-            frames so a list must have one entry per bright frame in dataset order.
+        od_raster_threshold (float): Threshold for flagging OD variations.
+        calspec_files (str or dict, optional): CALSPEC filepath(s) for the
+            bright-star target(s). If str, same file is used for all bright frames. 
+            If dict, TARGET should be key with the CALSPEC filepath as the corresponding
+            value, so dict must have one entry per TARGET among bright frames.
             When None the TARGET primary-header keyword is used to look up each
             star automatically.
         outputdir (str, optional): Directory where the auto-generated SpecFluxCal
@@ -679,76 +906,163 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, calspec_files=No
         if outputdir is None:
             outputdir = '.'
         sf_cal.save(filedir=outputdir)
+    
+    # 4. Process bright star frames
+    grouped_bright_files = group_by_keyword(bright_dataset, prihdr_keyword='TARGET', exthdr_keyword=None)
+    flux_results = {}
+    aggregated_data_list = []
+    aggregated_err_list = []
+    aggregated_xy_list = []
+    common_metadata = {}
 
-    # 4. Compute OD(lambda) for every bright frame
-    od_spectra  = []
-    wave_grids  = []
-    od_errs     = []
-
-    for i, entry in enumerate(bright_dataset):
-        # Get the CALSPEC filepath for the bright frame
+    for i, (target, files) in enumerate(grouped_bright_files.items()):
+        if not files:
+            continue
+        print(f"Processing bright target files: {target}")
+        
         if calspec_files is None:
-            target     = entry.pri_hdr.get('TARGET', '')
             calspec_fp = fluxcal.get_calspec_file(target)[0]
         elif isinstance(calspec_files, str):
             calspec_fp = calspec_files
         else:
-            calspec_fp = calspec_files[i]
+            if len(calspec_files) != len(grouped_bright_files):
+                raise ValueError("Number of CALSPEC files in dict do not correspond to number of unique targets, please provide one CALSPEC file per unique target.")
+            calspec_fp = calspec_files[target]
+        
+        star_data = process_bright_target_spec(target, files, sf_cal, calspec_fp,
+                                          od_raster_threshold)
+        flux_results[target] = star_data
 
-        od_spec, spec_wave, od_err = compute_od_spectrum_for_frame(
-            entry, sf_cal, calspec_fp
-        )
-        od_spectra.append(od_spec)
-        wave_grids.append(spec_wave)
-        od_errs.append(od_err)
+        od_var_flag = star_data['flag']
 
-    # 5. If multiple bright frames, remap to a common wavelength grid and average
-    common_wave = wave_grids[0]
+        # Convert to an NxN_wavex4 array [wave, OD, x, y], and a NxN_wavex4 array [wave_err, OD_err, x_err, y_err]
+        target_sweet_spot = np.dstack((
+            star_data['wave_grid'],
+            star_data['od_values'],
+            star_data['x_values'],
+            star_data['y_values']
+        ))
+        aggregated_data_list.append(target_sweet_spot)
 
-    if len(od_spectra) == 1:
-        od_combined  = od_spectra[0]
-        od_err_combined = od_errs[0]
-    else:
-        od_stack  = [od_spectra[0]]
-        err_stack = [od_errs[0]]
+        target_sweet_spot_err = np.dstack((
+            np.zeros_like(star_data['wave_grid']),
+            star_data['od_err_values'],
+            star_data['xerr_values'],
+            star_data['yerr_values']
+        ))
+        aggregated_err_list.append(target_sweet_spot_err)
 
-        for od, wave, oderr in zip(od_spectra[1:], wave_grids[1:], od_errs[1:]):
-            if not np.allclose(wave, common_wave, atol=0.01):
-                remap_od  = interp1d(wave, od,    kind='linear',
-                                     bounds_error=False, fill_value=np.nan)
-                remap_err = interp1d(wave, oderr, kind='linear',
-                                     bounds_error=False, fill_value=np.nan)
-                od    = remap_od(common_wave)
-                oderr = remap_err(common_wave)
-            od_stack.append(od)
-            err_stack.append(oderr)
+        # Initialize or validate the common metadata
+        if not common_metadata:
+            common_metadata = {
+                'FPAMNAME': star_data['FPAMNAME'],
+                'FPAM_H': star_data['FPAM_H'],
+                'FPAM_V': star_data['FPAM_V'],
+                'CFAMNAME': star_data['CFAMNAME'],
+                'DPAMNAME': star_data['DPAMNAME']
+            }
+        else:
+            # Basic consistency checks
+            if (common_metadata['FPAMNAME'] != star_data['FPAMNAME']
+                or abs(common_metadata['FPAM_H'] - star_data['FPAM_H']) >= 1.2  # PAM non-repeatability tolerance is +/- 1.2 um
+                or abs(common_metadata['FPAM_V'] - star_data['FPAM_V']) >= 1.2
+                or common_metadata['CFAMNAME'] != star_data['CFAMNAME']
+                or common_metadata['DPAMNAME'] != star_data['DPAMNAME']):
+                raise ValueError("Inconsistent FPAM, DPAM, or filter metadata among bright star observations.")
 
-        od_stack  = np.array(od_stack)
-        err_stack = np.array(err_stack)
-        od_combined  = np.nanmean(od_stack, axis=0)
-        # Combined uncertainty: sqrt(sum of variances) / N
-        od_err_combined = (
-            np.sqrt(np.nansum(err_stack ** 2, axis=0)) / len(err_stack)
-        )
-
-    avg_od = np.nanmean(od_combined)
-    print(f"Average OD across wavelength range: {avg_od:.4f}")
-
-    # 6. Put data into (2, M) data array and (1, 2, M) error array
-    data = np.array([common_wave, od_combined])
-    err  = np.array([[np.zeros_like(common_wave), od_err_combined]])  # (1, 2, M)
-    dq   = np.zeros(data.shape, dtype=int)
-
-    # 7. Make the NDSpectroscopy calibration product
-    nd_spec_cal = NDSpectroscopy(
-        data,
-        err=err,
-        dq=dq,
-        input_dataset=stars_dataset,
+    # 5. Combine all sweet-spot arrays into one dataset
+    combined_sweet_spot_data = (
+        np.vstack(aggregated_data_list) if aggregated_data_list else np.empty((0, 2))
     )
-    nd_spec_cal.ext_hdr['FPAMNAME'] = first_bright.ext_hdr.get('FPAMNAME', '')
-    nd_spec_cal.ext_hdr['FPAM_H']   = first_bright.ext_hdr.get('FPAM_H', 0.0)
-    nd_spec_cal.ext_hdr['FPAM_V']   = first_bright.ext_hdr.get('FPAM_V', 0.0)
-    nd_spec_cal.ext_hdr['DPAMNAME'] = dpam
+    combined_sweet_spot_err = (
+        np.vstack(aggregated_err_list) if aggregated_err_list else np.empty((0, 2))
+    )
 
-    return nd_spec_cal
+    od_list = [res['average_od'] for res in flux_results.values()
+               if res.get('average_od') is not None]
+    overall_avg_od = np.nanmean(od_list) if od_list else None
+    print(f"Average OD across bright targets: {overall_avg_od:.4f}")
+
+
+    # 6. Create the final NDSpectroscopy
+    
+    sweet_spot_dataset = create_nd_spectroscopy_dataset(
+        aggregated_sweet_spot_data=combined_sweet_spot_data,
+        aggregated_sweet_spot_err=combined_sweet_spot_err,
+        common_metadata=common_metadata, od_var_flag = od_var_flag, input_dataset = stars_dataset
+    )
+
+    #TO DO: do we want to return flux?
+    return sweet_spot_dataset
+
+def apply_od_spec_correction_to_image(clean_spec_image, fpamfsamcal, ndspectroscopy_dataset, wave_grid=None):
+    """
+    Wrapper function that applies OD correction as a function of wavelength to the input L4 image. Invokes 
+    calculate_od_spec_at_new_location() to calculate the OD at a new location for an input 
+    image, using a NDSpectroscopy calibration and a FpamFsamCal calibration instance.
+    
+    Parameters:
+        clean_spec_image (corgidrp.Data.Image): A clean L4 spec image with 'SPEC' extension hdus.
+        fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal calibration class. 
+        ndspectroscopy_dataset (corgidrp.Data.NDSpectroscopy): ND Spectroscopy dataset.
+        wave_grid (list of float or np.array, optional): Wavelength grid specfied
+            by user. Defaults to None (wavelength grid taken from spec image hdu 'SPEC_WAVE').
+
+    Returns:
+        corrected_image (corgidrp.Data.Image): A spec image with the OD-corrected spectrum and spec errors.
+    """
+
+    if clean_spec_image.ext_hdr['DATALVL'] != 'L4':
+        raise Exception("Please provide valid L4 image to apply OD spec correction.")
+
+    if 'SPEC' not in clean_spec_image.hdu_list:
+        raise Exception("L4 image should have hdu 'SPEC' in hdulist")
+
+    if 'SPEC_WAVE' not in clean_spec_image.hdu_list:
+        raise Exception("L4 image should have hdu 'SPEC_WAVE' in hdulist")
+
+    if 'SPEC_ERR' not in clean_spec_image.hdu_list:
+        raise Exception("L4 image should have hdu 'SPEC_ERR' in hdulist")
+
+    #Calculate OD as function of wavelength at image zeropoint. If no wave_grid passed, common_wave = spec_wave.
+    common_wave, od_spec = calculate_od_spec_at_new_location(clean_spec_image = clean_spec_image, \
+            fpamfsamcal = fpamfsamcal, ndspectroscopy_dataset = ndspectroscopy_dataset, wave_grid=wave_grid)
+    
+    corrected_image = clean_spec_image.copy()
+
+    spec = corrected_image.hdu_list['SPEC'].data
+    spec_wave = corrected_image.hdu_list['SPEC_WAVE'].data
+    spec_err = corrected_image.hdu_list['SPEC_ERR'].data
+    
+    # Interpolate SPEC values on new wavelength grid. This is only done if a wave_grid with wavelength points 
+    # significantly different from spec_wave (delta_wave > 0.01 nm) is passed by user into calculate_od_spec_at_new_location().
+    # Else common_wave = spec_wave, and no interpolation of SPEC values is performed.
+    if not np.allclose(spec_wave, common_wave, atol=0.01):
+        if common_wave[0] < spec_wave[0] or common_wave[-1] > spec_wave[-1]:
+            print(f"WARNING: Custom wavelength grid has points outside wavelengths in input L4 image 'SPEC_WAVE' hdu. Attempting to extrapolate 'SPEC' values at these points.")
+            remap_spec  = interp1d(spec_wave, spec,    kind='linear',
+                            bounds_error=False, fill_value="extrapolate")
+            remap_spec_err  = interp1d(spec_wave, spec_err,    kind='linear',
+                            bounds_error=False, fill_value="extrapolate")
+            spec    = remap_spec(common_wave)
+            spec_err = remap_spec_err(common_wave)
+        
+        else:
+            remap_spec  = interp1d(spec_wave, spec, kind='linear',
+                            bounds_error=False, fill_value=np.nan)
+            remap_spec_err  = interp1d(spec_wave, spec_err, kind='linear',
+                            bounds_error=False, fill_value=np.nan)
+            spec    = remap_spec(common_wave)
+            spec_err = remap_spec_err(common_wave)       
+    
+    corr_spec = spec * 10**(od_spec)
+    corr_spec_err = spec_err * 10**(od_spec)
+
+    corrected_image.hdu_list['SPEC'].data = corr_spec
+    corrected_image.hdu_list['SPEC_ERR'].data = corr_spec_err
+    if not np.allclose(spec_wave, common_wave, atol=0.01):  #Update wavelength grid if spec_wave and common_wave are different
+        corrected_image.hdu_list['SPEC_WAVE'].data = common_wave
+        corrected_image.hdu_list['SPEC_WAVE_ERR'].data = np.zeros_like(common_wave)
+
+    return corrected_image

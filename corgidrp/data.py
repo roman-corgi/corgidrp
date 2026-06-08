@@ -11,7 +11,7 @@ from astropy.table import Table
 import pyklip
 from pyklip.instruments.Instrument import Data as pyKLIP_Data
 from pyklip.instruments.utils.wcsgen import generate_wcs
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, interp1d, griddata
 from astropy import wcs
 import copy
 import corgidrp
@@ -4054,41 +4054,40 @@ class NDFilterSweetSpotDataset(Image):
 
 class NDSpectroscopy(Image):
     """
-    ND filter calibration product for spectroscopy.
-
-    For spectroscopy observations (DPAMNAME=PRISM*) - stores OD(lambda), 
-    the optical depth of the ND filter as a function of wavelength. 
-    Unlike the imaging mode ND filter calibration product, spectroscopy mode
-    ND filter calibration product is only measured at a single detector location.
-
-    Data shape: (2, M)
-        row 0: wavelengths in nm
-        row 1: OD(lambda) values (dimensionless)
-
-    Error shape: (1, 2, M)
-        err[0, 0, :]: wavelength uncertainties (nm)
-        err[0, 1, :]: OD uncertainties
-
+    Class for an ND spectroscopy sweet spot dataset product.
+    Typically stores data arrays for a given set of calibrations.
+    Data (HDU0) is a N×N_wave×4 array of [wave, OD, x, y], err (HDU1) is a 
+    1×N×N_wave×4 array of [wave_err, OD_err, x_err, y_err].
     Args:
-        data_or_filepath (str or np.array): filepath to an existing NDSpectroscopy
-            FITS file, or a (2, M) numpy array of [wavelengths, OD].
-        err (np.array): (1, 2, M) error array.
-        dq (np.array): (2, M) data-quality array.
-        pri_hdr (fits.Header): primary header (required if raw array passed in).
-        ext_hdr (fits.Header): extension header (required if raw array passed in).
-        err_hdr (fits.Header): error extension header.
-        input_dataset (corgidrp.data.Dataset): input frames used to create this
-            product (required if raw array passed in without DRPNFILE in ext_hdr).
-
+        data_or_filepath (str or np.array): Either the filepath to the FITS file 
+            to read in OR the 2D array of ND spectroscopy sweet-spot data (N×N_wave×4).
+        pri_hdr (astropy.io.fits.Header): The primary header (required only if 
+            raw 2D data is passed in).
+        ext_hdr (astropy.io.fits.Header): The image extension header (required 
+            only if raw 2D data is passed in).
+        input_dataset (corgidrp.data.Dataset): The input dataset used to produce 
+            this calibration file (optional). If this is a new product, you should 
+            pass in the dataset so that the parent filenames can be recorded.
+        err (np.array): Optional 4D error array for the data.
+        dq (np.array): Optional 2D data-quality mask for the data.
+        err_hdr (astropy.io.fits.Header): Optional error extension header.
     Attributes:
-        wavelengths (np.array): length-M wavelength array in nm.
-        od_spectrum (np.array): length-M OD(lambda) array.
-        od_err (np.array): length-M OD uncertainty array.
-        wave_err (np.array): length-M wavelength uncertainty array.
+        wavelengths (np.array): 2D array of wavelengths (N×N_wave)
+        od_spectra (np.array): 2D array of OD measurements with wavelength (N×N_wave).
+        x_values (np.array): 2D array of x-centroid positions (N×N_wave).
+        y_values (np.array): 2D array of y-centroid positions (N×N_wave).
     """
 
-    def __init__(self, data_or_filepath, err=None, dq=None,
-                 pri_hdr=None, ext_hdr=None, err_hdr=None, input_dataset=None):
+    def __init__(
+        self,
+        data_or_filepath,
+        pri_hdr=None,
+        ext_hdr=None,
+        input_dataset=None,
+        err=None,
+        dq=None,
+        err_hdr=None
+    ):
         if input_dataset is not None:
             pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
                 input_dataset,
@@ -4103,7 +4102,7 @@ class NDSpectroscopy(Image):
                     # Extension header keywords
                     'BITPIX', 'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
                     'STATUS', 'HVCBIAS', 'OPMODE',
-                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR',
+                    'EXPTIME', 'EMGAIN_A','EMGAIN_C', 'KGAINPAR',
                     'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
                     'PROXET',
                     'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
@@ -4119,6 +4118,7 @@ class NDSpectroscopy(Image):
                     'DATETIME', 'FTIMEUTC', 'DATATYPE',
                     'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
                     'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                    'WAVELEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR'
                 ],
             )
         else:
@@ -4131,27 +4131,24 @@ class NDSpectroscopy(Image):
             err=err,
             dq=dq,
             err_hdr=err_hdr,
-            dq_hdr=dq_hdr,
+            dq_hdr=dq_hdr
         )
 
-        # Shape validation - expect (2, M)
-        if self.data.ndim != 2 or self.data.shape[0] != 2:
+        # 1. Check data shape: expect N×N_wave×4 array for the sweet-spot dataset.
+        if self.data.ndim != 3 or self.data.shape[2] != 4:
             raise ValueError(
-                "NDSpectroscopy data must be a 2D array of shape (2, M). "
+                "NDSpectroscopy HDU0 must be a 3D array of shape (N, N_wave, 4). "
                 f"Received shape {self.data.shape}."
             )
 
-        # Class attributes
-        self.wavelengths = self.data[0, :]
-        self.od_spectrum = self.data[1, :]
-        if self.err is not None and self.err.shape == (1, 2, self.data.shape[1]):
-            self.wave_err = self.err[0, 0, :]
-            self.od_err   = self.err[0, 1, :]
-        else:
-            self.wave_err = np.zeros_like(self.wavelengths)
-            self.od_err   = np.zeros_like(self.od_spectrum)
+        # 2. Parse the columns into convenient attributes.
+        #    Column 0: wavelength, Column 1: OD, Column 2: x_center, Column 3: y_center.
+        self.wavelengths = self.data[:, :, 0]
+        self.od_spectra  = self.data[:, :, 1]
+        self.x_values    = self.data[:, :, 2]
+        self.y_values    = self.data[:, :, 3]
 
-        # Bookkeeping info for new files
+        # 3. If creating a new product (i.e. ext_hdr was passed in), record metadata.
         if ext_hdr is not None:
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
@@ -4165,21 +4162,100 @@ class NDSpectroscopy(Image):
                     latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
-                # append filename convention and set it as new filename
-                # remove .fits extension
-                orig_input_filename=latest_filename.split(".fits")[0]
-                self.filename = "{0}_nds_cal.fits".format(orig_input_filename)
-                self.filename = re.sub('_l[0-9].', '', self.filename)
-            self.ext_hdr['DATATYPE'] = 'NDSpectroscopy'
-            self.ext_hdr['BUNIT']    = ''        # dimensionless OD
-            self.ext_hdr['DATALVL'] = 'CAL'
-            self.ext_hdr['HISTORY'] = "NDSpectroscopy OD(lambda) calibration created"
-            self.pri_hdr['FILENAME'] = self.filename
+                # use latest frame filename and replace level suffix with ndf calibration suffix
+                self.filename=re.sub('_l[0-9].','_nds_cal',latest_filename)
+            # if no input_dataset is given, do we want to set the filename manually using 
+            # header values?
 
-        # Validate DATATYPE when loading from file
+            self.pri_hdr['FILENAME'] = self.filename
+            self.ext_hdr['DATATYPE'] = 'NDSpectroscopy'
+            self.ext_hdr['HISTORY'] = (
+                f"NDSpectroscopy created from {self.ext_hdr.get('DRPNFILE','?')} frames"
+            )
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+        # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDSpectroscopy':
             raise ValueError("File that was loaded is not labeled as an NDSpectroscopy file.")
 
+    def interpolate_od(self, x_query, y_query, method="linear", wave_grid=None, spec_image=None):
+        """
+        Interpolates the data to get the OD as a function of wavelength at the requested x/y location.
+
+        The calibration stores OD values at absolute EXCAM pixel coordinates
+        (i.e. coordinates in the full 1024×1024 detector frame).  When the
+        query image is a cropped sub-frame, pass it as ``image`` and the
+        function will automatically add the ``DETPIX0X``/``DETPIX0Y`` header
+        values (set by ``l2b_to_l3.crop``) to convert ``x``/``y`` from
+        cropped-frame pixel coordinates to absolute EXCAM coordinates before
+        interpolating.  If those keywords are absent the offsets default to 0,
+        so the call is also correct for full-frame (uncropped) images.
+
+        Args:
+            x_query (float or np.array): x pixel location/s at which to interpolate.
+            y_query (float or np.array): y pixel location/s at which to interpolate.
+            method (str, optional): Interpolation method, can be "linear", "nearest", 
+            or "cubic". Default is "linear".
+            wave_grid (list of float or np.array, optional): Wavelength grid specfied
+            by user. Defaults to None (wavelength grid taken from image hdu 'SPEC_WAVE').
+            spec_image (corgidrp.data.Image, optional): the science Image whose pixel
+                coordinates ``x``/``y`` were measured in.  When provided,
+                ``DETPIX0X`` and ``DETPIX0Y`` are read from its extension
+                header to remap frame coordinates to absolute EXCAM coordinates.
+                Defaults to None (no remapping applied). Wavelength grid also taken from
+                image hdu 'SPEC_WAVE' unless the "wave_grid" keyword specifies otherwise.
+
+        Returns:
+            np.array: Wavelength grid. 
+            np.array: OD as a function of wavelength at the requested point.
+        """
+        detpix0x = 0
+        detpix0y = 0
+
+        if wave_grid is not None:
+            common_wave = np.array(wave_grid)
+        elif spec_image is not None:
+            detpix0x = spec_image.ext_hdr.get('DETPIX0X', 0)
+            detpix0y = spec_image.ext_hdr.get('DETPIX0Y', 0)
+            common_wave = spec_image.hdu_list['SPEC_WAVE'].data
+        else:
+            warnings.warn("Wavelength grid not specified through user input. Interpolating wavelengths onto wavelength grid of first dither of NDSpectroscopy calibration product.")
+            common_wave = self.wavelengths[0,:]
+
+        od_stack = []
+        for i in range(self.od_spectra.shape[0]):
+            od = self.od_spectra[i,:]
+            wave = self.wavelengths[i,:]
+            if not np.allclose(wave, common_wave, atol=0.01):
+                if common_wave[0] < wave[0] or common_wave[-1] > wave[-1]:
+                    if wave_grid is not None:
+                        print(f"WARNING: Input wavelength grid has points outside wavelength range of dither {i+1}. Attempting to extrapolate OD at these points.")
+                    else:
+                        print(f"WARNING: Wavelength grid of input spec image has points outside wavelength range of dither {i+1}. Attempting to extrapolate OD at these points.")
+                    remap_od  = interp1d(wave, od,    kind='linear',
+                                        bounds_error=False, fill_value="extrapolate")
+                    od    = remap_od(common_wave)
+                else:
+                    remap_od  = interp1d(wave, od,    kind='linear',
+                                        bounds_error=False, fill_value=np.nan)
+                    od    = remap_od(common_wave)    
+            od_stack.append(od)
+
+        od_array = np.array(od_stack)
+        interp_od = np.zeros(len(common_wave))
+        
+        # Prepare interpolation coordinates
+        if np.isscalar(x_query) and np.isscalar(y_query):
+            xi = (x_query, y_query)
+        else:
+            xi = np.column_stack((x_query, y_query))
+
+        for i in range(len(common_wave)):
+            interp_od[i] = griddata(points=np.array([self.x_values[:,i], self.y_values[:,i]]).T, values=od_array[:,i], xi=xi, method=method)
+
+        return common_wave, interp_od
 
 class MuellerMatrix(Image):
     """

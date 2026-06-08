@@ -1024,7 +1024,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     return processed_dataset
 
 
-def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
+def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
     """ 
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -1038,6 +1038,8 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         (no-offset / +offset / -offset). The no-offset median is subtracted from the offset median before star-center estimation to suppress static speckles and 
         astrophysical sources. If False, all ''SATSPOTS=1'' frames are used directly as the offset (spot-bearing) median with no background subtraction and no 
         three-group structure assumed. Defaults to True.
+        additional_frame_sep_prikeys (list of str, optional): Additional primary header keywords (apart from VISITID) used to separate frames before zeropoint calculation. Default is None.
+        additional_frame_sep_extkeys (list of str, optional): Extension header keywords used to separate frames before zeropoint calculation. Default is None.
         xcent_guess (float): initial x guess for the centroid fit for all frames
         ycent_guess (float): initial y guess for the centroid fit for all frames
         bb_nb_dx (float): horizontal image offset between the narrowband and broadband filters, in EXCAM pixels. 
@@ -1081,18 +1083,21 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     else:
         raise AttributeError("No narrowband frames found in input dataset")
     
-    # Split satspot/science dataset according to VISITID
-    satspot_dataset, visitid = sat_dataset.split_dataset(prihdr_keywords=["VISITID"])
+    # Default is split satspot/science dataset according to VISITID
+    pri_keys = ["VISITID"]
+    ext_keys = additional_frame_sep_extkeys
+    if additional_frame_sep_prikeys is not None:
+        pri_keys = ["VISITID"] + additional_frame_sep_prikeys
+    satspot_dataset, keywords_sat = sat_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
     if with_science:
-        science_dataset, visitid = sci_dataset.split_dataset(prihdr_keywords=["VISITID"])
-    visitid = np.array(visitid)
+        science_dataset, keywords_sci = sci_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
 
     all_science_frames = []
 
-    for visid in visitid:
-        if subtract_no_offset_frames:
-            
-            satspot_subset = satspot_dataset[int(np.nonzero(visitid == visid)[0].item())]
+    for matched_index, keyword in enumerate(keywords_sat):
+
+        if subtract_no_offset_frames:    
+            satspot_subset = satspot_dataset[int(matched_index)]
             satspot_frames = []
             for frame in satspot_subset:
                 satspot_frames.append(frame)
@@ -1116,7 +1121,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             offset_dataset = data.Dataset(offset_frames)
 
         else:
-            satspot_subset = satspot_dataset[int(np.nonzero(visitid == visid)[0].item())]
+            satspot_subset = satspot_dataset[int(matched_index)]
             offset_dataset = satspot_subset
 
         if xcent_guess is not None and ycent_guess is not None:
@@ -1147,7 +1152,8 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             science_subset = offset_dataset
         
         if with_science:
-            science_subset = science_dataset[int(np.nonzero(visitid == visid)[0].item())]
+            matched_index_sci = [i for i, key in enumerate(keywords_sci) if key == keyword]
+            science_subset = science_dataset[int(matched_index_sci[0])]
         
 
         science_frames = []
