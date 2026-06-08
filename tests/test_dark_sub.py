@@ -38,6 +38,8 @@ def test_dark_sub():
     """
     Generate mock input data and pass into dark subtraction function
     """
+    # Reset random seed to ensure deterministic behavior regardless of test execution order
+    np.random.seed(456)
     corgidrp.track_individual_errors = True # this test uses individual error components
 
     ###### create simulated data
@@ -207,6 +209,8 @@ def test_dark_sub_multi_config():
         # Frame data equal to the synthesized dark so the result should be ~0
         frame_data = (noise_maps.FPN_map + noise_maps.CIC_map * em_gain + noise_maps.DC_map * exptime * em_gain) / em_gain
         prihdr, exthdr, errhdr, dqhdr, _ = mocks.create_default_L2a_headers()
+        # Give each frame a unique FILENAME so darks for different configs don't collide on disk
+        prihdr['FILENAME'] = "mock_g{0}_t{1}_l2a.fits".format(em_gain, exptime)
         img = data.Image(frame_data, pri_hdr=prihdr, ext_hdr=exthdr, err_hdr=errhdr, dq_hdr=dqhdr)
         img.ext_hdr['EMGAIN_C'] = em_gain
         img.ext_hdr['EXPTIME'] = exptime

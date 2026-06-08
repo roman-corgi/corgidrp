@@ -3,6 +3,8 @@ This is the data reduction pipeline for the Nancy Grace Roman Space Telescope Co
 
 ![Testing Badge](https://github.com/roman-corgi/corgidrp/actions/workflows/python-app.yml/badge.svg)
 
+Further documentation (including expected file formats) can be found on the readthedocs site [here](https://corgidrp.readthedocs.io/). 
+
 ## Install
 As the code is very much still in development, clone this repository, enter the top-level folder, and run the following command:
 ```

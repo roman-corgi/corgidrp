@@ -11,6 +11,9 @@
             "name" : "determine_wave_zeropoint",
                 "calibs" : {
                     "SpecFilterOffset" : "AUTOMATIC"
+            },
+                "keywords" : {
+                    "subtract_no_offset_frames": false
             }
         },
         {
@@ -38,7 +41,7 @@
             "name": "update_to_l4",
             "calibs": {
                 "CoreThroughputCalibration": "AUTOMATIC, OPTIONAL",
-                "FluxcalFactor": "AUTOMATIC"
+                "SpecFluxCal": "AUTOMATIC"
             }
         },
         {

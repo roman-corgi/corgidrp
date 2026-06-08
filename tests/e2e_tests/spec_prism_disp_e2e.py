@@ -1,5 +1,4 @@
 import os
-import sys
 import glob
 import shutil
 import numpy as np
@@ -8,11 +7,8 @@ from datetime import datetime, timedelta
 import logging
 import pytest
 import argparse
-import warnings
-from astropy.io.fits.verify import VerifyWarning
 
 from corgidrp.data import Dataset, DispersionModel
-from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model
 from astropy.table import Table
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers, rename_files_to_cgi_format

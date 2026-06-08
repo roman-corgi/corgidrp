@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 
-def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figure=False,pol_data = False,test_offset=False):
+def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figure=False,pol_data = False,rot_center='im_center'):
     """
     unit test of the northup function
 
@@ -20,8 +20,31 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         save_derot_dataset (optional): if you want to save the derotated files at the input directory, turn True
         save_comp_figure (optional): if you want to save a comparison figure of the original mock data and the derotated data
         pol_data (optional): if you want to test the northup function on pol data (Image shape (2,1024,1024), turn True
-
+        rot_center: 'im_center', 'starloc', or manual coordinate (x,y) for nothup. 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header.
+        point: (x,y) coordinates of the point to be rotated in rotate_point function
+        center: (x,y) coordinates of the center of the point to be rotated in rotate_point function
+        ang: angle of rotation in radians, positive for counterclockwise rotation in rotate_point function
     """
+
+    def rotate_point(point, center, ang):
+        """
+        Basic rotation algorithm to test behavior of the northup function when updating CRPIX/STARLOC
+
+        Args:
+            point: (x,y) coordinates of the point to be rotated
+            center: (x,y) coordinates of the center of the point to be rotated
+            ang: angle of rotation in radians, positive for counterclockwise rotation
+
+        Returns:
+            (x,y) coordinates of the rotated point
+        """
+        # ang in radians
+        x,y = point
+        xc,yc = center
+        x_shifted, y_shifted = x - xc, y - yc
+        xr = x_shifted * np.cos(ang) - y_shifted * np.sin(ang)
+        yr = x_shifted * np.sin(ang) + y_shifted * np.cos(ang)
+        return xr + xc, yr + yc
 
     # read mock file
     dirname = 'test_data/'
@@ -80,8 +103,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             mock_dataset_3d[0].ext_hdr = updated_dataset_temp[0].ext_hdr.copy()
             # inject fake sources for test - for both pol modes
             mock_dataset_3d[0].data[:, 340:360, 340:360] = 5
-            mock_dataset_3d[0].ext_hdr['X_1VAL'] = 350
-            mock_dataset_3d[0].ext_hdr['Y_1VAL'] = 350
+            mock_dataset_3d[0].ext_hdr['STARLOCX'] = 350
+            mock_dataset_3d[0].ext_hdr['STARLOCY'] = 350
             mock_dataset_3d[0].dq[:, 340:360, 340:360] = 1
         else:
             mock_dataset = mock_dataset_ori.copy()
@@ -91,8 +114,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             updated_dataset = create_wcs(mock_dataset, astrom_cal)
             # inject fake sources for test
             updated_dataset[0].data[340:360, 340:360] = 5
-            updated_dataset[0].ext_hdr['X_1VAL'] = 350
-            updated_dataset[0].ext_hdr['Y_1VAL'] = 350
+            updated_dataset[0].ext_hdr['STARLOCX'] = 350
+            updated_dataset[0].ext_hdr['STARLOCY'] = 350
             updated_dataset[0].dq[340:360, 340:360] = 1
         if pol_data == True:
             # update datalist for pol data - expected to be 4d array (shape 6, 2, 1024, 1024 for test)
@@ -103,7 +126,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
 
     # run northup function
     input_dataset = data.Dataset(updated_datalist)
-    derot_dataset = northup(input_dataset)
+    derot_dataset = northup(input_dataset,rot_center=rot_center)
 
     if save_mock_dataset == True:
         outdir = os.path.join('./', dirname)
@@ -133,17 +156,21 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 dq_input = input_data.dq[pol_idx]
                 dq_derot = derot_data.dq[pol_idx]
                 sci_hd = input_data.ext_hdr
+                sci_hd_derot = derot_data.ext_hdr
                 # rotate around the center of the image
                 ylen, xlen = sci_input.shape
-                xcen, ycen = xlen / 2, ylen / 2
+                if rot_center == 'im_center':
+                    xcen, ycen = xlen / 2, ylen / 2
+                elif rot_center == 'starloc':
+                    xcen, ycen = input_dataset[0].ext_hdr['STARLOCX'], input_dataset[0].ext_hdr['STARLOCY']
                 # check the angle offset
                 with warnings.catch_warnings():  # catch a warning related to a long fits header card - doesn't matter here
                     warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
                     astr_hdr = WCS(sci_hd)
                 angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
                 # the location for test
-                x_value1 = input_dataset[0].ext_hdr['X_1VAL']
-                y_value1 = input_dataset[0].ext_hdr['Y_1VAL']
+                x_value1 = input_dataset[0].ext_hdr['STARLOCX']
+                y_value1 = input_dataset[0].ext_hdr['STARLOCY']
                 r = np.sqrt((x_value1 - xcen) ** 2 + (y_value1 - ycen) ** 2)
                 theta = np.rad2deg(np.arctan2(y_value1 - ycen, x_value1 - xcen))
                 if theta < 0:
@@ -152,8 +179,16 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 x_test = round(xcen + r * np.cos(np.deg2rad(angle_offset + theta)))
                 y_test = round(ycen + r * np.sin(np.deg2rad(angle_offset + theta)))
                 # check if rotation works properly
-                assert (sci_input[y_value1, x_value1] != sci_derot[y_value1, x_value1])
-                assert (dq_input[y_value1, x_value1] != dq_derot[y_value1, x_value1])
+                if rot_center == 'im_center':
+                    assert (sci_input[y_value1, x_value1] != sci_derot[y_value1, x_value1])
+                    assert (dq_input[y_value1, x_value1] != dq_derot[y_value1, x_value1])
+                elif rot_center == 'starloc':
+                    #When rotating around STALOC, with STARLOC as reference and not im_center,
+                    #the value at STARLOC location should be the same before and after
+                    #(compared to the case 'im_center' when instead it need to be different).
+                    assert (math.isclose(sci_input[y_value1, x_value1], sci_derot[y_value1, x_value1], rel_tol=0.01))
+                    assert (dq_input[y_value1, x_value1] == dq_derot[y_value1, x_value1])
+
                 assert (math.isclose(sci_derot[y_test, x_test], sci_input[y_value1, x_value1], rel_tol=0.01))
                 assert (dq_input[y_value1, x_value1] == dq_derot[y_test, x_test])
                 # check if the derotated DQ frame has no non-integer values (except NaN)
@@ -166,6 +201,20 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                     astr_hdr_new = WCS(derot_data.ext_hdr)
                 north_pa = -np.rad2deg(np.arctan2(-astr_hdr_new.wcs.cd[0, 1], astr_hdr_new.wcs.cd[1, 1]))
                 assert (math.isclose(north_pa, 0, abs_tol=1e-3))
+
+                # check if CRPIX and STARLOC are updated correctly
+                input_starlocx, input_starlocy = sci_hd['STARLOCX'], sci_hd['STARLOCY']
+                derot_starlocx, derot_starlocy = sci_hd_derot['STARLOCX'], sci_hd_derot['STARLOCY']
+                input_crpix1, input_crpix2 = sci_hd['CRPIX1'], sci_hd['CRPIX2']
+                derot_crpix1, derot_crpix2 = sci_hd_derot['CRPIX1'], sci_hd_derot['CRPIX2']
+                test_derot_starlocx, test_derot_starlocy = rotate_point([input_starlocx, input_starlocy], [xcen, ycen],
+                                                                        np.deg2rad(angle_offset))
+                test_derot_crpix1, test_derot_crpix2 = rotate_point([input_crpix1, input_crpix2], [xcen, ycen],
+                                                                    np.deg2rad(angle_offset))
+                assert (math.isclose(derot_starlocx, test_derot_starlocx, rel_tol=0.01))
+                assert (math.isclose(derot_starlocy, test_derot_starlocy, rel_tol=0.01))
+                assert (math.isclose(test_derot_crpix1, derot_crpix1, rel_tol=0.01))
+                assert (math.isclose(test_derot_crpix2, derot_crpix2, rel_tol=0.01))
 
                 # save comparison figure only for first pol mode
                 if pol_idx == 0:
@@ -223,17 +272,21 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             dq_input = input_data.dq
             dq_derot = derot_data.dq
             sci_hd = input_data.ext_hdr
+            sci_hd_derot = derot_data.ext_hdr
             # rotate around the center of the image
             ylen, xlen = sci_input.shape
-            xcen, ycen = xlen / 2, ylen / 2
+            if rot_center == 'im_center':
+                xcen, ycen = xlen / 2, ylen / 2
+            elif rot_center == 'starloc':
+                xcen, ycen = input_dataset[0].ext_hdr['STARLOCX'], input_dataset[0].ext_hdr['STARLOCY']
             # check the angle offset
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=fits.verify.VerifyWarning) 
                 astr_hdr = WCS(sci_hd)
             angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0, 1], astr_hdr.wcs.cd[1, 1]))
             # the location for test
-            x_value1 = input_dataset[0].ext_hdr['X_1VAL']
-            y_value1 = input_dataset[0].ext_hdr['Y_1VAL']
+            x_value1 = input_dataset[0].ext_hdr['STARLOCX']
+            y_value1 = input_dataset[0].ext_hdr['STARLOCY']
             r = np.sqrt((x_value1 - xcen) ** 2 + (y_value1 - ycen) ** 2)
             theta = np.rad2deg(np.arctan2(y_value1 - ycen, x_value1 - xcen))
             if theta < 0:
@@ -244,8 +297,12 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
             y_test = round(ycen + r * np.sin(np.deg2rad(angle_offset + theta)))
 
             # check if rotation works properly
-            assert (sci_input[y_value1, x_value1] != sci_derot[y_value1, x_value1])
-            assert (dq_input[y_value1, x_value1] != dq_derot[y_value1, x_value1])
+            if rot_center == 'im_center':
+                assert (sci_input[y_value1, x_value1] != sci_derot[y_value1, x_value1])
+                assert (dq_input[y_value1, x_value1] != dq_derot[y_value1, x_value1])
+            elif rot_center == 'starloc':
+                assert (math.isclose(sci_input[y_value1, x_value1], sci_derot[y_value1, x_value1], rel_tol=0.01))
+                assert (dq_input[y_value1, x_value1] == dq_derot[y_value1, x_value1])
 
             assert (math.isclose(sci_derot[y_test, x_test], sci_input[y_value1, x_value1], rel_tol=0.01))
             assert (dq_input[y_value1, x_value1] == dq_derot[y_test, x_test])
@@ -261,6 +318,19 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
                 astr_hdr_new = WCS(derot_data.ext_hdr)
             north_pa = -np.rad2deg(np.arctan2(-astr_hdr_new.wcs.cd[0, 1], astr_hdr_new.wcs.cd[1, 1]))
             assert (math.isclose(north_pa, 0, abs_tol=1e-3))
+
+            #check if CRPIX and STARLOC are updated correctly
+            input_starlocx,input_starlocy = sci_hd['STARLOCX'], sci_hd['STARLOCY']
+            derot_starlocx,derot_starlocy = sci_hd_derot['STARLOCX'], sci_hd_derot['STARLOCY']
+            input_crpix1,input_crpix2 = sci_hd['CRPIX1'], sci_hd['CRPIX2']
+            derot_crpix1,derot_crpix2 = sci_hd_derot['CRPIX1'], sci_hd_derot['CRPIX2']
+            test_derot_starlocx,test_derot_starlocy = rotate_point([input_starlocx,input_starlocy], [xcen, ycen], np.deg2rad(angle_offset))
+            test_derot_crpix1,test_derot_crpix2 = rotate_point([input_crpix1,input_crpix2], [xcen, ycen],  np.deg2rad(angle_offset))
+            assert (math.isclose(derot_starlocx, test_derot_starlocx, rel_tol=0.01))
+            assert (math.isclose(derot_starlocy, test_derot_starlocy, rel_tol=0.01))
+            assert (math.isclose(test_derot_crpix1, derot_crpix1, rel_tol=0.01))
+            assert (math.isclose(test_derot_crpix2, derot_crpix2, rel_tol=0.01))
+
             # (optional) save comparison figure
             ang = ang_list[i]
             if save_comp_figure:
@@ -315,8 +385,17 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
 
     return
 
+def test_northup_starloc():
+    test_northup(rot_center='starloc')
+    return
+
 def test_northup_pol():
     test_northup(pol_data=True)
+    return
+
+def test_northup_pol_starloc():
+    test_northup(pol_data=True, rot_center='starloc')
+    return
 
 def test_wcs_and_offset(save_mock_dataset=False):
    """

@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from scipy.ndimage import shift as ndi_shift
 from astropy.time import Time
 from astropy.io import fits, ascii
 
@@ -235,14 +236,83 @@ def estimate_psf_pix_and_ct(
         raise Exception('PSF positions and CT values are inconsistent')
     return psf_pix, psf_ct
 
+def subpixel_center_stamp(
+    cutout_data,
+    cutout_dq,
+    dx,
+    dy,
+    spline_order=3,
+    ):
+    """ Apply a sub-pixel shift to a PSF stamp and its DQ array so that the
+    PSF centroid lands centered on the stamp's central pixel.
+
+    The data array is shifted with a cubic spline. NaNs in the input would 
+    propagate through the spline coefficients and be an issue in the stamp, 
+    so they are temporarily replaced with zeros. The NaN mask is shifted
+    separately and reapplied to the output so that originally NaN regions 
+    remain NaN.
+
+    The DQ array is shifted with nearest-neighbour interpolation since its 
+    values are integers. Pixels shifted in from outside the stamp are flagged 
+    as bad.
+
+    Args:
+        cutout_data (np.ndarray): 2-D PSF stamp (could contain NaN)
+        cutout_dq (np.ndarray): 2-D DQ array of the same shape
+        dx (float): Sub-pixel shift along the x axis
+        dy (float): Sub-pixel shift along the y axis
+        spline_order (int): Spline order for the data shift. Default 3.
+
+    Returns:
+        shifted_data (np.ndarray): Data stamp shifted by (dy, dx) 
+        shifted_dq (np.ndarray): DQ stamp shifted by (dy, dx) 
+    """
+    # Track NaN regions separately so the spline does not smear them into PSF data
+    nan_mask = np.isnan(cutout_data)
+    data_filled = np.where(nan_mask, 0.0, cutout_data) if nan_mask.any() else cutout_data
+
+    # Shift the data with a spline. Pixels that get shifted in are marked with 
+    # NaN
+    shifted_data = ndi_shift(
+        data_filled,
+        shift=(dy, dx),
+        order=spline_order,
+        mode='constant',
+        cval=0.0,
+    )
+    # Shift the NaN mask as well (skip when no NaN)
+    if nan_mask.any():
+        shifted_nan_mask = ndi_shift(
+            nan_mask.astype(np.float32),
+            shift=(dy, dx),
+            order=spline_order,
+            mode='constant',
+            cval=0.0,
+        ) > 0.5
+        shifted_data = np.where(shifted_nan_mask, np.nan, shifted_data)
+
+    # Shift the DQ array with nearest-neighbour interpolation
+    shifted_dq = ndi_shift(
+        cutout_dq,
+        shift=(dy, dx),
+        order=0,
+        mode='constant',
+        cval=1,
+    ).astype(cutout_dq.dtype)
+
+    return shifted_data, shifted_dq
+
 def generate_psf_cube(
     dataset_in,
     psf_loc,
     cfam_name='1F',
     cfam_version=0,
+    spline_order=3,
     ):
     """
     Function that derives a 3-d cube of PSF images from a core throughput dataset.
+
+    Each PSF stamp is centered on the central pixel.
 
     # TODO: error data cubes will be added in a release after R3.0.2
 
@@ -255,10 +325,13 @@ def generate_psf_cube(
       cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
       cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
+      spline_order (int): Spline order used to shift and center each stamp.
+        Default 3 (cubic). Use 1 for linear interpolation.
 
     Returns:
       3-d PSF cube of PSF images from a core throughput dataset, including their
-      data quality, and corresponding headers as HDU units. 
+      data quality, and corresponding headers as HDU units.
+
     """
     dataset = dataset_in.copy()
 
@@ -270,27 +343,70 @@ def generate_psf_cube(
     # 3 * lambda_mean_nm * 1e-9 / D * rad_to_mas / EXCAM_pixel_pitch in mas
     n_pix_psf = int(np.ceil(3*get_cfam(cfam_name=cfam_name,
         cfam_version=cfam_version)[0].mean()*1e-9/2.36*180/np.pi*3600e3/21.8))
+    expected_size = 2*n_pix_psf + 1
+
     i_psf = 0
     for frame in dataset:
         # Skip pupil images of the unocculted source, which satisfy:
         # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
         try:
-        # Pupil images of the unocculted source satisfy:
-        # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
             exthd = frame.ext_hdr
             if (exthd['DPAMNAME']=='PUPIL' and exthd['LSAMNAME']=='OPEN' and
                 exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
                 continue
         except:
             pass
-        idx_0_0 = max(int(np.round(psf_loc[i_psf][1])) - n_pix_psf,0)
-        idx_0_1 = min(frame.data.shape[0],
-            int(np.round(psf_loc[i_psf][1])) + n_pix_psf + 1)
-        idx_1_0 = max(int(np.round(psf_loc[i_psf][0])) - n_pix_psf,0)
-        idx_1_1 = min(frame.data.shape[1],
-            int(np.round(psf_loc[i_psf][0])) + n_pix_psf + 1)
-        psf_cube += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
-        dq_cube += [frame.dq[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
+        
+        # Sub-pixel centroid of this PSF on EXCAM, and the integer pixel it falls on
+        cx = float(psf_loc[i_psf][0])
+        cy = float(psf_loc[i_psf][1])
+        cx_round = int(np.round(cx))
+        cy_round = int(np.round(cy))
+
+        # Bounding box of size (2*n_pix_psf + 1)^2 around the rounded centroid
+        # pixel. Axis 0 = y (rows), axis 1 = x (cols). max/min clip to the frame
+        # edges so PSFs near the boundary produce smaller cutouts; these are
+        # padded back to uniform size below.
+        idx_0_0 = max(cy_round - n_pix_psf, 0)
+        idx_0_1 = min(frame.data.shape[0], cy_round + n_pix_psf + 1)
+        idx_1_0 = max(cx_round - n_pix_psf, 0)
+        idx_1_1 = min(frame.data.shape[1], cx_round + n_pix_psf + 1)
+        cutout_data = frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]
+        cutout_dq = frame.dq[idx_0_0:idx_0_1, idx_1_0:idx_1_1]
+
+        # PSFs near field stop boundary produce clipped cutouts with varying shapes
+        # (eg not all 15x15). Pad them to uniform size so np.array() can create 
+        # the PSF cube. Padded regions are filled with NaN (data) and DQ flag 1 
+        # (bad pixel).
+        if cutout_data.shape[0] != expected_size or cutout_data.shape[1] != expected_size:
+            padded_data = np.full((expected_size, expected_size), np.nan, dtype=cutout_data.dtype)
+            padded_dq = np.full((expected_size, expected_size), 1, dtype=cutout_dq.dtype)
+            # Place the clipped cutout so the rounded centroid pixel lands at
+            # (n_pix_psf, n_pix_psf) in the padded array.
+            y_offset = n_pix_psf - (cy_round - idx_0_0)
+            x_offset = n_pix_psf - (cx_round - idx_1_0)
+            padded_data[y_offset:y_offset+cutout_data.shape[0],
+                       x_offset:x_offset+cutout_data.shape[1]] = cutout_data
+            padded_dq[y_offset:y_offset+cutout_dq.shape[0],
+                     x_offset:x_offset+cutout_dq.shape[1]] = cutout_dq
+            
+            cutout_data = padded_data
+            cutout_dq = padded_dq
+
+        # Sub-pixel centering:
+        # The cutout is currently centered on the rounded centroid pixel.
+        # Shift it by (round(c) - c) so the centroid lands on the central 
+        # pixel of the stamp.
+        dx = cx_round - cx
+        dy = cy_round - cy
+        # Skip the shift for negligible offsets to avoid introducing
+        # interpolation noise when the PSF is already pixel-centered.
+        if abs(dx) > 1e-6 or abs(dy) > 1e-6:
+            cutout_data, cutout_dq = subpixel_center_stamp(
+                cutout_data, cutout_dq, dx, dy, spline_order=spline_order)
+
+        psf_cube += [cutout_data]
+        dq_cube += [cutout_dq]
         i_psf += 1
 
     psf_cube = np.array(psf_cube)
@@ -300,13 +416,22 @@ def generate_psf_cube(
         raise Exception(('The number of PSFs does not match the number of PSF '+
             ' locations.'))
 
-    # PSF cube header
-    ext_hdr = dataset[0].ext_hdr
+    # PSF cube header: use first off-axis frame so pupil headers don't propagate
+    first_offaxis_frame = None
+    for frame in dataset:
+        exthd = frame.ext_hdr
+        if not (exthd['DPAMNAME'] == 'PUPIL' and exthd['LSAMNAME'] == 'OPEN' and
+                exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12'):
+            first_offaxis_frame = frame
+            break
+    if first_offaxis_frame is None:
+        raise Exception('No off-axis PSF frame found in dataset')
+    ext_hdr = first_offaxis_frame.ext_hdr
     # Add EXTNAME
     psf_hdu = fits.ImageHDU(data=psf_cube, header=ext_hdr, name='PSFCUBE')
 
     # Data quality cube
-    dq_hdr = dataset[0].dq_hdr
+    dq_hdr = first_offaxis_frame.dq_hdr
     # Add specific information
     dq_hdr['COMMENT'] = 'Data quality for each image' 
     # Add EXTNAME
@@ -318,6 +443,7 @@ def generate_ct_cal(
     dataset_in,
     roi_radius=3,
     cfam_version=0,
+    spline_order=3,
     ):
     """
     Generate the elements needed to create a core throughput calibration file.
@@ -340,6 +466,8 @@ def generate_ct_cal(
         in pixels. Adjust based on desired λ/D.
       cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
+      spline_order (int): Spline order for sub-pixel centering of the PSF
+        stamps. Default 3. Use 1 for linear interpolation.
 
     Returns:
       PSF cube, data quality cube, HDU list with the CT array measurements,
@@ -364,14 +492,18 @@ def generate_ct_cal(
             roi_radius=roi_radius,
             cfam_version=cfam_version)
 
+    # Build the PSF cube. Each stamp is centered so the PSF lands on
+    # the stamp's central pixel.
     psf_hdu, dq_hdu = generate_psf_cube(dataset, psf_loc_est,
-        cfam_name=cfam_list[0], cfam_version=cfam_version)
+        cfam_name=cfam_list[0], cfam_version=cfam_version,
+        spline_order=spline_order)
+
     # N sets of (x,y, CT measurements)
     # x, y: PSF centers wrt EXCAM's (0,0) pixel
     ct_excam = np.array([psf_loc_est[:,0], psf_loc_est[:,1], ct_est])
     ct_hdr = fits.Header()
     # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
-    # wrt FPM's center 
+    # wrt FPM's center
     ct_hdr['COMMENT'] = ('PSF location with respect to EXCAM (0,0) pixel. '
         'Core throughput value for each PSF. (x,y,ct)=(data[0], data[1], data[2])')
     ct_hdr['UNITS'] = 'PSF location: EXCAM pixels. Core throughput: values between 0 and 1.'

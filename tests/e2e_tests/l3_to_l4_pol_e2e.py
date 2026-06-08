@@ -253,7 +253,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
     number_nd_images = 3
     number_of_science_images = 4
-    number_of_sat_spot_images = 2
+    number_of_sat_spot_images = 3  # must be divisible by 3: no-offset, +offset, -offset groups
 
     wide_psf_sigma = 10
 
@@ -312,22 +312,26 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
                     input_image_list.append(stellar_sys_wp_img)
 
-            ## Make the normal science data with sat spots
+            ## Make the satellite spot data in three groups:
+            ## i=0: no-offset (amplitude=0), i=1: +offset, i=2: -offset.
+            ## SCTSRT is set in ascending order so find_star can recover the group ordering.
+            satspot_sctsrt = ['2024-01-01T00:00:01', '2024-01-01T00:00:02', '2024-01-01T00:00:03']
             for i in range(number_of_sat_spot_images):
+                # No-offset group has no satellite spots; offset groups have spots.
+                satspot_amplitude = 0 if i == 0 else stokes_info["amplitude"] * 1000
                 for wollaston in polarizers.keys():
                     pol_angles = polarizers[wollaston]
                     # find intensities at each polarizer angle for star 1
                     stellar_sys_o_beam = (pol.lin_polarizer_mueller_matrix(pol_angles[0]) @ stellar_sys_stokes)[0]
                     stellar_sys_e_beam = (pol.lin_polarizer_mueller_matrix(pol_angles[1]) @ stellar_sys_stokes)[0]
 
-                    
                     #Here we'll make the simmed images the same as in the unit test test_align_frames() in test_polarimetry.py
                     image_WP_nfov_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(dpamname=wollaston,
                     observing_mode='NFOV',
                     left_image_value=1,
                     right_image_value=1,
                     bg_sigma=1,
-                    amplitude_multiplier=stokes_info["amplitude"]*1000)
+                    amplitude_multiplier=satspot_amplitude)
 
                     #Split the images
                     temp_dataset = data.Dataset([image_WP_nfov_sp])
@@ -347,6 +351,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                     split_frame.pri_hdr['PA_APER'] = rotation_angle
                     split_frame.ext_hdr['NORTHANG'] = astrom_cal.northangle-(rotation_angle-astrom_cal.pri_hdr['PA_APER'])
                     split_frame.ext_hdr['SATSPOTS'] = True
+                    split_frame.ext_hdr['SCTSRT'] = satspot_sctsrt[i]
 
                     input_image_list.append(split_frame)
 

@@ -70,13 +70,14 @@ def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None):
     x_indices += x_min
 
     # 4) Compute flux-weighted centroid in the subarray
-    total_flux = np.sum(sub_frame)
-    if total_flux == 0:
-        # Edge case: empty or zero frame
-        return peak_x, peak_y
+    # Use nansum to handle NaN pixels from flat field corrections
+    total_flux = np.nansum(sub_frame)
+    if total_flux == 0 or np.isnan(total_flux):
+        # probably should raise error if total flux is 0 or nan
+        raise ValueError(f"Cannot compute centroid: ROI has zero or NaN total flux at position ({peak_x}, {peak_y})")
 
-    xcen = np.sum(x_indices * sub_frame) / total_flux
-    ycen = np.sum(y_indices * sub_frame) / total_flux
+    xcen = np.nansum(x_indices * sub_frame) / total_flux
+    ycen = np.nansum(y_indices * sub_frame) / total_flux
 
     return xcen, ycen
 
@@ -169,11 +170,19 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
     ydata += ystar + yoffset_guess
     
     data = ndi.map_coordinates(frame, [ydata, xdata])
-    
+
     ### Fit the PSF to the data ###
+    # Replace NaN/Inf values with zeros before fitting
+    # This allows curve_fit to work, treating bad pixels as background
+    stamp_clean = np.copy(stamp)
+    data_clean = np.copy(data)
+
+    stamp_clean[~np.isfinite(stamp)] = 0.0
+    data_clean[~np.isfinite(data)] = 0.0
+
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=OptimizeWarning) 
-        popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux), maxfev=2000)
+        warnings.filterwarnings("ignore", category=OptimizeWarning)
+        popt, pcov = optimize.curve_fit(shift_psf, stamp_clean, data_clean.ravel(), p0=(0,0,guessflux), maxfev=2000)
     tinyoffsets = popt[0:2]
     fit_errs = np.sqrt([pcov[0,0], pcov[1,1], pcov[2,2]])
 

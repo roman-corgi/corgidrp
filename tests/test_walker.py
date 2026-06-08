@@ -8,13 +8,14 @@ import warnings
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+import xml.etree.ElementTree as ET
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.caldb as caldb
 import corgidrp.walker as walker
 import corgidrp.detector as detector
-
+import datetime
 np.random.seed(456)
 
 def test_autoreducing():
@@ -613,7 +614,7 @@ def test_cpgs_satspots():
     filelist = [frame.filepath for frame in l3_dataset]
 
     # load CPGS
-    CPGS_XML_filepath = os.path.join(os.path.dirname(__file__), "test_data", "cpgs_mock.xml")
+    CPGS_XML_filepath = os.path.join(os.path.dirname(__file__), "test_data", "CPGS_betatest_041426.xml")
     
     # create a recipe just to do spec star centering
     # use this simple saving recipe as a template
@@ -644,6 +645,187 @@ def test_cpgs_satspots():
         assert 'phi_deg' in hdr_recipe['steps'][0]['keywords']
         assert hdr_recipe['steps'][0]['keywords']['phi_deg'] == 0.
 
+def test_cpgs_one_satspot():
+    """
+    Tests if walker.py can parse CPGS XML to extract satspot info
+    if just one satspot tuple is specified.
+    """
+
+    CPGS_XML_filepath = os.path.join(os.path.dirname(__file__), "test_data", "CPGS_satspot_test.xml")
+    cpgs_xml = ET.parse(CPGS_XML_filepath)
+    sat_spot_info = walker._get_satellite_spot_info_from_xml(cpgs_xml)
+    assert sat_spot_info['num_spots'] == 1
+    assert sat_spot_info['spot1_sep'] == 6.2
+    assert sat_spot_info['spot1_angle'] == 45.4
+    assert sat_spot_info['spot1_contrast'] == 1.7E-06
+    assert sat_spot_info['spot1_filt'] == '3D'
+
+def test_l1_to_l2b_default_calibs():
+    """
+    Tests that L1 to L2b processing works using only the packaged TVAC default
+    calibrations, without creating any custom dummy calibration files.
+    """
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    os.makedirs(datadir, exist_ok=True)
+
+    # Create simulated L1 data. The default headers have DPAMNAME='IMAGING',
+    # CFAMNAME='1F', which the default TVAC flat (FPAMNAME='OPEN_12') satisfies.
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+    l1_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l1_dataset]
+
+    # Ensure the default calibrations are present and indexed in the caldb.
+    caldb.initialized = False
+    caldb.initialize()
+
+    # Run l1 to l2b using only the packaged default calibrations.
+    template_filepath = os.path.join(
+        os.path.dirname(walker.__file__), "recipe_templates", "l1_to_l2b.json"
+    )
+    template_recipe = json.load(open(template_filepath, "r"))
+    walker.walk_corgidrp(filelist, "", outputdir, template=template_recipe)
+
+    # Verify that L2b output files were produced.
+    output_files = sorted(glob.glob(os.path.join(outputdir, "*_l2b.fits")))
+    assert len(output_files) == len(l1_dataset), (
+        f"Expected {len(l1_dataset)} L2b files, found {len(output_files)}"
+    )
+
+    # Verify each output file is a valid L2b Image.
+    for output_file in output_files:
+        img = data.Image(output_file)
+        assert img.ext_hdr["DATALVL"] == "L2b", (
+            f"Expected DATALVL='L2b' in {output_file}, got {img.ext_hdr['DATALVL']!r}"
+        )
+
+def test_pc_science_analog_satspots():
+    # create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+    image_shape=(201, 201)
+    bg_sigma=1.0
+    bg_offset=10.0
+    gaussian_fwhm=5.0
+    separation=14.79
+    star_center=None
+    angle_offset=0
+    amplitude_multiplier=100
+
+    prihdr, exthdr, errhdr, dqhdr,biashdr = mocks.create_default_L2a_headers(arrtype="SCI")
+
+    sci_image = mocks.create_synthetic_satellite_spot_image(
+        image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+        separation, star_center, angle_offset,
+        amplitude_multiplier=0
+    )
+    sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    sci_frame.ext_hdr["SATSPOTS"] = False
+    sci_frame.ext_hdr["ISPC"] = True
+
+    satspot_image = mocks.create_synthetic_satellite_spot_image(
+                image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+                separation, star_center, angle_offset, amplitude_multiplier
+            )
+    satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+    satspot_frame.ext_hdr["SATSPOTS"] = True
+
+    for dpamname in ['IMAGING', 'PRISM3', 'POL0']:
+        sci_frame.ext_hdr["DPAMNAME"] = dpamname
+        visitid = sci_frame.pri_hdr["VISITID"]
+        base_time = datetime.datetime.now()
+        time_str = data.format_ftimeutc(base_time.isoformat())
+        sci_frame.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+
+
+        satspot_frame.ext_hdr["DPAMNAME"] = dpamname
+        time_offset = datetime.timedelta(seconds=1000)  # Offset to avoid conflicts with science frames
+        unique_time = base_time + time_offset
+        time_str = data.format_ftimeutc(unique_time.isoformat())
+        satspot_frame.filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+
+        all_frames = [sci_frame, satspot_frame]
+        dataset = data.Dataset(all_frames)
+        dataset.save()
+        filelist = [frame.filepath for frame in dataset]
+
+        templates, chained = walker.guess_template(dataset)
+        assert len(templates)==2
+        assert len(templates[0])==3
+        assert len(templates[1])==1
+        assert chained == True
+
+        recipes = walker.autogen_recipe(filelist, outputdir)
+        assert len(recipes) == 2
+        assert recipes[0][0]["inputs"][0] == sci_frame.filename
+        assert recipes[1][0]["inputs"][0] == satspot_frame.filename
+
+        for file in filelist:
+            os.remove(file)
+
+def test_guess_template_l1_absflux_pol():
+    """
+    Tests that L1 ABSFLUX data with polarimetry correctly chains to l2b_to_fluxcal_factor_pol.json
+    """
+    test_cases = [
+        ('CGIVST_CAL_ABSFLUX_FAINT', 'POL0'),
+        ('CGIVST_CAL_ABSFLUX_FAINT', 'POL45'),
+        ('CGIVST_CAL_ABSFLUX_BRIGHT', 'POL0'),
+        ('CGIVST_CAL_ABSFLUX_BRIGHT', 'POL45'),
+    ]
+    for vistype, dpamname in test_cases:
+        l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+        for frame in l1_dataset:
+            frame.pri_hdr['VISTYPE'] = vistype
+            frame.ext_hdr['DATALVL'] = 'L1'
+            frame.ext_hdr['DPAMNAME'] = dpamname
+
+        recipe_filename, chained = walker.guess_template(l1_dataset)
+        expected_chain = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
+        assert recipe_filename == expected_chain
+        assert chained == True
+
+def test_guess_template_l1_absflux_non_pol():
+    """
+    Tests that L1 ABSFLUX data without polarimetry still uses the regular flux calibration recipe
+    """
+    l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+    for frame in l1_dataset:
+        frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_ABSFLUX_FAINT'
+        frame.ext_hdr['DATALVL'] = 'L1'
+        frame.ext_hdr['DPAMNAME'] = 'NFOV'  # Not POL0 or POL45
+
+    recipe_filename, chained = walker.guess_template(l1_dataset)
+    expected_chain = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+    assert recipe_filename == expected_chain
+    assert chained == True
+
+def test_guess_template_l1_pol_setup():
+    """
+    Tests that L1 POL_SETUP data correctly chains through to l2b_to_polcal.json
+    """
+    test_dpamnames = ['POL0', 'POL45']
+
+    for dpamname in test_dpamnames:
+        l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+        for frame in l1_dataset:
+            frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_POL_SETUP'
+            frame.ext_hdr['DATALVL'] = 'L1'
+            frame.ext_hdr['DPAMNAME'] = dpamname
+        recipe_filename, chained = walker.guess_template(l1_dataset)
+
+        expected_chain = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
+        assert recipe_filename == expected_chain
+        assert chained == True
 
 if __name__ == "__main__":#
     test_autoreducing()
@@ -654,5 +836,10 @@ if __name__ == "__main__":#
     test_jit_calibs()
     test_generate_multiple_recipes()
     test_cpgs_satspots()
-
+    test_cpgs_one_satspot()
+    test_l1_to_l2b_default_calibs()
+    test_pc_science_analog_satspots()
+    test_guess_template_l1_absflux_pol()
+    test_guess_template_l1_absflux_non_pol()
+    test_guess_template_l1_pol_setup()
 
