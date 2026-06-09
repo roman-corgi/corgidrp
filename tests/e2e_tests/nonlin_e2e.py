@@ -172,6 +172,7 @@ def test_nonlin_cal_e2e(
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
             step['keywords']['n_cal'] = 14 # set n_cal to 14 to match the number of frames used to produce the II&T result (so we can compare results)
+    recipe[0][1]['steps'].pop(3) # II&T code does not desmear
     output_filepaths = walker.run_recipe(recipe[0][0], save_recipe_file=True)
     recipe[0][1]['inputs'] = output_filepaths
     output_filepaths1 = walker.run_recipe(recipe[0][1], save_recipe_file=True)

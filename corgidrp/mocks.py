@@ -4653,10 +4653,12 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             fits_file[1].header['SCTSRT'] = sctsrt
             
             # Update FITS file with new filename
+            fits_file.writeto(new_filename, overwrite=True)
+            fits_file.close()
+
             # Remove old file only if renaming in-place
             # Don't remove original files when copying to a different directory
             if file != new_filename and os.path.exists(file) and not output_dir:
-                fits_file.writeto(new_filename, overwrite=True)
                 os.remove(file)
 
         # Update the file in the list
