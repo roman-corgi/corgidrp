@@ -681,6 +681,7 @@ def desmear(input_dataset, detector_params, detector_regions=None, auto_decide=F
             image_data -= smear
         
         frames_data[i].ext_hdr['DESMEAR'] = desmear_flag
+        frames_data[i].err_hdr['DESMEAR'] = desmear_flag
         # now restore original values in cosmic ray pixels
         if image_frame_flag:
             orig_data = input_dataset[i].copy().data
