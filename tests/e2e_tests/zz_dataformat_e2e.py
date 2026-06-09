@@ -265,7 +265,14 @@ def validate_cgi_filename(filepath, expected_suffix):
 custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'NRECIPES', 'FILE0', 'DATETIME', 'FTIMEUTC', 'DETPIX0X', 'DETPIX0Y', 'PYKLIPV']
 
 def is_recipe_header_key(name):
-    """Return True for generated recipe-history header keywords."""
+    """Return True for generated recipe-history header keywords.
+
+    Args:
+        name (str): FITS header keyword name to check.
+
+    Returns:
+        bool: True when ``name`` is a recipe-history keyword.
+    """
     return name == 'RECIPE' or name == 'NRECIPES' or bool(re.fullmatch(r'RECIPE[2-9][0-9]*', str(name)))
 
 def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_check=False):
