@@ -69,7 +69,8 @@ def measure_companions(
     
     # correct host star counts for ND if ND cal is provided: true_flux = measured_flux * 10**OD
     if nd_cal is not None:
-        od_val = nd_cal.interpolate_od(x_host, y_host)
+        # Pass host_star_image so interpolate_od can remap cropped-frame coords to absolute EXCAM.
+        od_val = nd_cal.interpolate_od(x_host, y_host, image=host_star_image)
         host_star_peakflux *= 10**od_val
     
 

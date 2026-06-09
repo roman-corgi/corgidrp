@@ -678,7 +678,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         # by amplitude and FWHM used for KLIP throughput calculation.  Amplitude found by doing Gaussian fit.
         star_fr = unocculted_star_dataset.frames[i]
         if unocculted_star_loc is None:
-            peak_row, peak_col = np.where(star_fr.data == star_fr.data.max())
+            peak_row, peak_col = np.where(star_fr.data == np.nanmax(star_fr.data))
             pos = (peak_row[0], peak_col[0])
         else:
             pos = (unocculted_star_loc[0][i], unocculted_star_loc[1][i])
@@ -725,9 +725,10 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         star_x = star_xs[star_ind]
         star_y = star_ys[star_ind]
         #TODO perhaps incorporate into ERR in future, and incorporate error in psf_phot argument above (must be non-zero, though)
-        star_err = psf_phot.results['flux_err'][star_ind] 
-        # OD (optical density) of the ND filter at the star location:
-        ND_od = NDcalibration.interpolate_od(star_x, star_y)
+        star_err = psf_phot.results['flux_err'][star_ind]
+        # OD (optical density) of the ND filter at the star location.
+        # Pass star_fr so interpolate_od can remap cropped-frame coords to absolute EXCAM.
+        ND_od = NDcalibration.interpolate_od(star_x, star_y, image=star_fr)
         # integral under the fitted 2-D Gaussian for the unocculted star,
         # corrected for ND filter attenuation: true_flux = measured_flux * 10**OD
         Fs = 10**ND_od * psf_phot.results['flux_fit'][star_ind]
@@ -869,7 +870,7 @@ def update_to_tda(input_dataset):
 
 
 def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
-                image_without_planet=None):
+                image_without_planet=None, N_threads=None):
     """
     Detects sources in an image based on a specified SNR threshold and save their approximate pixel locations and SNRs into the header.
     
@@ -879,6 +880,8 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
         fwhm (float, optional): Full-width at half-maximum of the PSF in pixels.
         nsigma_threshold (float, optional): The SNR threshold for source detection.
         image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
+        N_threads (int, optional): Number of threads for multiprocessing. If -1, runs sequentially without multiprocessing.
+                                   If None (default), uses all available CPU cores.
 
     Returns:
         corgidrp.data.Image: A copy of the input image with the detected sources and their SNRs saved in the header.
@@ -906,7 +909,7 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
 
     # Compute the SNR map using cross-correlation
     image_residual = np.zeros_like(new_image.data) + new_image.data
-    image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
+    image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet, N_threads=N_threads)
     
     sn_source, xy_source = [], []
 
@@ -924,7 +927,7 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
             image_residual = psf_scalesub(image_residual, xy, psf, fwhm)
                 
             # Update the SNR map after source removal
-            image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
+            image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet, N_threads=N_threads)
         
     # Store detected sources in FITS header
     for i in range(len(sn_source)):
@@ -1017,7 +1020,7 @@ def calc_pol_p_and_pa_image(input_Image):
     evpa_err = 0.5 * np.sqrt((U * Qerr)**2 + (Q * Uerr)**2) / np.maximum(Q**2 + U**2, 1e-10)
     evpa = np.degrees(evpa)
     evpa_err = np.degrees(evpa_err)
-
+    
     # --- Data quality propagation ---
     dq = np.bitwise_or(np.bitwise_or(Idq, Qdq), Udq)
 

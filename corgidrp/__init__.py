@@ -31,6 +31,11 @@ def create_config_dir():
     if not os.path.exists(default_cal_dir):
         os.mkdir(default_cal_dir)
 
+    # make user templates folder if it doesn't exist
+    user_templates_dir = os.path.join(config_folder, "user_templates")
+    if not os.path.exists(user_templates_dir):
+        os.mkdir(user_templates_dir)
+
     # write config if it doesn't exist
     config_filepath = os.path.join(config_folder, "corgidrp.cfg")
     if not os.path.exists(config_filepath):
@@ -38,6 +43,7 @@ def create_config_dir():
         config["PATH"] = {}
         config["PATH"]["caldb"] = os.path.join(config_folder, "corgidrp_caldb.csv") # location to store caldb
         config["PATH"]["default_calibs"] = default_cal_dir
+        config["PATH"]["user_templates"] = user_templates_dir
         config["DATA"] = {}
         config["DATA"]["track_individual_errors"] = "False"
         config["DATA"]["chunk_size"] = "200"
@@ -46,6 +52,7 @@ def create_config_dir():
         config["WALKER"] = {}
         config["WALKER"]["skip_missing_cal_steps"] = "False"
         config["WALKER"]["jit_calib_id"] = "False"
+        config["WALKER"]["enforce_template_structure"] = "False"
         # overwrite with old settings if needed
         if oldconfig is not None:
             config["PATH"]["caldb"] = oldconfig["PATH"]["caldb"]
@@ -61,7 +68,7 @@ def update_pipeline_settings():
     Loads configuration file to update pipeline settings
     """
     global config_filepath
-    global caldb_filepath, default_cal_dir, track_individual_errors, chunk_size, image_dtype, dq_dtype, skip_missing_cal_steps, jit_calib_id
+    global caldb_filepath, default_cal_dir, user_templates_dir, track_individual_errors, chunk_size, image_dtype, dq_dtype, skip_missing_cal_steps, jit_calib_id, enforce_template_structure
     # borrowed from the kpicdrp caldb
     # load in default caldbs based on configuration file
     config_filepath = os.path.join(pathlib.Path.home(), ".corgidrp", "corgidrp.cfg")
@@ -75,12 +82,14 @@ def update_pipeline_settings():
     ## pipeline settings
     caldb_filepath = config.get("PATH", "caldb", fallback=None) # path to calibration db
     default_cal_dir = config.get("PATH", "default_calibs", fallback=None) # path to default calibrations directory
+    user_templates_dir = config.get("PATH", "user_templates", fallback=os.path.join(pathlib.Path.home(), ".corgidrp", "user_templates")) # path to user templates directory
     track_individual_errors = _bool_map[config.get("DATA", "track_individual_errors", fallback='false').lower()] # save each individual error component separately?
     chunk_size = int(float(config.get("DATA", "chunk_size", fallback="200"))) # number of frames to process at a time if pocessing in chunks for RAM conservation
     image_dtype = image_datatype_map[config.get("DATA", "image_dtype", fallback="32")] # bit size for image and error data
     dq_dtype = dq_datatype_map[config.get("DATA", "dq_dtype", fallback="16")] # bit size for DQ data
     skip_missing_cal_steps = _bool_map[config.get("WALKER", "skip_missing_cal_steps", fallback='false').lower()] # skip steps, instead of crashing, when suitable calibration file cannot be found 
     jit_calib_id = _bool_map[config.get("WALKER", "jit_calib_id", fallback='false').lower()] # AUTOMATIC calibration files identified right before the execution of a step, rather than when recipe is first generated
+    enforce_template_structure = _bool_map[config.get("WALKER", "enforce_template_structure", fallback='false').lower()] # require user templates to have same step structure as default templates
 
 
 create_config_dir()

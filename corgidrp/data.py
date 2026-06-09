@@ -11,7 +11,7 @@ from astropy.table import Table
 import pyklip
 from pyklip.instruments.Instrument import Data as pyKLIP_Data
 from pyklip.instruments.utils.wcsgen import generate_wcs
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, interp1d, griddata
 from astropy import wcs
 import copy
 import corgidrp
@@ -856,11 +856,24 @@ class Dark(Image):
             # give it a default filename using the last input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
-                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-                self.filename = "{0}_drk_cal.fits".format(orig_input_filename)
-                self.filename = re.sub('_l[0-9].', '', self.filename)
-                # dnm_cal fed directly into drk_cal when doing build_synthesized_dark, so this will delete that string if it's there:
-                self.filename = self.filename.replace("_dnm_cal", "")
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # append filename convention and set it as new filename
+                # remove .fits extension
+                orig_input_filename=latest_filename.split(".fits")[0]
+                self.filename="{0}_drk_cal.fits".format(orig_input_filename)
+                self.filename=re.sub('_l[0-9].','',self.filename)
+                # remove dnm_cal if building synthesized dark from detector noise maps
+                self.filename=self.filename.replace("_dnm_cal","")
+                self.pri_hdr['FILENAME']=self.filename
             else:
                 if self.filename == '':
                     self.filename = "drk_cal.fits" # we shouldn't normally be here, but we default to something just in case. 
@@ -948,8 +961,18 @@ class FlatField(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
-            # give it a default filename using the last input file as the base
-            self.filename = re.sub('_l[0-9].', '_flt_cal', input_dataset[-1].filename)
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # use latest frame filename and replace level suffix with calibration suffix
+            self.filename=re.sub('_l[0-9].','_flt_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
@@ -992,8 +1015,19 @@ class SpectroscopyCentroidPSF(Image):
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
 
-            # Generate default output filename
-            base = input_dataset[-1].filename.split(".fits")[0]
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # append filename convention and set it as new filename
+            # remove .fits extension
+            base=latest_filename.split(".fits")[0]
             filename = f"{base}_scp_cal.fits"
             self.filename = re.sub('_l[0-9].', '', filename)
             self.pri_hdr['FILENAME'] = self.filename
@@ -1072,9 +1106,19 @@ class LineSpread(Image):
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
 
-            # Generate default output filename
-            # Strip level suffix (e.g., _l2b) before adding calibration suffix
-            base = input_dataset[-1].filename.split(".fits")[0]
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # append filename convention and set it as new filename
+            # remove .fits extension
+            base=latest_filename.split(".fits")[0]
             self.filename = f"{base}_lsf_cal.fits"
             self.filename = re.sub('_l[0-9].', '', self.filename)
             if gauss_par is not None:
@@ -1314,6 +1358,7 @@ class SpecFilterOffset(Image):
             pri_hdr = fits.Header()
             ext_hdr = fits.Header()
             ext_hdr['SCTSRT'] = date_valid.isot # use this for validity date
+            ext_hdr['MJDSRT'] = date_valid.mjd
             ext_hdr['DRPVERSN'] =  corgidrp.__version__
             ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
@@ -1356,7 +1401,10 @@ class SpecFilterOffset(Image):
         self.dq = None
 
     def get_offsets(self, filter):
-        return self.offsets.get(filter.upper())
+        filt = filter.upper()
+        if filt.endswith("F"):
+            filt = filt[0]
+        return self.offsets.get(filt)
 
     def save(self, filedir=None, filename=None):
         """
@@ -1467,7 +1515,18 @@ class NonLinearityCalibration(Image):
 
             # Follow filename convention as of R3.0.2
             self.filedir = '.'
-            self.filename = re.sub('_l[0-9].', '_nln_cal', input_dataset[-1].filename)
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # use latest frame filename and replace level suffix with nln calibration suffix
+            self.filename=re.sub('_l[0-9].','_nln_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
 
         # double check that this is actually a NonLinearityCalibration file that got read in
@@ -1553,8 +1612,18 @@ class KGain(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # give it a default filename using the last input file as the base
-                self.filename = re.sub('_l[0-9].', '_krn_cal', input_dataset[-1].filename)
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # use latest frame filename and replace level suffix with krn calibration suffix
+                self.filename=re.sub('_l[0-9].','_krn_cal',latest_filename)
                 self.pri_hdr['FILENAME'] = self.filename
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
@@ -1686,13 +1755,27 @@ class BadPixelMap(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
-            # check whether we're making the bpmap from a flat only, or from L1/2 files. 
-            if "_flt_cal" in input_dataset[-1].filename:
-                self.filename = input_dataset[-1].filename.replace("_flt_cal", "_bpm_cal")
+            # check whether we're making the bpmap from a flat only, or from L1/2 files.
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
             else:
-                self.filename = re.sub('_l[0-9].', '_bpm_cal', input_dataset[-1].filename)
-            self.pri_hdr['FILENAME'] = self.filename          
-            
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+
+            # replace flat or dark w/ bpm
+            if "_flt_cal" in latest_filename:
+                self.filename=latest_filename.replace("_flt_cal","_bpm_cal")
+            elif "_drk_cal" in latest_filename:
+                self.filename=latest_filename.replace("_drk_cal","_bpm_cal")
+            else:
+                self.filename=re.sub('_l[0-9].','_bpm_cal',latest_filename)
+            self.pri_hdr['FILENAME']=self.filename
+
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
 
@@ -1763,7 +1846,18 @@ class DetectorNoiseMaps(Image):
 
             # give it a default filename
             if input_dataset is not None:
-                orig_input_filename = input_dataset.frames[-1].filename.split(".fits")[0]
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # remove .fits extension
+                orig_input_filename=latest_filename.split(".fits")[0]
             else:
                 #running the calibration code gets the name right (based on last filename in input dataset); this is a standby
                 orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0] 
@@ -1828,8 +1922,8 @@ class DetectorParams(Image):
     # default detector params
     default_values = {
         'KGAINPAR' : 8.7,
-        'FWC_PP_E' : 90000.,
-        'FWC_EM_E' : 100000.,
+        'FWC_PP_E' : 90000.,    # full-well capacity in electrons for image area (before gain register)
+        'FWC_EM_E' : 105000.,   # full-well capacity in electrons for gain register
         'ROWREADT' : 223.5e-6,  # seconds
         'NEMGAIN': 604,         # number of EM gain register stages
         'TELRSTRT': -1,         # slice of rows that are used for telemetry
@@ -1839,8 +1933,8 @@ class DetectorParams(Image):
         'GAINMAX': 8000.0,      # Maximum allowable EM gain
         'DELCNST': 1.0e-4,      # tolerance in exposure time calculator
         'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
-        'PCECNTMX': 0.1,        # Maximum allowed electrons/pixel/frame for photon counting
-        'TFACTOR': 5,            # number of read noise standard deviations at which to set the photon-counting threshold
+        'PCECNTMX': 0.25,       # Maximum allowed electrons/pixel/frame for photon counting
+        'TFACTOR': 5,           # number of read noise standard deviations at which to set the photon-counting threshold
     }
 
     back_compat_mapping = {
@@ -2048,13 +2142,23 @@ class AstrometricCalibration(Image):
 
             # add to history
             self.ext_hdr['HISTORY'] = "Astrometric Calibration file created"
-            
-            # give it a default filename using the first input file as the base
-            # strip off everything starting at .fits
-            orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # remove .fits extension
+            orig_input_filename=latest_filename.split(".fits")[0]
+            # append filename convention and set it as new filename
             self.filename = "{0}_ast_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_l[0-9].', '', self.filename)
-            self.pri_hdr['FILENAME'] = self.filename
+            self.pri_hdr['FILENAME']=self.filename
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -2117,11 +2221,18 @@ class TrapCalibration(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "TrapCalibration created from {0} frames".format(self.ext_hdr['DRPNFILE'])
 
-            # give it a default filename using the first input file as the base
-            # strip off everything starting at .fits
-            orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-            self.filename = "{0}_tpu_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # use latest frame filename and replace level suffix with tpu calibration suffix
+            self.filename=re.sub('_l[0-9].','_tpu_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
@@ -2193,9 +2304,18 @@ class FluxcalFactor(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # give it a default filename using the first input file as the base
-                # strip off everything starting at .fits
-                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # remove .fits extension
+                orig_input_filename=latest_filename.split(".fits")[0]
 
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
             # JM: moved the below to fluxcal.py since it varies depending on the method
@@ -2253,6 +2373,52 @@ class FluxcalFactor(Image):
         self.fluxcal_fac = self.data[0]
         self.fluxcal_err =  self.err[0]
 
+        # if this is a new FluxcalFactors file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                if 'DRPNFILE' not in ext_hdr:
+                    # error check. this is required in this case
+                    raise ValueError("This appears to be a new FluxcalFactor. The dataset of input files needs to be passed \
+                                     in to the input_dataset keyword to record history of this FluxcalFactor file.")
+                else:
+                    pass
+            else:
+                # log all the data that went into making this calibration file
+                self._record_parent_filenames(input_dataset)
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # remove .fits extension
+                orig_input_filename=latest_filename.split(".fits")[0]
+
+            self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
+            # JM: moved the below to fluxcal.py since it varies depending on the method
+            #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+            #self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+            # add to history
+            self.ext_hdr['HISTORY'] = "Flux calibration file created"
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+            # use the start date for the filename by default
+            self.filedir = "."
+            # slight hack for old mocks not in the standard filename format
+            if input_dataset is not None:
+                self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
+                self.filename = re.sub('_l[0-9].', '', self.filename)
+            else:
+                self.filename = re.sub(r'\.fits$', '_abf_cal.fits', self.pri_hdr['FILENAME'])
+            self.pri_hdr['FILENAME'] = self.filename
+
 class SpecFluxCal(Image):
     """
     Class containing the wavelength dependent absolute spectral flux calibration (spectro-photometric calibration) 
@@ -2295,10 +2461,19 @@ class SpecFluxCal(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # give it a default filename using the first input file as the base
-                # strip off everything starting at .fits
-                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-  
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # remove .fits extension
+                orig_input_filename = latest_filename.split(".fits")[0]
+
             self.ext_hdr['DATATYPE'] = 'SpecFluxCal' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s/bin)'
             self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s/bin)'
@@ -2357,9 +2532,18 @@ class SpecFluxCal(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # give it a default filename using the first input file as the base
-                # strip off everything starting at .fits
-                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # remove .fits extension
+                orig_input_filename=latest_filename.split(".fits")[0]
   
             self.ext_hdr['DATATYPE'] = 'SpecFluxCal' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s/bin)'
@@ -2426,11 +2610,21 @@ class SlitTransmission(Image):
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored Slit Transmission map."
 
-            # Generate default output filename
-            # Strip level suffix (e.g., _l2b) before adding calibration suffix
-            base = input_dataset[0].filename.split(".fits")[0]
-            self.filename = f"{base}_slt_cal.fits"
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # append filename convention and set it as new filename
+            # remove .fits extension
+            base=latest_filename.split(".fits")[0]
+            self.filename=f"{base}_slt_cal.fits"
+            self.filename=re.sub('_l[0-9].','',self.filename)
             # File format checks
             if self.data.ndim != 2:
                 raise ValueError('The slit transmission array must have 2 dimensions') 
@@ -2787,8 +2981,18 @@ class CoreThroughputCalibration(Image):
             # Default convention: replace _l3_.fits from the filename of the
             # input dataset by _ctp_cal.fits
             self.filedir = '.'
-            self.filename = re.sub('_l[0-9].', '_ctp_cal', input_dataset[-1].filename)
-            self.pri_hdr['FILENAME'] = self.filename
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # use latest frame filename and replace level suffix with ctp calibration suffix
+            self.filename=re.sub('_l[0-9].','_ctp_cal',latest_filename)
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -3242,7 +3446,20 @@ class CoreThroughputMap(Image):
             # Generate filename following the calibration file convention
             self.filedir = '.'
             if input_dataset is not None:
-                self.filename = re.sub('_l[0-9].', '_ctm_cal', input_dataset[-1].filename)
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # use latest frame filename and replace suffix with ctm calibration suffix
+                self.filename=re.sub('_l[0-9].','_ctm_cal',latest_filename)
+                self.pri_hdr['FILENAME']=self.filename
+
             else:
                 self.filename = 'corethroughput_map.fits'  # fallback
             self.pri_hdr['FILENAME'] = self.filename
@@ -3772,7 +3989,18 @@ class NDFilterSweetSpotDataset(Image):
         if ext_hdr is not None:
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
-                self.filename = re.sub('_l[0-9].', '_ndf_cal', input_dataset[-1].filename)
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # use latest frame filename and replace level suffix with ndf calibration suffix
+                self.filename=re.sub('_l[0-9].','_ndf_cal',latest_filename)
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?
 
@@ -3789,59 +4017,78 @@ class NDFilterSweetSpotDataset(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
             raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
 
-    def interpolate_od(self, x, y, method="nearest"):
+    def interpolate_od(self, x, y, method="nearest", image=None):
         """
-        Interpolates the data to get the OD at the requested x/y location
+        Interpolates the data to get the OD at the requested x/y location.
+
+        The calibration stores OD values at absolute EXCAM pixel coordinates
+        (i.e. coordinates in the full 1024×1024 detector frame).  When the
+        query image is a cropped sub-frame, pass it as ``image`` and the
+        function will automatically add the ``DETPIX0X``/``DETPIX0Y`` header
+        values (set by ``l2b_to_l3.crop``) to convert ``x``/``y`` from
+        cropped-frame pixel coordinates to absolute EXCAM coordinates before
+        interpolating.  If those keywords are absent the offsets default to 0,
+        so the call is also correct for full-frame (uncropped) images.
 
         Args:
-            x (float): x detector pixel location
-            y (float): y detector pixel location
-            method (str): only "nearest" supported currently
-        
+            x (float): x pixel location in the science frame's own coordinate system.
+            y (float): y pixel location in the science frame's own coordinate system.
+            method (str): only "nearest" supported currently.
+            image (corgidrp.data.Image, optional): the science Image whose pixel
+                coordinates ``x``/``y`` were measured in.  When provided,
+                ``DETPIX0X`` and ``DETPIX0Y`` are read from its extension
+                header to remap frame coordinates to absolute EXCAM coordinates.
+                Defaults to None (no remapping applied).
+
         Returns:
             float: the OD at the requested point
         """
+        detpix0x = 0
+        detpix0y = 0
+        if image is not None:
+            detpix0x = image.ext_hdr.get('DETPIX0X', 0)
+            detpix0y = image.ext_hdr.get('DETPIX0Y', 0)
+
         interpolator = LinearNDInterpolator(np.array([self.x_values, self.y_values]).T, self.od_values)
 
-        return interpolator(x, y)
+        return interpolator(x + detpix0x, y + detpix0y)
 
 class NDSpectroscopy(Image):
     """
-    ND filter calibration product for spectroscopy.
-
-    For spectroscopy observations (DPAMNAME=PRISM*) - stores OD(lambda), 
-    the optical depth of the ND filter as a function of wavelength. 
-    Unlike the imaging mode ND filter calibration product, spectroscopy mode
-    ND filter calibration product is only measured at a single detector location.
-
-    Data shape: (2, M)
-        row 0: wavelengths in nm
-        row 1: OD(lambda) values (dimensionless)
-
-    Error shape: (1, 2, M)
-        err[0, 0, :]: wavelength uncertainties (nm)
-        err[0, 1, :]: OD uncertainties
-
+    Class for an ND spectroscopy sweet spot dataset product.
+    Typically stores data arrays for a given set of calibrations.
+    Data (HDU0) is a N×N_wave×4 array of [wave, OD, x, y], err (HDU1) is a 
+    1×N×N_wave×4 array of [wave_err, OD_err, x_err, y_err].
     Args:
-        data_or_filepath (str or np.array): filepath to an existing NDSpectroscopy
-            FITS file, or a (2, M) numpy array of [wavelengths, OD].
-        err (np.array): (1, 2, M) error array.
-        dq (np.array): (2, M) data-quality array.
-        pri_hdr (fits.Header): primary header (required if raw array passed in).
-        ext_hdr (fits.Header): extension header (required if raw array passed in).
-        err_hdr (fits.Header): error extension header.
-        input_dataset (corgidrp.data.Dataset): input frames used to create this
-            product (required if raw array passed in without DRPNFILE in ext_hdr).
-
+        data_or_filepath (str or np.array): Either the filepath to the FITS file 
+            to read in OR the 2D array of ND spectroscopy sweet-spot data (N×N_wave×4).
+        pri_hdr (astropy.io.fits.Header): The primary header (required only if 
+            raw 2D data is passed in).
+        ext_hdr (astropy.io.fits.Header): The image extension header (required 
+            only if raw 2D data is passed in).
+        input_dataset (corgidrp.data.Dataset): The input dataset used to produce 
+            this calibration file (optional). If this is a new product, you should 
+            pass in the dataset so that the parent filenames can be recorded.
+        err (np.array): Optional 4D error array for the data.
+        dq (np.array): Optional 2D data-quality mask for the data.
+        err_hdr (astropy.io.fits.Header): Optional error extension header.
     Attributes:
-        wavelengths (np.array): length-M wavelength array in nm.
-        od_spectrum (np.array): length-M OD(lambda) array.
-        od_err (np.array): length-M OD uncertainty array.
-        wave_err (np.array): length-M wavelength uncertainty array.
+        wavelengths (np.array): 2D array of wavelengths (N×N_wave)
+        od_spectra (np.array): 2D array of OD measurements with wavelength (N×N_wave).
+        x_values (np.array): 2D array of x-centroid positions (N×N_wave).
+        y_values (np.array): 2D array of y-centroid positions (N×N_wave).
     """
 
-    def __init__(self, data_or_filepath, err=None, dq=None,
-                 pri_hdr=None, ext_hdr=None, err_hdr=None, input_dataset=None):
+    def __init__(
+        self,
+        data_or_filepath,
+        pri_hdr=None,
+        ext_hdr=None,
+        input_dataset=None,
+        err=None,
+        dq=None,
+        err_hdr=None
+    ):
         if input_dataset is not None:
             pri_hdr, ext_hdr, err_hdr, dq_hdr = corgidrp.check.merge_headers(
                 input_dataset,
@@ -3856,7 +4103,7 @@ class NDSpectroscopy(Image):
                     # Extension header keywords
                     'BITPIX', 'BUNIT', 'ISHOWFSC', 'ISACQ', 'SPBAL', 'ISFLAT', 'SATSPOTS',
                     'STATUS', 'HVCBIAS', 'OPMODE',
-                    'EXPTIME', 'EMGAIN_C', 'KGAINPAR',
+                    'EXPTIME', 'EMGAIN_A','EMGAIN_C', 'KGAINPAR',
                     'BLNKTIME', 'BLNKCYC', 'EXPCYC', 'OVEREXP', 'NOVEREXP',
                     'PROXET',
                     'FCMLOOP', 'FCMPOS', 'FSMINNER', 'FSMLOS', 'FSMPRFL', 'FSMRSTR',
@@ -3872,6 +4119,7 @@ class NDSpectroscopy(Image):
                     'DATETIME', 'FTIMEUTC', 'DATATYPE',
                     'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
                     'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                    'WAVELEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR'
                 ],
             )
         else:
@@ -3884,43 +4132,131 @@ class NDSpectroscopy(Image):
             err=err,
             dq=dq,
             err_hdr=err_hdr,
-            dq_hdr=dq_hdr,
+            dq_hdr=dq_hdr
         )
 
-        # Shape validation - expect (2, M)
-        if self.data.ndim != 2 or self.data.shape[0] != 2:
+        # 1. Check data shape: expect N×N_wave×4 array for the sweet-spot dataset.
+        if self.data.ndim != 3 or self.data.shape[2] != 4:
             raise ValueError(
-                "NDSpectroscopy data must be a 2D array of shape (2, M). "
+                "NDSpectroscopy HDU0 must be a 3D array of shape (N, N_wave, 4). "
                 f"Received shape {self.data.shape}."
             )
 
-        # Class attributes
-        self.wavelengths = self.data[0, :]
-        self.od_spectrum = self.data[1, :]
-        if self.err is not None and self.err.shape == (1, 2, self.data.shape[1]):
-            self.wave_err = self.err[0, 0, :]
-            self.od_err   = self.err[0, 1, :]
-        else:
-            self.wave_err = np.zeros_like(self.wavelengths)
-            self.od_err   = np.zeros_like(self.od_spectrum)
+        # 2. Parse the columns into convenient attributes.
+        #    Column 0: wavelength, Column 1: OD, Column 2: x_center, Column 3: y_center.
+        self.wavelengths = self.data[:, :, 0]
+        self.od_spectra  = self.data[:, :, 1]
+        self.x_values    = self.data[:, :, 2]
+        self.y_values    = self.data[:, :, 3]
 
-        # Bookkeeping info for new files
+        # 3. If creating a new product (i.e. ext_hdr was passed in), record metadata.
         if ext_hdr is not None:
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
-                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-                self.filename = "{0}_nds_cal.fits".format(orig_input_filename)
-                self.filename = re.sub('_l[0-9].', '', self.filename)
-            self.ext_hdr['DATATYPE'] = 'NDSpectroscopy'
-            self.ext_hdr['BUNIT']    = ''        # dimensionless OD
-            self.ext_hdr['DATALVL'] = 'CAL'
-            self.ext_hdr['HISTORY'] = "NDSpectroscopy OD(lambda) calibration created"
-            self.pri_hdr['FILENAME'] = self.filename
+                # pull latest timestamp from all frames using SCTSRT (new standard)
+                sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+                if len(sctsrt_values) == len(input_dataset):
+                    # if SCTSRT present, use it
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+                else:
+                    # if not, use timestamp from filename
+                    latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+                # use latest frame filename to rename
+                latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+                # use latest frame filename and replace level suffix with ndf calibration suffix
+                self.filename=re.sub('_l[0-9].','_nds_cal',latest_filename)
+            # if no input_dataset is given, do we want to set the filename manually using 
+            # header values?
 
-        # Validate DATATYPE when loading from file
+            self.pri_hdr['FILENAME'] = self.filename
+            self.ext_hdr['DATATYPE'] = 'NDSpectroscopy'
+            self.ext_hdr['HISTORY'] = (
+                f"NDSpectroscopy created from {self.ext_hdr.get('DRPNFILE','?')} frames"
+            )
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+        # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDSpectroscopy':
             raise ValueError("File that was loaded is not labeled as an NDSpectroscopy file.")
 
+    def interpolate_od(self, x_query, y_query, method="linear", wave_grid=None, spec_image=None):
+        """
+        Interpolates the data to get the OD as a function of wavelength at the requested x/y location.
+
+        The calibration stores OD values at absolute EXCAM pixel coordinates
+        (i.e. coordinates in the full 1024×1024 detector frame).  When the
+        query image is a cropped sub-frame, pass it as ``image`` and the
+        function will automatically add the ``DETPIX0X``/``DETPIX0Y`` header
+        values (set by ``l2b_to_l3.crop``) to convert ``x``/``y`` from
+        cropped-frame pixel coordinates to absolute EXCAM coordinates before
+        interpolating.  If those keywords are absent the offsets default to 0,
+        so the call is also correct for full-frame (uncropped) images.
+
+        Args:
+            x_query (float or np.array): x pixel location/s at which to interpolate.
+            y_query (float or np.array): y pixel location/s at which to interpolate.
+            method (str, optional): Interpolation method, can be "linear", "nearest", 
+            or "cubic". Default is "linear".
+            wave_grid (list of float or np.array, optional): Wavelength grid specfied
+            by user. Defaults to None (wavelength grid taken from image hdu 'SPEC_WAVE').
+            spec_image (corgidrp.data.Image, optional): the science Image whose pixel
+                coordinates ``x``/``y`` were measured in.  When provided,
+                ``DETPIX0X`` and ``DETPIX0Y`` are read from its extension
+                header to remap frame coordinates to absolute EXCAM coordinates.
+                Defaults to None (no remapping applied). Wavelength grid also taken from
+                image hdu 'SPEC_WAVE' unless the "wave_grid" keyword specifies otherwise.
+
+        Returns:
+            np.array: Wavelength grid. 
+            np.array: OD as a function of wavelength at the requested point.
+        """
+        detpix0x = 0
+        detpix0y = 0
+
+        if wave_grid is not None:
+            common_wave = np.array(wave_grid)
+        elif spec_image is not None:
+            detpix0x = spec_image.ext_hdr.get('DETPIX0X', 0)
+            detpix0y = spec_image.ext_hdr.get('DETPIX0Y', 0)
+            common_wave = spec_image.hdu_list['SPEC_WAVE'].data
+        else:
+            warnings.warn("Wavelength grid not specified through user input. Interpolating wavelengths onto wavelength grid of first dither of NDSpectroscopy calibration product.")
+            common_wave = self.wavelengths[0,:]
+
+        od_stack = []
+        for i in range(self.od_spectra.shape[0]):
+            od = self.od_spectra[i,:]
+            wave = self.wavelengths[i,:]
+            if not np.allclose(wave, common_wave, atol=0.01):
+                if common_wave[0] < wave[0] or common_wave[-1] > wave[-1]:
+                    if wave_grid is not None:
+                        print(f"WARNING: Input wavelength grid has points outside wavelength range of dither {i+1}. Attempting to extrapolate OD at these points.")
+                    else:
+                        print(f"WARNING: Wavelength grid of input spec image has points outside wavelength range of dither {i+1}. Attempting to extrapolate OD at these points.")
+                    remap_od  = interp1d(wave, od,    kind='linear',
+                                        bounds_error=False, fill_value="extrapolate")
+                    od    = remap_od(common_wave)
+                else:
+                    remap_od  = interp1d(wave, od,    kind='linear',
+                                        bounds_error=False, fill_value=np.nan)
+                    od    = remap_od(common_wave)    
+            od_stack.append(od)
+
+        od_array = np.array(od_stack)
+        interp_od = np.zeros(len(common_wave))
+        
+        # Prepare interpolation coordinates
+        if np.isscalar(x_query) and np.isscalar(y_query):
+            xi = (x_query, y_query)
+        else:
+            xi = np.column_stack((x_query, y_query))
+
+        for i in range(len(common_wave)):
+            interp_od[i] = griddata(points=np.array([self.x_values[:,i], self.y_values[:,i]]).T, values=od_array[:,i], xi=xi, method=method)
+
+        return common_wave, interp_od
 
 class MuellerMatrix(Image):
     """
@@ -3973,8 +4309,18 @@ class MuellerMatrix(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Mueller Matrix created"
 
-            # set the filename
-            self.filename = re.sub('_l[0-9].', '_mmx_cal', input_dataset[-1].filename)
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # use latest frame filename and replace level suffix with mmx calibration suffix
+            self.filename=re.sub('_l[0-9].','_mmx_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename          
             
             # Enforce data level = CAL
@@ -4044,8 +4390,18 @@ class NDMuellerMatrix(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Mueller Matrix created"
 
-            # set the filename
-            self.filename = re.sub('_l[0-9].', '_ndm_cal', input_dataset[-1].filename)
+            # pull latest timestamp from all frames using SCTSRT (new standard)
+            sctsrt_values=[frame.ext_hdr.get('SCTSRT') for frame in input_dataset if frame.ext_hdr.get('SCTSRT') is not None]
+            if len(sctsrt_values) == len(input_dataset):
+                # if SCTSRT present, use it
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(str(item[1].ext_hdr['SCTSRT']), item[0]))[1]
+            else:
+                # if not, use timestamp from filename
+                latest_frame=max(enumerate(input_dataset),key=lambda item:(next((name.split('_')[2] for name in [item[1].filename, item[1].pri_hdr.get('FILENAME')] if name and len(name.split('_')) > 2), ''), item[0]))[1]
+            # use latest frame filename to rename
+            latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
+            # use latest frame filename and replace level suffix with ndm calibration suffix
+            self.filename=re.sub('_l[0-9].','_ndm_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename          
             
             # Enforce data level = CAL

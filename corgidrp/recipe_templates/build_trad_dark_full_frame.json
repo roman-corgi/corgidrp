@@ -44,6 +44,12 @@
             "name" : "update_to_l2a"
         },
         {
+            "name" : "frame_select",
+            "keywords" : {
+                "record_selection" : false
+            }
+        },
+        {
             "name" : "convert_to_electrons",
             "calibs" : {
                 "KGain" : "AUTOMATIC"

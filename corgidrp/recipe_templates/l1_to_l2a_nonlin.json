@@ -51,7 +51,14 @@
                 "KGain" : "AUTOMATIC, OPTIONAL"
             },
             "keywords" : {
+                "mode" : "full",
                 "dataset_copy" : false
+            }
+        },
+        {
+            "name" : "frame_select",
+            "keywords" : {
+                "record_selection" : false
             }
         },
         {

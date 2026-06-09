@@ -1,4 +1,5 @@
 import argparse
+import copy
 import os
 import shutil
 import numpy as np
@@ -153,12 +154,12 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
         #Create the new Image object
         mock_pri_header, mock_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-        new_image = Image(big_array, mock_pri_header, mock_ext_header, input_hdulist=[bias_hdu])
+        new_image = Image(big_array, mock_pri_header, mock_ext_header, err_hdr=errhdr, dq_hdr=dqhdr,  input_hdulist=[bias_hdu])
         # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
         # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
         new_image.pri_hdr.set('FRAMET', str(frame_exptime_sec[ibatch]))
         new_image.ext_hdr.set('EXPTIME', frame_exptime_sec[ibatch])
-        new_image.pri_hdr.set('PA_APER',rotation[ibatch])
+        new_image.pri_hdr.set('PA_APER',-rotation[ibatch])
         new_image.ext_hdr.set('FSMPRFL','NFOV')
         new_image.ext_hdr.set('LSAMNAME','NFOV')
         new_image.ext_hdr.set('CFAMNAME','1F')
@@ -184,36 +185,48 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
         istart = iend
 
-    #############################################
-    #### Add a sat spot image to the dataset ####
-    #############################################
+    ########################################################
+    #### Add three sat spot images to the dataset       ####
+    #### (no-offset, +offset, -offset acquisition groups) ####
+    ########################################################
 
-    #For now assuming there's just one since the step function in progress doesn't break things up. 
-    #We'll want it do later. 
-
-    #Create a mock satellite spot image with the same center as the PSF images. 
+    # Build the +offset and -offset satspot image (identical for mock purposes).
     satellite_spot_image = create_synthetic_satellite_spot_image([55,55],1e-4,0,2,14.79,amplitude_multiplier=1000)
     big_array = np.zeros(big_array_size)
     big_rows, big_cols = big_array_size
     small_rows, small_cols = satellite_spot_image.shape
-
-    # Find the middle indices for the big array
     row_start = (big_rows - small_rows) // 2
     col_start = (big_cols - small_cols) // 2
-
-    # Insert the small array into the middle of the big array
     big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = satellite_spot_image
 
     mock_satspot_pri_header, mock_satspot_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
     mock_satspot_ext_header['SATSPOTS'] = True
-    mock_satspot_ext_header['FSMPRFL']='NFOV'
+    mock_satspot_ext_header['FSMPRFL'] = 'NFOV'
 
-    sat_spot_image = Image(big_array, mock_satspot_pri_header, mock_satspot_ext_header)
-    # Generate proper filename for satellite spot
-    unique_time = (datetime.now() + timedelta(milliseconds=(ibatch+1)*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
-    sat_spot_image.filename = f"cgi_{sat_spot_image.pri_hdr['VISITID']}_{unique_time}_l2b.fits"
+    # Base time for ascending SCTSRT across the three satspot groups.
+    satspot_base_time = datetime(2024, 1, 2, 0, 0, 0)
 
-    image_list.append(sat_spot_image)
+    # No-offset frame: copy of the last science frame with SATSPOTS=True.
+    # It represents the DM-unprobed state (no satellite spots, only speckles).
+    sat_spot_nooffset = copy.deepcopy(image_list[-1])
+    sat_spot_nooffset.ext_hdr['SATSPOTS'] = True
+    sat_spot_nooffset.ext_hdr['SCTSRT'] = satspot_base_time.isoformat()
+    nooffset_time_str = satspot_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
+    sat_spot_nooffset.filename = f"cgi_{sat_spot_nooffset.pri_hdr['VISITID']}_{nooffset_time_str}_l2b.fits"
+
+    # Positive-offset frame.
+    sat_spot_pos = Image(big_array.copy(), mock_satspot_pri_header, mock_satspot_ext_header, err_hdr=errhdr, dq_hdr=dqhdr)
+    sat_spot_pos.ext_hdr['SCTSRT'] = (satspot_base_time + timedelta(seconds=1)).isoformat()
+    pos_time_str = (satspot_base_time + timedelta(seconds=1)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+    sat_spot_pos.filename = f"cgi_{sat_spot_pos.pri_hdr['VISITID']}_{pos_time_str}_l2b.fits"
+
+    # Negative-offset frame (identical to positive for mock purposes).
+    sat_spot_neg = Image(big_array.copy(), mock_satspot_pri_header, mock_satspot_ext_header, err_hdr=errhdr, dq_hdr=dqhdr)
+    sat_spot_neg.ext_hdr['SCTSRT'] = (satspot_base_time + timedelta(seconds=2)).isoformat()
+    neg_time_str = (satspot_base_time + timedelta(seconds=2)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+    sat_spot_neg.filename = f"cgi_{sat_spot_neg.pri_hdr['VISITID']}_{neg_time_str}_l2b.fits"
+
+    image_list.extend([sat_spot_nooffset, sat_spot_pos, sat_spot_neg])
 
     #########################################
     #### Save the dataset to a directory ####
