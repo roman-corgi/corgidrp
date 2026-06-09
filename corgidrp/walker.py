@@ -94,6 +94,152 @@ all_steps = {
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
 
+def _recipe_header_index(key):
+    """
+    Return the 1-indexed recipe position stored by a FITS header keyword.
+
+    Args:
+        key (str): FITS header keyword to check.
+
+    Returns:
+        int or None: 1 for ``RECIPE``, N for ``RECIPE{N}``, otherwise None.
+    """
+    if key == "RECIPE":
+        return 1
+    match = re.fullmatch(r"RECIPE([2-9][0-9]*)", str(key))
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def _read_recipe_history_from_header(header):
+    """
+    Read serialized recipe history from a FITS extension header.
+
+    Args:
+        header (astropy.io.fits.Header): FITS header that may contain recipe
+            history keywords.
+
+    Returns:
+        list: Recipe dictionaries in processing order. Non-JSON legacy values
+        are ignored.
+    """
+    recipe_keys = {key for key in header.keys() if _recipe_header_index(key) is not None}
+    try:
+        nrecipes = int(header.get("NRECIPES", 0))
+    except (TypeError, ValueError):
+        nrecipes = 0
+    recipe_keys.update("RECIPE" if i == 1 else f"RECIPE{i}" for i in range(1, nrecipes + 1))
+
+    recipes = []
+    for key in sorted(recipe_keys, key=_recipe_header_index):
+        if key not in header:
+            continue
+        try:
+            recipe = json.loads(header[key])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if isinstance(recipe, dict):
+            recipes.append(recipe)
+    return recipes
+
+
+def _write_recipe_history_to_header(header, recipes):
+    """
+    Write all recipe history entries to a FITS extension header.
+
+    Args:
+        header (astropy.io.fits.Header): FITS header to update.
+        recipes (list): Recipe dictionaries in processing order.
+    """
+    for key in list(header.keys()):
+        if key == "NRECIPES" or _recipe_header_index(key) is not None:
+            del header[key]
+
+    if not recipes:
+        return
+
+    header["NRECIPES"] = (len(recipes), "Number of recipes recorded")
+    for recipe_index, recipe in enumerate(recipes, start=1):
+        header["RECIPE" if recipe_index == 1 else f"RECIPE{recipe_index}"] = json.dumps(recipe)
+
+
+def _update_recipe_history(frames, recipe, recipe_for_other_frames=None, replace_latest=False):
+    """
+    Append or replace a recipe in one or more frames' FITS header history.
+
+    Args:
+        frames (corgidrp.data.Dataset or list or corgidrp.data.Image): Frame or
+            frames whose ``ext_hdr`` should be updated.
+        recipe (dict): Full recipe dictionary to record on the final frame.
+        recipe_for_other_frames (dict, optional): Recipe dictionary to record on
+            all frames except the final one. Defaults to ``recipe``.
+        replace_latest (bool, optional): Replace the latest recipe entry instead
+            of appending a new entry. Used when JIT calibration resolution mutates
+            the current recipe. Defaults to False.
+    """
+    frames = _frame_list(frames)
+    if not frames:
+        return
+
+    if recipe_for_other_frames is None:
+        recipe_for_other_frames = recipe
+
+    for frame_index, frame in enumerate(frames):
+        frame_recipe = recipe if frame_index == len(frames) - 1 else recipe_for_other_frames
+        recipes = _read_recipe_history_from_header(frame.ext_hdr)
+        if replace_latest and recipes:
+            recipes[-1] = frame_recipe
+        else:
+            recipes.append(frame_recipe)
+        _write_recipe_history_to_header(frame.ext_hdr, recipes)
+
+
+def _frame_list(dataset_or_frame):
+    """
+    Return a list of frames for a Dataset, list, or single frame.
+
+    Args:
+        dataset_or_frame (corgidrp.data.Dataset or list or corgidrp.data.Image):
+            Frame container or single frame to normalize.
+
+    Returns:
+        list: Frames from ``dataset_or_frame``.
+    """
+    if isinstance(dataset_or_frame, data.Dataset):
+        return list(dataset_or_frame)
+    if isinstance(dataset_or_frame, list):
+        return dataset_or_frame
+    return [dataset_or_frame]
+
+
+def _propagate_recipe_history(input_dataset_or_frame, output_dataset_or_frame, fallback_recipe):
+    """
+    Copy input recipe history to output frames that did not inherit it.
+
+    Args:
+        input_dataset_or_frame (corgidrp.data.Dataset or list or corgidrp.data.Image):
+            Pipeline step input whose recipe history should be reused.
+        output_dataset_or_frame (corgidrp.data.Dataset or list or corgidrp.data.Image):
+            Pipeline step output to inspect.
+        fallback_recipe (dict): Recipe to write when no recipe history is present
+            on the input.
+    """
+    recipes = []
+    for frame in reversed(_frame_list(input_dataset_or_frame)):
+        if hasattr(frame, "ext_hdr"):
+            recipes = _read_recipe_history_from_header(frame.ext_hdr)
+            if recipes:
+                break
+
+    if not recipes:
+        recipes = [fallback_recipe]
+
+    for frame in _frame_list(output_dataset_or_frame):
+        if hasattr(frame, "ext_hdr") and not _read_recipe_history_from_header(frame.ext_hdr):
+            _write_recipe_history_to_header(frame.ext_hdr, recipes)
+
+
 def _load_recipe_template(recipe_filename, user_templates_dir=None):
     """
     Load recipe template, checking user_templates first, then defaults.
@@ -807,11 +953,11 @@ def run_recipe(recipe, save_recipe_file=True):
                 else:
                     curr_dataset = data.Dataset(filelist)
                     recipe_temp = recipe
-                # write the recipe into the image extension header
-                curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                if len(curr_dataset) > 1:
-                    for frame in curr_dataset[:-1]:
-                        frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                _update_recipe_history(
+                    curr_dataset,
+                    recipe,
+                    recipe_for_other_frames=recipe_temp,
+                )
             # execute each pipeline step
             print('Executing recipe: {0}'.format(recipe['name']))
             if isinstance(filelist, list):
@@ -872,10 +1018,12 @@ def run_recipe(recipe, save_recipe_file=True):
                                 recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
                             else:
                                 recipe_temp = recipe
-                            list_of_frames[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                            if len(list_of_frames) > 1:
-                                for frame in list_of_frames[:-1]:
-                                    frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                            _update_recipe_history(
+                                list_of_frames,
+                                recipe,
+                                recipe_for_other_frames=recipe_temp,
+                                replace_latest=True,
+                            )
 
                         # load the calibration files in from disk
                         for calib in step["calibs"]:
@@ -895,15 +1043,11 @@ def run_recipe(recipe, save_recipe_file=True):
                     kwargs = step.get("keywords", {})
 
                     # run the step!
+                    input_dataset = curr_dataset
                     curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
 
-                    # make sure RECIPE header is propagated to output
-                    if isinstance(curr_dataset, data.Dataset):
-                        for frame in curr_dataset:
-                            if "RECIPE" not in frame.ext_hdr:
-                                frame.ext_hdr["RECIPE"] = json.dumps(recipe)
-                    elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
-                        curr_dataset.ext_hdr["RECIPE"] = json.dumps(recipe)
+                    # make sure recipe history is propagated to output
+                    _propagate_recipe_history(input_dataset, curr_dataset, recipe)
 
         if not save_step:
             output_filepaths = None

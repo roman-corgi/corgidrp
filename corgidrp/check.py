@@ -4,6 +4,7 @@ Module to hold input-checking functions to minimize repetition
 Copied over from the II&T pipeline
 """
 import datetime
+import re
 import numbers
 import numpy as np
 import logging
@@ -806,10 +807,27 @@ invalid_keywords_default = ['FTIMEUTC', 'PROXET', 'DATETIME']
 # FILETIME is the only one calculated in merge_heades, the others are calculated elsewhere in the
 # pipeline but are included here so that they are exempt from the identical check
 calculated_value_keywords_default = (
-    ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']
+    ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE', 'NRECIPES']
     + [f'FILE{i}' for i in range(100)]
 )
 any_true_keywords_default = ['OVEREXP']
+
+def _is_recipe_metadata_keyword(key):
+    """
+    Identify generated recipe-history header keywords.
+
+    Args:
+        key (str): FITS header keyword to check.
+
+    Returns:
+        bool: True when ``key`` is ``RECIPE``, a numbered recipe keyword, or
+        ``NRECIPES``.
+    """
+    return (
+        key == 'RECIPE'
+        or key == 'NRECIPES'
+        or bool(re.fullmatch(r'RECIPE[2-9][0-9]*', str(key)))
+    )
 
 def merge_headers(
     input_dataset,
@@ -1040,7 +1058,7 @@ def merge_headers(
     header_attrs = ('pri_hdr', 'ext_hdr', 'err_hdr', 'dq_hdr')
     for header_attr, out_header in zip(header_attrs, headers):
         for key in list(out_header.keys()):
-            if key in exempt:
+            if key in exempt or _is_recipe_metadata_keyword(key):
                 continue
             values = []
             for f in input_dataset:

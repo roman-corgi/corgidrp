@@ -7,6 +7,22 @@ from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, u
 import corgidrp.check as check
 from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords
 
+def _copy_recipe_metadata(src_hdr, dst_hdr):
+    """
+    Copy generated recipe-history metadata between FITS extension headers.
+
+    Args:
+        src_hdr (astropy.io.fits.Header): Source header containing recipe history.
+        dst_hdr (astropy.io.fits.Header): Destination header to update.
+    """
+    for key in list(dst_hdr.keys()):
+        if check._is_recipe_metadata_keyword(key):
+            del dst_hdr[key]
+
+    for key in src_hdr.keys():
+        if check._is_recipe_metadata_keyword(key):
+            dst_hdr.set(key, src_hdr[key], comment=src_hdr.comments[key])
+
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
     Get mean frame and corresponding bad-pixel map from L2b data frames.  The
@@ -1050,7 +1066,6 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         master_dark = Dark(md_data, prihdr, exthdr, input_data, md_noise, FDCdq,
                         errhdr)
         master_dark.ext_hdr['DRPNFILE'] = noise_maps.ext_hdr['DRPNFILE']
-        if 'RECIPE' in dataset.frames[0].ext_hdr:
-            master_dark.ext_hdr['RECIPE'] = dataset.frames[0].ext_hdr['RECIPE']
+        _copy_recipe_metadata(dataset.frames[0].ext_hdr, master_dark.ext_hdr)
 
         return master_dark

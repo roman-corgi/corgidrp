@@ -575,6 +575,48 @@ def test_generate_multiple_recipes():
     assert len(recipes[0]) == 3 # nonlin chain in 3 parts
     assert len(recipes[1]) == 2 # kgain chain in 2 parts
 
+def test_chained_recipes_are_all_written_to_header(tmp_path):
+    """
+    Tests that chained recipe outputs keep the complete recipe history.
+    """
+    datadir = tmp_path / "simdata"
+    outputdir = tmp_path / "walker_output"
+    datadir.mkdir()
+    outputdir.mkdir()
+
+    l1_dataset = mocks.create_prescan_files(filedir=str(datadir), arrtype="SCI", numfiles=2)
+    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+    l1_dataset.save(filedir=str(datadir))
+    filelist = [frame.filepath for frame in l1_dataset]
+
+    save_recipe_path = os.path.join(os.path.dirname(__file__), "test_data", "saving_only.json")
+    first_recipe = json.load(open(save_recipe_path, 'r'))
+    first_recipe["name"] = "recipe_history_first"
+    first_recipe["template"] = False
+    first_recipe["inputs"] = filelist
+    first_recipe["outputdir"] = str(outputdir)
+    first_recipe["steps"][0]["keywords"]["suffix"] = "first"
+    first_outputs = walker.run_recipe(first_recipe, save_recipe_file=False)
+
+    second_recipe = json.load(open(save_recipe_path, 'r'))
+    second_recipe["name"] = "recipe_history_second"
+    second_recipe["template"] = False
+    second_recipe["inputs"] = first_outputs
+    second_recipe["outputdir"] = str(outputdir)
+    second_recipe["steps"][0]["keywords"]["suffix"] = "second"
+    second_outputs = walker.run_recipe(second_recipe, save_recipe_file=False)
+
+    output_dataset = data.Dataset(second_outputs)
+    for frame in output_dataset:
+        assert frame.ext_hdr["NRECIPES"] == 2
+        first_header_recipe = json.loads(frame.ext_hdr["RECIPE"])
+        second_header_recipe = json.loads(frame.ext_hdr["RECIPE2"])
+        assert first_header_recipe["name"] == first_recipe["name"]
+        assert second_header_recipe["name"] == second_recipe["name"]
+        assert "RECIPE3" not in frame.ext_hdr
+
 def test_cpgs_satspots():
     """
     Tests passing in sat spot parameters from the CPGS XML into the 
@@ -1197,4 +1239,3 @@ if __name__ == "__main__":#
     test_user_template_in_autogen_recipe()
     test_user_template_wrong_name_loads_without_validation()
     test_user_template_wrong_name_rejected_with_validation()
-

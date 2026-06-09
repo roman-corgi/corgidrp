@@ -2,6 +2,7 @@ import os
 import argparse
 import difflib
 import glob
+import re
 import pytest
 import numpy as np
 import astropy.io.fits as fits
@@ -261,7 +262,12 @@ def validate_cgi_filename(filepath, expected_suffix):
     print(f"Filename validation passed: {filename}")
     return True
 
-custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'FILE0', 'DATETIME', 'FTIMEUTC', 'DETPIX0X', 'DETPIX0Y', 'PYKLIPV']
+custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'NRECIPES', 'FILE0', 'DATETIME', 'FTIMEUTC', 'DETPIX0X', 'DETPIX0Y', 'PYKLIPV']
+
+def is_recipe_header_key(name):
+    """Return True for generated recipe-history header keywords."""
+    return name == 'RECIPE' or name == 'NRECIPES' or bool(re.fullmatch(r'RECIPE[2-9][0-9]*', str(name)))
+
 def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_check=False):
     """
     Compare reference doc to new doc. Checks that all headers are present regardless of order
@@ -316,6 +322,8 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                     if name.startswith("HIERARCH FILE") and len(name) > 13 and name[13:].isdigit():
                         continue
                     if name.startswith("HIERARCH FILE_") and len(name) > 14 and name[14:].isdigit():
+                        continue
+                    if is_recipe_header_key(name):
                         continue
                     # Skip table header/delimiter rows
                     if name and dtype and name != 'Keyword' and name != '=' * len(name) and name != '-' * len(name) and not name.isdigit():
