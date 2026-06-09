@@ -1,6 +1,5 @@
 import argparse
 import copy
-import json
 import os
 import shutil
 import numpy as np
@@ -151,6 +150,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     image_list = []
     last_sci_image_by_pa = {}
+    last_ref_image = None
     science_frame_index = 0
     for ibatch in range(nbatch): 
         # iend = istart + nframes_per_batch
@@ -216,6 +216,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         #Save the last science filename for later. 
         if star[ibatch] != 2:
             last_sci_image_by_pa[round(float(new_image.pri_hdr['PA_APER']), 10)] = copy.deepcopy(new_image)
+        else:
+            last_ref_image = copy.deepcopy(new_image)
 
 
         image_list.append(new_image)
@@ -237,7 +239,6 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = satellite_spot_image
 
     mock_satspot_pri_header, mock_satspot_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    mock_satspot_pri_header['PSFREF'] = 0
     mock_satspot_ext_header['SATSPOTS'] = True
     mock_satspot_ext_header['FSMPRFL'] = 'NFOV'
 
@@ -247,18 +248,27 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     science_visitids_for_pa = visitid_by_pa_aper(science_pa_apers, science_visitids)
     if set(last_sci_image_by_pa) != set(science_pa_apers):
         raise ValueError("No science frames were found for one or more PA_APER satellite-spot groups.")
+    if last_ref_image is None:
+        raise ValueError("No reference frames were found for the reference satellite-spot group.")
 
-    ### This block creates the mock satellite-spot frames needed for each science PA_APER / science VISITID.
-    ### In short: for each science visit, it creates 3 extra frames:
+    satspot_frame_specs = []
+    for pa_aper, visitid in zip(science_pa_apers, science_visitids_for_pa):
+        satspot_frame_specs.append((pa_aper, visitid, 0, last_sci_image_by_pa[pa_aper]))
+    ref_pa_aper = round(float(last_ref_image.pri_hdr['PA_APER']), 10)
+    satspot_frame_specs.append((ref_pa_aper, reference_visitid, 1, last_ref_image))
+
+    ### This block creates the mock satellite-spot frames needed for each science PA_APER / science VISITID
+    ### and for the reference VISITID. In short: for each visit, it creates 3 extra frames:
     ###   - a no-offset frame
     ###   - a positive-offset satellite-spot frame
     ###   - a negative-offset satellite-spot frame
-    ### So if there are 2 science PA_APER values, this creates 6 satellite-spot frames total.
+    ### So if there are 2 science PA_APER values plus 1 reference VISITID, this creates 9
+    ### satellite-spot frames total.
     satspot_frames_by_group = [[], [], []]
-    for pa_aper, visitid in zip(science_pa_apers, science_visitids_for_pa):
-        # No-offset frame: copy of the last science frame for this PA_APER with SATSPOTS=True.
+    for pa_aper, visitid, psfref, nooffset_source_image in satspot_frame_specs:
+        # No-offset frame: copy of the last matching frame for this visit with SATSPOTS=True.
         # It represents the DM-unprobed state (no satellite spots, only speckles).
-        sat_spot_nooffset = copy.deepcopy(last_sci_image_by_pa[pa_aper])
+        sat_spot_nooffset = copy.deepcopy(nooffset_source_image)
         sat_spot_nooffset.ext_hdr['SATSPOTS'] = True
         satspot_frames_by_group[0].append(sat_spot_nooffset)
 
@@ -267,6 +277,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
             satspot_ext_header = mock_satspot_ext_header.copy()
             satspot_pri_header['VISITID'] = visitid
             satspot_pri_header['PA_APER'] = pa_aper
+            satspot_pri_header['PSFREF'] = psfref
             sat_spot = Image(
                 big_array.copy(),
                 satspot_pri_header,
@@ -280,7 +291,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     for group_index, satspot_frames in enumerate(satspot_frames_by_group):
         for i_frame, satspot_frame in enumerate(satspot_frames):
             frame_time = satspot_base_time + timedelta(
-                seconds=group_index * len(science_pa_apers) + i_frame
+                seconds=group_index * len(satspot_frame_specs) + i_frame
             )
             satspot_frame.ext_hdr['SCTSRT'] = frame_time.isoformat()
             time_str = frame_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
@@ -475,13 +486,7 @@ def test_l3_to_l4(e2eoutput_path):
 
     l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
-    with open(os.path.join(walker.recipe_dir, "l3_to_l4.json"), "r") as recipe_file:
-        l3_to_l4_template = json.load(recipe_file)
-    for step in l3_to_l4_template["steps"]:
-        if step["name"] == "find_star":
-            step.setdefault("keywords", {})["pri_split_keywords"] = []
-
-    walker.walk_corgidrp(l3_data_filelist, "", main_output_dir, template=l3_to_l4_template)
+    walker.walk_corgidrp(l3_data_filelist, "", main_output_dir)
 
     ########################################################################
     #### Read in the psf_subtracted images and test for source detection ###
