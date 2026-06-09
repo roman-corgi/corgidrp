@@ -186,7 +186,6 @@ def P2_P3(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
         np.exp(-3*time_data/tau))+ \
         num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
 
-#@profile
 def illumination_correction(img, binsize, ill_corr):
     """Performs non-uniform illumination correction by taking sections of the
     image and performing local illumination subtraction.
@@ -334,7 +333,6 @@ def sig_tau_temp(temp_data, E, cs, sig_E, sig_cs):
     sig_tau = np.sqrt((dtau_dcs*sig_cs*1e-19)**2 + (dtau_dE*sig_E)**2)
     return sig_tau
 
-#@profile
 def trap_id(cor_img_stack, ill_corr_min, ill_corr_max, timings, thresh_factor,
             length_limit):
     """
@@ -2122,7 +2120,6 @@ def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
 
     return (E, sig_E, cs, sig_cs, Rsq, tau_input_T, sig_tau_input_T)
 
-#@profile
 def tpump_analysis(input_dataset, time_head = 'TPTAU',
                    mean_field = None, length_lim = 5,
     thresh_factor = 1.5, k_prob = 1, ill_corr = True, tfit_const = True,
@@ -2388,9 +2385,9 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
                 #if np.abs(frame_data[0:1027]).max()==0:
                 halfway_row, halfway_col = int(frame_data.shape[0]/2), int(frame_data.shape[1]/2)
                 central_mean_value = np.mean(frame_data[halfway_row-150:halfway_row+150, halfway_col-150:halfway_col+150])
-                if np.abs(central_mean_value) < bias_tolerance: 
+                if np.abs(central_mean_value) < bias_tolerance:
                     continue #skip these frames; even if some legacy ones made it through, they wouldn't actually have any dipoles in them to find
-                timings.append(phase_time)   
+                timings.append(phase_time)
                 frames.append(frame_data)
 
             # no need for cosmic ray removal since we do ill. correction

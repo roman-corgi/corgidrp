@@ -130,7 +130,8 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=False, plot_outdir='figures', show_plot=False,
-                     verbose=False, nonlin_params=None, apply_dq = True, percent_pupil=0.99):
+                     verbose=False, nonlin_params=None, apply_dq = True, percent_pupil=0.99,
+                     extrapolate=False):
     """
     Function that derives the non-linearity calibration table for a set of DN
     and EM values.
@@ -230,6 +231,10 @@ def calibrate_nonlin(dataset_nl,
       percent_pupil (float): (Optional) the fraction of the pupil that must be not masked in order to have good statistics 
         for the mean signal for each exposure time set for each EM gain. Default is 0.99, meaning that at least 99% of the pixels 
         in the pupil area must be included in the unmasked pixels to calculate the mean signal for each frame.
+    extrapolate (bool): (Optional) If True, extrapolation will be used for nonlinearity correction beyond the bounds 
+        of the data, within min_write and max_write.  Defaults to False.  Some high-DN frames may be saturated and leave 
+        a long range of DN over which to linearly extrapolate, which may lead to unphysically high nonlinearity corrections there. 
+        When extrapolate = False, the values on the bounds of the data are used for points outside the bounds. 
       
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
@@ -856,9 +861,14 @@ def calibrate_nonlin(dataset_nl,
         # Use the end point values as the extrapolation b/c if saturation affects many 
         # frames, extrapolating linearly based on the slope of the last 2 points 
         # at an end may result in a huge, unphysical correction at the chosen value outside the bounds
-        interp_func = interp1d(corr_mean_signal_sorted, 
-                        rel_gain_smoothed, kind='linear', bounds_error=False, 
-                        fill_value=(rel_gain_smoothed[0], rel_gain_smoothed[-1]))#'extrapolate')
+        if extrapolate:
+            interp_func = interp1d(corr_mean_signal_sorted, 
+                                    rel_gain_smoothed, kind='linear', 
+                                    fill_value='extrapolate')
+        else:
+            interp_func = interp1d(corr_mean_signal_sorted, 
+                            rel_gain_smoothed, kind='linear', bounds_error=False, 
+                            fill_value=(rel_gain_smoothed[0], rel_gain_smoothed[-1]))
         rel_gain_interp = interp_func(mean_linspace)
         
         # Normalize the relative gain to the value at norm_val DN

@@ -26,12 +26,6 @@ import corgidrp.sorting
 import corgidrp.fluxcal
 import corgidrp.spec
 
-#for RAM testing
-#import psutil
-#import tracemalloc
-#from datetime import date
-#from memory_profiler import profile
-
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
     "discard_setup_frames" : corgidrp.l1_to_l2a.discard_setup_frames,
@@ -167,7 +161,7 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                         step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
 
             output_filelist = run_recipe(recipe)
-   
+
     # return just the recipe if there was only one
     if len(list_of_recipe_chains) == 1:
         if len(list_of_recipe_chains[0]) == 1:
@@ -477,13 +471,13 @@ def guess_template(dataset):
 
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['ISPC'])
 
-            if len(unique_vals) > 1: #Satspots are not PC 
+            if len(unique_vals) > 1: #Satspots are not PC
                 if is_spectroscopy:
                     recipe_filename = [["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"], ["l2a_to_l2b_spec.json"]] #"l2a_to_l2b_pc_spec.json"
                 elif is_polarimetry:
                     recipe_filename = [["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pol_pc_3.json"],["l2a_to_l2b_pol.json"]] #"l2a_to_l2b_pc_pol.json"
                 else:
-                    recipe_filename = [["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"], ["l2a_to_l2b.json"]]#l2a_to_l2b_pc.json 
+                    recipe_filename = [["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"], ["l2a_to_l2b.json"]]#l2a_to_l2b_pc.json
                 chained = True
 
 
@@ -495,16 +489,16 @@ def guess_template(dataset):
 
                     else:
                         recipe_filename = "l2a_to_l2b_spec.json"
-                            
+
                 elif is_polarimetry:
                     if image.ext_hdr['ISPC'] == 1:
                         recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pol_pc_3.json"] #"l2a_to_l2b_pc_pol.json"
                         chained = True
-                    else: 
+                    else:
                         recipe_filename = "l2a_to_l2b_pol.json"
                 else:
                     if image.ext_hdr['ISPC'] == 1:
-                        recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
+                        recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json
                         chained = True
                     else:
                         recipe_filename = "l2a_to_l2b.json"  # science data and all else
@@ -604,7 +598,6 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
             this_caldb = caldb.CalDB()
             this_caldb.create_entry(image)
 
-#@profile
 def run_recipe(recipe, save_recipe_file=True):
     """
     Run the specified recipe
@@ -816,7 +809,7 @@ def _get_satellite_spot_info_from_xml(xml_tree):
         fields = sat_spot.split(",")
         sat_spot_output['num_spots'] += 1
         for i, field in enumerate(fields):
-            value = field.split("=")[1]            
+            value = field.split("=")[1]
             if i <=2:
                 sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = float(value)
             else:
