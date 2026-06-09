@@ -684,8 +684,8 @@ def test_cosm_tail_bleed_over():
     # cosmic ray is found by first finding saturation, so mask due to cosmic rays 
     # could be valued at 128 or 128+32
     assert (np.array_equal(np.where(dataset_masked.all_dq>=128,1,0)[0], check_mask))
-    # saturated row 1200-2 outside of image area covered in saturation mask:
-    assert (1198 in np.where(dataset_masked.all_dq[0]==32)[0])
+    # saturated row 1200-2 outside of image area covered in saturation+cosmic ray mask:
+    assert (1198 in np.where(dataset_masked.all_dq[0]==160)[0])
 
 def test_i_begs():
     """Verify that function returns correct i_begs result."""

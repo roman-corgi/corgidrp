@@ -391,11 +391,11 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                 if pc_master_dark.ext_hdr['NUM_FR'] < len(sub_dataset):
                     print('Number of frames that created the photon-counted master dark should be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
     
-            # in case the number of subsets of darks < number of subsets of brights, which can happen since the number of darks within a subset can be bigger than the number in a bright subset
+            # just one PC master dark (not binned), so attach it for every bin of illuminated frames
             j = np.mod(i, pc_master_dark.data.shape[0])
-            pc_means.append(pc_master_dark.data[j])
-            dqs.append(pc_master_dark.dq[j])
-            errs.append(pc_master_dark.err[0][j])
+            pc_means.append(pc_master_dark.data)
+            dqs.append(pc_master_dark.dq)
+            errs.append(pc_master_dark.err[0])
             dark_sub = "yes"
         else:
             pc_means.append(np.zeros_like(pc_means[0]))
@@ -457,7 +457,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         ext_hdr['PCTHRESH'] = thresh
         ext_hdr['NUM_FR'] = len(sub_dataset) 
         ext_hdr['HISTORY'] = "Photon-counted {0} dark frames for master dark of the output dataset. Using T_factor={1} and niter={2}.".format(len(sub_dataset), T_factor, niter)
-        pc_dark = data.Dark(list_new_image[0], pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err]), dq=list_dq[0], err_hdr=err_hdr, dq_hdr=dq_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
+        pc_dark = data.Dark(list_new_image[0], pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err[0]]), dq=list_dq[0], err_hdr=err_hdr, dq_hdr=dq_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
         return pc_dark
 
 def corr_photon_count(nobs, nfr, t, g, mask_indices, niter=2):
