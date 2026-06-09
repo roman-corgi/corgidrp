@@ -9,6 +9,12 @@
     "outputdir" : "",
     "steps" : [
         {
+            "name" : "frame_select",
+            "keywords" : {
+                "record_selection" : false
+            }
+        },
+        {
             "name" : "build_trad_dark",
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC"

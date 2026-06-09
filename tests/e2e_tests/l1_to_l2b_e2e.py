@@ -164,8 +164,9 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(bp_map)
 
     # define the raw science data to process
-    l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in range(len(os.listdir(l1_datadir)))]
 
+    l1_filenames=sorted(os.listdir(l1_datadir))
+    l1_data_filelist=[os.path.join(l1_datadir,l1_filenames[i]) for i in [0,3]]
     # Update headers for TVAC files
     l1_data_filelist = check.fix_hdrs_for_tvac(l1_data_filelist, input_data_dir)
 

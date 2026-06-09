@@ -95,6 +95,84 @@ all_steps = {
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
 
+def _load_recipe_template(recipe_filename, user_templates_dir=None):
+    """
+    Load recipe template, checking user_templates first, then defaults.
+
+    Args:
+        recipe_filename (str): Template filename (e.g., "l1_to_l2a_basic.json")
+        user_templates_dir (str): Path to user templates directory. If None, uses corgidrp.user_templates_dir
+
+    Returns:
+        tuple: (template dict, source path, is_user_template bool)
+    """
+    if user_templates_dir is None:
+        user_templates_dir = corgidrp.user_templates_dir
+
+    # First check user templates directory
+    user_template_path = os.path.join(user_templates_dir, recipe_filename)
+    if os.path.exists(user_template_path):
+        with open(user_template_path, 'r') as f:
+            template = json.load(f)
+        return template, user_template_path, True
+
+    # Fall back to default template
+    default_template_path = os.path.join(recipe_dir, recipe_filename)
+    if os.path.exists(default_template_path):
+        with open(default_template_path, 'r') as f:
+            template = json.load(f)
+        return template, default_template_path, False
+
+    # Template not found in either location
+    raise FileNotFoundError(
+        f"Recipe template '{recipe_filename}' not found in user templates "
+        f"({user_templates_dir}) or default templates ({recipe_dir})"
+    )
+
+def _validate_template_structure(user_template, default_template_path, recipe_filename):
+    """
+    Validate that user template has same step names/order as default.
+    Raises ValueError if mismatch found when enforce_template_structure=True.
+
+    Args:
+        user_template (dict): User-provided template
+        default_template_path (str): Path of the default template from repo
+        recipe_filename (str): Template name for error messages
+
+    Raises:
+        ValueError: If template structures don't match and enforcement is enabled
+    """
+    if not corgidrp.enforce_template_structure:
+        return  # Validation disabled
+
+    if not os.path.exists(default_template_path):
+        raise FileNotFoundError(
+            f"Cannot validate user template '{recipe_filename}': "
+            f"no corresponding default template found at {default_template_path}. "
+            f"User templates must have same filename as a default template when "
+            f"enforce_template_structure=True."
+        )
+    with open(default_template_path, 'r') as f:
+        default_template = json.load(f)
+
+        # Extract step names from both templates
+        user_steps = [step['name'] for step in user_template.get('steps', [])]
+        default_steps = [step['name'] for step in default_template.get('steps', [])]
+    
+        # Check if step names and order match
+        if user_steps != default_steps:
+            error_msg = (
+                f"User template '{recipe_filename}' has different step structure than default.\n"
+                f"User template steps: {user_steps}\n"
+                f"Default template steps: {default_steps}\n"
+                f"When enforce_template_structure=True, user templates must have the same "
+                f"step names in the same order as default templates. You can modify step "
+                f"keywords and calibs, but not add/remove/reorder steps.\n"
+                f"To allow different step structures, set enforce_template_structure=False "
+                f"in your config file or via environment variable."
+            )
+            raise ValueError(error_msg)
+
 def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     """
     Automatically create a recipe and process the input filelist.
@@ -113,17 +191,33 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     Returns:
         json or list: the JSON recipe (or list of JSON recipes) that was used for processing
     """
+    recipe_filepath = None
     if isinstance(template, str):
         if os.path.sep not in template:
-            # this is just a template name in the recipe_templates folder
-            recipe_filepath = os.path.join(recipe_dir, template)
+            # this is just a template name. check user_templates first, then defaults
+            template, recipe_filepath, is_user_template = _load_recipe_template(template)
+            # Validate user template structure if enabled
+            if is_user_template and corgidrp.enforce_template_structure:
+                default_template_path = os.path.join(recipe_dir, os.path.basename(recipe_filepath))
+                _validate_template_structure(template, default_template_path, os.path.basename(recipe_filepath))
         else:
             recipe_filepath = template
-
-        template = json.load(open(recipe_filepath, 'r'))
+            template = json.load(open(recipe_filepath, 'r'))
+            is_user_template = False  # explicit paths are not user templates
 
     # generate recipe
     recipes = autogen_recipe(filelist, outputdir, template=template)
+
+    if recipe_filepath is not None:
+        if isinstance(recipes, list):
+            for r in recipes:
+                if isinstance(r, list):
+                    for sub_r in r:
+                        sub_r["RECIPE_SRC"] = recipe_filepath
+                else:
+                    r["RECIPE_SRC"] = recipe_filepath
+        else:
+            recipes["RECIPE_SRC"] = recipe_filepath
 
 
     if not isinstance(recipes, list):
@@ -215,27 +309,57 @@ def autogen_recipe(filelist, outputdir, template=None):
                 raise TypeError("Each element of recipe_filename_list should be a list, but got {0}".format(type(l)))
         
         recipe_template_list_list = []
+        template_sources = []  # Track sources for logging
         for recipe_filename_list in recipe_filename_list_list:
             recipe_template_list = []
             for recipe_filename in recipe_filename_list:
-                # load the template recipe
-                recipe_filepath = os.path.join(recipe_dir, recipe_filename)
-                template = json.load(open(recipe_filepath, 'r'))
+                # load the template recipe (check user_templates first, then defaults)
+                template, template_path, is_user_template = _load_recipe_template(recipe_filename)
+                # If user template loaded and validation enabled, validate structure
+                if is_user_template and corgidrp.enforce_template_structure:
+                    # Load default template for comparison
+                    default_template_path = os.path.join(recipe_dir, recipe_filename)
+                    _validate_template_structure(template, default_template_path, recipe_filename)
                 recipe_template_list.append(template)
+                template_sources.append((recipe_filename, template_path, is_user_template))
             recipe_template_list_list.append(recipe_template_list)
     else:
         # user passed in a single template
-        recipe_template_list = [template]
+        # Check if it's a string (filename) or already loaded dict
+        if isinstance(template, str):
+            # It's a filename, load it (check user_templates first)
+            template_dict, template_path, is_user_template = _load_recipe_template(template)
+
+            # If user template loaded and validation enabled, validate structure
+            if is_user_template and corgidrp.enforce_template_structure:
+                # Load default template for comparison
+                default_template_path = os.path.join(recipe_dir, template)
+                _validate_template_structure(template_dict, default_template_path, template)
+
+            recipe_template_list = [template_dict]
+            template_sources = [(template, template_path, is_user_template)]
+        else:
+            # It's already a loaded dict
+            recipe_template_list = [template]
+            template_sources = []
+
         recipe_template_list_list = [recipe_template_list]
         chained = False
 
     recipe_list_list = []
+    source_idx = 0  # Index into template_sources list
     for recipe_template_list in recipe_template_list_list:
         recipe_list = []
         for i, template in enumerate(recipe_template_list):
             # create the personalized recipe
             recipe = template.copy()
             recipe["template"] = False
+
+            # Add template source for traceability
+            if source_idx < len(template_sources):
+                _, template_path, is_user_template = template_sources[source_idx]
+                recipe["RECIPE_SRC"] = template_path
+                source_idx += 1
 
             # for chained recipes, don't put the input in yet since we don't know it
             if i > 0 and chained:
@@ -288,19 +412,30 @@ def autogen_recipe(filelist, outputdir, template=None):
 
     # Print the recipes
     print("\n" + "="*60)
+    user_templates_dir = corgidrp.user_templates_dir
     if len(recipe_list_list) > 1:
         print("Generated Recipe Chains:")
         for chain_idx, recipe_list in enumerate(recipe_list_list):
             print(f"\nChain {chain_idx + 1}:")
             for recipe_idx, recipe in enumerate(recipe_list):
-                print(f"\n  Recipe {recipe_idx + 1}: {recipe['name']}" )
+                print(f"\n  Recipe {recipe_idx + 1}: {recipe['name']}")
+                if 'RECIPE_SRC' in recipe:
+                    src_label = " (user template)" if user_templates_dir in recipe['RECIPE_SRC'] else " (default template)"
+                    print(f"    Source: {recipe['RECIPE_SRC']}{src_label}")
     else:
         if len(recipe_list_list[0]) > 1:
             print("Generated Recipe Chain:")
             for recipe_idx, recipe in enumerate(recipe_list_list[0]):
                 print(f"\nRecipe {recipe_idx + 1}: {recipe['name']}")
+                if 'RECIPE_SRC' in recipe:
+                    src_label = " (user template)" if user_templates_dir in recipe['RECIPE_SRC'] else " (default template)"
+                    print(f"  Source: {recipe['RECIPE_SRC']}{src_label}")
         else:
             print(f"Generated Recipe: {recipe_list_list[0][0]['name']}")
+            if 'RECIPE_SRC' in recipe_list_list[0][0]:
+                recipe = recipe_list_list[0][0]
+                src_label = " (user template)" if user_templates_dir in recipe['RECIPE_SRC'] else " (default template)"
+                print(f"  Source: {recipe['RECIPE_SRC']}{src_label}")
     print("="*60 + "\n")
 
     # if list of chains, return that.  If single list, return that.  If single
@@ -426,7 +561,11 @@ def guess_template(dataset):
                     recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
                     chained = True
                 else:
-                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+                    # Check for polarimetry mode to use appropriate flux calibration recipe
+                    if image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']:
+                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
+                    else:
+                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
                     chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
@@ -442,6 +581,9 @@ def guess_template(dataset):
             chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TPUMP':
             recipe_filename = ['trap_pump_cal_1.json', 'trap_pump_cal_2.json']
+            chained = True
+        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_POL_SETUP':
+            recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
             chained = True
         else:
             recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
