@@ -23,6 +23,99 @@ from datetime import datetime, timedelta
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 
+def visitid_by_pa_aper(pa_aper_values, visitids):
+    """Assign visit IDs to PA_APER groups in sorted PA_APER order.
+
+    Args:
+        pa_aper_values (array-like): PA_APER values, one per frame.
+        visitids (tuple or list): Visit IDs to assign to the sorted unique
+            PA_APER values.
+
+    Returns:
+        list: Visit ID for each PA_APER value in the input order.
+    """
+    pa_aper_values = [round(float(pa_aper), 10) for pa_aper in pa_aper_values]
+    unique_pa_apers = sorted(set(pa_aper_values))
+    if len(unique_pa_apers) != len(visitids):
+        raise ValueError(
+            f"Expected {len(visitids)} PA_APER values, but found "
+            f"{len(unique_pa_apers)}: {unique_pa_apers}"
+        )
+    return [visitids[unique_pa_apers.index(pa_aper)] for pa_aper in pa_aper_values]
+
+
+def make_satspot_frame_for_visit(visitid, pa_aper, psfref, sctsrt,
+                                 source_image=None, satspot_data=None,
+                                 satspot_pri_header=None,
+                                 satspot_ext_header=None, err_hdr=None,
+                                 dq_hdr=None):
+    """Create one L2b satellite-spot frame assigned to a visit split.
+
+    Args:
+        visitid (str): VISITID to write into the primary header.
+        pa_aper (float): PA_APER value for this visit.
+        psfref (int): Primary-header PSFREF value, 0 for science and 1 for
+            reference-star frames.
+        sctsrt (datetime.datetime): Timestamp used for ``SCTSRT`` and filename
+            ordering across no-offset/+offset/-offset groups.
+        source_image (corgidrp.data.Image, optional): Existing L2b frame to copy
+            for the no-offset satellite-spot group.
+        satspot_data (numpy.ndarray, optional): Synthetic image data for the
+            +offset/-offset satellite-spot groups.
+        satspot_pri_header (astropy.io.fits.Header, optional): Base primary
+            header for synthetic satellite-spot frames.
+        satspot_ext_header (astropy.io.fits.Header, optional): Base image
+            extension header for synthetic satellite-spot frames.
+        err_hdr (astropy.io.fits.Header, optional): Base ERR header for
+            synthetic satellite-spot frames.
+        dq_hdr (astropy.io.fits.Header, optional): Base DQ header for synthetic
+            satellite-spot frames.
+
+    Returns:
+        corgidrp.data.Image: L2b satellite-spot frame with visit-specific
+        headers and filename metadata.
+    """
+    if source_image is not None:
+        satspot_frame = copy.deepcopy(source_image)
+        satspot_frame.ext_hdr['SATSPOTS'] = True
+        satspot_frame.ext_hdr['FSMPRFL'] = 'NFOV'
+    else:
+        required_inputs = {
+            'satspot_data': satspot_data,
+            'satspot_pri_header': satspot_pri_header,
+            'satspot_ext_header': satspot_ext_header,
+            'err_hdr': err_hdr,
+            'dq_hdr': dq_hdr,
+        }
+        missing_inputs = [
+            name for name, value in required_inputs.items() if value is None
+        ]
+        if missing_inputs:
+            raise ValueError(
+                "Missing required inputs for synthetic satellite-spot frame: "
+                + ", ".join(missing_inputs)
+            )
+
+        satspot_frame = Image(
+            satspot_data.copy(),
+            satspot_pri_header.copy(),
+            satspot_ext_header.copy(),
+            err_hdr=err_hdr.copy(),
+            dq_hdr=dq_hdr.copy(),
+        )
+
+    satspot_frame.pri_hdr['VISITID'] = visitid
+    satspot_frame.pri_hdr['PA_APER'] = pa_aper
+    satspot_frame.pri_hdr['PSFREF'] = psfref
+    satspot_frame.ext_hdr['SATSPOTS'] = True
+    satspot_frame.ext_hdr['FSMPRFL'] = 'NFOV'
+    satspot_frame.ext_hdr['SCTSRT'] = sctsrt.isoformat()
+    time_str = sctsrt.strftime('%Y%m%dt%H%M%S%f')[:-5]
+    satspot_frame.filename = f"cgi_{visitid}_{time_str}_l2b.fits"
+
+    return satspot_frame
+
+
 @pytest.mark.e2e
 def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     '''
@@ -121,30 +214,6 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     big_array_size = [1024,1024]
     science_visitids = ("1111111111111111101", "1111111111111111201")
     reference_visitid = "2222222222222222222"
-
-    def visitid_by_pa_aper(pa_aper_values, visitids):
-        """
-        Assign one visit ID to science frames based on each PA_APER value.
-
-        The unique PA_APER values are rounded, sorted, and paired with the
-        provided visit IDs in order. The returned list has the same length and
-        order as pa_aper_values.
-
-        Args:
-            pa_aper_values: PA_APER values, one per science frame.
-            visitids: Visit IDs to assign to the sorted unique PA_APER values.
-
-        Returns:
-            Visit ID for each PA_APER value in the input order.
-        """
-        pa_aper_values = [round(float(pa_aper), 10) for pa_aper in pa_aper_values]
-        unique_pa_apers = sorted(set(pa_aper_values))
-        if len(unique_pa_apers) != len(visitids):
-            raise ValueError(
-                f"Expected {len(visitids)} PA_APER values, but found "
-                f"{len(unique_pa_apers)}: {unique_pa_apers}"
-            )
-        return [visitids[unique_pa_apers.index(pa_aper)] for pa_aper in pa_aper_values]
 
     science_visitids_by_frame = visitid_by_pa_aper(rotation[star != 2], science_visitids)
 
@@ -264,38 +333,34 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     ###   - a negative-offset satellite-spot frame
     ### So if there are 2 science PA_APER values plus 1 reference VISITID, this creates 9
     ### satellite-spot frames total.
-    satspot_frames_by_group = [[], [], []]
-    for pa_aper, visitid, psfref, nooffset_source_image in satspot_frame_specs:
-        # No-offset frame: copy of the last matching frame for this visit with SATSPOTS=True.
-        # It represents the DM-unprobed state (no satellite spots, only speckles).
-        sat_spot_nooffset = copy.deepcopy(nooffset_source_image)
-        sat_spot_nooffset.ext_hdr['SATSPOTS'] = True
-        satspot_frames_by_group[0].append(sat_spot_nooffset)
-
-        for satspot_group in [1, 2]:
-            satspot_pri_header = mock_satspot_pri_header.copy()
-            satspot_ext_header = mock_satspot_ext_header.copy()
-            satspot_pri_header['VISITID'] = visitid
-            satspot_pri_header['PA_APER'] = pa_aper
-            satspot_pri_header['PSFREF'] = psfref
-            sat_spot = Image(
-                big_array.copy(),
-                satspot_pri_header,
-                satspot_ext_header,
-                err_hdr=errhdr.copy(),
-                dq_hdr=dqhdr.copy(),
-            )
-            satspot_frames_by_group[satspot_group].append(sat_spot)
-
     satellite_spot_frames = []
-    for group_index, satspot_frames in enumerate(satspot_frames_by_group):
-        for i_frame, satspot_frame in enumerate(satspot_frames):
+    for group_index in range(3):
+        for i_frame, frame_spec in enumerate(satspot_frame_specs):
+            pa_aper, visitid, psfref, nooffset_source_image = frame_spec
             frame_time = satspot_base_time + timedelta(
                 seconds=group_index * len(satspot_frame_specs) + i_frame
             )
-            satspot_frame.ext_hdr['SCTSRT'] = frame_time.isoformat()
-            time_str = frame_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
-            satspot_frame.filename = f"cgi_{satspot_frame.pri_hdr['VISITID']}_{time_str}_l2b.fits"
+            if group_index == 0:
+                # No-offset frame: copy the last matching frame for this visit.
+                satspot_frame = make_satspot_frame_for_visit(
+                    visitid,
+                    pa_aper,
+                    psfref,
+                    frame_time,
+                    source_image=nooffset_source_image,
+                )
+            else:
+                satspot_frame = make_satspot_frame_for_visit(
+                    visitid,
+                    pa_aper,
+                    psfref,
+                    frame_time,
+                    satspot_data=big_array,
+                    satspot_pri_header=mock_satspot_pri_header,
+                    satspot_ext_header=mock_satspot_ext_header,
+                    err_hdr=errhdr,
+                    dq_hdr=dqhdr,
+                )
             satellite_spot_frames.append(satspot_frame)
 
     image_list.extend(satellite_spot_frames)
