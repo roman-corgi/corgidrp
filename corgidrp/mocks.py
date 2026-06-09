@@ -4586,10 +4586,17 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             scheme_offset = scheme * 2000  # Each scheme gets 2000 seconds
             #emgain_offset = emgain_c * 10000 # EM gain adds more spread, beyond the range used for EM gain = 1
             # 2 to 3 frames per config
-            config_offset = int(file[file.find('_config')+7])+13
-            fr_offset = int(file[file.find('_fr')+3])+7
-            #unique_dt = base_dt + datetime.timedelta(seconds=temp_offset + scheme_offset + config_offset + fr_offset + i)
-            unique_dt = base_dt + datetime.timedelta(seconds=i)
+            filename = os.path.split(file)[-1]
+            if '_config' in filename:
+                config_offset = int(filename[filename.find('_config')+7])+13
+            else:
+                config_offset = 0
+            if '_fr' in filename:
+                fr_offset = int(filename[filename.find('_fr')+3])+7
+            else:
+                fr_offset = 0
+            unique_dt = base_dt + datetime.timedelta(seconds=temp_offset + scheme_offset + config_offset + fr_offset + i)
+            #unique_dt = base_dt + datetime.timedelta(seconds=i)
         else:
             # Fallback for non-pump-trap data
             filetime_hdr = exthdr.get('FILETIME', prihdr.get('FILETIME', None))
@@ -4649,6 +4656,7 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             # Remove old file only if renaming in-place
             # Don't remove original files when copying to a different directory
             if file != new_filename and os.path.exists(file) and not output_dir:
+                fits_file.writeto(new_filename, overwrite=True)
                 os.remove(file)
 
         # Update the file in the list

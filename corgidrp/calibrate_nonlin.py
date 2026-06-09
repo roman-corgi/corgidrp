@@ -853,8 +853,12 @@ def calibrate_nonlin(dataset_nl,
         mean_linspace = np.linspace(20, 14000, 1+int((14000-20)/20))
         
         # Interpolate/extrapolate the relative gain values
+        # Use the end point values as the extrapolation b/c if saturation affects many 
+        # frames, extrapolating linearly based on the slope of the last 2 points 
+        # at an end may result in a huge, unphysical correction at the chosen value outside the bounds
         interp_func = interp1d(corr_mean_signal_sorted, 
-                        rel_gain_smoothed, kind='linear', fill_value=(rel_gain_smoothed[0], rel_gain_smoothed[-1]))#'extrapolate')
+                        rel_gain_smoothed, kind='linear', bounds_error=False, 
+                        fill_value=(rel_gain_smoothed[0], rel_gain_smoothed[-1]))#'extrapolate')
         rel_gain_interp = interp_func(mean_linspace)
         
         # Normalize the relative gain to the value at norm_val DN

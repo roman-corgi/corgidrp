@@ -828,6 +828,7 @@ def test_guess_template_l1_pol_setup():
         assert chained == True
 
 if __name__ == "__main__":#
+    test_l1_to_l2b_default_calibs()
     test_autoreducing()
     test_auto_template_identification()
     test_saving()
@@ -837,7 +838,6 @@ if __name__ == "__main__":#
     test_generate_multiple_recipes()
     test_cpgs_satspots()
     test_cpgs_one_satspot()
-    test_l1_to_l2b_default_calibs()
     test_pc_science_analog_satspots()
     test_guess_template_l1_absflux_pol()
     test_guess_template_l1_absflux_non_pol()

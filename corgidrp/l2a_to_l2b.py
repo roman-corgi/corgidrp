@@ -569,8 +569,14 @@ def desmear(input_dataset, detector_params, detector_regions=None, auto_decide=F
         # Physically, smearing only happens in the area exposed to light, the image area:
         arrtype = frames_data[i].ext_hdr['ARRTYPE']
         # Changes to the two below (image_data and image_dq) change their original arrays as well
-        image_data = slice_section(data_cube[i], arrtype, 'image', detector_regions)
-        image_dq = slice_section(frames_data.all_dq[i], arrtype, 'image', detector_regions)
+        if data_cube[i].shape == (detector_regions[arrtype]['image']['rows'], detector_regions[arrtype]['image']['cols']):
+            image_data = data_cube[i]
+            image_dq = frames_data.all_dq[i]
+            image_frame_flag = True
+        else:
+            image_data = slice_section(data_cube[i], arrtype, 'image', detector_regions)
+            image_dq = slice_section(frames_data.all_dq[i], arrtype, 'image', detector_regions)
+            image_frame_flag = False
         # we don't want to desmear things that were not smeared, like cosmic rays and their tails
         # Best we can do:  take value of closest unmasked pixel to get an estimate of the true signal 
         # and use that for the desmearing calculation.  
@@ -668,12 +674,18 @@ def desmear(input_dataset, detector_params, detector_regions=None, auto_decide=F
                     columnsum = columnsum + rowreadtime_sec/exptime_sec*((1
                     + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*image_data[s,:]
                 smear[r,:] = columnsum
-            orig_data = slice_section(input_dataset[i].data.copy(), arrtype, 'image', detector_regions)
+            if image_frame_flag:
+                orig_data = input_dataset[i].data.copy()
+            else:
+                orig_data = slice_section(input_dataset[i].data.copy(), arrtype, 'image', detector_regions)
             image_data -= smear
         
         frames_data[i].ext_hdr['DESMEAR'] = desmear_flag
         # now restore original values in cosmic ray pixels
-        orig_data = slice_section(input_dataset[i].copy().data, arrtype, 'image', detector_regions)
+        if image_frame_flag:
+            orig_data = input_dataset[i].copy().data
+        else:
+            orig_data = slice_section(input_dataset[i].copy().data, arrtype, 'image', detector_regions)
         if desmear_flag:
             image_data[rows, cols] = orig_data[rows, cols] - smear[rows, cols]
         else:

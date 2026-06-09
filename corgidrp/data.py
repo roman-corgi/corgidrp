@@ -1934,7 +1934,7 @@ class DetectorParams(Image):
         'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
         'PCECNTMX': 0.25,       # Maximum allowed electrons/pixel/frame for photon counting
         'TFACTOR': 5,           # number of read noise standard deviations at which to set the photon-counting threshold
-        'READ_N': 165               # current best estimate
+        'READ_N': 165.               # current best estimate
     }
 
     back_compat_mapping = {
