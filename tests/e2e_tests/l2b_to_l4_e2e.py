@@ -215,7 +215,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     science_visitids = ("1111111111111111101", "1111111111111111201")
     reference_visitid = "2222222222222222222"
 
-    science_visitids_by_frame = visitid_by_pa_aper(rotation[star != 2], science_visitids)
+    science_pa_aper_values = -rotation[star != 2]
+    science_visitids_by_frame = visitid_by_pa_aper(science_pa_aper_values, science_visitids)
 
     image_list = []
     last_sci_image_by_pa = {}
@@ -313,7 +314,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     # Base time for ascending SCTSRT across the three satspot groups.
     satspot_base_time = datetime(2024, 1, 2, 0, 0, 0)
-    science_pa_apers = sorted({round(float(pa_aper), 10) for pa_aper in rotation[star != 2]})
+    science_pa_apers = sorted({round(float(pa_aper), 10) for pa_aper in science_pa_aper_values})
     science_visitids_for_pa = visitid_by_pa_aper(science_pa_apers, science_visitids)
     if set(last_sci_image_by_pa) != set(science_pa_apers):
         raise ValueError("No science frames were found for one or more PA_APER satellite-spot groups.")
