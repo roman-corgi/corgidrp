@@ -676,7 +676,7 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
 
     return residuals
 
-def compute_platescale_and_northangle(image, source_info, center_coord, center_radius=0.9):
+def compute_platescale_and_northangle(image, source_info, center_radius=1):
     """
     Used to find the platescale and north angle of the image. Calculates the platescale for each pair of stars in the image
     and returns the averged platescale. Calculates the north angle for pairs of stars with the center target
@@ -685,9 +685,9 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
     Args:
         image (numpy.ndarray): 2D array of image data 
         source_info (astropy.table.Table): Estimated pixel positions of sources and true sky positions, must have column names 'x', 'y', 'RA', 'DEC'
-        center_coord (tuple):
-            (float): RA coordinate of the target pointing
-            (float): Dec coordinate of the target pointing
+        # center_coord (tuple):
+        #     (float): RA coordinate of the target pointing
+        #     (float): Dec coordinate of the target pointing
         center_radius (float): Percent of the image radius used to crop the image and compute plate scale and north angle from (default: 1 -- ie: the full image is used)
 
     Returns:
@@ -706,21 +706,14 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
         guesses = source_info
         skycoords = SkyCoord(ra = guesses['RA'], dec= guesses['DEC'], unit='deg', frame='icrs')
 
-    # translate the center_coord param into a skycoord
-    if type(center_coord) != tuple:
-        raise TypeError('center_coord must be a tuple coordinate (RA,DEC)')
-    else:
-        center_coord = SkyCoord(ra = center_coord[0], dec= center_coord[1], unit='deg', frame='icrs')
-
-    # use only center quadrant
     imageshape = np.shape(image)
     cut = 1 - center_radius
     suby, subx = imageshape[0] * cut, imageshape[1] * cut
     center_source_inds = np.where((guesses['x'] >= subx) & (guesses['x'] <= imageshape[1] - subx) & (guesses['y'] >= suby) & (guesses['y'] <= imageshape[0] - suby))
-    sub_guesses = guesses[center_source_inds]
+    sub_guesses = guesses[center_source_inds]   # these are already guassian fit to find exact pixel location
     sub_skycoords = skycoords[center_source_inds]
 
-    # Platescale calculation
+    # PLATESCALE
     # create random combinations of stars
     all_combinations = list(compute_combinations(sub_guesses))
     if len(all_combinations) > 200:
