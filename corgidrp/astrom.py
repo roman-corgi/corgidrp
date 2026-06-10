@@ -722,32 +722,30 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1):
     else:
         combo_list = np.array(all_combinations)
 
-    # gather the skycoord separations for all combinations
-    seps = np.empty(len(combo_list))
+
+    length_diffs = np.empty(len(combo_list))
     for i,c in enumerate(combo_list):
+        # calculate the sky separation btw all combos of stars
         star1 = sub_skycoords[c[0]]
         star2 = sub_skycoords[c[1]]
 
-        sep = star1.separation(star2).mas
-        seps[i] = sep
+        sep_sky = star1.separation(star2).mas
 
-    # find the separations in pixel space on the image between all combinations
-    pixseps = np.empty(len(combo_list))
-    for i,c in enumerate(combo_list):
+        # calculate the image separation between the same combos of stars
         star1 = sub_guesses[c[0]]
         star2 = sub_guesses[c[1]]
-
         xguess = star2['x'] - star1['x']
         yguess = star2['y'] - star1['y']
         
         (xoff, yoff), _ = measure_offset(image, xstar_guess=star1['x'], ystar_guess=star1['y'], xoffset_guess= xguess, yoffset_guess= yguess)
+        sep_pix = np.sqrt(np.power(xoff,2) + np.power(yoff,2))
 
-        pixsep = np.sqrt(np.power(xoff,2) + np.power(yoff,2))
-        pixseps[i] = pixsep
+        # calc the ratio of sky to pixel separation for each star pair
+        diff = sep_sky / sep_pix
+        length_diffs[i] = diff
 
-    # estimate the platescale from each combination and find the mean
-    platescales = seps / pixseps
-    platescale = np.mean(platescales)
+    # estimate the platescale from each combination
+    platescale = np.mean(length_diffs)
 
     # North angle calculation
     # find the true centerings of the sources in the image from the guesses and save into a table
