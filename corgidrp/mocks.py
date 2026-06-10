@@ -1510,7 +1510,7 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     return image
 
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
-                       distortion_coeffs_path=None, dither_pointings=0, bpix_map=None, sim_err_map=False):
+                       distortion_coeffs_path=None, dither_pointings=0, bpix_map=None, sim_err_map=False, vignette_radius=3460):
     """
     Create simulated data for astrometric calibration.
 
@@ -1525,9 +1525,10 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         rotation (float): The north angle of the created image data (default: 45 [deg])
         add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
         distortion_coeffs_path (str): Full path to csv with the distortion coefficients and the order of polynomial used to describe distortion (default: None))
-        dither_pointings (int): Number of dithers to include with the dataset. Dither offset is assumed to be half the FoV. (default: 0)
+        dither_pointings (int): Number of dithers to include with the dataset (UP to 4 pointings). Dither offset is assumed to be 1/10 the FoV. (default: 0)
         bpix_map (np.array): 2D bad pixel map to apply to simulated data (default: None)
         sim_err_map (boolean): If True, simulates an error map (default: False) 
+        vignette_radius (float): (Optional) The radius (from [0,0]) at which to simulate vignetting edge in [mas] (default: 3460 mas (~ 160 pixels)). No vignetting can be invoked by setting =None
 
     Returns:
         corgidrp.data.Dataset:
