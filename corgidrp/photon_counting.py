@@ -173,7 +173,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         
     if inputmode == 'darks':
         if bin_size is not None:
-            warnings.warn('bin_size is not meaningful if input_mode=\'darks\'. All frames will be used in making the PC master dark.')
+            warnings.warn('bin_size is not meaningful if inputmode=\'darks\'. All frames will be used in making the PC master dark.')
         num_bins = 1
         bin_size = len(input_dataset)
     else:

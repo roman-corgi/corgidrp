@@ -175,7 +175,9 @@ def test_pc_subsets():
     dark_dataset_bin.all_data = dark_dataset_bin.all_data.astype(float)*7 - 20000.
     # process darks and check NUM_FR
     dark_dataset_bin[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
-    pc_dark = get_pc_mean(dark_dataset_bin, inputmode='darks', bin_size=40)
+
+    with pytest.warns(UserWarning):
+        pc_dark = get_pc_mean(dark_dataset_bin, inputmode='darks', bin_size=40)
     assert pc_dark.ext_hdr['NUM_FR'] == len(dark_dataset_bin) # binning not used for 'darks' mode 
     assert pc_dark.data.ndim == 2
     assert pc_dark.dq.ndim == 2
