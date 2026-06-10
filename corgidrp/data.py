@@ -4653,17 +4653,9 @@ def selective_dq(dq, val=128):
         selected_dq (array-like): A map where pixels that had the specified flag value in the original DQ map are marked as val, and all other pixels are marked as 0.
     '''
     selected_dq = np.zeros_like(dq).astype(float)
-    temp_dq = dq.copy().astype(float)
-    nan_inds = np.array([]) # initialize
-    while nan_inds.size < temp_dq.size:
-        bad_inds = np.where(temp_dq == 0)
-        temp_dq[bad_inds] = np.nan
-        highest_power = np.floor(np.log(temp_dq)/np.log(2))
-        selected_inds = np.where(2**(highest_power) == val)
-        selected_dq[selected_inds] = val
-        temp_dq = temp_dq - 2**(highest_power)
-        nans = np.where(np.isnan(temp_dq))
-        nan_inds = nans[0]
+    temp_dq = dq.copy().astype(int)
+    val_ar = np.ones_like(temp_dq).astype(int)*val
+    selected_dq = (temp_dq & val_ar)
     return selected_dq
 
 
