@@ -4639,9 +4639,6 @@ def selective_dq(dq, val=128):
     of a single DQ flag without regard to other flags. 
     
     For example, for val=32, the function identifies which pixels are flagged as saturated and creates a new map where those pixels are flagged as val and all other pixels are flagged as 0.
-    The function does this by iteratively identifying the highest power of 2 in the DQ map, 
-    checking if that power of 2 corresponds to the value for saturation, and if so, marking those pixels in the output map.  
-    Then it removes that power of 2 from the DQ map copy and repeats until there are no more flags left in the DQ map copy.
     
     To select for all DQs except for the one indicated by val, do dq - selective_dq(dq,val).
 
