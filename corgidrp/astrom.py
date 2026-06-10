@@ -223,20 +223,11 @@ def angle_between(pos1, pos2):
     """
     
     xdif = pos2[0] - pos1[0]
-    ydif = pos2[1] - pos1[1]  
+    ydif = pos2[1] - pos1[1] 
 
-    if xdif<0:
-        if ydif<0:
-            angle = np.pi - np.arctan(xdif/ydif)
-        else:
-            angle = - np.arctan(xdif/ydif)
-    else:
-        if ydif<0:
-            angle = - np.arctan(xdif/ydif) + np.pi
-        else: 
-            angle = (2*np.pi) - np.arctan(xdif/ydif)
-            
-    return angle * 180/np.pi
+    dtheta = np.mod(np.arctan2(ydif, xdif) - np.pi/2, 2*np.pi)  # this is in radians
+
+    return np.degrees(dtheta)
 
 
 def get_polar_dist(seppa1,seppa2):
