@@ -433,12 +433,20 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.02,
     source1, source2, source3 = sources[0], sources[1], sources[2]
 
     # define the side length to perimeter ratio for the triangle made from these sources [pixels]
-    l1, l2, l3 = np.sqrt(np.power(source1['x'] - source2['x'], 2) + np.power(source1['y'] - source2['y'], 2)), np.sqrt(np.power(source2['x'] - source3['x'], 2) + np.power(source2['y'] - source3['y'], 2)), np.sqrt(np.power(source3['x'] - source1['x'], 2) + np.power(source3['y'] - source1['y'], 2))
-    perimeter = l1 + l2 + l3
+    l12, l23, l31 = np.sqrt(np.power(source1['x'] - source2['x'], 2) + np.power(source1['y'] - source2['y'], 2)), np.sqrt(np.power(source2['x'] - source3['x'], 2) + np.power(source2['y'] - source3['y'], 2)), np.sqrt(np.power(source3['x'] - source1['x'], 2) + np.power(source3['y'] - source1['y'], 2))
+    perimeter = l12 + l23 + l31
+
+    # keep track of which star is furthest from and closest to the other 2
+    dstar1 = l12 + l31
+    dstar2 = l23 + l12
+    dstar3 = l23 + l31
+
+    tri_dist_star = [(dstar1, source1), (dstar2, source2), (dstar3, source3)]
+    tri_dist_star.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
+    long_star, mid_star, short_star = tri_dist_star[0][1], tri_dist_star[1][1], tri_dist_star[2][1]
 
     # the shortest to longest sides get reordered to l1, l2, l3
-    l1, l2, l3 = np.sort([l1, l2, l3])
-
+    l1, l2, l3 = np.sort([l12, l23, l31])
     a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
 
     # define a search field and load in RA, DEC, Vmag
@@ -489,6 +497,18 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.02,
             smallest_lsq = lstsq
             best_ind = i
             best_sky_ind = ind
+
+    # keep track of which best fit skycoord is the farthest from the other two
+    j, k, l = best_sky_ind
+    coord1, coord2, coord3 = skycoords[j], skycoords[k], skycoords[l]
+
+    dcoord1 = coord1.separation(coord2).mas + coord1.separation(coord3).mas
+    dcoord2 = coord2.separation(coord3).mas + coord2.separation(coord1).mas
+    dcoord3 = coord3.separation(coord1).mas + coord3.separation(coord2).mas
+
+    tri_dist_coords = [(dcoord1, coord1), (dcoord2, coord2), (dcoord3, coord3)]
+    tri_dist_coords.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
+    long_coord, mid_coord, short_coord = tri_dist_coords[0][1], tri_dist_coords[1][1], tri_dist_coords[2][1]
 
     # now use the side length to separations with best fit triangle to define a pseudo plate scale
     best_l1, best_l2, best_l3 = field_side_lengths[best_ind]
