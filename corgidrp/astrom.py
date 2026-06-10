@@ -928,12 +928,11 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
 
     return first_stars, offsets, true_offsets, errs
 
-def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, platescale, northangle, fitorder=3, initial_guess=None):
+def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, northangle, fitorder=3, initial_guess=None):
     ''' 
     Function that computes the legendre polynomial coefficients that describe the image distortion map * must run format_disotrtio_inputs() first *
 
-    Args:
-        input_dataset (corgidrp.data.Dataset): corgidrp dataset object with images to compute the distortion from
+    # Args:
         pos1 (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
         meas_offset (np.array): 2D array of the (delta_x, delta_y) values for each star from the first star position
         sky_offset (np.array): 2D array of the (delta_ra, delta_dec) offsets between the matched stars in the reference field
@@ -947,13 +946,6 @@ def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, 
         distortion_coeffs (tuple): The legendre coefficients (np.array) and polynomial order used for the fit (int)
 
     '''
-
-    ## SET FITTING PARAMS
-    # assume all images in dataset have the same shape
-    input_image = input_dataset[0].data
-    x0 = np.shape(input_image)[1] // 2
-    y0 = np.shape(input_image)[0] // 2
-    
     # define fitting params            
     fitparams = (fitorder + 1)**2
     
