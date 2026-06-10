@@ -1550,7 +1550,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     
     # load in the field data and restrict to 0.02 [deg] radius around target
     cal_field = ascii.read(field_path)
-    subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - subfield_radius) & (cal_field['DEC'] <= target[1] + subfield_radius))]
+    subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - (subfield_radius*(np.cos(np.radians(target[1]))))) & (cal_field['DEC'] <= target[1] + (subfield_radius*np.cos(np.radians(target[1])))))]
     cal_SkyCoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg', frame='icrs')  # save these subfield skycoords somewhere
 
     # create the simulated image header
@@ -1590,7 +1590,12 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     frame_targs = []
 
     # compute pixel positions and sky locations for the undithered image
-    pix_inds = np.where((xpix_full >= 0) & (xpix_full <= nx) & (ypix_full >= 0) & (ypix_full <= ny))[0]
+    if (vignette_radius is None) or ((vignette_radius / platescale) > np.min([nx//2, ny//2])):     # cover the case with no vignetting OR where vignette rad is larger than image size
+        pix_inds = np.where((xpix_full >= (0)) & (xpix_full <= (nx)) & (ypix_full >= (0)) & (ypix_full <= (ny)))[0]
+    else:
+        vignette = vignette_radius / platescale     # convert from [mas] to pixel radius based on platescale injected
+        pix_inds = np.where((xpix_full >= ((nx//2) - vignette)) & (xpix_full <= ((nx//2) + vignette)) & (ypix_full >= ((ny//2) - vignette)) & (ypix_full <= ((ny//2) + vignette)))[0]
+
     xpix = xpix_full[pix_inds]
     ypix = ypix_full[pix_inds]
     ras = cal_SkyCoords[pix_inds]
@@ -1611,8 +1616,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     ra_fov = 0.01741774460001011  #[deg]
     dec_fov = 0.00617760699999792  #[deg]
     ## assume the target coord has moved by half ra/dec fov based on direction
-    dither_target_ras = [target[0], target[0], target[0]+(ra_fov/2), target[0]-(ra_fov/2)]
-    dither_target_decs = [target[1]+(dec_fov/2), target[1]-(dec_fov/2), target[1], target[1]]
+    dither_target_ras = [target[0], target[0], target[0]+(ra_fov/50), target[0]-(ra_fov/50)]
+    dither_target_decs = [target[1]+(dec_fov/50), target[1]-(dec_fov/50), target[1], target[1]]
 
 
     # create dithered images if dither_pointings > 0
@@ -1642,7 +1647,12 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         # create the image data
         xpix_full, ypix_full = wcs.utils.skycoord_to_pixel(cal_SkyCoords, wcs=w)
 
-        dither_inds = np.where((xpix_full >= 0) & (xpix_full <= 1024) & (ypix_full >= 0) & (ypix_full <= 1024))[0]
+        # compute pixel positions and sky locations for the undithered image
+        if (vignette_radius is None) or ((vignette_radius / platescale) > np.min([nx//2, ny//2])):     # cover the case with no vignetting OR where vignette rad is larger than image size
+            dither_inds = np.where((xpix_full >= (0)) & (xpix_full <= (nx)) & (ypix_full >= (0)) & (ypix_full <= (ny)))[0]
+        else:
+            vignette = vignette_radius / platescale     # convert from [mas] to pixel radius based on platescale injected
+            dither_inds = np.where((xpix_full >= ((nx//2) - vignette)) & (xpix_full <= ((nx//2) + vignette)) & (ypix_full >= ((ny//2) - vignette)) & (ypix_full <= ((ny//2) + vignette)))[0]
 
         dxpix = xpix_full[dither_inds]
         dypix = ypix_full[dither_inds]
