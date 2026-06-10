@@ -747,58 +747,23 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1):
     # estimate the platescale from each combination
     platescale = np.mean(length_diffs)
 
-    # North angle calculation
-    # find the true centerings of the sources in the image from the guesses and save into a table
-    xs = np.empty(len(sub_guesses))
-    ys = np.empty(len(sub_guesses))
-    for i, (gx, gy) in enumerate(zip(sub_guesses['x'], sub_guesses['y'])):
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=RuntimeWarning)
-            pf, fw, x, y = fakes.gaussfit2d(frame= image, xguess= gx, yguess=gy)
-        xs[i] = x
-        ys[i] = y
+    # NORTH ANGLE    
+    angle_diffs = np.empty(len(combo_list))
+    for i,c in enumerate(combo_list):       # compute pa sky vs image for each star combination
+        star1 = sub_guesses[c[0]]
+        star2 = sub_guesses[c[1]]
 
-    sources = astropy.table.Table()
-    sources['x'] = xs
-    sources['y'] = ys
+        coord1 = sub_skycoords[c[0]]
+        coord2 = sub_skycoords[c[1]]
 
-    # find the sky position angles between the center star and all others
-    pa_sky = np.empty(len(sub_skycoords))
-    for i, star in enumerate(sub_skycoords):
-        pa = center_coord.position_angle(star).deg
-        pa_sky[i] = pa
+        pa_image = angle_between((star1['x'], star1['y']), (star2['x'], star2['y']))    # these are both in [deg]
+        pa_sky = coord1.position_angle(coord2).deg
 
-    # find the pixel position angles
-    pa_pixel = np.empty(len(sub_guesses))
-    for i, (x, y) in enumerate(zip(xs, ys)):
-        pa = angle_between(((np.shape(image)[0]-1)//2, (np.shape(image)[1]-1)//2), (x,y))
-        pa_pixel[i] = pa
+        # difference in angle between sky and image
+        dtheta = np.arctan2(np.sin(np.radians(pa_sky - pa_image)), np.cos(np.radians(pa_sky - pa_image)))
+        angle_diffs[i] = np.degrees(dtheta)
 
-    # find the difference between the measured and true positon angles
-    offset = np.empty(len(sub_guesses))
-    # locate a potential comparison with self
-    if len(np.where((sub_skycoords.ra.value == center_coord.ra.value) & (sub_skycoords.dec.value == center_coord.dec.value))[0]) > 0:
-        same_ind = np.where((sub_skycoords.ra.value == center_coord.ra.value) & (sub_skycoords.dec.value == center_coord.dec.value))[0][0]
-    else:
-        same_ind = None
-
-    for i, (sky, pix) in enumerate(zip(pa_sky, pa_pixel)):
-        if i != same_ind:
-            numerator = np.sin(np.radians(sky - pix))
-            denominator = np.cos(np.radians(sky - pix))
-            north_offset = np.degrees(np.arctan(numerator / denominator))
-            # if sky > pix:
-            #     north_offset = sky - pix
-            # else:
-            #     north_offset = sky - pix + 360 
-            offset[i] = north_offset
-
-    # get rid of the comparison with self if it exists
-    if same_ind != None:
-        offset = np.delete(offset, same_ind)
-
-    # use the median to avoid bias
-    north_angle = np.mean(offset)
+    north_angle = np.mean(angle_diffs)
     
     return platescale, north_angle
 
