@@ -453,13 +453,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.02,
     field = ascii.read(field_path)
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     
-    ymid, xmid = image.data.shape   # fit gaussian to find target x,y location (assuming near center)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        pf, fw, targetx, targety = fakes.gaussfit2d(frame= image.data, xguess= (xmid-1)//2, yguess= (ymid-1)//2)
-
-    target_skycoord = SkyCoord(ra= target[0], dec= target[1], unit='deg')
-    subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - rad) & (field['DEC'] <= target[1] + rad))]
+    subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - (rad*(np.cos(np.radians(target[1]))))) & (field['DEC'] <= target[1] + (rad*np.cos(np.radians(target[1])))))]
 
     bright_order_subfield = subfield.copy()
     bright_order_subfield.sort(keys='VMAG')
@@ -468,7 +462,6 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.02,
     # create all combinations of triangles with the brightest field sources
     combos = list(compute_combinations(range(len(brightest_field)), r=3))
 
-    #a_prime, b_prime, c_prime = np.empty(len(combos)), np.empty(len(combos)), np.empty(len(combos))
     skycoords = SkyCoord(ra= brightest_field['RA'], dec= brightest_field['DEC'], unit='deg')
     field_side_lengths = np.empty((len(combos), 3))
     best_sky_ind = np.nan
@@ -514,18 +507,17 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.02,
     best_l1, best_l2, best_l3 = field_side_lengths[best_ind]
     initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))  # [deg/mas]
 
-    # find pseudo north angle from difference in triangle rotations from the target value
-    # using found target pixel
-  
-    # rot_image = np.array([angle_between(((xmid-1) //2, (ymid-1) //2), (s['x'], s['y'])) for s in [source1, source2, source3]])
-    rot_image = np.array([angle_between((targetx, targety), (s['x'], s['y'])) for s in [source1, source2, source3]])
-    rot_field = np.array([target_skycoord.position_angle(t).deg for t in skycoords[[best_sky_ind]]])
-
-    initial_northangle = np.abs(np.mean(rot_field - rot_image))
+    # find the angle between the `target` star and the other two, in the image and in the field
+    rot_image = np.array([angle_between((long_star['x'], long_star['y']), (s['x'], s['y'])) for s in [mid_star, short_star]])
+    rot_field = np.array([long_coord.position_angle(t).deg for t in [mid_coord, short_coord]])
+    # use arctan2 to handle angle wrapping when calculating the difference between the reference field angle and the image
+    dtheta1 = np.arctan2(np.sin(np.radians(rot_field[0] - rot_image[0])), np.cos(np.radians(rot_field[0] - rot_image[0])))
+    dtheta2 = np.arctan2(np.sin(np.radians(rot_field[1] - rot_image[1])), np.cos(np.radians(rot_field[1] - rot_image[1])))
+    initial_northangle = np.mean([dtheta1, dtheta2])
 
     # make a new image header with the pseudo platescale and north angle to find matchings
     # allow for some error window and assign the closest star to each source
-    vert_ang = np.radians(initial_northangle)
+    vert_ang = initial_northangle   # this is in radians
     pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
     cdmatrix = pc * (initial_platescale * 0.001) / 3600.
 
@@ -534,16 +526,14 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.02,
     new_hdr['CD1_2'] = cdmatrix[0,1]
     new_hdr['CD2_1'] = cdmatrix[1,0]
     new_hdr['CD2_2'] = cdmatrix[1,1]
-    # new_hdr['CRPIX1'] = (np.shape(image.data)[1]-1) // 2
-    # new_hdr['CRPIX2'] = (np.shape(image.data)[0]-1) // 2
-    new_hdr['CRPIX1'] = targetx
-    new_hdr['CRPIX2'] = targety
+    new_hdr['CRPIX1'] = long_star['x']
+    new_hdr['CRPIX2'] = long_star['y']
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
     new_hdr['CDELT1'] = (initial_platescale * 0.001) / 3600.
     new_hdr['CDELT2'] = (initial_platescale * 0.001) / 3600.
-    new_hdr['CRVAL1'] = target[0]
-    new_hdr['CRVAL2'] = target[1]
+    new_hdr['CRVAL1'] = long_coord.ra.value
+    new_hdr['CRVAL2'] = long_coord.dec.value
     w = astropy.wcs.WCS(new_hdr)
 
     # transform the subfield skycoords to pixel locations
@@ -585,7 +575,6 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.02,
 
         if key not in image.ext_hdr:
             image.ext_hdr[key] = string
-
 
     return matched_image_to_field
 
