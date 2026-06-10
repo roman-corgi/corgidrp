@@ -622,17 +622,17 @@ def desmear(input_dataset, detector_params, detector_regions=None, auto_decide=F
         if auto_decide and frames_data[i].ext_hdr['ISPC'] == 0:
             if nbins < 3:
                 raise ValueError('nbins should be 3 or more in order to determine a local minimum in the histogram.')
-            # if these are calibration pupil images, they won't have RN and KGAINPAR yet
-            # b/c convert_to_electrons hasn't been performed
-            if 'RN' in frames_data[i].ext_hdr:
-                read_noise_cbe = frames_data[i].ext_hdr['RN']
-            else:
-                read_noise_cbe = detector_params.params['READ_N']
+            # if these are calibration pupil images, they won't have RN yet
+            # b/c convert_to_electrons() hasn't been performed.  KGAINPAR is a L1 header and should be present.
             if 'KGAINPAR' in frames_data[i].ext_hdr:
                 kgain_cbe = frames_data[i].ext_hdr['KGAINPAR']
-                rn = read_noise_cbe # in e- units
             else:
                 kgain_cbe = detector_params.params['KGAINPAR']
+            if 'RN' in frames_data[i].ext_hdr: # True if convert_to_electrons() has been performed
+                read_noise_cbe = frames_data[i].ext_hdr['RN']
+                rn = read_noise_cbe # in e- units
+            else:
+                read_noise_cbe = detector_params.params['READ_N']
                 rn = read_noise_cbe/kgain_cbe # in DN units (relevant to pupil images)
             # Read noise and CIC are not smeared, and read noise swamps CIC. 
             # Desmear only if signal of frame is sufficiently above the read noise.
