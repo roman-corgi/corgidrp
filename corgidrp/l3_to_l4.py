@@ -256,6 +256,10 @@ def find_star(input_dataset,
     of the DM-offset satellite spot frames (``SATSPOTS=1``), then estimates the star
     location based on these median images and the initial guess provided.
 
+    Unocculted-star observations, identified by ``FPAMNAME`` values starting with ``OPEN``
+    or ``ND``, skip satellite-spot analysis. Their ``STARLOCX`` and ``STARLOCY`` values
+    are left unchanged if already present, or initialized to the image center.
+
     When ``subtract_no_offset_frames=True`` (default), satellite spot data is expected in
     three sequential equal-sized groups, all tagged ``SATSPOTS=1`` and ordered by their
     ``SCTSRT`` header timestamp (filename order is used as a fallback):
@@ -407,6 +411,32 @@ def find_star(input_dataset,
     split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=pri_split_keywords, exthdr_keywords=ext_split_keywords)
     out_frames = []
     for val, split_dataset in  zip(unique_vals, split_datasets):
+        # skip unocculted frames with FPAMNAME='OPEN_12','OPEN_34', 'ND225', or 'ND475'
+        fpamnames = [
+            str(frame.ext_hdr.get('FPAMNAME',
+                                  frame.ext_hdr.get('FPSAMNAME', ''))).strip().upper()
+            for frame in split_dataset.frames
+        ]
+        if_unocculted_star = (
+            len(fpamnames) > 0
+            and all(fpamname.startswith(('OPEN', 'ND')) for fpamname in fpamnames)
+        )
+        if if_unocculted_star:
+            for frame in split_dataset:
+                if drop_satspots_frames and frame.ext_hdr.get("SATSPOTS", 0) == 1:
+                    # if this is a satellite-spot frame, drop it.
+                    continue
+                if 'STARLOCX' not in frame.ext_hdr or 'STARLOCY' not in frame.ext_hdr:
+                    # if STARLOCX/Y are missing, it sets them to the image center
+                    ny, nx = frame.data.shape[-2:]
+                    frame.ext_hdr['STARLOCX'] = nx // 2
+                    frame.ext_hdr['STARLOCY'] = ny // 2
+                frame.ext_hdr['HISTORY'] = (
+                    f"find_star skipped for unocculted-star FPAMNAME={frame.ext_hdr.get('FPAMNAME', '')}."
+                )
+                out_frames.append(frame)
+            continue
+
         observing_mode = []
         sci_frames = []
         sat_spot_frames = []

@@ -44,7 +44,7 @@ def visitid_by_pa_aper(pa_aper_values, visitids):
     return [visitids[unique_pa_apers.index(pa_aper)] for pa_aper in pa_aper_values]
 
 
-def make_satspot_frame_for_visit(visitid, pa_aper, psfref, sctsrt,
+def fake_satspot_frame_for_visit(visitid, pa_aper, psfref, sctsrt,
                                  source_image=None, satspot_data=None,
                                  satspot_pri_header=None,
                                  satspot_ext_header=None, err_hdr=None,
@@ -214,7 +214,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     big_array_size = [1024,1024]
     science_visitids = ("1111111111111111101", "1111111111111111201")
     reference_visitid = "2222222222222222222"
-
+    
+    # only use the PA_APER for the science frames here 
     science_pa_aper_values = -rotation[star != 2]
     science_visitids_by_frame = visitid_by_pa_aper(science_pa_aper_values, science_visitids)
 
@@ -343,7 +344,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
             )
             if group_index == 0:
                 # No-offset frame: copy the last matching frame for this visit.
-                satspot_frame = make_satspot_frame_for_visit(
+                satspot_frame = fake_satspot_frame_for_visit(
                     visitid,
                     pa_aper,
                     psfref,
@@ -351,7 +352,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
                     source_image=nooffset_source_image,
                 )
             else:
-                satspot_frame = make_satspot_frame_for_visit(
+                satspot_frame = fake_satspot_frame_for_visit(
                     visitid,
                     pa_aper,
                     psfref,

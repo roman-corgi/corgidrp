@@ -85,9 +85,13 @@ def apply_pol_visitids_to_l1_files(filelist, source_filelist=None, visit_offset=
             target = hdul[0].header.get('TARGET', '')
             dpamname = hdul[1].header.get('DPAMNAME', '')
             visitid = str(hdul[0].header.get('VISITID', '')).strip()
-        target_entries.setdefault(target, {})[dpamname] = visitid
+        visitids_by_dpam = target_entries.setdefault(target, {})
+        visitids_by_dpam[dpamname] = visitid
 
     visitids_by_target = {}
+    # For each target, use its POL0 VISITID as the base visit(same as original VISITID from the header).VISITID of other
+    # polarimetry modes are assigned by applying their mode-specific offset to that target's base VISITID.
+    # There is a addition offset to  VISITID for unocculated frames.
     for target, visitids_by_dpam in target_entries.items():
         if 'POL0' in visitids_by_dpam:
             base_visitid = visitids_by_dpam['POL0']
@@ -115,7 +119,7 @@ def apply_pol_visitids_to_l1_files(filelist, source_filelist=None, visit_offset=
     return filelist
 
 
-def make_satspot_frame_for_visit(visitid, output_dir, filepath=None,
+def fake_satspot_frame_for_visit(visitid, output_dir, filepath=None,
                                  template_img=None, science_img=None,
                                  fake_time=None, exptime_ratio=None):
     """Create or copy one L1 satellite-spot frame for a requested visit split.
@@ -508,7 +512,6 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         os.makedirs(input_data_dir)
 
     # Update headers
-    # TO DO: pol sims should have the correct VISTYPE, currently undefined
     input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
     input_data_filelist = apply_pol_visitids_to_l1_files(input_data_filelist)
 
@@ -609,11 +612,6 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     fake_l1_paths = []
     accepted_real_files = []
     fake_base_time = datetime(2000, 1, 1, 0, 0, 0)
-    unocculted_visitids_by_target = apply_pol_visitids_to_l1_files(
-        input_data_filelist,
-        visit_offset=UNOCCULTED_VISITID_OFFSET,
-        update_files=False,
-    )
 
     for target in np.unique(satspot_targets):
         target_files = satspot_l1_files[satspot_targets == target]
@@ -626,30 +624,22 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
 
             template_img = data.Image(group_files[0])
             visitid = template_img.pri_hdr.get('VISITID', '')
-            unocculted_visitid = unocculted_visitids_by_target[target][dpamname]
             accepted_real_files.extend(list(group_files))
             exptime_ratio = template_img.ext_hdr['EXPTIME'] / science_exptime
 
-            # Duplicate real satspot frames so unocculted visits have SATSPOTS=1
-            # frames when find_star uses its default VISITID/DPAMNAME split.
-            for real_file in group_files:
-                accepted_real_files.append(make_satspot_frame_for_visit(
-                    visitid=unocculted_visitid,
-                    output_dir=sat_spot_dir,
-                    filepath=real_file,
-                ))
-
+            # group_files contains only +offset and -offset satspot frames.
+            # Add one fake no-offset frame for each +offset/-offset pair so
+            # find_star sees three equal groups: no-offset, +offset, -offset.
             for _ in range(len(group_files) // 2):
-                for fake_visitid in [visitid, unocculted_visitid]:
-                    fake_l1_paths.append(make_satspot_frame_for_visit(
-                        visitid=fake_visitid,
-                        output_dir=sat_spot_dir,
-                        template_img=template_img,
-                        science_img=science_img,
-                        fake_time=fake_base_time,
-                        exptime_ratio=exptime_ratio,
-                    ))
-                    fake_base_time += timedelta(seconds=1)
+                fake_l1_paths.append(fake_satspot_frame_for_visit(
+                    visitid=visitid,
+                    output_dir=sat_spot_dir,
+                    template_img=template_img,
+                    science_img=science_img,
+                    fake_time=fake_base_time,
+                    exptime_ratio=exptime_ratio,
+                ))
+                fake_base_time += timedelta(seconds=1)
 
     # Rebuild input list: fake frames first (early timestamps sort them into the
     # no-offset group), followed by the accepted real frames.

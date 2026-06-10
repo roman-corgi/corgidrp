@@ -52,7 +52,7 @@ def visitid_for_pol_mode(base_visitid, dpamname, visit_offset=0):
         raise ValueError(f"Cannot offset VISITID '{base_visitid}' for {dpamname}") from exc
 
 
-def make_satspot_frame_for_visit(targetname, wollaston, rotation_angle, astrom_cal,
+def fake_satspot_frame_for_visit(targetname, wollaston, rotation_angle, astrom_cal,
                                  image_size, wide_psf_sigma, star_amplitude,
                                  satspot_amplitude, sctsrt, visit_offset=0):
     """Create one L3 satellite-spot frame assigned to a requested visit split.
@@ -415,7 +415,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                 # No-offset group has no satellite spots; offset groups have spots.
                 satspot_amplitude = 0 if i == 0 else stokes_info["amplitude"] * 1000
                 for wollaston in polarizers.keys():
-                    input_image_list.append(make_satspot_frame_for_visit(
+                    input_image_list.append(fake_satspot_frame_for_visit(
                         targetname,
                         wollaston,
                         rotation_angle,
@@ -469,22 +469,6 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                 stellar_nd_wp_img.ext_hdr['FSMPRFL'] = 'NFOV'
 
                 input_image_list.append(stellar_nd_wp_img)
-
-        for i in range(number_of_sat_spot_images):
-            satspot_amplitude = 0 if i == 0 else stokes_info["nd_amplitude"] * 1000
-            for wollaston in polarizers.keys():
-                input_image_list.append(make_satspot_frame_for_visit(
-                    targetname,
-                    wollaston,
-                    rotation_angle,
-                    astrom_cal,
-                    image_size,
-                    wide_psf_sigma,
-                    stokes_info["nd_amplitude"],
-                    satspot_amplitude,
-                    satspot_sctsrt[i],
-                    visit_offset=UNOCCULTED_VISITID_OFFSET,
-                ))
 
     # input_dataset = data.Dataset(input_image_list)
     saved_files = mocks.rename_files_to_cgi_format(input_image_list, level_suffix="l3", output_dir=output_dir)
