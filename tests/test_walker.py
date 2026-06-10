@@ -599,17 +599,6 @@ def test_chained_recipe_intermediate_levels():
     l2a_dataset.save(filedir=datadir)
     filelist = [frame.filepath for frame in l2a_dataset]
 
-    # Create KGain calibration (required by convert_to_electrons in l2a_to_l2b_pc_1)
-    pri_hdr, ext_hdr = mocks.create_default_L1_headers("SCI")
-    ext_hdr['DRPCTIME'] = time.Time.now().isot
-    ext_hdr['DRPVERSN'] = corgidrp.__version__
-    dummy_dataset = mocks.create_prescan_files()
-    kgain_val = 8.8
-    new_kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=dummy_dataset)
-    new_kgain.save(filedir=os.path.join(os.path.dirname(__file__), "test_data"), filename="kgain.fits")
-    mycaldb = caldb.CalDB()
-    mycaldb.create_entry(new_kgain)
-
     # Load the real l2a_to_l2b_pc chain templates
     template_dir = os.path.join(os.path.dirname(walker.__file__), "recipe_templates")
     template_1 = json.load(open(os.path.join(template_dir, "l2a_to_l2b_pc_1.json"), "r"))
@@ -639,9 +628,6 @@ def test_chained_recipe_intermediate_levels():
     # Verify the inputs are the IM1 files
     for inp in recipe_2['inputs']:
         assert "_im1" in inp
-
-    # clean up
-    mycaldb.remove_entry(new_kgain)
 
 
 def test_cpgs_satspots():
