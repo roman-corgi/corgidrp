@@ -615,6 +615,8 @@ def test_chained_recipes_are_all_written_to_header(tmp_path):
         second_header_recipe = json.loads(frame.ext_hdr["RECIPE2"])
         assert first_header_recipe["name"] == first_recipe["name"]
         assert second_header_recipe["name"] == second_recipe["name"]
+        assert first_header_recipe["inputs"] == filelist
+        assert second_header_recipe["inputs"] == []
         assert "RECIPE3" not in frame.ext_hdr
 
 def test_cpgs_satspots():

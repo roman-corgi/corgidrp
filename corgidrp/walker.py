@@ -161,7 +161,12 @@ def _write_recipe_history_to_header(header, recipes):
 
     header["NRECIPES"] = (len(recipes), "Number of recipes recorded")
     for recipe_index, recipe in enumerate(recipes, start=1):
-        header["RECIPE" if recipe_index == 1 else f"RECIPE{recipe_index}"] = json.dumps(recipe)
+        recipe_for_header = dict(recipe)
+        if recipe_index > 1:
+            # Avoid repeating large intermediate input file lists in every
+            # chained-recipe header. The original inputs remain in RECIPE.
+            recipe_for_header["inputs"] = []
+        header["RECIPE" if recipe_index == 1 else f"RECIPE{recipe_index}"] = json.dumps(recipe_for_header)
 
 
 def _update_recipe_history(frames, recipe, recipe_for_other_frames=None, replace_latest=False):
