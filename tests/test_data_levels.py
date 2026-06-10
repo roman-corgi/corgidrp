@@ -53,6 +53,67 @@ def test_l1_to_l4():
         assert frame.ext_hdr['DATALVL'] == "L4"
         assert frame.filename == "cgi_0000011222333ooo111_20250101t12{0:02d}00_l4_.fits".format(i)
 
+def test_update_to_intermediate():
+    """
+    Tests marking data as intermediate (IM1, IM2) and then upgrading to final level.
+    """
+    l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+    fname_template = "cgi_0000011222333ooo111_20250101t12{0:02d}00_l1_.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+
+    # Mark as IM1
+    im1_dataset = l1_to_l2a.update_to_intermediate(l1_dataset, intermediate_level=1)
+    for i, frame in enumerate(im1_dataset):
+        assert frame.ext_hdr['DATALVL'] == "IM1"
+        assert "_im1" in frame.filename
+        assert "_l1_" not in frame.filename
+        assert frame.pri_hdr['FILENAME'] == frame.filename
+
+    # Mark as IM2 (from IM1)
+    im2_dataset = l1_to_l2a.update_to_intermediate(im1_dataset, intermediate_level=2)
+    for i, frame in enumerate(im2_dataset):
+        assert frame.ext_hdr['DATALVL'] == "IM2"
+        assert "_im2" in frame.filename
+        assert "_im1" not in frame.filename
+
+    # Upgrade IM2 to L2a (relaxed check)
+    l2a_dataset = l1_to_l2a.update_to_l2a(im2_dataset)
+    for i, frame in enumerate(l2a_dataset):
+        assert frame.ext_hdr['DATALVL'] == "L2a"
+        assert "_l2a" in frame.filename
+        assert "_im" not in frame.filename
+
+
+def test_update_to_l2b_from_intermediate():
+    """
+    Tests upgrading from IM# to L2b (relaxed check).
+    """
+    l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+    fname_template = "cgi_0000011222333ooo111_20250101t12{0:02d}00_l1_.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+
+    # L1 -> IM1
+    im1_dataset = l1_to_l2a.update_to_intermediate(l1_dataset, intermediate_level=1)
+
+    # IM1 -> L2a (to get valid L2a filename format)
+    l2a_dataset = l1_to_l2a.update_to_l2a(im1_dataset)
+
+    # L2a -> IM1 again (simulating a second chain)
+    im1_l2a = l1_to_l2a.update_to_intermediate(l2a_dataset, intermediate_level=1)
+    for frame in im1_l2a:
+        assert frame.ext_hdr['DATALVL'] == "IM1"
+        assert "_im1" in frame.filename
+
+    # IM1 -> L2b
+    l2b_dataset = l2a_to_l2b.update_to_l2b(im1_l2a)
+    for i, frame in enumerate(l2b_dataset):
+        assert frame.ext_hdr['DATALVL'] == "L2b"
+        assert "_l2b" in frame.filename
+        assert "_im" not in frame.filename
+
+
 def test_l1_to_l2a_bad():
     """
     Tests an unsuccessful upgrade of L1 to L2a data because the input is not L1
@@ -101,6 +162,8 @@ def test_l3_to_l4_bad():
 
 if __name__ == "__main__":
     test_l1_to_l4()
+    test_update_to_intermediate()
+    test_update_to_l2b_from_intermediate()
     test_l1_to_l2a_bad()
     test_l1a_to_l2b_bad()
     test_l2b_to_l3_bad()
