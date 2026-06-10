@@ -77,7 +77,7 @@ def generate_car_pump_trap_data(output_dir,meta_path, EMgain=50.,
         temperatures (list): list of temperatures to simulate (in K)
         cycles_per_injection (int): number of cycles per injection for trap pumping.
         num_cycles (dict): dictionary with keys 1, 2, 3, and 4 for the 4 trap schemes, and values corresponding to the number of cycles to simulate for each scheme.
-        num_frames_per_config (int): number of frames to generate per configuration (i.e., per unique combination of trap scheme, temperature, EM gain, and probability function).
+        num_frames_per_config (int): number of frames to generate per configuration (i.e., per unique combination of phase time, trap scheme, temperature, EM gain, and probability function).
         num_phase_times (int): number of phase times to simulate per trap scheme.  The phase times are the same for all trap schemes, and are log spaced between 1 us and 40 ms (or 10 ms when e2emode is True).
     """
 

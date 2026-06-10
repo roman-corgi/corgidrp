@@ -674,10 +674,6 @@ def desmear(input_dataset, detector_params, detector_regions=None, auto_decide=F
                     columnsum = columnsum + rowreadtime_sec/exptime_sec*((1
                     + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*image_data[s,:]
                 smear[r,:] = columnsum
-            if image_frame_flag:
-                orig_data = input_dataset[i].data.copy()
-            else:
-                orig_data = slice_section(input_dataset[i].data.copy(), arrtype, 'image', detector_regions)
             image_data -= smear
         
         frames_data[i].ext_hdr['DESMEAR'] = desmear_flag
@@ -692,7 +688,10 @@ def desmear(input_dataset, detector_params, detector_regions=None, auto_decide=F
         else:
             image_data[rows, cols] = orig_data[rows, cols]
 
-    history_msg = "Desmear function applied to data"
+    if auto_decide:
+        history_msg = "Desmear function applied to data with auto-decide on"
+    else:
+        history_msg = "Desmear function applied to data with auto-decide off"
     frames_data.update_after_processing_step(history_msg, new_all_data=data_cube)
 
     return frames_data

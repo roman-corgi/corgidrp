@@ -4587,6 +4587,11 @@ def rename_files_to_cgi_format(list_of_fits=None, output_dir=None, level_suffix=
             #emgain_offset = emgain_c * 10000 # EM gain adds more spread, beyond the range used for EM gain = 1
             # 2 to 3 frames per config
             filename = os.path.split(file)[-1]
+            # frames created with RAM_testing/tpump_frame_generator.py are according to the observation plan, 
+            # and those filenames contain extra specifications '_config' (# of frames per unique combination of 
+            # phase time, trap scheme, temperature, EM gain, and probability function) and '_fr' (indexing real data 
+            # versus "junk" frames).  See tpump_frame_generator.py for more details.  For e2e test, '_config' and '_fr'
+            # do not appear in the filenames.
             if '_config' in filename:
                 config_offset = int(filename[filename.find('_config')+7])+13
             else:

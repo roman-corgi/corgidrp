@@ -24,8 +24,7 @@ from scipy.optimize import curve_fit
 
 import corgidrp.check as check
 from corgidrp.data import TrapCalibration, typical_bool_keywords, typical_cal_invalid_keywords
-from datetime import date
-#from memory_profiler import profile
+
 class TPumpAnException(Exception):
     """Exception class for tpumpanalysis."""
 
