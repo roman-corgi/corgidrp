@@ -932,7 +932,7 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
     ''' 
     Function that computes the legendre polynomial coefficients that describe the image distortion map * must run format_disotrtio_inputs() first *
 
-    # Args:
+    Args:
         pos1 (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
         meas_offset (np.array): 2D array of the (delta_x, delta_y) values for each star from the first star position
         sky_offset (np.array): 2D array of the (delta_ra, delta_dec) offsets between the matched stars in the reference field
