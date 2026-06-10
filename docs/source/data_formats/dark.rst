@@ -7,10 +7,10 @@ Dark Data Product
 FITS HDU Structure
 ------------------
 
-Image HDU array: (r,c), where this is (1024,1024) for image area or (1200,2200) for full frame.
-ERR HDU array: (1,r,c)
-DQ HDU array: (r,c)
-Below is an example.
+| Image HDU array: (r,c), where this is (1024,1024) for image area or (1200,2200) for full frame.
+| ERR HDU array: (1,r,c)
+| DQ HDU array: (r,c)
+| Below is an example.
 
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |

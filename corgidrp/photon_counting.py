@@ -144,9 +144,6 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     Kevin Ludwick - UAH - 2023
 
     """
-    # uncomment for RAM check
-    # import psutil 
-    # process = psutil.Process()
 
     # the following chunck of code checks if the dataset needs to be divided up into multiple datasets
     # currently this addresses the case of pol mode where we don't want to combine pol0 and pol45 frames together
@@ -175,6 +172,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         raise ValueError('bin_size must be less than the number of frames in input_dataset.')
         
     if inputmode == 'darks':
+        if bin_size is not None:
+            warnings.warn('bin_size is not meaningful if input_mode=\'darks\'. All frames will be used in making the PC master dark.')
         num_bins = 1
         bin_size = len(input_dataset)
     else:

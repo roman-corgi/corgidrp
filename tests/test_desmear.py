@@ -111,7 +111,7 @@ def test_desmear():
     assert(np.max(np.abs(dataset_desmear.all_data[0] - unsmeared_frame)) < 1e-7)
 
     # test same thing with auto-decide on
-    dataset_desmear = desmear(dataset_smeared, detector_params)
+    dataset_desmear = desmear(dataset_smeared, detector_params, auto_decide=True)
     assert(np.max(np.abs(dataset_desmear.all_data[0] - unsmeared_frame)) < 1e-7)
 
     # now test a frame that shouldn't be desmeared
