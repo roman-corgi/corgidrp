@@ -905,7 +905,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))
     l2a_data_filename = dataset[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
-    noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
+    noise_maps.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', noise_maps.filename)
     noise_maps.ext_hdr.set('FPN_IMM', FPN_image_mean, 'mean of the image-area fixed-pattern noise (e-). -999. if no value supplied.')
     noise_maps.ext_hdr.set('CIC_IMM', CIC_image_mean, 'mean of the image-area clock-induced charge (e-). -999. if no value supplied.')
     noise_maps.ext_hdr.set('DC_IMM', DC_image_mean, 'mean of the image-area dark current (e-/s). -999. if no value supplied.')
