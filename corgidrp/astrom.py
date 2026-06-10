@@ -856,13 +856,13 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return boresight_ra, boresight_dec
 
-def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, position_error=None):
+def format_distortion_inputs(input_dataset, source_matches, position_error=None):
     ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
     
     Args:
         input_dataset (corgidrp.data.dataset): corgidrp dataset object with images to compute the distortion from
         source_matches (list of astropy.table.Table() objects): List of length N for N frames in the input dataset. Tables must columns 'x','y','RA','DEC' as pixel locations and corresponding sky positons
-        ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference position to compute pairs with
+        # ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference position to compute pairs with
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
                         Should be changed later to accept non-uniform errors
         
@@ -882,15 +882,16 @@ def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, positi
     for frame_ind in range(len(input_dataset)):
         input_image = input_dataset[frame_ind].data
 
-        # create all combinations of the target star with all others
-        combo_list = range(len(source_matches[frame_ind]))
         skycoords = SkyCoord(ra= source_matches[frame_ind]['RA'], dec= source_matches[frame_ind]['DEC'], unit='deg', frame='icrs')
-        target_coord = SkyCoord(ra= ref_star_pos[frame_ind]['RA'], dec= ref_star_pos[frame_ind]['DEC'], unit='deg', frame='icrs')
-    
-        for pair_ind in combo_list:
+        # compute combinations of all pairs of stars
+        combos = list(compute_combinations(range(len(source_matches[frame_ind])), r=2))
+        # pair_ind = 1
+        # while pair_ind < len(source_matches[frame_ind]):    # compare the first source with all others
+        for pair_ind in combos: # restrict to using only the first ~200 combinations
+        # for pair_ind in combo_list:
             # get the pixel offset
-            star1 = ref_star_pos[frame_ind]
-            star2 = source_matches[frame_ind][pair_ind]
+            star1 = source_matches[frame_ind][pair_ind[0]]  
+            star2 = source_matches[frame_ind][pair_ind[1]]
     
             x_guess = star2['x'] - star1['x']
             y_guess = star2['y'] - star1['y']
@@ -898,8 +899,8 @@ def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, positi
             (dx, dy), (xfit_err, yfit_err, _) = measure_offset(input_image, star2['x'], star2['y'], x_guess, y_guess, guessflux=10000)
     
             # get the true sky offset [mas]
-            true1 = target_coord
-            true2 = skycoords[pair_ind]
+            true1 = skycoords[pair_ind[0]]  
+            true2 = skycoords[pair_ind[1]]
         
             # get true sky separation and position angle
             true_sep = true1.separation(true2).mas
