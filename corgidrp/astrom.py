@@ -407,7 +407,7 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     
     return found_sources
 
-def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012, platescale_guess=21.8, platescale_tol=0.1):
+def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.02, platescale_guess=21.8, platescale_tol=0.1):
     ''' 
     Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
