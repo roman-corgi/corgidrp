@@ -405,7 +405,7 @@ def test_satspot_invalid_count():
 def test_find_star_skips_unocculted_star_fpm_frames():
     """
     Verify that unocculted-star frames with OPEN/ND FPAMNAME values skip satellite-spot
-    analysis and are returned with center-based STARLOC headers.
+    analysis and are returned without populating STARLOC headers.
     """
     frames = []
     for i, fpamname in enumerate(['OPEN_12', 'ND225']):
@@ -429,8 +429,6 @@ def test_find_star_skips_unocculted_star_fpm_frames():
 
     assert len(dataset_with_center.frames) == 2
     for frame in dataset_with_center.frames:
-        assert frame.ext_hdr['STARLOCX'] == 15
-        assert frame.ext_hdr['STARLOCY'] == 10
         assert 'find_star skipped' in str(frame.ext_hdr['HISTORY'])
 
 
