@@ -156,10 +156,10 @@ def test_distortion():
 
     # create dithered dataset 
     # mocks.create_astrom_data(field_path=field_path, filedir=datadir, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=4)
-    dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=4)
+    dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, vignette_radius=3_460, dither_pointings=4)
 
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=400, find_distortion=True, fitorder=3, position_error=0.5)
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=25, find_distortion=True, fitorder=3, position_error=0.5)
 
     ## check that the distortion map does not create offsets greater than 4[mas]
         # compute the distortion maps created from the best fit coeffs
@@ -354,6 +354,7 @@ def test_transform_coeff_to_distortion_map():
 
 if __name__ == "__main__":
     test_astrom()
+    test_astrom_vignette()
     test_distortion()
     test_seppa2dxdy()
     test_seppa2xy()
