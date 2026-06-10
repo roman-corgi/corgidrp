@@ -1004,7 +1004,6 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
                     matched_sources_multiframe.append(matched_sources)
                 else:
                     matched_sources_multiframe.append(field_matches[0])
-        # elif len(field_matches) == len(dataset): # this needs to be if the len(field_matches >1)
         elif len(field_matches) > 1:  # unique matches for each frame case
             if len(field_matches) != len(dataset):
                 raise TypeError('field_matches must be a single str/ astropy.table OR the same length as input_dataset')
@@ -1015,8 +1014,6 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
                         matched_sources_multiframe.append(matched_sources)
                     else:
                         matched_sources_multiframe = field_matches
-        # else:
-        #     raise TypeError('field_matches must be a single str or the same length as input_dataset')
 
     # load in field data to refer to
     if field_path == 'JWST_CALFIELD2020.csv':
@@ -1050,8 +1047,6 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     # create a place to store all the calibration measurements
     astroms = []
-    target_coord_tables = []
-
     hold_matches = []   # place to hold the auto-found source matches for each frame
     corrected_positions_boresight = []      # place to hold the corrected target position based on boresight offsets for each frame
 
@@ -1061,20 +1056,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
-        target_coord_tab = astropy.table.Table()
-        target_coord_tab['x'] = [(np.shape(image)[1]-1) // 2]    # assume the target is at the center of the image
-        target_coord_tab['y'] = [(np.shape(image)[0]-1) // 2]
-        target_coord_tab['RA'] = [target_coordinate[0]]
-        target_coord_tab['DEC'] = [target_coordinate[1]]
-        target_coord_tables.append(target_coord_tab)
-   
+
         # compute the calibration properties
         found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
         matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
         # if len(hold_matches) < 1:
         hold_matches.append(matched_sources)
 
-        cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate, center_radius=center_radius)
+        cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
         # calculate the corrected target position based on ra, dec offsets
         corr_ra, corr_dec = target_coordinate[0] - ra, target_coordinate[1] - dec
@@ -1096,8 +1085,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     # compute the distortion map coeffs
     if find_distortion:
         # use the found matches for distortion
-        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, source_matches=hold_matches, ref_star_pos=target_coord_tables, position_error=position_error)
-        distortion_coeffs, order = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
+        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, source_matches=hold_matches, position_error=position_error)
+        distortion_coeffs, order = compute_distortion(first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
         # set default coeffs to produce zero distortion
         fitparams = (fitorder + 1)**2
