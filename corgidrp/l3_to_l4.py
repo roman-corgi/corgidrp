@@ -1425,6 +1425,10 @@ def align_polarimetry_frames(input_dataset):
     starloc0 = (processed_dataset.frames[0].ext_hdr['STARLOCX'],processed_dataset.frames[0].ext_hdr['STARLOCY'])
 
     for frame in processed_dataset:
+        # skip the unocculted frames, whhch don't need to be aligned. 
+        if frame.ext_hdr['FPAMNAME'].startswith(('OPEN', 'ND')):
+            continue
+        
         starloc = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         if starloc != starloc0:
             shift_value = (starloc0[1] - starloc[1] , starloc0[0] - starloc[0])
