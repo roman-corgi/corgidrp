@@ -147,8 +147,11 @@ class Dataset():
                 filenames.append(frame.filename)
 
         for filename, frame in zip(filenames, self.frames):
-            if ram_heavy_save: 
-                temp_frame = Image(frame.filepath)
+            if ram_heavy_save:
+                source_path = frame.filepath
+                if not os.path.exists(source_path):
+                    source_path = getattr(frame, '_source_filepath', source_path)
+                temp_frame = Image(source_path)
                 if frame.data is None:
                     frame.data = temp_frame.data
                 if frame.err is None:
@@ -435,6 +438,8 @@ class Image():
             else:
                 self.filename = filepath_args[-1]
                 self.filedir = os.path.sep.join(filepath_args[:-1])
+            # remember load path so ram_heavy_save works after filename renames
+            self._source_filepath = data_or_filepath
 
         else:
             # data has been passed in directly
@@ -870,7 +875,7 @@ class Dark(Image):
                 # remove .fits extension
                 orig_input_filename=latest_filename.split(".fits")[0]
                 self.filename="{0}_drk_cal.fits".format(orig_input_filename)
-                self.filename=re.sub('_l[0-9].','',self.filename)
+                self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','',self.filename)
                 # remove dnm_cal if building synthesized dark from detector noise maps
                 self.filename=self.filename.replace("_dnm_cal","")
                 self.pri_hdr['FILENAME']=self.filename
@@ -971,7 +976,7 @@ class FlatField(Image):
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
             # use latest frame filename and replace level suffix with calibration suffix
-            self.filename=re.sub('_l[0-9].','_flt_cal',latest_filename)
+            self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_flt_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
@@ -1028,7 +1033,7 @@ class SpectroscopyCentroidPSF(Image):
             # remove .fits extension
             base=latest_filename.split(".fits")[0]
             filename = f"{base}_scp_cal.fits"
-            self.filename = re.sub('_l[0-9].', '', filename)
+            self.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', filename)
             self.pri_hdr['FILENAME'] = self.filename
             if err is None:
                 self.err = np.zeros(self.data.shape)
@@ -1119,7 +1124,7 @@ class LineSpread(Image):
             # remove .fits extension
             base=latest_filename.split(".fits")[0]
             self.filename = f"{base}_lsf_cal.fits"
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', self.filename)
             if gauss_par is not None:
                 if not (gauss_par.ndim == 1 and len(gauss_par) == 6):
                     raise ValueError('The LineSpread calibration gauss_par array must have 6 entries')
@@ -1525,7 +1530,7 @@ class NonLinearityCalibration(Image):
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
             # use latest frame filename and replace level suffix with nln calibration suffix
-            self.filename=re.sub('_l[0-9].','_nln_cal',latest_filename)
+            self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_nln_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
 
         # double check that this is actually a NonLinearityCalibration file that got read in
@@ -1622,7 +1627,7 @@ class KGain(Image):
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
                 # use latest frame filename and replace level suffix with krn calibration suffix
-                self.filename=re.sub('_l[0-9].','_krn_cal',latest_filename)
+                self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_krn_cal',latest_filename)
                 self.pri_hdr['FILENAME'] = self.filename
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
@@ -1772,7 +1777,7 @@ class BadPixelMap(Image):
             elif "_drk_cal" in latest_filename:
                 self.filename=latest_filename.replace("_drk_cal","_bpm_cal")
             else:
-                self.filename=re.sub('_l[0-9].','_bpm_cal',latest_filename)
+                self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_bpm_cal',latest_filename)
             self.pri_hdr['FILENAME']=self.filename
 
             # Enforce data level = CAL
@@ -1862,7 +1867,7 @@ class DetectorNoiseMaps(Image):
                 orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0] 
             
             self.filename = "{0}_dnm_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -2157,7 +2162,7 @@ class AstrometricCalibration(Image):
             orig_input_filename=latest_filename.split(".fits")[0]
             # append filename convention and set it as new filename
             self.filename = "{0}_ast_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', self.filename)
             self.pri_hdr['FILENAME']=self.filename
             
             # Enforce data level = CAL
@@ -2232,7 +2237,7 @@ class TrapCalibration(Image):
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
             # use latest frame filename and replace level suffix with tpu calibration suffix
-            self.filename=re.sub('_l[0-9].','_tpu_cal',latest_filename)
+            self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_tpu_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
@@ -2333,7 +2338,7 @@ class FluxcalFactor(Image):
             # slight hack for old mocks not in the standard filename format
             if input_dataset is not None:
                 self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-                self.filename = re.sub('_l[0-9].', '', self.filename)
+                self.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', self.filename)
             else:
                 self.filename = re.sub(r'\.fits$', '_abf_cal.fits', self.pri_hdr['FILENAME'])
             self.pri_hdr['FILENAME'] = self.filename
@@ -2414,7 +2419,7 @@ class FluxcalFactor(Image):
             # slight hack for old mocks not in the standard filename format
             if input_dataset is not None:
                 self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-                self.filename = re.sub('_l[0-9].', '', self.filename)
+                self.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', self.filename)
             else:
                 self.filename = re.sub(r'\.fits$', '_abf_cal.fits', self.pri_hdr['FILENAME'])
             self.pri_hdr['FILENAME'] = self.filename
@@ -2489,7 +2494,7 @@ class SpecFluxCal(Image):
             self.filedir = "."
             # slight hack for old mocks not in the standard filename format
             self.filename = "{0}_sfl_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
         # File format checks
@@ -2560,7 +2565,7 @@ class SpecFluxCal(Image):
             self.filedir = "."
             # slight hack for old mocks not in the standard filename format
             self.filename = "{0}_sfl_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
 class SlitTransmission(Image):
@@ -2624,7 +2629,7 @@ class SlitTransmission(Image):
             # remove .fits extension
             base=latest_filename.split(".fits")[0]
             self.filename=f"{base}_slt_cal.fits"
-            self.filename=re.sub('_l[0-9].','',self.filename)
+            self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','',self.filename)
             # File format checks
             if self.data.ndim != 2:
                 raise ValueError('The slit transmission array must have 2 dimensions') 
@@ -2992,7 +2997,7 @@ class CoreThroughputCalibration(Image):
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
             # use latest frame filename and replace level suffix with ctp calibration suffix
-            self.filename=re.sub('_l[0-9].','_ctp_cal',latest_filename)
+            self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_ctp_cal',latest_filename)
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -3457,7 +3462,7 @@ class CoreThroughputMap(Image):
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
                 # use latest frame filename and replace suffix with ctm calibration suffix
-                self.filename=re.sub('_l[0-9].','_ctm_cal',latest_filename)
+                self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_ctm_cal',latest_filename)
                 self.pri_hdr['FILENAME']=self.filename
 
             else:
@@ -4000,7 +4005,7 @@ class NDFilterSweetSpotDataset(Image):
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
                 # use latest frame filename and replace level suffix with ndf calibration suffix
-                self.filename=re.sub('_l[0-9].','_ndf_cal',latest_filename)
+                self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_ndf_cal',latest_filename)
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?
 
@@ -4164,7 +4169,7 @@ class NDSpectroscopy(Image):
                 # use latest frame filename to rename
                 latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
                 # use latest frame filename and replace level suffix with ndf calibration suffix
-                self.filename=re.sub('_l[0-9].','_nds_cal',latest_filename)
+                self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_nds_cal',latest_filename)
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?
 
@@ -4320,7 +4325,7 @@ class MuellerMatrix(Image):
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
             # use latest frame filename and replace level suffix with mmx calibration suffix
-            self.filename=re.sub('_l[0-9].','_mmx_cal',latest_filename)
+            self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_mmx_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename          
             
             # Enforce data level = CAL
@@ -4401,7 +4406,7 @@ class NDMuellerMatrix(Image):
             # use latest frame filename to rename
             latest_filename=latest_frame.filename or latest_frame.pri_hdr['FILENAME']
             # use latest frame filename and replace level suffix with ndm calibration suffix
-            self.filename=re.sub('_l[0-9].','_ndm_cal',latest_filename)
+            self.filename=re.sub(r'_(?:l[0-9][ab_]|im\d+)','_ndm_cal',latest_filename)
             self.pri_hdr['FILENAME'] = self.filename          
             
             # Enforce data level = CAL

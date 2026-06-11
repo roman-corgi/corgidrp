@@ -61,6 +61,12 @@
 			}
         },
         {
+            "name": "update_to_intermediate",
+            "keywords": {
+                "intermediate_level": 2
+            }
+        },
+        {
             "name" : "save"
         }
     ]

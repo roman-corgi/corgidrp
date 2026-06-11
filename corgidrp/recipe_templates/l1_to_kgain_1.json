@@ -15,9 +15,15 @@
               }
         },
         {
-            "name" : "save",
-			"keywords" : {
-                "ram_heavy_save" : true
+            "name": "update_to_intermediate",
+            "keywords": {
+                "intermediate_level": 1
+            }
+        },
+        {
+            "name": "save",
+            "keywords": {
+                "ram_heavy_save": true
             }
         }
     ]

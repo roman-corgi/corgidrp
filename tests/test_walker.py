@@ -4,7 +4,10 @@ Test the walker infrastructure to read and execute recipes
 import os
 import glob
 import json
+import tempfile
 import warnings
+import shutil
+import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
@@ -572,6 +575,61 @@ def test_generate_multiple_recipes():
     assert len(recipes[0]) == 3 # nonlin chain in 3 parts
     assert len(recipes[1]) == 2 # kgain chain in 2 parts
 
+def test_chained_recipe_intermediate_levels():
+    """
+    Tests that running a chained recipe correctly marks intermediate output
+    files with IM1 level using the real l2a_to_l2b_pc_1.json template, then
+    verifies the next recipe in the chain can accept them.
+    """
+    # create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+    # Create simulated L2a data (l2a_to_l2b_pc chain starts from L2a)
+    l2a_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l2a.fits"
+    for i, image in enumerate(l2a_dataset):
+        image.filename = fname_template.format(i)
+        image.ext_hdr['DATALVL'] = "L2a"
+        image.ext_hdr['ISPC'] = 1  # photon-counting mode (l2a_to_l2b_pc template)
+    l2a_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l2a_dataset]
+
+    # Load the real l2a_to_l2b_pc chain templates
+    template_dir = os.path.join(os.path.dirname(walker.__file__), "recipe_templates")
+    template_1 = json.load(open(os.path.join(template_dir, "l2a_to_l2b_pc_1.json"), "r"))
+    template_2 = json.load(open(os.path.join(template_dir, "l2a_to_l2b_pc_2.json"), "r"))
+
+    # Generate recipe from template 1
+    recipe_1 = walker.autogen_recipe(filelist, outputdir, template=template_1)
+
+    # Run recipe 1 (frame_select -> convert_to_electrons -> dark_subtraction -> update_to_intermediate -> save)
+    output_filelist = walker.run_recipe(recipe_1)
+
+    # Verify intermediate outputs on disk
+    assert output_filelist is not None
+    assert len(output_filelist) > 0
+    output_dataset = data.Dataset(output_filelist)
+    for frame in output_dataset:
+        assert frame.ext_hdr['DATALVL'] == "IM1", (
+            f"Expected DATALVL='IM1', got '{frame.ext_hdr['DATALVL']}'"
+        )
+        assert "_im1" in frame.filename, (
+            f"Expected '_im1' in filename, got '{frame.filename}'"
+        )
+
+    # Verify chaining: recipe 2 accepts intermediate files as inputs
+    recipe_2 = walker.autogen_recipe(output_filelist, outputdir, template=template_2)
+    assert len(recipe_2['inputs']) > 0
+    # Verify the inputs are the IM1 files
+    for inp in recipe_2['inputs']:
+        assert "_im1" in inp
+
+
 def test_cpgs_satspots():
     """
     Tests passing in sat spot parameters from the CPGS XML into the 
@@ -827,6 +885,349 @@ def test_guess_template_l1_pol_setup():
         assert recipe_filename == expected_chain
         assert chained == True
 
+def test_load_user_template_when_exists():
+    """
+    Test that user template is loaded when it exists in user_templates directory
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create a user template programmatically
+        user_template = {
+            "name": "l1_to_l2a_basic",
+            "template": True,
+            "steps": [
+                {"name": "prescan_biassub"},
+                {"name": "discard_setup_frames"},
+                {
+                    "name": "detect_cosmic_rays",
+                    "keywords": {"test_user_param": 42}
+                },
+                {"name": "correct_nonlinearity"},
+                {"name": "update_to_l2a"},
+                {"name": "save"}
+            ]
+        }
+
+        # Write template to temp directory
+        template_path = os.path.join(tmpdir, "l1_to_l2a_basic.json")
+        with open(template_path, 'w') as f:
+            json.dump(user_template, f)
+
+        # Load template
+        template, loaded_path, is_user_template = walker._load_recipe_template(
+            "l1_to_l2a_basic.json", user_templates_dir=tmpdir
+        )
+
+        # Verify user template was loaded
+        assert is_user_template == True
+        assert tmpdir in loaded_path
+        assert template['name'] == "l1_to_l2a_basic"
+
+        # Verify user-specific parameter is present
+        detect_cr_step = next(s for s in template['steps'] if s['name'] == 'detect_cosmic_rays')
+        assert 'test_user_param' in detect_cr_step['keywords']
+        assert detect_cr_step['keywords']['test_user_param'] == 42
+
+def test_fallback_to_default_when_user_missing():
+    """
+    Test that default template is loaded when user template doesn't exist
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Empty temp directory - template doesn't exist here
+        # Load template that doesn't exist in tmpdir (should fall back to default)
+        template, template_path, is_user_template = walker._load_recipe_template(
+            "l2a_to_l2b.json", user_templates_dir=tmpdir
+        )
+
+        # Verify default template was loaded
+        assert is_user_template == False
+        assert "recipe_templates" in template_path
+        assert template['name'] == "l2a_to_l2b"
+
+def test_template_not_found_raises_error():
+    """
+    Test that FileNotFoundError is raised when template not in user or default
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with pytest.raises(FileNotFoundError) as exc_info:
+            walker._load_recipe_template("nonexistent_template.json", user_templates_dir=tmpdir)
+
+        assert "not found" in str(exc_info.value).lower()
+        assert "nonexistent_template.json" in str(exc_info.value)
+
+def test_validation_mode_matching_structure():
+    """
+    Test that validation passes when user template has matching structure
+    """
+    # Create mock templates with matching structure
+    user_template = {
+        'name': 'test',
+        'steps': [
+            {'name': 'step1'},
+            {'name': 'step2'},
+            {'name': 'step3'}
+        ]
+    }
+    default_template = {
+        'name': 'test',
+        'steps': [
+            {'name': 'step1'},
+            {'name': 'step2'},
+            {'name': 'step3'}
+        ]
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Write template to temp directory
+        default_template_path = os.path.join(tmpdir, "test_template.json")
+        with open(default_template_path, 'w') as f:
+            json.dump(default_template, f)
+        # Save original setting
+        original_enforce = corgidrp.enforce_template_structure
+    
+        try:
+            corgidrp.enforce_template_structure = True
+            # Should not raise
+            walker._validate_template_structure(user_template, default_template_path, "test.json")
+        finally:
+            corgidrp.enforce_template_structure = original_enforce
+
+def test_validation_mode_mismatched_structure_raises():
+    """
+    Test that validation raises ValueError when structures don't match
+    """
+    # Create mock templates with different structures
+    user_template = {
+        'name': 'test',
+        'steps': [
+            {'name': 'step1'},
+            {'name': 'step3'},  # Missing step2
+            {'name': 'step2'}   # Wrong order
+        ]
+    }
+    default_template = {
+        'name': 'test',
+        'steps': [
+            {'name': 'step1'},
+            {'name': 'step2'},
+            {'name': 'step3'}
+        ]
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Write template to temp directory
+        default_template_path = os.path.join(tmpdir, "test_template.json")
+        with open(default_template_path, 'w') as f:
+            json.dump(default_template, f)
+        # Save original setting
+        original_enforce = corgidrp.enforce_template_structure
+    
+        try:
+            corgidrp.enforce_template_structure = True
+            with pytest.raises(ValueError) as exc_info:
+                walker._validate_template_structure(user_template, default_template_path, "test.json")
+    
+            error_msg = str(exc_info.value)
+            assert "different step structure" in error_msg.lower()
+            assert "test.json" in error_msg
+        finally:
+            corgidrp.enforce_template_structure = original_enforce
+
+def test_validation_mode_disabled_allows_mismatch():
+    """
+    Test that validation is skipped when enforce_template_structure=False
+    """
+    # Create mock templates with different structures
+    user_template = {
+        'name': 'test',
+        'steps': [
+            {'name': 'step1'},
+            {'name': 'step3'}
+        ]
+    }
+    default_template = {
+        'name': 'test',
+        'steps': [
+            {'name': 'step1'},
+            {'name': 'step2'},
+            {'name': 'step3'}
+        ]
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Write template to temp directory
+        default_template_path = os.path.join(tmpdir, "test_template.json")
+        with open(default_template_path, 'w') as f:
+            json.dump(default_template, f)
+            
+        # Save original setting
+        original_enforce = corgidrp.enforce_template_structure
+    
+        try:
+            corgidrp.enforce_template_structure = False
+            # Should not raise even with mismatched structure
+            walker._validate_template_structure(user_template, default_template_path, "test.json")
+        finally:
+            corgidrp.enforce_template_structure = original_enforce
+
+def test_user_template_in_autogen_recipe():
+    """
+    Test that autogen_recipe correctly uses user templates and adds RECIPE_SRC
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create a user template programmatically
+        user_template = {
+            "name": "l1_to_l2a_basic",
+            "template": True,
+            "process_in_chunks": True,
+            "drpconfig": {"track_individual_errors": False},
+            "inputs": [],
+            "outputdir": "",
+            "steps": [
+                {
+                    "name": "prescan_biassub",
+                    "calibs": {"DetectorNoiseMaps": "AUTOMATIC,OPTIONAL"},
+                    "keywords": {"return_full_frame": False, "dataset_copy": False}
+                },
+                {
+                    "name": "discard_setup_frames",
+                    "keywords": {"keywords_to_check": ["ISACQ"]}
+                },
+                {
+                    "name": "detect_cosmic_rays",
+                    "calibs": {"DetectorParams": "AUTOMATIC", "KGain": "AUTOMATIC, OPTIONAL"},
+                    "keywords": {"dataset_copy": False, "test_user_param": 42}
+                },
+                {
+                    "name": "correct_nonlinearity",
+                    "calibs": {"NonLinearityCalibration": "AUTOMATIC"}
+                },
+                {"name": "update_to_l2a"},
+                {"name": "save"}
+            ]
+        }
+
+        # Write template to temp directory
+        template_path = os.path.join(tmpdir, "l1_to_l2a_basic.json")
+        with open(template_path, 'w') as f:
+            json.dump(user_template, f)
+
+        # Create simulated data
+        datadir = os.path.join(os.path.dirname(__file__), "simdata")
+        if not os.path.exists(datadir):
+            os.mkdir(datadir)
+
+        l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+        for frame in l1_dataset:
+            frame.pri_hdr['VISTYPE'] = 'CGIVST_OBS_CORIMG'
+            frame.ext_hdr['DATALVL'] = 'L1'
+        l1_dataset.save(filedir=datadir)
+        filelist = [frame.filepath for frame in l1_dataset]
+
+        # Save original setting
+        original_user_templates = corgidrp.user_templates_dir
+
+        try:
+            # Temporarily set user_templates_dir
+            corgidrp.user_templates_dir = tmpdir
+
+            # Create output directory
+            outputdir = os.path.join(os.path.dirname(__file__), "test_user_template_output")
+            if not os.path.exists(outputdir):
+                os.mkdir(outputdir)
+
+            # Generate recipe
+            recipe = walker.autogen_recipe(filelist, outputdir, template="l1_to_l2a_basic.json")
+
+            # Verify RECIPE_SRC is present and points to user template
+            assert 'RECIPE_SRC' in recipe
+            assert tmpdir in recipe['RECIPE_SRC']
+
+            # Verify user-specific parameter is in the recipe
+            detect_cr_step = next(s for s in recipe['steps'] if s['name'] == 'detect_cosmic_rays')
+            assert 'test_user_param' in detect_cr_step['keywords']
+
+            # Clean up
+            shutil.rmtree(outputdir, ignore_errors=True)
+
+        finally:
+            corgidrp.user_templates_dir = original_user_templates
+
+def test_user_template_wrong_name_loads_without_validation():
+    """
+    User template with non-existent default name loads fine when validation disabled.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        wrong_template = {
+            "name": "nonexistent_recipe",
+            "template": True,
+            "inputs": [],
+            "outputdir": "",
+            "drpconfig": {},
+            "steps": [{"name": "save"}]
+        }
+        template_path = os.path.join(tmpdir, "nonexistent_recipe.json")
+        with open(template_path, 'w') as f:
+            json.dump(wrong_template, f)
+
+        template, loaded_path, is_user = walker._load_recipe_template(
+            "nonexistent_recipe.json", user_templates_dir=tmpdir
+        )
+        assert is_user == True
+        assert template['name'] == "nonexistent_recipe"
+
+
+def test_user_template_wrong_name_rejected_with_validation():
+    """
+    User template with non-existent default name raises FileNotFoundError
+    when enforce_template_structure=True.
+    """
+    original_enforce = corgidrp.enforce_template_structure
+    original_user_templates = corgidrp.user_templates_dir
+
+    try:
+        corgidrp.enforce_template_structure = True
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wrong_template = {
+                "name": "nonexistent_recipe",
+                "template": True,
+                "inputs": [],
+                "outputdir": "",
+                "drpconfig": {},
+                "steps": [{"name": "save"}]
+            }
+            template_path = os.path.join(tmpdir, "nonexistent_recipe.json")
+            with open(template_path, 'w') as f:
+                json.dump(wrong_template, f)
+
+            datadir = os.path.join(os.path.dirname(__file__), "simdata")
+            os.makedirs(datadir, exist_ok=True)
+            l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=1)
+            l1_dataset[0].filename = "test_l1_.fits"
+            l1_dataset.save(filedir=datadir)
+            filelist = [l1_dataset[0].filepath]
+
+            outputdir = os.path.join(os.path.dirname(__file__), "test_output")
+            os.makedirs(outputdir, exist_ok=True)
+
+            corgidrp.user_templates_dir = tmpdir
+
+            with pytest.raises(FileNotFoundError) as exc_info:
+                walker.autogen_recipe(filelist, outputdir, template="nonexistent_recipe.json")
+
+            assert "nonexistent_recipe.json" in str(exc_info.value)
+            assert "default" in str(exc_info.value).lower()
+
+    finally:
+        corgidrp.enforce_template_structure = original_enforce
+        corgidrp.user_templates_dir = original_user_templates
+
+
 if __name__ == "__main__":#
     test_l1_to_l2b_default_calibs()
     test_autoreducing()
@@ -836,10 +1237,20 @@ if __name__ == "__main__":#
     test_skip_missing_optional_calib()
     test_jit_calibs()
     test_generate_multiple_recipes()
+    test_chained_recipe_intermediate_levels()
     test_cpgs_satspots()
     test_cpgs_one_satspot()
     test_pc_science_analog_satspots()
     test_guess_template_l1_absflux_pol()
     test_guess_template_l1_absflux_non_pol()
     test_guess_template_l1_pol_setup()
+    test_load_user_template_when_exists()
+    test_fallback_to_default_when_user_missing()
+    test_template_not_found_raises_error()
+    test_validation_mode_matching_structure()
+    test_validation_mode_mismatched_structure_raises()
+    test_validation_mode_disabled_allows_mismatch()
+    test_user_template_in_autogen_recipe()
+    test_user_template_wrong_name_loads_without_validation()
+    test_user_template_wrong_name_rejected_with_validation()
 
