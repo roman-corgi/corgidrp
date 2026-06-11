@@ -569,7 +569,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
             key=lambda item: (os.path.basename(item[1]).split('_')[2] if len(os.path.basename(item[1]).split('_')) > 2 else '', item[0]),
         )[1]
     test_filename = os.path.basename(latest_input_file).split('.fits')[0] + '_drk_cal.fits'
-    test_filename = re.sub('_l[0-9].', '', test_filename)
+    test_filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', test_filename)
     assert(trad_dark.filename == test_filename)
     print('e2e test for trad_dark_im calibration passed')
 
