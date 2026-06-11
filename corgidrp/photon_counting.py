@@ -118,7 +118,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             Defaults to True.
         inputmode (str):  If 'illuminated', the frames are assumed to be illuminated frames.  If 'darks', frames are assumed to be dark frames input for creation of a photon-counted master dark. 
             This flag shows the user's intention with the input, and this input is checked against the file type of the dataset for compatibility (e.g., if this input is 'darks' while 'VISTYPE' is not equal 
-            to 'DARK', an exception is raised).
+            to 'DARK', an exception is raised). If inputmode is 'darks', all frames in input_dataset will be used to construct the PC master dark, regardless of the specification for bin_size. 
+            Forcing the PC master dark to be made from all the input darks is all the better for the fidelity of the PC master dark.
         bin_size (int):  If one wishes to break up the input dataset into subsets of frames to photon-count separately (e.g., for testing the balancing act between 
             good SNR with many frames vs countering speckle time variability with fewer frames), one specifies this number for the size of each subset. If the number does not evenly divide the 
             number of frames in input_dataset, the remainder frames are ignored.  The output is the a dataset containing the more than 1 photon-counted mean-combined frame. Defaults to None, in which case 
@@ -143,9 +144,6 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     Kevin Ludwick - UAH - 2023
 
     """
-    # uncomment for RAM check
-    # import psutil 
-    # process = psutil.Process()
 
     # the following chunck of code checks if the dataset needs to be divided up into multiple datasets
     # currently this addresses the case of pol mode where we don't want to combine pol0 and pol45 frames together
@@ -167,13 +165,19 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     if not isinstance(niter, (int, np.integer)) or niter < 1:
             raise PhotonCountException('niter must be an integer greater than '
                                         '0')
-    if bin_size is None:
+    if inputmode == 'darks':
+        if bin_size is not None:
+            warnings.warn('bin_size is not meaningful if inputmode=\'darks\'. All frames will be used in making the PC master dark.')
+        num_bins = 1
         bin_size = len(input_dataset)
-    check.positive_scalar_integer(bin_size, 'bin_size', TypeError)
-    if bin_size > len(input_dataset):
-        raise ValueError('bin_size must be less than the number of frames in input_dataset.')
+    else:
+        if bin_size is None:
+            bin_size = len(input_dataset)
+        check.positive_scalar_integer(bin_size, 'bin_size', TypeError)
+        if bin_size > len(input_dataset):
+            raise ValueError('bin_size must be less than the number of frames in input_dataset.')
+        num_bins = len(input_dataset)//bin_size 
         
-    num_bins = len(input_dataset)//bin_size 
 
     lines = []
     for line in input_dataset[0].ext_hdr['HISTORY']:
@@ -214,7 +218,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                 raise PhotonCountException('\'ISPC\' header value must be 1 if these frames are to be processed as photon-counted.')
 
         dataset = datasets[0]
-        
+        if len(dataset) <= 1:
+            raise PhotonCountException('Photon counting requires more than 1 frame.')
         pc_means = []
         errs = []
         dqs = []
@@ -236,6 +241,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
 
         # now get threshold to use for photon-counting
         read_noise = test_dataset[0].frames[0].ext_hdr['RN']
+
         # Ensure RN is numeric (FITS headers can sometimes preserve string values)
         # if isinstance(read_noise, str): NOTE shouldn't need this when default RN is float, like -999.0
         #     try:
@@ -384,11 +390,11 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                 if pc_master_dark.ext_hdr['NUM_FR'] < len(sub_dataset):
                     print('Number of frames that created the photon-counted master dark should be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
     
-            # in case the number of subsets of darks < number of subsets of brights, which can happen since the number of darks within a subset can be bigger than the number in a bright subset
+            # just one PC master dark (not binned), so attach it for every bin of illuminated frames
             j = np.mod(i, pc_master_dark.data.shape[0])
-            pc_means.append(pc_master_dark.data[j])
-            dqs.append(pc_master_dark.dq[j])
-            errs.append(pc_master_dark.err[0][j])
+            pc_means.append(pc_master_dark.data)
+            dqs.append(pc_master_dark.dq)
+            errs.append(pc_master_dark.err[0])
             dark_sub = "yes"
         else:
             pc_means.append(np.zeros_like(pc_means[0]))
@@ -449,8 +455,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]
         ext_hdr['PCTHRESH'] = thresh
         ext_hdr['NUM_FR'] = len(sub_dataset) 
-        ext_hdr['HISTORY'] = "Photon-counted {0} dark frames for each master dark of the output dataset.  Number of subsets: {1}.  Total number of master darks in input dataset: {2}. Using T_factor={3} and niter={4}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter)
-        pc_dark = data.Dark(np.stack(list_new_image), pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err]), dq=np.stack(list_dq), err_hdr=err_hdr, dq_hdr=dq_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
+        ext_hdr['HISTORY'] = "Photon-counted {0} dark frames for master dark of the output dataset. Using T_factor={1} and niter={2}.".format(len(sub_dataset), T_factor, niter)
+        pc_dark = data.Dark(list_new_image[0], pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err[0]]), dq=list_dq[0], err_hdr=err_hdr, dq_hdr=dq_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
         return pc_dark
 
 def corr_photon_count(nobs, nfr, t, g, mask_indices, niter=2):

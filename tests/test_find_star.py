@@ -402,6 +402,36 @@ def test_satspot_invalid_count():
     assert raised, "Expected ValueError when satspot frame count is not divisible by 3"
 
 
+def test_find_star_skips_unocculted_star_fpm_frames():
+    """
+    Verify that unocculted-star frames with OPEN/ND FPAMNAME values skip satellite-spot
+    analysis and are returned without populating STARLOC headers.
+    """
+    frames = []
+    for i, fpamname in enumerate(['OPEN_12', 'ND225']):
+        prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
+        prihdr['VISITID'] = '0000000000000000001'
+        exthdr['DPAMNAME'] = 'POL0'
+        exthdr['FPAMNAME'] = fpamname
+        exthdr['FSMPRFL'] = 'NFOV'
+        if 'SATSPOTS' in exthdr:
+            del exthdr['SATSPOTS']
+        frame = data.Image(
+            np.ones((2, 20, 30)) * i,
+            pri_hdr=prihdr,
+            ext_hdr=exthdr,
+            err_hdr=errhdr,
+            dq_hdr=dqhdr,
+        )
+        frames.append(frame)
+
+    dataset_with_center = find_star(data.Dataset(frames))
+
+    assert len(dataset_with_center.frames) == 2
+    for frame in dataset_with_center.frames:
+        assert 'find_star skipped' in str(frame.ext_hdr['HISTORY'])
+
+
 if __name__ == "__main__":
     # test_find_star_offset()
     # test_overwrite_parameters()

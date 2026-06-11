@@ -252,14 +252,9 @@ def sort_pupilimg_frames(
         used to calibrate the calibration type: k-gain or non-linearity.
     """
     if actual_visit: # should have appropriate values populated in exthdr
-        split_dpam, vals = dataset_in.split_dataset(exthdr_keywords=['DPAMNAME'])
-        for val in vals:
-            if 'PUPIL' not in val.upper():
-                raise Exception(f'Expected DPAMNAME to contain PUPIL, but found {val}.')
-        del split_dpam
         frames_to_keep = []
         for frame in dataset_in: # rejecting all DARK frames, which are only used for EM gain cal
-            if ('DARK' not in frame.ext_hdr['CFAMNAME'].upper()):
+            if ('DARK' not in frame.ext_hdr['CFAMNAME'].upper()) and ('PUPIL' in frame.ext_hdr['DPAMNAME'].upper()):
                 frames_to_keep.append(frame)
         if len(frames_to_keep) == 0:
             raise Exception("Input dataset appears to have no files relevant for k gain/nonlin calibration.")

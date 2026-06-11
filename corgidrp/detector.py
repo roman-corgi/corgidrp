@@ -451,18 +451,10 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
     if detector_regions is None:
         detector_regions = detector_areas
 
-    if mode=='full':
-        im_num_rows = detector_regions[arrtype]['image']['rows']
-        im_num_cols = detector_regions[arrtype]['image']['cols']
-        im_starting_row = detector_regions[arrtype]['image']['r0c0'][0]
-        im_ending_row = im_starting_row + im_num_rows
-        im_starting_col = detector_regions[arrtype]['image']['r0c0'][1]
-        im_ending_col = im_starting_col + im_num_cols
-    else:
-        im_starting_row = 0
-        im_ending_row = mask.shape[1] - 1 # - 1 to get the index, not size
-        im_starting_col = 0
-        im_ending_col = mask.shape[2] - 1 # - 1 to get the index, not size
+    im_starting_row = 0
+    im_ending_row = mask.shape[1] - 1 # - 1 to get the index, not size
+    im_starting_col = 0
+    im_ending_col = mask.shape[2] - 1 # - 1 to get the index, not size
 
     # Do a cheap prefilter for rows that don't have anything bright
     max_rows = np.max(cube, axis=-1,keepdims=True)

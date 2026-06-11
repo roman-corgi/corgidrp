@@ -1,5 +1,6 @@
 # A file that holds the functions that transmogrify l1 data to l2a data
 from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc, imaging_slice, imaging_area_geom
+import re
 import numpy as np
 import corgidrp.data as data
 import corgidrp.check as check
@@ -158,8 +159,9 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     return output_dataset
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
-                       plat_thresh=0.85, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image', detector_regions=None, pct_oversat_lim=20, dataset_copy=True):
+                       plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10,
+                       mode='image', detector_regions=None, pct_oversat_lim=20,
+                       dataset_copy=True, discard_oversat=False):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -178,9 +180,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             plateau. Interval 0 to 1, defaults to 0.85. Lower numbers are more aggressive in flagging cosmic
             ray hits.
         cosm_filter (int):
-            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 1.  For EM gain = 1, 
-            this should probaly be 1 since no serial streaking is expected to occur, so a cosmic head could just
-            be in 1 pixel.
+            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 2.
         cosm_box (int):
             Number of pixels out from an identified cosmic head (i.e., beginning of
             the plateau) to mask out.
@@ -205,9 +205,11 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
-            and will be discarded. Frame saturations equal to this argument are not discarded.
+            and will be marked bad or discarded. Frame saturations equal to this argument are not flagged.
         dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
+        discard_oversat (bool): if True, discard frames that exceed pct_oversat_lim, preserving the previous behavior.
+            If False, keep them, mark IS_BAD, and skip cosmic ray identification for those frames. Defaults to False.
 
     Returns:
         corgidrp.data.Dataset:
@@ -255,8 +257,27 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         frame.ext_hdr['FWC_EM_E'] = fwcem_e_arr[i]
         frame.ext_hdr['SAT_DN'] = initial_sat_fwcs[i]
 
-    # Remove images that are too saturated to remove cosmics in a timely manner
-    crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim, dataset_copy=dataset_copy)
+    oversat_frames = set()
+    if discard_oversat:
+        # Preserve previous behavior as an option.
+        crmasked_dataset, sat_fwcs = remove_sat_images(initial_dataset, initial_sat_fwcs, pct_oversat_lim, dataset_copy=False)
+    else:
+        crmasked_dataset = initial_dataset
+        sat_fwcs = initial_sat_fwcs
+
+        # Keep oversaturated frames, but mark them bad and skip the expensive CR search.
+        for i, frame in enumerate(crmasked_dataset.frames):
+            pct_frame_sat = ((frame.data > sat_fwcs[i]).sum() / frame.data.size) * 100
+            if pct_frame_sat > pct_oversat_lim:
+                frame.ext_hdr['IS_BAD'] = True
+                frame.ext_hdr.add_history(
+                    "Marked IS_BAD because frame exceeded pct_oversat_lim in detect_cosmic_rays."
+                )
+                frame.ext_hdr.add_history(
+                    "Cosmic ray identification skipped for this oversaturated frame."
+                )
+                oversat_frames.add(i)
+
     crmasked_cube = crmasked_dataset.all_data
 
     sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])
@@ -277,6 +298,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             break
 
     for i in range(len(crmasked_cube)):
+        if i in oversat_frames:
+            continue
+
         arrtype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
         if emgain_list[i] == 1:
             cosm_tail_i = 0
@@ -408,23 +432,50 @@ def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20, dataset_copy=
 
     return pruned_dataset, pruned_fwcs
 
+def update_to_intermediate(input_dataset, intermediate_level=1):
+    """
+    Updates the data level to an intermediate level (IM1, IM2, ...) for chained
+    recipe outputs that are not final data products.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): dataset to mark as intermediate
+        intermediate_level (int): which intermediate level (1, 2, ...)
+
+    Returns:
+        corgidrp.data.Dataset: dataset with DATALVL set to IM# and filename updated
+    """
+    updated_dataset = input_dataset.copy(copy_data=False)
+
+    im_tag = f"im{intermediate_level}"
+    for frame in updated_dataset:
+        frame.ext_hdr['DATALVL'] = f"IM{intermediate_level}"
+        # Replace existing data level marker in filename.
+        # Handles _l1_, _l2a, _l2b, _l3_, _l4_, or existing _im#
+        frame.filename = re.sub(r'_(?:l[1234][ab]?_?|im\d+)', f'_{im_tag}', frame.filename, count=1)
+        frame.pri_hdr['FILENAME'] = frame.filename
+
+    history_msg = f"Updated Data Level to IM{intermediate_level} (intermediate)"
+    updated_dataset.update_after_processing_step(history_msg)
+
+    return updated_dataset
+
 def update_to_l2a(input_dataset):
     """
-    Updates the data level to L2a. Only works on L1 data.
+    Updates the data level to L2a. Works on L1 or intermediate (IM#) data.
 
     Applies merge_headers to each frame (removes deleted keywords, applies other
     header rules), then sets DATALVL to L2a and updates filenames.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L1-level)
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L1 or IM-level)
 
     Returns:
         corgidrp.data.Dataset: same dataset now at L2a level
     """
-    # check that we are running this on L1 data
+    # check that we are running this on L1 or intermediate data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATALVL'] != "L1":
-            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
+        if not re.match(r'^(L1|IM\d+)$', orig_frame.ext_hdr['DATALVL']):
+            err_msg = "{0} needs to be L1 or IM data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
             raise ValueError(err_msg)
 
     # we aren't altering the data
@@ -432,7 +483,7 @@ def update_to_l2a(input_dataset):
 
     for frame in updated_dataset:
         # Merge_headers is called here to delete a subset of keywords that should not be carried past L1
-        
+
         pri_hdr, ext_hdr, err_hdr, dq_hdr = check.merge_headers(data.Dataset([frame]), invalid_keywords=[])
         frame.pri_hdr = pri_hdr
         frame.ext_hdr = ext_hdr
@@ -440,8 +491,8 @@ def update_to_l2a(input_dataset):
         frame.dq_hdr = dq_hdr
         frame.ext_hdr['DATALVL'] = "L2a"
         # update filename convention. The file convention should be
-        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_l1_", "_l2a", 1)
+        # "CGI_[datalevel_*]" so we replace the first data level marker
+        frame.filename = re.sub(r'_(?:l1_|im\d+)', '_l2a', frame.filename, count=1)
         #updating filename in the primary header
         frame.pri_hdr['FILENAME'] = frame.filename
 

@@ -26,7 +26,6 @@ import corgidrp.sorting
 import corgidrp.fluxcal
 import corgidrp.spec
 
-
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
     "discard_setup_frames" : corgidrp.l1_to_l2a.discard_setup_frames,
@@ -34,6 +33,7 @@ all_steps = {
     "calibrate_nonlin": corgidrp.calibrate_nonlin.calibrate_nonlin,
     "correct_nonlinearity" : corgidrp.l1_to_l2a.correct_nonlinearity,
     "update_to_l2a" : corgidrp.l1_to_l2a.update_to_l2a,
+    "update_to_intermediate" : corgidrp.l1_to_l2a.update_to_intermediate,
     "add_shot_noise_to_err" : corgidrp.l2a_to_l2b.add_shot_noise_to_err,
     "dark_subtraction" : corgidrp.l2a_to_l2b.dark_subtraction,
     "flat_division" : corgidrp.l2a_to_l2b.flat_division,
@@ -67,6 +67,7 @@ all_steps = {
     "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
     "find_star": corgidrp.l3_to_l4.find_star,
     "find_spec_star" : corgidrp.l3_to_l4.find_spec_star,
+    "combine_frames_per_visit": corgidrp.combine.combine_frames_per_visit,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
     "spec_psf_subtraction": corgidrp.l3_to_l4.spec_psf_subtraction,
     "determine_wave_zeropoint": corgidrp.l3_to_l4.determine_wave_zeropoint,
@@ -94,6 +95,84 @@ all_steps = {
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
 
+def _load_recipe_template(recipe_filename, user_templates_dir=None):
+    """
+    Load recipe template, checking user_templates first, then defaults.
+
+    Args:
+        recipe_filename (str): Template filename (e.g., "l1_to_l2a_basic.json")
+        user_templates_dir (str): Path to user templates directory. If None, uses corgidrp.user_templates_dir
+
+    Returns:
+        tuple: (template dict, source path, is_user_template bool)
+    """
+    if user_templates_dir is None:
+        user_templates_dir = corgidrp.user_templates_dir
+
+    # First check user templates directory
+    user_template_path = os.path.join(user_templates_dir, recipe_filename)
+    if os.path.exists(user_template_path):
+        with open(user_template_path, 'r') as f:
+            template = json.load(f)
+        return template, user_template_path, True
+
+    # Fall back to default template
+    default_template_path = os.path.join(recipe_dir, recipe_filename)
+    if os.path.exists(default_template_path):
+        with open(default_template_path, 'r') as f:
+            template = json.load(f)
+        return template, default_template_path, False
+
+    # Template not found in either location
+    raise FileNotFoundError(
+        f"Recipe template '{recipe_filename}' not found in user templates "
+        f"({user_templates_dir}) or default templates ({recipe_dir})"
+    )
+
+def _validate_template_structure(user_template, default_template_path, recipe_filename):
+    """
+    Validate that user template has same step names/order as default.
+    Raises ValueError if mismatch found when enforce_template_structure=True.
+
+    Args:
+        user_template (dict): User-provided template
+        default_template_path (str): Path of the default template from repo
+        recipe_filename (str): Template name for error messages
+
+    Raises:
+        ValueError: If template structures don't match and enforcement is enabled
+    """
+    if not corgidrp.enforce_template_structure:
+        return  # Validation disabled
+
+    if not os.path.exists(default_template_path):
+        raise FileNotFoundError(
+            f"Cannot validate user template '{recipe_filename}': "
+            f"no corresponding default template found at {default_template_path}. "
+            f"User templates must have same filename as a default template when "
+            f"enforce_template_structure=True."
+        )
+    with open(default_template_path, 'r') as f:
+        default_template = json.load(f)
+
+        # Extract step names from both templates
+        user_steps = [step['name'] for step in user_template.get('steps', [])]
+        default_steps = [step['name'] for step in default_template.get('steps', [])]
+    
+        # Check if step names and order match
+        if user_steps != default_steps:
+            error_msg = (
+                f"User template '{recipe_filename}' has different step structure than default.\n"
+                f"User template steps: {user_steps}\n"
+                f"Default template steps: {default_steps}\n"
+                f"When enforce_template_structure=True, user templates must have the same "
+                f"step names in the same order as default templates. You can modify step "
+                f"keywords and calibs, but not add/remove/reorder steps.\n"
+                f"To allow different step structures, set enforce_template_structure=False "
+                f"in your config file or via environment variable."
+            )
+            raise ValueError(error_msg)
+
 def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     """
     Automatically create a recipe and process the input filelist.
@@ -112,17 +191,33 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     Returns:
         json or list: the JSON recipe (or list of JSON recipes) that was used for processing
     """
+    recipe_filepath = None
     if isinstance(template, str):
         if os.path.sep not in template:
-            # this is just a template name in the recipe_templates folder
-            recipe_filepath = os.path.join(recipe_dir, template)
+            # this is just a template name. check user_templates first, then defaults
+            template, recipe_filepath, is_user_template = _load_recipe_template(template)
+            # Validate user template structure if enabled
+            if is_user_template and corgidrp.enforce_template_structure:
+                default_template_path = os.path.join(recipe_dir, os.path.basename(recipe_filepath))
+                _validate_template_structure(template, default_template_path, os.path.basename(recipe_filepath))
         else:
             recipe_filepath = template
-
-        template = json.load(open(recipe_filepath, 'r'))
+            template = json.load(open(recipe_filepath, 'r'))
+            is_user_template = False  # explicit paths are not user templates
 
     # generate recipe
     recipes = autogen_recipe(filelist, outputdir, template=template)
+
+    if recipe_filepath is not None:
+        if isinstance(recipes, list):
+            for r in recipes:
+                if isinstance(r, list):
+                    for sub_r in r:
+                        sub_r["RECIPE_SRC"] = recipe_filepath
+                else:
+                    r["RECIPE_SRC"] = recipe_filepath
+        else:
+            recipes["RECIPE_SRC"] = recipe_filepath
 
 
     if not isinstance(recipes, list):
@@ -142,7 +237,7 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                 recipe["inputs"] = []
                 for filename in output_filelist:
                     recipe["inputs"].append(filename)
-            
+
             # check for functions that require CPGS XML info
             for step in recipe['steps']:
                 if step['name'].lower() == 'find_spec_star':
@@ -160,9 +255,9 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                         sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
                         step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
                         step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
-            
+
             output_filelist = run_recipe(recipe)
-   
+
     # return just the recipe if there was only one
     if len(list_of_recipe_chains) == 1:
         if len(list_of_recipe_chains[0]) == 1:
@@ -212,29 +307,59 @@ def autogen_recipe(filelist, outputdir, template=None):
         for l in recipe_filename_list_list:
             if not isinstance(l, list):
                 raise TypeError("Each element of recipe_filename_list should be a list, but got {0}".format(type(l)))
-        
+
         recipe_template_list_list = []
+        template_sources = []  # Track sources for logging
         for recipe_filename_list in recipe_filename_list_list:
             recipe_template_list = []
             for recipe_filename in recipe_filename_list:
-                # load the template recipe
-                recipe_filepath = os.path.join(recipe_dir, recipe_filename)
-                template = json.load(open(recipe_filepath, 'r'))
+                # load the template recipe (check user_templates first, then defaults)
+                template, template_path, is_user_template = _load_recipe_template(recipe_filename)
+                # If user template loaded and validation enabled, validate structure
+                if is_user_template and corgidrp.enforce_template_structure:
+                    # Load default template for comparison
+                    default_template_path = os.path.join(recipe_dir, recipe_filename)
+                    _validate_template_structure(template, default_template_path, recipe_filename)
                 recipe_template_list.append(template)
+                template_sources.append((recipe_filename, template_path, is_user_template))
             recipe_template_list_list.append(recipe_template_list)
     else:
         # user passed in a single template
-        recipe_template_list = [template]
+        # Check if it's a string (filename) or already loaded dict
+        if isinstance(template, str):
+            # It's a filename, load it (check user_templates first)
+            template_dict, template_path, is_user_template = _load_recipe_template(template)
+
+            # If user template loaded and validation enabled, validate structure
+            if is_user_template and corgidrp.enforce_template_structure:
+                # Load default template for comparison
+                default_template_path = os.path.join(recipe_dir, template)
+                _validate_template_structure(template_dict, default_template_path, template)
+
+            recipe_template_list = [template_dict]
+            template_sources = [(template, template_path, is_user_template)]
+        else:
+            # It's already a loaded dict
+            recipe_template_list = [template]
+            template_sources = []
+
         recipe_template_list_list = [recipe_template_list]
         chained = False
 
     recipe_list_list = []
+    source_idx = 0  # Index into template_sources list
     for recipe_template_list in recipe_template_list_list:
         recipe_list = []
         for i, template in enumerate(recipe_template_list):
             # create the personalized recipe
             recipe = template.copy()
             recipe["template"] = False
+
+            # Add template source for traceability
+            if source_idx < len(template_sources):
+                _, template_path, is_user_template = template_sources[source_idx]
+                recipe["RECIPE_SRC"] = template_path
+                source_idx += 1
 
             # for chained recipes, don't put the input in yet since we don't know it
             if i > 0 and chained:
@@ -287,29 +412,40 @@ def autogen_recipe(filelist, outputdir, template=None):
 
     # Print the recipes
     print("\n" + "="*60)
+    user_templates_dir = corgidrp.user_templates_dir
     if len(recipe_list_list) > 1:
         print("Generated Recipe Chains:")
         for chain_idx, recipe_list in enumerate(recipe_list_list):
             print(f"\nChain {chain_idx + 1}:")
             for recipe_idx, recipe in enumerate(recipe_list):
-                print(f"\n  Recipe {recipe_idx + 1}: {recipe['name']}" )
+                print(f"\n  Recipe {recipe_idx + 1}: {recipe['name']}")
+                if 'RECIPE_SRC' in recipe:
+                    src_label = " (user template)" if user_templates_dir in recipe['RECIPE_SRC'] else " (default template)"
+                    print(f"    Source: {recipe['RECIPE_SRC']}{src_label}")
     else:
         if len(recipe_list_list[0]) > 1:
             print("Generated Recipe Chain:")
             for recipe_idx, recipe in enumerate(recipe_list_list[0]):
                 print(f"\nRecipe {recipe_idx + 1}: {recipe['name']}")
+                if 'RECIPE_SRC' in recipe:
+                    src_label = " (user template)" if user_templates_dir in recipe['RECIPE_SRC'] else " (default template)"
+                    print(f"  Source: {recipe['RECIPE_SRC']}{src_label}")
         else:
             print(f"Generated Recipe: {recipe_list_list[0][0]['name']}")
+            if 'RECIPE_SRC' in recipe_list_list[0][0]:
+                recipe = recipe_list_list[0][0]
+                src_label = " (user template)" if user_templates_dir in recipe['RECIPE_SRC'] else " (default template)"
+                print(f"  Source: {recipe['RECIPE_SRC']}{src_label}")
     print("="*60 + "\n")
 
     # if list of chains, return that.  If single list, return that.  If single
-    # recipe, return that. 
+    # recipe, return that.
     if len(recipe_list_list) > 1: # list of chains
         return recipe_list_list
     else:
-        if len(recipe_list_list[0]) > 1: # single list 
+        if len(recipe_list_list[0]) > 1: # single list
             return recipe_list_list[0]
-        else: #single recipe 
+        else: #single recipe
             return recipe_list_list[0][0]
 
 def _fill_in_calib_files(step, this_caldb, ref_frame):
@@ -407,7 +543,7 @@ def guess_template(dataset):
                 chained = True
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_PUPIL_IMAGING":
             recipe_filename = [["l1_to_l2a_nonlin_1.json", "l1_to_l2a_nonlin_2.json", "l1_to_l2a_nonlin_3.json"],
-                               ["l1_to_kgain_1.json", "l1_to_kgain_2.json"]] # ["l1_to_l2a_nonlin.json","l1_to_kgain.json"] 
+                               ["l1_to_kgain_1.json", "l1_to_kgain_2.json"]] # ["l1_to_l2a_nonlin.json","l1_to_kgain.json"]
             chained = True # in this case, each sub-list is chained
         elif image.pri_hdr['VISTYPE'] in ("CGIVST_CAL_ABSFLUX_FAINT", "CGIVST_CAL_ABSFLUX_BRIGHT"):
             is_spec_mode = image.ext_hdr.get('DPAMNAME', '').startswith('PRISM')
@@ -425,7 +561,11 @@ def guess_template(dataset):
                     recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
                     chained = True
                 else:
-                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+                    # Check for polarimetry mode to use appropriate flux calibration recipe
+                    if image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']:
+                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
+                    else:
+                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
                     chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
@@ -441,6 +581,9 @@ def guess_template(dataset):
             chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TPUMP':
             recipe_filename = ['trap_pump_cal_1.json', 'trap_pump_cal_2.json']
+            chained = True
+        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_POL_SETUP':
+            recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
             chained = True
         else:
             recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
@@ -460,18 +603,18 @@ def guess_template(dataset):
         else:
             # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
             is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
-            
+
             is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']
 
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['ISPC'])
 
-            if len(unique_vals) > 1: #Satspots are not PC 
+            if len(unique_vals) > 1: #Satspots are not PC
                 if is_spectroscopy:
                     recipe_filename = [["l2a_to_l2b_pc_spec_1.json", "l2a_to_l2b_pc_spec_2.json", "l2a_to_l2b_pc_spec_3.json"], ["l2a_to_l2b_spec.json"]] #"l2a_to_l2b_pc_spec.json"
                 elif is_polarimetry:
                     recipe_filename = [["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pol_pc_3.json"],["l2a_to_l2b_pol.json"]] #"l2a_to_l2b_pc_pol.json"
                 else:
-                    recipe_filename = [["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"], ["l2a_to_l2b.json"]]#l2a_to_l2b_pc.json 
+                    recipe_filename = [["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"], ["l2a_to_l2b.json"]]#l2a_to_l2b_pc.json
                 chained = True
 
 
@@ -483,16 +626,16 @@ def guess_template(dataset):
 
                     else:
                         recipe_filename = "l2a_to_l2b_spec.json"
-                            
+
                 elif is_polarimetry:
                     if image.ext_hdr['ISPC'] == 1:
                         recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pol_pc_3.json"] #"l2a_to_l2b_pc_pol.json"
                         chained = True
-                    else: 
+                    else:
                         recipe_filename = "l2a_to_l2b_pol.json"
                 else:
                     if image.ext_hdr['ISPC'] == 1:
-                        recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json 
+                        recipe_filename = ["l2a_to_l2b_pc_1.json", "l2a_to_l2b_pc_2.json", "l2a_to_l2b_pc_3.json"] #l2a_to_l2b_pc.json
                         chained = True
                     else:
                         recipe_filename = "l2a_to_l2b.json"  # science data and all else
@@ -536,7 +679,7 @@ def guess_template(dataset):
                 recipe_filename = "l3_to_l4_psfsub_spec.json"
             else:
                 # noncoronagraphic spec obs - no PSF subtraction
-                recipe_filename = "l3_to_l4_noncoron_spec.json" 
+                recipe_filename = "l3_to_l4_noncoron_spec.json"
         else:
             if image.pri_hdr['VISTYPE'] != 'CGIVST_CAL_TGTREF_PHOT':
                 # coronagraphic obs - PSF subtraction
@@ -558,15 +701,15 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
         outputdir (str): path to directory where files should be saved
         suffix (str): optional suffix to tack onto the filename.
                       E.g.: `test.fits` with `suffix="dark"` becomes `test_dark.fits`
-        ram_heavy_save (bool):  If True, the input is assumed to have no data loaded into memory. (Only metadata was 
-            manipulated in step leading up to save_data.) The data is loaded from the filepath frame by frame, and 
+        ram_heavy_save (bool):  If True, the input is assumed to have no data loaded into memory. (Only metadata was
+            manipulated in step leading up to save_data.) The data is loaded from the filepath frame by frame, and
             each Image is saved to outputdir.  Defaults to False.
     """
     # convert everything to dataset to make life easier
     if isinstance(dataset_or_image, data.Image):
         dataset = data.Dataset([dataset_or_image])
     else:
-        dataset = dataset_or_image        
+        dataset = dataset_or_image
 
     # add suffix to ending if necessary
     if len(suffix) > 0:
@@ -591,7 +734,6 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
             # this is a calibration frame!
             this_caldb = caldb.CalDB()
             this_caldb.create_entry(image)
-
 
 def run_recipe(recipe, save_recipe_file=True):
     """
@@ -778,7 +920,7 @@ def _get_satellite_spot_info_from_xml(xml_tree):
 
     Args:
         xml_tree (ElementTree): loaded in CPGS XML file
-        
+
     Returns:
         dict: dictionary with satellite spot information
             "num_spots": int, number of satellite spots
@@ -804,7 +946,7 @@ def _get_satellite_spot_info_from_xml(xml_tree):
         fields = sat_spot.split(",")
         sat_spot_output['num_spots'] += 1
         for i, field in enumerate(fields):
-            value = field.split("=")[1]            
+            value = field.split("=")[1]
             if i <=2:
                 sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = float(value)
             else:

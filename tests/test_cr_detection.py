@@ -643,8 +643,8 @@ def test_cosm_tail_2():
 
 def test_cosm_tail_bleed_over():
     """Assert correct elements are masked when cosmic ray in
-        a single row with bleed over into next row, while preventng 
-        detections outside of image area from being flagged."""
+        a single row with bleed over into next row.  Assert that a cosmic 
+        ray outside of image area (as in TVAC data) is detected."""
     im_num_rows = 1024
     im_num_cols = 1024
     im_starting_row = 13
@@ -655,7 +655,7 @@ def test_cosm_tail_bleed_over():
     image = np.zeros((1200,2200), dtype=float)
     # head (not saturating for easy distinguishing b/w cosmic and saturation flag values)
     image[im_ending_row-1,im_ending_col-4:im_ending_col-1] = sat_thresh*fwcem/8.7
-    # would normally trigger a detection, but not inside image area:
+    # not inside image area:
     image[-2,6:9] = fwc
 
     # cosmic head
@@ -663,10 +663,14 @@ def test_cosm_tail_bleed_over():
     # with cosm_tail=100, and (88-2) left in row after cosm_filter, 
     # so bleed 12-2 over next row
     check_mask[im_ending_row,0:10] = 1
-    # cosm_box gets cut short one row since the end of the image area is 
-    # reached with only 1 extra row of masking below the cosmic head
-    check_mask[im_ending_row-3:im_ending_row+1,
+    # cosm_box
+    check_mask[im_ending_row-3:im_ending_row+2,
                 im_ending_col-6:im_ending_col-1] = 1 # cosm_box=2
+    # cosmic ray outside image area:
+    # cosm_box
+    check_mask[-2-2:, 6-2:6+2+1] = 1
+    # cosmic tail, starting at 6+2+1=9
+    check_mask[-2, 9:9+100] = 1
     
     prihdr, exthdr = mocks.create_default_L1_headers()
     exthdr["EMGAIN_C"] = 3 # something > 1
@@ -680,8 +684,8 @@ def test_cosm_tail_bleed_over():
     # cosmic ray is found by first finding saturation, so mask due to cosmic rays 
     # could be valued at 128 or 128+32
     assert (np.array_equal(np.where(dataset_masked.all_dq>=128,1,0)[0], check_mask))
-    # saturated row 1200-2 outside of image area covered in saturation mask:
-    assert (1198 in np.where(dataset_masked.all_dq[0]==32)[0])
+    # saturated row 1200-2 outside of image area covered in saturation+cosmic ray mask:
+    assert (1198 in np.where(dataset_masked.all_dq[0]==160)[0])
 
 def test_i_begs():
     """Verify that function returns correct i_begs result."""
@@ -884,7 +888,28 @@ def test_EM_gain_1():
 
     assert (np.array_equal(dataset_masked[0].dq, check_mask))
 
+def test_oversaturated_frames_are_marked_not_removed():
+    """
+    Tests that oversaturated frames are kept, marked bad, and skipped by CR detection.
+    """
+    # mock dataset, saturate enough of one frame to exceed pct_oversat_lim
+    dataset = mocks.create_cr_dataset(nonlin_fits_filepath, filedir=datadir, numfiles=2, numCRs=0)
+    num_oversat_rows = int(np.ceil(dataset[0].data.shape[0] * 0.25))
+    dataset[0].data[:num_oversat_rows, :] = 1e9
+
+    output_dataset = detect_cosmic_rays(dataset, detector_params, k_gain, pct_oversat_lim=20)
+    # saturated frame should stay in the dataset, but be marked bad for later rejection.
+    assert len(output_dataset) == len(dataset)
+    assert output_dataset[0].ext_hdr['IS_BAD'] is True
+    assert output_dataset[1].ext_hdr.get('IS_BAD', False) is False
+
+    # since CR detection was skipped for this frame it should only flag saturated pixels
+    assert np.any(output_dataset[0].dq > 0)
+    assert not np.all(output_dataset[0].dq > 0)
+    assert np.all(np.bitwise_and(output_dataset[0].dq, 128) == 0)
+
 if __name__ == "__main__":
+    test_cosm_tail_bleed_over()
     test_EM_gain_1()
     test_iit_vs_corgidrp()
     test_crs_zeros_frame()
@@ -904,5 +929,5 @@ if __name__ == "__main__":
     test_mask_box()
     test_mask_box_corners()
     test_cosm_tail_2()
-    test_cosm_tail_bleed_over()
     test_remove_sat_images()
+    test_oversaturated_frames_are_marked_not_removed()

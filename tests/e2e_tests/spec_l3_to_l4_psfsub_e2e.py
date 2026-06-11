@@ -1,5 +1,7 @@
 import os
 import glob
+import copy
+import datetime
 import shutil
 import numpy as np
 import astropy.io.fits as fits
@@ -20,6 +22,38 @@ from corgidrp.check import (check_filename_convention, check_dimensions,
                            get_latest_cal_file, compare_to_mocks_hdrs)
 from l1_to_l3_spec_e2e import run_l1_to_l3_e2e_test
 import warnings
+
+REFSTAR_VISITID_OFFSET = 100
+
+
+def assign_visitid_to_l3_frames(frames, visit_offset, psfref):
+    """Update L3 frame VISITID, PSFREF, and filename metadata.
+
+    Args:
+        frames (list): L3 ``corgidrp.data.Image`` frames to update in memory.
+        visit_offset (int): Offset applied to each frame's original VISITID.
+        psfref (bool): Whether these frames should be marked as reference-star
+            frames in the primary header.
+    """
+    for frame in frames:
+        base_visitid = str(frame.pri_hdr['VISITID']).strip()
+        if visit_offset == 0:
+            visitid = base_visitid
+        else:
+            try:
+                visitid = f"{int(base_visitid) + visit_offset:0{len(base_visitid)}d}"
+            except ValueError as exc:
+                raise ValueError(f"Cannot offset VISITID '{base_visitid}'") from exc
+
+        filename = frame.filename or frame.pri_hdr.get('FILENAME', '')
+        filename_parts = os.path.basename(filename).split('_', 2)
+        if len(filename_parts) == 3 and filename_parts[0] == 'cgi':
+            filename = f"cgi_{visitid}_{filename_parts[2]}"
+
+        frame.pri_hdr['VISITID'] = visitid
+        frame.pri_hdr['PSFREF'] = int(bool(psfref))
+        frame.pri_hdr['FILENAME'] = filename
+        frame.filename = filename
 
 
 def patch_eacq_to_center_if_missing(filelist):
@@ -42,6 +76,55 @@ def patch_eacq_to_center_if_missing(filelist):
                 h['EACQ_ROW'] = (n2 - 1) / 2.0
                 h['EACQ_COL'] = (n1 - 1) / 2.0
 
+# Existing satspot data only has +/- offset frames, but find_star expects
+# three equal groups: no-offset, +offset, -offset.  We inject fake no-offset
+# frames (science background data, no DM probe) at L1 so they flow through
+# the full pipeline and sort first (year-2000 timestamps) into the no-offset
+# group at L3.  Frames are grouped by (TARGET, DPAMNAME) — the same split
+# find_star uses — and one real frame is dropped when the count is odd to
+# keep each group size even so that n_fake = K/2 gives a divisible-by-3 total.
+# We do this for all satspots
+
+def create_mock_L1_files(l1_datadir, logger):
+    """
+    Create mock L1 background satspot (no offset) files using np.zeros.
+
+    Args:
+        l1_datadir (str): Filepath to directory with L1 files.
+        logger (logging.Logger): Logger instance for output.
+
+    Returns:
+        list: List of L1 filenames for input.
+    """
+
+    if 'refstar_zeropoint' in l1_datadir:  # Different SCTSRT keyword for refstar and targetstar background satspot files
+        fake_base_time = datetime.datetime(2000, 1, 1, 0, 0, 0)
+    else:
+        fake_base_time = datetime.datetime(2000, 1, 1, 0, 0, 1)
+
+    group_files = sorted(glob.glob(os.path.join(l1_datadir, "cgi_*l1_.fits")))
+    if len(group_files) % 2 != 0:
+        logger.info(f'Creating mock L1 background satspot file in {l1_datadir}')
+        group_files = group_files[:-1]  # drop one frame to make count even
+
+        template_img = Image(group_files[0])
+        visitid = template_img.pri_hdr.get('VISITID', '')
+        
+    for _ in range(len(group_files) // 2):
+        fake_frame = copy.deepcopy(template_img)
+        fake_frame.data[:] = np.zeros(np.shape(template_img.data))
+        if fake_frame.err is not None:
+            fake_frame.err[:] = np.zeros(np.shape(template_img.data))
+        fake_frame.ext_hdr['SCTSRT'] = fake_base_time.isoformat()
+        time_str = fake_base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
+        fake_satspot_filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+        fake_frame.pri_hdr['FILENAME'] = fake_satspot_filename
+
+        fake_frame.save(filedir=l1_datadir, filename=fake_satspot_filename)
+        fake_base_time += datetime.timedelta(seconds=1)
+    
+    l1_filelist = sorted(glob.glob(os.path.join(l1_datadir,"cgi_*l1_.fits")))
+    return l1_filelist
 
 # ================================================================================
 # Main Spec L3 to L4 E2E Test Function PSF subtracted
@@ -82,10 +165,14 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     logger.info(f"Found {len(psfref_satspot_files)} existing L1 reference satspot files in {e2edata_path}")
     
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
-    ref_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_science_analog", "L3")
-    target_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_science_analog", "L3")
-    ref_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_refstar_zeropoint", "L3")
-    target_spot_l3_output_dir = os.path.join(e2edata_path, "SPEC_NOM_sims","SPEC-NOM_targetstar_zeropoint", "L3")
+    ref_l3_output_dir = os.path.join(e2eoutput_path,"SPEC-NOM_refstar_science_analog", "L1_to_L3")
+    if os.path.exists(ref_l3_output_dir):shutil.rmtree(ref_l3_output_dir)
+    target_l3_output_dir = os.path.join(e2eoutput_path, "SPEC-NOM_targetstar_science_analog", "L1_to_L3")
+    if os.path.exists(target_l3_output_dir):shutil.rmtree(target_l3_output_dir)
+    ref_spot_l3_output_dir = os.path.join(e2eoutput_path, "SPEC-NOM_refstar_zeropoint", "L1_to_L3")
+    if os.path.exists(ref_spot_l3_output_dir):shutil.rmtree(ref_spot_l3_output_dir)
+    target_spot_l3_output_dir = os.path.join(e2eoutput_path, "SPEC-NOM_targetstar_zeropoint", "L1_to_L3")
+    if os.path.exists(target_spot_l3_output_dir):shutil.rmtree(target_spot_l3_output_dir)
 
     cpgs_xml_filepath = os.path.join(os.path.dirname(__file__), "..", "test_data", "CPGS_betatest_041426.xml")
 
@@ -93,23 +180,83 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     for flist in (psfref_satspot_files, psfref_files, target_satspot_files, target_files):
         patch_eacq_to_center_if_missing(flist)
 
-    run_l1_to_l3_e2e_test(psfref_satspot_path, ref_spot_l3_output_dir, processed_cal_path, logger)
-    run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger)
-    run_l1_to_l3_e2e_test(target_satspot_path, target_spot_l3_output_dir, processed_cal_path, logger)
-    run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger)
+    # Copy and save all L1 satspot files in output_dir
+    psfref_satspot_path = os.path.join(ref_spot_l3_output_dir,"all_L1")
+    target_satspot_path = os.path.join(target_spot_l3_output_dir,"all_L1")
+    os.makedirs(psfref_satspot_path)
+    os.makedirs(target_satspot_path)
+
+    for file in psfref_satspot_files:
+        filename = fits.getheader(file)['FILENAME']
+        shutil.copy(file,os.path.join(psfref_satspot_path,filename))
+    for file in target_satspot_files:
+        filename = fits.getheader(file)['FILENAME']
+        shutil.copy(file,os.path.join(target_satspot_path,filename))
+
+    # Create fake background satspot files (if required), and save them to L1 folder in output_dir
+    psfref_satspot_files = create_mock_L1_files(psfref_satspot_path, logger)
+    target_satspot_files = create_mock_L1_files(target_satspot_path, logger)
+
+    changed_visitid=False
+    # Artificial change to visitid for target files since both refstar/target corgisim files have same visitid. We need them different for determine_wave_zeropoint
+    if fits.getheader(target_satspot_files[0])['VISITID'] == fits.getheader(psfref_satspot_files[0])['VISITID']:
+        for f in target_satspot_files:
+            target_visitid = fits.getheader(psfref_satspot_files[0])['VISITID'] # We only change if refstar and target star visitids are same. Saving refstar visitid here as it is never altered.
+            fits.setval(f, 'VISITID', value = '0200001001001002001', ext=0)
+        for f in target_files:
+            fits.setval(f, 'VISITID', value = '0200001001001002001', ext=0) 
+        changed_visitid=True
+
+    # If we have generated a fake background satspot file, sorts and selects input L1 files so that we only take the previously generated fake file and two corgisim satspot files.
+    # Those files are copied and saved to a different folder
+    if len(target_satspot_files) % 3 != 0:
+        psfref_satspot_input_path = os.path.join(ref_spot_l3_output_dir,"input_l1")
+        target_satspot_input_path = os.path.join(target_spot_l3_output_dir,"input_l1")
+
+        os.makedirs(psfref_satspot_input_path)
+        os.makedirs(target_satspot_input_path)
+
+        logger.info(f"Copying psfref satspot files used as input to {psfref_satspot_input_path}.")
+        for file in psfref_satspot_files[:-(len(psfref_satspot_files) % 3)]:
+            filename = fits.getheader(file)['FILENAME']
+            shutil.copy(file,os.path.join(psfref_satspot_input_path,filename))
+        logger.info(f"Copying target satspot files used as input to {target_satspot_input_path}.")
+        for file in target_satspot_files[:-(len(target_satspot_files) % 3)]:
+            filename = fits.getheader(file)['FILENAME']
+            shutil.copy(file,os.path.join(target_satspot_input_path,filename))
     
-    l3_files = []
+    run_l1_to_l3_e2e_test(psfref_satspot_input_path, ref_spot_l3_output_dir, processed_cal_path, logger, fix_headers=False)
+    run_l1_to_l3_e2e_test(psfref_files_path, ref_l3_output_dir, processed_cal_path, logger, fix_headers=False)
+    run_l1_to_l3_e2e_test(target_satspot_input_path, target_spot_l3_output_dir, processed_cal_path, logger, fix_headers=False)
+    run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger, fix_headers=False)
+
     l3_psfref = sorted(glob.glob(os.path.join(ref_l3_output_dir, "cgi_*l3_.fits")))
-    l3_files.extend(l3_psfref)
     l3_psfref_spot = sorted(glob.glob(os.path.join(ref_spot_l3_output_dir, "cgi_*l3_.fits")))
-    l3_files.extend(l3_psfref_spot)
     l3_target = sorted(glob.glob(os.path.join(target_l3_output_dir, "cgi_*l3_.fits")))
-    l3_files.extend(l3_target)
     l3_target_spot = sorted(glob.glob(os.path.join(target_spot_l3_output_dir, "cgi_*l3_.fits")))
-    l3_files.extend(l3_target_spot)
-    l3_dataset = Dataset(l3_files)
+    l3_psfref_dataset = Dataset(l3_psfref)
+    l3_psfref_spot_dataset = Dataset(l3_psfref_spot)
+    l3_target_dataset = Dataset(l3_target)
+    l3_target_spot_dataset = Dataset(l3_target_spot)
+    assign_visitid_to_l3_frames(l3_psfref_dataset.frames, REFSTAR_VISITID_OFFSET, psfref=True)
+    assign_visitid_to_l3_frames(l3_psfref_spot_dataset.frames, REFSTAR_VISITID_OFFSET, psfref=True)
+    assign_visitid_to_l3_frames(l3_target_dataset.frames, 0, psfref=False)
+    assign_visitid_to_l3_frames(l3_target_spot_dataset.frames, 0, psfref=False)
+    l3_dataset = Dataset(np.concatenate([
+        l3_psfref_dataset.frames,
+        l3_psfref_spot_dataset.frames,
+        l3_target_dataset.frames,
+        l3_target_spot_dataset.frames,
+    ]))
     logger.info('')
-    
+
+    # Reverting changed visitids to old values.
+    if changed_visitid:
+        for f in target_satspot_files:
+            fits.setval(f, 'VISITID', value = target_visitid, ext=0)
+        for f in target_files:
+            fits.setval(f, 'VISITID', value = target_visitid, ext=0) 
+            
     # ================================================================================
     # (2) Validate Input Images
     # ================================================================================
@@ -132,7 +279,7 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         verify_header_keywords(frame.ext_hdr, {'SATSPOTS'}, frame_info, logger)
         logger.info("")
     
-    l3_files_dir = os.path.join(e2eoutput_path, "L3")
+    l3_files_dir = os.path.join(e2eoutput_path, "input_L3")
     if os.path.exists(l3_files_dir):
         shutil.rmtree(l3_files_dir)
     os.makedirs(l3_files_dir)
@@ -470,7 +617,7 @@ if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
     # Create top-level e2e folder
     outputdir = thisfile_dir
-    e2edata_dir = '/home/ababuraj/roman/E2E_Test_Data'
+    e2edata_dir = '/Users/kevinludwick/Library/CloudStorage/OneDrive-SharedLibraries-NorthwesternUniversity/Roman Coronagraph Data Share - Documents/DRP E2E Test Files v2/E2E_Test_Data' #'/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/home/ababuraj/roman/E2E_Test_Data'
 
     ap = argparse.ArgumentParser(description="run the spectroscopy l3 to l4 end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
@@ -481,5 +628,3 @@ if __name__ == "__main__":
     
     # Run the e2e test with the same nested structure logic
     test_run_end_to_end(args.e2edata_dir, args.outputdir)
-
-

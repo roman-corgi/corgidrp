@@ -2,7 +2,7 @@ import numpy as np
 from pyklip.kpp.metrics.crossCorr import calculate_cc
 from pyklip.kpp.stat.statPerPix_utils import get_image_stat_map_perPixMasking
 
-def make_snmap(image, psf_binarymask, image_without_planet=None, coronagraph=True):
+def make_snmap(image, psf_binarymask, image_without_planet=None, coronagraph=True, N_threads=None):
     """
     Generates a signal-to-noise (S/N) map by convolving the image with the PSF.
     
@@ -11,7 +11,9 @@ def make_snmap(image, psf_binarymask, image_without_planet=None, coronagraph=Tru
         psf_binarymask (ndarray): A binary mask for PSF convolution.
         image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
         coronagraph (bool, optional): If True, an IWA is applied to derive the snmap. Defaults to True.
-    
+        N_threads (int, optional): Number of threads for multiprocessing. If -1, runs sequentially without multiprocessing.
+                                   If None (default), uses all available CPU cores.
+                  
     Returns:
         ndarray: The computed S/N map.
     """
@@ -33,7 +35,7 @@ def make_snmap(image, psf_binarymask, image_without_planet=None, coronagraph=Tru
     else: mask_radius = 0.
 
     image_snmap = get_image_stat_map_perPixMasking(image_convo, image_without_planet=image_wop_convo,
-                                                   mask_radius=mask_radius, Dr=3.)
+                                                   mask_radius=mask_radius, Dr=3., N_threads=N_threads)
 
     return image_snmap
 

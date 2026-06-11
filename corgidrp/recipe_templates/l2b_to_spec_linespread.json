@@ -19,6 +19,7 @@
                     "SpecFilterOffset" : "AUTOMATIC"
             },
                 "keywords" : {
+                    "subtract_no_offset_frames": false,
                     "return_all" : true
             }
         },
