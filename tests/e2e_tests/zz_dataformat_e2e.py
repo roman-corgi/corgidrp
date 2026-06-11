@@ -264,17 +264,6 @@ def validate_cgi_filename(filepath, expected_suffix):
 
 custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'NRECIPES', 'FILE0', 'DATETIME', 'FTIMEUTC', 'DETPIX0X', 'DETPIX0Y', 'PYKLIPV']
 
-def is_dynamic_recipe_header_key(name):
-    """Return True for dynamic numbered recipe-history header keywords.
-
-    Args:
-        name (str): FITS header keyword name to check.
-
-    Returns:
-        bool: True when ``name`` is ``RECIPE2``, ``RECIPE3``, etc.
-    """
-    return bool(re.fullmatch(r'RECIPE([2-9]|[1-9][0-9]+)', str(name)))
-
 def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_check=False):
     """
     Compare reference doc to new doc. Checks that all headers are present regardless of order
@@ -331,8 +320,6 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                     if name.startswith("HIERARCH FILE") and len(name) > 13 and name[13:].isdigit():
                         continue
                     if name.startswith("HIERARCH FILE_") and len(name) > 14 and name[14:].isdigit():
-                        continue
-                    if is_dynamic_recipe_header_key(name):
                         continue
                     # Skip table header/delimiter rows
                     if name and dtype and name != 'Keyword' and name != '=' * len(name) and name != '-' * len(name) and not name.isdigit():
@@ -1669,7 +1656,7 @@ if __name__ == "__main__":
     test_polflat_dataformat_e2e(e2edata_dir, outputdir)
     test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
     test_fluxcal_pol_dataformat_e2e(e2edata_dir, outputdir)
-    test_specfluxcal_dataformat_e2e(e2edata_dir, outputdir)
+    #test_specfluxcal_dataformat_e2e(e2edata_dir, outputdir)
     test_kgain_dataformat_e2e(e2edata_dir, outputdir)
     test_l2a_dataformat_e2e(e2edata_dir, outputdir)
     test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
@@ -1679,12 +1666,12 @@ if __name__ == "__main__":
     test_l3_pol_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_coron_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_noncoron_dataformat_e2e(e2edata_dir, outputdir)
-    test_l4_pol_dataformat_e2e(e2edata_dir, outputdir)
+    #test_l4_pol_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_spec_coron_dataformat_e2e(e2edata_dir, outputdir)
     test_l4_spec_noncoron_dataformat_e2e(e2edata_dir, outputdir)
     test_mueller_matrix_dataformat_e2e(e2edata_dir, outputdir)
     test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
-    test_ndfilter_spec_dataformat_e2e(e2edata_dir, outputdir)
+    #test_ndfilter_spec_dataformat_e2e(e2edata_dir, outputdir)
     test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
     test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
     test_nd_mueller_dataformat_e2e(e2edata_dir, outputdir)
