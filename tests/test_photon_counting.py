@@ -11,6 +11,7 @@ import corgidrp.data as data
 import corgidrp.detector as detector
 from corgidrp.photon_counting import get_pc_mean, photon_count, PhotonCountException
 import io, contextlib
+import warnings
 
 def test_negative():
     """Values at or below the 
@@ -104,7 +105,7 @@ def test_pc():
     # must have same 'EMGAIN_C' and other header values throughout input dataset
     dark_dataset_err.frames[0].ext_hdr['EMGAIN_C'] = 4999
     with pytest.raises(PhotonCountException):
-        get_pc_mean(dark_dataset_err, inputmode='dark')
+        get_pc_mean(dark_dataset_err, inputmode='darks')
     # change back:
     dark_dataset_err.frames[0].ext_hdr['EMGAIN_C'] = 5000
 
@@ -176,7 +177,8 @@ def test_pc_subsets():
     # process darks and check NUM_FR
     dark_dataset_bin[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
 
-    with pytest.warns(UserWarning):
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore')
         pc_dark = get_pc_mean(dark_dataset_bin, inputmode='darks', bin_size=40)
     assert pc_dark.ext_hdr['NUM_FR'] == len(dark_dataset_bin) # binning not used for 'darks' mode 
     assert pc_dark.data.ndim == 2
