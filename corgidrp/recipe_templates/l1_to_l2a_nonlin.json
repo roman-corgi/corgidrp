@@ -1,7 +1,6 @@
 {
     "name" : "l1_to_l2a_nonlin",
     "template" : true,
-    "ram_heavy" : true,
     "drpconfig" : {
         "track_individual_errors" : false
     },
@@ -52,8 +51,18 @@
             },
             "keywords" : {
                 "mode" : "full",
-                "dataset_copy" : false
+                "dataset_copy" : false,
+                "cosm_filter" : 1
             }
+        },
+        {
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            },
+            "keywords" : {
+				"auto_decide" : true
+			}
         },
         {
             "name" : "frame_select",

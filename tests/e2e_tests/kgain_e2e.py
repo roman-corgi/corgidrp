@@ -212,9 +212,11 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     
     recipe = walker.autogen_recipe(ordered_filelist, kgain_outputdir)
     ### Modify they keywords of some of the steps
+    desmear_step = None
     for step in recipe[1][1]['steps']:
         if step['name'] == "calibrate_kgain":
             step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
+    recipe[1][1]['steps'].pop(3) # II&T code does not desmear
     output_filepaths = walker.run_recipe(recipe[1][0], save_recipe_file=True)
     recipe[1][1]['inputs'] = output_filepaths
     walker.run_recipe(recipe[1][1], save_recipe_file=True)    

@@ -130,7 +130,8 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=False, plot_outdir='figures', show_plot=False,
-                     verbose=False, nonlin_params=None, apply_dq = True, percent_pupil=0.9):
+                     verbose=False, nonlin_params=None, apply_dq = True, percent_pupil=0.99,
+                     extrapolate=False):
     """
     Function that derives the non-linearity calibration table for a set of DN
     and EM values.
@@ -228,8 +229,12 @@ def calibrate_nonlin(dataset_nl,
         (rowback11, colback12), etc. Defaults to nonlin_params_default specified in this file.
       apply_dq (bool): consider the dq mask (from cosmic ray detection, saturation) or not. Defaults to True.
       percent_pupil (float): (Optional) the fraction of the pupil that must be not masked in order to have good statistics 
-        for the mean signal for each exposure time set for each EM gain. Default is 0.9, meaning that at least 90% of the pixels 
+        for the mean signal for each exposure time set for each EM gain. Default is 0.99, meaning that at least 99% of the pixels 
         in the pupil area must be included in the unmasked pixels to calculate the mean signal for each frame.
+    extrapolate (bool): (Optional) If True, extrapolation will be used for nonlinearity correction beyond the bounds 
+        of the data, within min_write and max_write.  Defaults to False.  Some high-DN frames may be saturated and leave 
+        a long range of DN over which to linearly extrapolate, which may lead to unphysically high nonlinearity corrections there. 
+        When extrapolate = False, the values on the bounds of the data are used for points outside the bounds. 
       
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
@@ -619,7 +624,8 @@ def calibrate_nonlin(dataset_nl,
         
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
-                        positive_means = frame_mean0[frame_mean0 > 0]
+                        pupil_inds = np.where(mask==1)
+                        positive_means = frame_mean0[pupil_inds]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
                         mean_frame_index += 1
 
@@ -669,7 +675,8 @@ def calibrate_nonlin(dataset_nl,
         
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
-                        positive_means = frame_mean0[frame_mean0 > 0]
+                        pupil_inds = np.where(mask==1)
+                        positive_means = frame_mean0[pupil_inds]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan                        
                         mean_frame_index += 1
 
@@ -711,7 +718,8 @@ def calibrate_nonlin(dataset_nl,
                         frame_count0 = np.sum(roi_frame)
                         frame_mean0 = frame_1 - frame_back
                         frame_mean0 *= mask
-                        positive_means = frame_mean0[frame_mean0 > 0]
+                        pupil_inds = np.where(mask==1)
+                        positive_means = frame_mean0[pupil_inds]
                         frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan        
                         mean_frame_index += 1
 
@@ -777,6 +785,7 @@ def calibrate_nonlin(dataset_nl,
         
         # Fit a polynomial to selected points (excluding some points)
         good_inds = np.where(~np.isnan(corr_mean_signal_sorted))
+        #print('For gain of ', actual_gain_arr[gain_index], ':  ', len(good_inds[0]), ' good_inds out of ', len(corr_mean_signal_sorted))
         filt_exp_times_sorted = filt_exp_times_sorted[good_inds[0]]
         corr_mean_signal_sorted = corr_mean_signal_sorted[good_inds[0]]
         p0 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
@@ -849,8 +858,17 @@ def calibrate_nonlin(dataset_nl,
         mean_linspace = np.linspace(20, 14000, 1+int((14000-20)/20))
         
         # Interpolate/extrapolate the relative gain values
-        interp_func = interp1d(corr_mean_signal_sorted, 
-                        rel_gain_smoothed, kind='linear', fill_value='extrapolate')
+        # Use the end point values as the extrapolation b/c if saturation affects many 
+        # frames, extrapolating linearly based on the slope of the last 2 points 
+        # at an end may result in a huge, unphysical correction at the chosen value outside the bounds
+        if extrapolate:
+            interp_func = interp1d(corr_mean_signal_sorted, 
+                                    rel_gain_smoothed, kind='linear', 
+                                    fill_value='extrapolate')
+        else:
+            interp_func = interp1d(corr_mean_signal_sorted, 
+                            rel_gain_smoothed, kind='linear', bounds_error=False, 
+                            fill_value=(rel_gain_smoothed[0], rel_gain_smoothed[-1]))
         rel_gain_interp = interp_func(mean_linspace)
         
         # Normalize the relative gain to the value at norm_val DN
