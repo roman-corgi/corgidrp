@@ -32,8 +32,7 @@ a single dark can be subtracted.
                   which converts CALSPEC SED (erg/s/cm^2/AA) to detector
                   counts (e-/s/bin) at each wavelength
 
-
-TARGET should be in corgidrp.fluxcal.calspec_names so that the CALSPEC SED can be 
+TARGET should be in corgidrp.fluxcal.calspec_names so that the CALSPEC SED can be
 downloaded.
 
 Required calibration files
@@ -66,7 +65,7 @@ A single SpecFluxCal FITS product (*_nds_cal.fits) containing:
 The test here does:
     Band  : 3  (CFAMNAME = 3F / 3D)
     DPAM  : PRISM3
-    Star : TYC 4424-1286-1 (dim, Vmag~12)
+    Star : TYC 4424-1286-1 (dim, Vmag=12.0, G0V, mapped from simulation metadata)
 """
 import argparse
 import os
@@ -140,8 +139,16 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
 
     # Build a mock input_dataset from a couple of L1 files so that
     # calibration products can record them
-    all_l1 = sorted(f for f in os.listdir(l1_datadir)
-                    if f.endswith('l1.fits') or f.endswith('l1_.fits'))
+    _all_l1_files = sorted(f for f in os.listdir(l1_datadir)
+                           if f.endswith('l1.fits') or f.endswith('l1_.fits'))
+    all_l1 = []
+    for f in _all_l1_files:
+        try:
+            if fits.getheader(os.path.join(l1_datadir, f), ext=0).get('VISTYPE') == 'CGIVST_CAL_ABSFLUX_FAINT':
+                all_l1.append(f)
+        except Exception:
+            pass
+
     mock_cal_files = [os.path.join(l1_datadir, f) for f in all_l1[-2:]]
     mock_cal_dir   = os.path.join(os.path.dirname(calibrations_dir), 'mock_cal_input')
     os.makedirs(mock_cal_dir, exist_ok=True)
@@ -279,13 +286,42 @@ def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
         l1_datadir, processed_cal_path, calibrations_dir)
 
     # ------------------------------------------------------------------
-    # 2. Prepare L1 input files (only 5 of the faint star without ND filter)
+    # 2. Prepare L1 input files
     # ------------------------------------------------------------------
-    l1_filelist = sorted(
-        os.path.join(l1_datadir, f)
-        for f in os.listdir(l1_datadir)
+    input_l1_datadir = os.path.join(outputdir, "input_l1")
+    os.makedirs(input_l1_datadir, exist_ok=True)
+
+    # Copy all L1 files to output_dir before alterations to header keywords
+    shutil.copytree(l1_datadir, input_l1_datadir, dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.txt', '*.png'))
+
+    all_l1_files = sorted(
+        os.path.join(input_l1_datadir, f)
+        for f in os.listdir(input_l1_datadir)
         if f.endswith('l1_.fits') or f.endswith('l1.fits')
-    )[0:5]
+    )
+
+    faint_star_filelist = []
+    for f in all_l1_files:
+        try:
+            if fits.getheader(f, ext=0).get('VISTYPE') == 'CGIVST_CAL_ABSFLUX_FAINT':
+                faint_star_filelist.append(f)
+        except Exception:
+            pass
+
+    # Changing TARGET if original TARGET not in calspec list
+    try:
+        faint_target = fits.getheader(faint_star_filelist[0], ext=0)['TARGET']
+        _, _ = fluxcal.get_calspec_file(faint_target)
+    except:
+        for f in faint_star_filelist:
+            fits.setval(f, 'TARGET', value='tyc 4424-1286-1', ext=0)
+
+    # We need both 3D and 3F frames for spec fluxcal.
+    # Use all available 3D and 3F faint star frames.
+    l1_3d = [f for f in faint_star_filelist if fits.getheader(f, ext=1)['CFAMNAME'] == '3D']
+    l1_3f = [f for f in faint_star_filelist if fits.getheader(f, ext=1)['CFAMNAME'] == '3F']
+    l1_filelist = l1_3d + l1_3f
+
     if not l1_filelist:
         raise FileNotFoundError(f"No L1 files found in {l1_datadir}")
 
@@ -346,22 +382,29 @@ def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
     assert np.all(np.isfinite(specflux_err)), "spectrum fluxcal errors contains non-finite values."
     assert np.all(specflux_err > 0), f"spectrum fluxcal errors contains non-positive values (min={specflux_err.min():.3f})."
     
-    #estimate flux cal factor from one l2b image
+    # estimate flux cal factor from one broadband (3F) l2b image
     l2b_filelist = sorted(
         os.path.join(outputdir, f)
         for f in os.listdir(outputdir) if f.endswith('_l2b.fits')
     )
-    l2b_image = data.Image(l2b_filelist[2])
+
+    # Find the first 3F frame
+    l2b_3f_file = next(f for f in l2b_filelist if fits.getheader(f, ext=1).get('CFAMNAME') == '3F')
+    l2b_image = data.Image(l2b_3f_file)
+
     target = l2b_image.pri_hdr["TARGET"]
     exptime = l2b_image.ext_hdr["EXPTIME"]
     calspec_filepath, _ = fluxcal.get_calspec_file(target)
     flux_ref = fluxcal.read_cal_spec(calspec_filepath,spec_wave * 10.)
-    center = 512
-    spec = np.sum(np.mean(l2b_image.data[center - 9:center +9, center -2:center +2],0))/exptime
+
+    # Dynamically find the spectrum center (it shifted in the new simulated dataset)
+    y_cen, x_cen = np.unravel_index(np.nanargmax(l2b_image.data), l2b_image.data.shape)
+    spec = np.nansum(np.nanmean(l2b_image.data[y_cen - 9:y_cen +9, x_cen -2:x_cen +2],0))/exptime
+
     est_fluxfac = np.mean(flux_ref)/spec
     dev = (est_fluxfac - np.mean(specflux))/est_fluxfac
 
-    assert dev < 0.1, f"deviation of the estimated spec flux cal factor is bigger than 10 %: {dev * 100:.3f}"
+    assert abs(dev) < 0.1, f"deviation of the estimated spec flux cal factor is bigger than 10 %: {dev * 100:.3f}"
     print(f"deviation from estimated spec flux calibration factors is {dev *100:.3f} %, therefore spec flux cal values PASSED")
 
     # Headers
@@ -394,7 +437,7 @@ def test_spec_fluxcal_e2e(e2edata_path, e2eoutput_path):
         e2eoutput_path (str): Path to the E2E test output
 
     """
-    l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "L1")
+    l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "SPEC_NOM_L1")
     processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
     outputdir = os.path.join(e2eoutput_path, "l1_to_spec_fluxcal_e2e")
 
@@ -419,7 +462,7 @@ if __name__ == "__main__":
     ap.add_argument(
         "-d", "--e2edata_dir",
         default="/home/schreiber/DataCopy/E2E_Test_Data",
-        help="Root directory containing ND_SPEC/L1/ and ND_SPEC/Cals/ sub-folders"
+        help="Root directory containing ND_SPEC/SPEC_NOM_L1/ and ND_SPEC/Cals/ sub-folders"
     )
     ap.add_argument(
         "-o", "--outputdir",
