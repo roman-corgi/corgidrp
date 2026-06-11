@@ -428,4 +428,4 @@ if __name__ == "__main__":
     )
     args = ap.parse_args()
 
-    test_spec_fluxcal_e2e(e2edata_dir, outputdir)
+    test_spec_fluxcal_e2e(args.e2edata_dir, args.outputdir)
