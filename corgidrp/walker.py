@@ -34,6 +34,7 @@ all_steps = {
     "calibrate_nonlin": corgidrp.calibrate_nonlin.calibrate_nonlin,
     "correct_nonlinearity" : corgidrp.l1_to_l2a.correct_nonlinearity,
     "update_to_l2a" : corgidrp.l1_to_l2a.update_to_l2a,
+    "update_to_intermediate" : corgidrp.l1_to_l2a.update_to_intermediate,
     "add_shot_noise_to_err" : corgidrp.l2a_to_l2b.add_shot_noise_to_err,
     "dark_subtraction" : corgidrp.l2a_to_l2b.dark_subtraction,
     "flat_division" : corgidrp.l2a_to_l2b.flat_division,

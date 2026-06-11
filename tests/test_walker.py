@@ -575,6 +575,61 @@ def test_generate_multiple_recipes():
     assert len(recipes[0]) == 3 # nonlin chain in 3 parts
     assert len(recipes[1]) == 2 # kgain chain in 2 parts
 
+def test_chained_recipe_intermediate_levels():
+    """
+    Tests that running a chained recipe correctly marks intermediate output
+    files with IM1 level using the real l2a_to_l2b_pc_1.json template, then
+    verifies the next recipe in the chain can accept them.
+    """
+    # create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+    # Create simulated L2a data (l2a_to_l2b_pc chain starts from L2a)
+    l2a_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l2a.fits"
+    for i, image in enumerate(l2a_dataset):
+        image.filename = fname_template.format(i)
+        image.ext_hdr['DATALVL'] = "L2a"
+        image.ext_hdr['ISPC'] = 1  # photon-counting mode (l2a_to_l2b_pc template)
+    l2a_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l2a_dataset]
+
+    # Load the real l2a_to_l2b_pc chain templates
+    template_dir = os.path.join(os.path.dirname(walker.__file__), "recipe_templates")
+    template_1 = json.load(open(os.path.join(template_dir, "l2a_to_l2b_pc_1.json"), "r"))
+    template_2 = json.load(open(os.path.join(template_dir, "l2a_to_l2b_pc_2.json"), "r"))
+
+    # Generate recipe from template 1
+    recipe_1 = walker.autogen_recipe(filelist, outputdir, template=template_1)
+
+    # Run recipe 1 (frame_select -> convert_to_electrons -> dark_subtraction -> update_to_intermediate -> save)
+    output_filelist = walker.run_recipe(recipe_1)
+
+    # Verify intermediate outputs on disk
+    assert output_filelist is not None
+    assert len(output_filelist) > 0
+    output_dataset = data.Dataset(output_filelist)
+    for frame in output_dataset:
+        assert frame.ext_hdr['DATALVL'] == "IM1", (
+            f"Expected DATALVL='IM1', got '{frame.ext_hdr['DATALVL']}'"
+        )
+        assert "_im1" in frame.filename, (
+            f"Expected '_im1' in filename, got '{frame.filename}'"
+        )
+
+    # Verify chaining: recipe 2 accepts intermediate files as inputs
+    recipe_2 = walker.autogen_recipe(output_filelist, outputdir, template=template_2)
+    assert len(recipe_2['inputs']) > 0
+    # Verify the inputs are the IM1 files
+    for inp in recipe_2['inputs']:
+        assert "_im1" in inp
+
+
 def test_cpgs_satspots():
     """
     Tests passing in sat spot parameters from the CPGS XML into the 
@@ -1181,6 +1236,7 @@ if __name__ == "__main__":#
     test_skip_missing_optional_calib()
     test_jit_calibs()
     test_generate_multiple_recipes()
+    test_chained_recipe_intermediate_levels()
     test_cpgs_satspots()
     test_cpgs_one_satspot()
     test_l1_to_l2b_default_calibs()
