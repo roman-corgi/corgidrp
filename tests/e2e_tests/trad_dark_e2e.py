@@ -278,7 +278,8 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     telem_rows = slice(telem_rows_start, telem_rows_end)
     proc_dark = Process(bad_pix, eperdn, fwc_em_e, fwc_pp_e,
                  bias_offset, em_gain, exptime,
-                 nonlin_path)
+                 nonlin_path, sat_thresh=0.99, plat_thresh=0.85,
+                 cosm_filter=2) # last 3 keyword arguments match what is now in DRP
     dark_frames = []
     bp_frames = []
     filelist = []
@@ -315,7 +316,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     trad_dark_data[telem_rows] = np.nan
 
     # Use allclose for float32 save/load and small numerical differences (rtol/atol=1e-5)
-    assert np.allclose(TVAC_trad_dark, trad_dark_data, rtol=1e-5, atol=1e-5, equal_nan=True)
+    # Recent change to cosmic ray detection to cover the entire frame instead of just the image area; no equivalent 
+    # in II&T code, but the image areas should agree. 
+    assert np.allclose(TVAC_trad_dark[13:13+1024,1088:1088+1024], trad_dark_data[13:13+1024,1088:1088+1024], rtol=1e-5, atol=1e-5, equal_nan=True)
     print('e2e test for trad_dark calibration passed')
     
     # remove temporary caldb file
@@ -599,5 +602,5 @@ if __name__ == "__main__":
     # args = ap.parse_args(args_here)
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_trad_dark(e2edata_dir, outputdir)
     test_trad_dark_im(e2edata_dir, outputdir)
+    test_trad_dark(e2edata_dir, outputdir)

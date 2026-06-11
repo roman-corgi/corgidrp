@@ -2,7 +2,6 @@
 {
     "name" : "l1_to_kgain",
     "template" : true,
-	"ram_heavy" : true,
     "drpconfig" : {
         "track_individual_errors" : false
     },
@@ -39,12 +38,12 @@
 		}
             }
         },
-        {
+	{
             "name" : "discard_setup_frames",
             "keywords" : {
                 "keywords_to_check" : ["ISACQ"]
             }
-        },
+	},
 	{
 	    "name" : "detect_cosmic_rays",
 	    "calibs" : {
@@ -53,9 +52,19 @@
 	    },
 		"keywords" : {
 				"mode" : "full",
-                "dataset_copy" : false
+                "dataset_copy" : false,
+				"cosm_filter" : 1
             }
 		},
+		{
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            },
+			"keywords" : {
+				"auto_decide" : true
+			}
+	},
 		{
 		    "name" : "frame_select",
 		    "keywords" : {
@@ -82,7 +91,8 @@
 			    "r0c0": [99, 799]
 			}
 		    }
-	        }
+	        },
+			"dataset_copy" : false
 	    }		
 	},
         {

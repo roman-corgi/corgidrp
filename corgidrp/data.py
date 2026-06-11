@@ -1939,6 +1939,7 @@ class DetectorParams(Image):
         'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
         'PCECNTMX': 0.25,       # Maximum allowed electrons/pixel/frame for photon counting
         'TFACTOR': 5,           # number of read noise standard deviations at which to set the photon-counting threshold
+        'READ_N': 165.               # current best estimate
     }
 
     back_compat_mapping = {
@@ -4637,6 +4638,28 @@ def get_bit_to_flag_map():
         dict: A dictionary with bit positions (int) as keys and flag names as values.
     """
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
+
+def selective_dq(dq, val=128):
+    '''Reduces the DQ map to just the flags valued at val.  This allows the ability to mask a frame because 
+    of a single DQ flag without regard to other flags. 
+    
+    For example, for val=32, the function identifies which pixels are flagged as saturated and creates a new map where those pixels are flagged as val and all other pixels are flagged as 0.
+    
+    To select for all DQs except for the one indicated by val, do dq - selective_dq(dq,val).
+
+    Args:
+        dq (array-like): DQ map where each pixel's value is a combination of powers of 2 corresponding to different flags.  For example, if a pixel has a value of 34, it means that it has flags corresponding to 32 and 2.
+        val (int): The specific flag value to identify in the DQ map.  Defaults to 128 for cosmic rays.
+
+    Returns:
+        selected_dq (array-like): A map where pixels that had the specified flag value in the original DQ map are marked as val, and all other pixels are marked as 0.
+    '''
+    selected_dq = np.zeros_like(dq).astype(float)
+    temp_dq = dq.copy().astype(int)
+    val_ar = np.ones_like(temp_dq).astype(int)*val
+    selected_dq = (temp_dq & val_ar)
+    return selected_dq
+
 
 def get_stokes_intensity_image(stokes_image):
     """Return a copy containing only the Stokes I plane for photometry.

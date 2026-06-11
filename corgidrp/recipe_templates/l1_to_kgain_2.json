@@ -47,9 +47,19 @@
 	    },
 		"keywords" : {
 				"mode" : "full",
-                "dataset_copy" : false
+                "dataset_copy" : false,
+				"cosm_filter" : 1
             }
 		},
+		{
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            },
+			"keywords" : {
+				"auto_decide" : true
+			}
+	},
 		{
 		    "name" : "frame_select",
 		    "keywords" : {

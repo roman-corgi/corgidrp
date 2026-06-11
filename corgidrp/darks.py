@@ -6,6 +6,7 @@ from astropy.io import fits
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
 from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords
+import corgidrp
 
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
@@ -14,11 +15,14 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     removed.  This function takes the bad-pixels maps into account when taking
     the mean.
 
-    The two lists must be the same length, and each 2D array in each list must
-    be the same size, both within a list and across lists.
+    The first two inputs can be lists.  If the first two inputs are np.ndarray 
+    (a single frame or a stack), the function will accommodate and convert them 
+    to lists of arrays.  If the first input is a Dataset, RAM-heavy mode is assumed, 
+    and the second input is irrelevant since the DQ map for each frame of the input 
+    Dataset will be used to construct the bad-pixel maps.  
 
-    If the inputs are instead np.ndarray (a single frame or a stack),
-    the function will accommodate and convert them to lists of arrays.
+    Unless the first input is a Dataset, the first two inputs must be the same length, and each 2D array in each list must
+    be the same size, both within a list and across lists.
 
     Also Includes outputs for processing darks used for calibrating the
     master dark.
@@ -411,7 +415,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         the effect of any DQ masking.  If False, all data is evenly weighted in
         the least squares fit.  Defaults to True.
     detector_regions (dict):
-        a dictionary of detector geometry properties.  Keys should be as found
+        A dictionary of detector geometry properties.  Keys should be as found
         in detector_areas in detector.py.
         Defaults to None, in which case detector_areas from detector.py is used.
 

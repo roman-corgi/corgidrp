@@ -2,7 +2,7 @@
 
 Data Formats
 ============
-
+Note:  HDU dimension sizes are subject to change (after L2b), but the number of dimensions is not.
 .. toctree::
    :maxdepth: 1
    :caption: Science Data Types

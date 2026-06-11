@@ -409,7 +409,7 @@ if __name__=='__main__':
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     
-    e2edata_dir = os.path.join(this_file_dir,'../../../TVAC_Test_Data/E2E_Test_Data/')
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data' #os.path.join(this_file_dir,'../../../TVAC_Test_Data/E2E_Test_Data/')
     outputdir = this_file_dir
     
     ap = argparse.ArgumentParser(description='run the l1->l4 end-to-end test')
