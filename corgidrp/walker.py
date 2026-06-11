@@ -174,6 +174,57 @@ def _validate_template_structure(user_template, default_template_path, recipe_fi
             )
             raise ValueError(error_msg)
 
+def _set_recipe_header(frame, recipe, prev_recipes=None, ram_heavy_last_filepath=None):
+    """
+    Write the current recipe (and any prior chain recipes) into frame.ext_hdr.
+    Clears any stale RECIPEn / NRECIPES keys before writing.
+
+    For a standalone recipe (prev_recipes empty or None): RECIPE = recipe.
+    For a chained recipe: RECIPE = prev_recipes[0], RECIPE2 = prev_recipes[1], ...,
+    RECIPE{N} = recipe, NRECIPES = N.
+
+    For non-last frames in a RAM-heavy unchained run, pass ram_heavy_last_filepath
+    to store a compact pointer instead of repeating the full input list in every header.
+
+    Args:
+        frame (corgidrp.data.Image): frame whose ext_hdr to update
+        recipe (dict): the recipe that is currently being executed
+        prev_recipes (list): ordered list of recipes that ran before this one in
+            the chain. Empty list or None means this is a standalone recipe.
+        ram_heavy_last_filepath (str): filepath of the last frame in the dataset.
+            When provided for an unchained recipe, the stored recipe uses a compact
+            "See RECIPE header value in <path>" reference instead of the full input
+            list, keeping per-frame header sizes small for large RAM-heavy datasets.
+            Only applied when prev_recipes is empty/None.
+    """
+    # Remove any leftover extra recipe headers from a previous chain
+    if 'NRECIPES' in frame.ext_hdr:
+        n_prev = frame.ext_hdr['NRECIPES']
+        if n_prev > 1:
+            for idx in range(2, n_prev + 1):
+                del frame.ext_hdr['RECIPE{0}'.format(idx)]
+        del frame.ext_hdr['NRECIPES']
+
+    # For unchained RAM-heavy non-last frames, store a compact pointer to avoid
+    # repeating ~26000 input filepaths in every frame header
+    if ram_heavy_last_filepath is not None and not prev_recipes:
+        recipe_to_store = recipe.copy()
+        recipe_to_store["inputs"] = "See RECIPE header value in {0}".format(ram_heavy_last_filepath)
+    else:
+        recipe_to_store = recipe
+
+    if not prev_recipes:
+        frame.ext_hdr['RECIPE'] = json.dumps(recipe_to_store)
+    else:
+        # First recipe in the chain occupies RECIPE for backwards compatibility
+        frame.ext_hdr['RECIPE'] = json.dumps(prev_recipes[0])
+        for idx, r in enumerate(prev_recipes[1:], start=2):
+            frame.ext_hdr['RECIPE{0}'.format(idx)] = json.dumps(r)
+        n = len(prev_recipes) + 1
+        frame.ext_hdr['RECIPE{0}'.format(n)] = json.dumps(recipe_to_store)
+        frame.ext_hdr['NRECIPES'] = n
+
+
 def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     """
     Automatically create a recipe and process the input filelist.
@@ -257,8 +308,8 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                         step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
                         step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
             
-            output_filelist = run_recipe(recipe)
-   
+            output_filelist = run_recipe(recipe, prev_recipes=recipes[:i])
+
     # return just the recipe if there was only one
     if len(list_of_recipe_chains) == 1:
         if len(list_of_recipe_chains[0]) == 1:
@@ -737,13 +788,17 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
             this_caldb.create_entry(image)
 
 
-def run_recipe(recipe, save_recipe_file=True):
+def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
     """
     Run the specified recipe
 
     Args:
         recipe (dict or str): either the filepath to the recipe or the already loaded in recipe
         save_recipe_file (bool): saves the recipe as a JSON file in the outputdir (true by default)
+        prev_recipes (list): ordered list of recipe dicts that ran before this one in a chain.
+            When provided, RECIPE in the output headers holds the first recipe for backwards
+            compatibility, RECIPE2/RECIPE3/... hold subsequent ones, and NRECIPES records the count.
+            Defaults to None (standalone recipe, single RECIPE header written).
 
     Returns:
         list: list of filepaths to the saved files, or None if no files were saved
@@ -803,17 +858,15 @@ def run_recipe(recipe, save_recipe_file=True):
             if recipe["inputs"]:
                 if ram_heavy_bool:
                     curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
-                    recipe_temp = recipe.copy()
-                    # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
-                    recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
+                    last_filepath = curr_dataset[-1].filepath
                 else:
                     curr_dataset = data.Dataset(filelist)
-                    recipe_temp = recipe
-                # write the recipe into the image extension header
-                curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                if len(curr_dataset) > 1:
-                    for frame in curr_dataset[:-1]:
-                        frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                    last_filepath = None
+                # Write recipe chain headers to all frames, clearing any stale ones
+                frames = list(curr_dataset)
+                for j, frame in enumerate(frames):
+                    ref = last_filepath if j < len(frames) - 1 else None
+                    _set_recipe_header(frame, recipe, prev_recipes, ram_heavy_last_filepath=ref)
             # execute each pipeline step
             print('Executing recipe: {0}'.format(recipe['name']))
             if isinstance(filelist, list):
@@ -867,17 +920,11 @@ def run_recipe(recipe, save_recipe_file=True):
                                 ref_image = data.Image(ref_image.filepath) #load in data for calibration matching
                             _fill_in_calib_files(step, this_caldb, ref_image)
 
-                            # also update the recipe we used in the headers
-                            if ram_heavy_bool:
-                                recipe_temp = recipe.copy()
-                                # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
-                                recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
-                            else:
-                                recipe_temp = recipe
-                            list_of_frames[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                            if len(list_of_frames) > 1:
-                                for frame in list_of_frames[:-1]:
-                                    frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                            # also update the recipe headers now that calibs are resolved
+                            lof = list(list_of_frames)
+                            for j, frame in enumerate(lof):
+                                ref = last_filepath if j < len(lof) - 1 else None
+                                _set_recipe_header(frame, recipe, prev_recipes, ram_heavy_last_filepath=ref)
 
                         # load the calibration files in from disk
                         for calib in step["calibs"]:
@@ -899,13 +946,13 @@ def run_recipe(recipe, save_recipe_file=True):
                     # run the step!
                     curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
 
-                    # make sure RECIPE header is propagated to output
+                    # make sure recipe headers are propagated to any newly created frames
                     if isinstance(curr_dataset, data.Dataset):
                         for frame in curr_dataset:
                             if "RECIPE" not in frame.ext_hdr:
-                                frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+                                _set_recipe_header(frame, recipe, prev_recipes)
                     elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
-                        curr_dataset.ext_hdr["RECIPE"] = json.dumps(recipe)
+                        _set_recipe_header(curr_dataset, recipe, prev_recipes)
 
         if not save_step:
             output_filepaths = None

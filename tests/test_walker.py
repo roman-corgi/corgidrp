@@ -1228,6 +1228,83 @@ def test_user_template_wrong_name_rejected_with_validation():
         corgidrp.user_templates_dir = original_user_templates
 
 
+def test_set_recipe_header():
+    """
+    Tests that _set_recipe_header correctly writes RECIPE, RECIPE2, NRECIPES
+    for chained recipes and clears stale RECIPEn headers from a previous chain.
+    """
+    recipe0 = {"name": "recipe_zero", "inputs": ["a.fits"], "steps": []}
+    recipe1 = {"name": "recipe_one", "inputs": [], "steps": []}
+    stale = {"name": "stale", "inputs": ["z.fits"], "steps": []}
+
+    # Create a mock frame with stale chain headers from a hypothetical previous 3-recipe chain
+    pri_hdr, ext_hdr = mocks.create_default_L1_headers()
+    ext_hdr['RECIPE'] = json.dumps(stale)
+    ext_hdr['RECIPE2'] = json.dumps(stale)
+    ext_hdr['RECIPE3'] = json.dumps(stale)
+    ext_hdr['NRECIPES'] = 3
+    frame = data.Image(np.zeros((4, 4)), pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+    # Simulate recipe1 being the second recipe in a 2-recipe chain
+    walker._set_recipe_header(frame, recipe1, prev_recipes=[recipe0])
+
+    assert json.loads(frame.ext_hdr['RECIPE']) == recipe0, "RECIPE should hold first recipe in chain"
+    assert json.loads(frame.ext_hdr['RECIPE2']) == recipe1, "RECIPE2 should hold second recipe in chain"
+    assert frame.ext_hdr['NRECIPES'] == 2, "NRECIPES should reflect the chain length"
+    assert 'RECIPE3' not in frame.ext_hdr, "Stale RECIPE3 from previous chain should be removed"
+
+    # Standalone recipe: just RECIPE, no RECIPE2/NRECIPES
+    walker._set_recipe_header(frame, recipe0)
+    assert json.loads(frame.ext_hdr['RECIPE']) == recipe0
+    assert 'RECIPE2' not in frame.ext_hdr
+    assert 'NRECIPES' not in frame.ext_hdr
+
+
+def test_run_recipe_clears_stale_chain_headers():
+    """
+    Tests that run_recipe removes RECIPE2 / NRECIPES inherited from a prior
+    processing chain when a new recipe starts from those files.
+    """
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    os.makedirs(datadir, exist_ok=True)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
+
+    # Create L2a files whose headers simulate the output of a previous 2-recipe chain
+    l2a_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    fname_template = "cgi_stalehdr_{:03d}_l2a.fits"
+    stale_recipe = {"name": "old_recipe", "inputs": [], "steps": []}
+    for i, image in enumerate(l2a_dataset):
+        image.filename = fname_template.format(i)
+        image.ext_hdr['DATALVL'] = "L2a"
+        image.ext_hdr['RECIPE'] = json.dumps(stale_recipe)
+        image.ext_hdr['RECIPE2'] = json.dumps(stale_recipe)
+        image.ext_hdr['NRECIPES'] = 2
+    l2a_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l2a_dataset]
+
+    # Minimal recipe with only a save step (no calibration required)
+    recipe = {
+        "name": "test_stale_cleanup",
+        "template": False,
+        "inputs": filelist,
+        "outputdir": outputdir,
+        "drpconfig": {},
+        "steps": [{"name": "save"}]
+    }
+
+    output_filelist = walker.run_recipe(recipe, save_recipe_file=False)
+    assert output_filelist is not None
+
+    output_dataset = data.Dataset(output_filelist)
+    for frame in output_dataset:
+        assert 'RECIPE2' not in frame.ext_hdr, "Stale RECIPE2 should be cleared by run_recipe"
+        assert 'NRECIPES' not in frame.ext_hdr, "Stale NRECIPES should be cleared by run_recipe"
+        assert 'RECIPE' in frame.ext_hdr, "RECIPE should be set to the current recipe"
+        current = json.loads(frame.ext_hdr['RECIPE'])
+        assert current['name'] == 'test_stale_cleanup'
+
+
 if __name__ == "__main__":#
     test_autoreducing()
     test_auto_template_identification()
@@ -1253,4 +1330,6 @@ if __name__ == "__main__":#
     test_user_template_in_autogen_recipe()
     test_user_template_wrong_name_loads_without_validation()
     test_user_template_wrong_name_rejected_with_validation()
+    test_set_recipe_header()
+    test_run_recipe_clears_stale_chain_headers()
 
