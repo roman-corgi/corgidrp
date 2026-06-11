@@ -15,6 +15,12 @@
             }
         },
         {
+            "name": "update_to_intermediate",
+            "keywords": {
+                "intermediate_level": 1
+            }
+        },
+        {
             "name" : "save"
         }
     ]

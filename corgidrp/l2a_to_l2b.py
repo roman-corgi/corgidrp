@@ -1,4 +1,5 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
+import re
 import numpy as np
 from scipy.interpolate import interp1d
 import copy
@@ -573,20 +574,18 @@ def desmear(input_dataset, detector_params):
 
 def update_to_l2b(input_dataset):
     """
-    Updates the data level to L2b. Only works on L2a data.
-
-    Currently only checks that data is at the L2a level
+    Updates the data level to L2b. Works on L2a or intermediate (IM#) data.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a or IM-level)
 
     Returns:
         corgidrp.data.Dataset: same dataset now at L2b-level
     """
-    # check that we are running this on L1 data
+    # check that we are running this on L2a or intermediate data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATALVL'] != "L2a":
-            err_msg = "{0} needs to be L2a data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
+        if not re.match(r'^(L2a|IM\d+)$', orig_frame.ext_hdr['DATALVL']):
+            err_msg = "{0} needs to be L2a or IM data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
             raise ValueError(err_msg)
 
     # we aren't altering the data
@@ -596,8 +595,8 @@ def update_to_l2b(input_dataset):
         # update header
         frame.ext_hdr['DATALVL'] = "L2b"
         # update filename convention. The file convention should be
-        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_l2a", "_l2b", 1)
+        # "CGI_[datalevel_*]" so we replace the first data level marker
+        frame.filename = re.sub(r'_(?:l2a|im\d+)', '_l2b', frame.filename, count=1)
         #updating filename in the primary header
         frame.pri_hdr['FILENAME'] = frame.filename
 
