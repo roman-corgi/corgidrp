@@ -7,12 +7,12 @@ from datetime import datetime, timedelta
 import logging
 import pytest
 import argparse
-
+import json
 from corgidrp.data import Dataset, DispersionModel
 from astropy.table import Table
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers, rename_files_to_cgi_format
-from corgidrp.walker import walk_corgidrp
+import corgidrp.walker as walker
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
                            validate_binary_table_fields, get_latest_cal_file, compare_to_mocks_hdrs)
@@ -148,12 +148,19 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     logger.info('Running e2e recipe...')
-    recipe = walk_corgidrp(
-        filelist=saved_files, 
-        CPGS_XML_filepath="",
-        outputdir=e2eoutput_path,
-        template="l2b_to_spec_prism_disp.json"
-    )
+    ### delete the crop step function in the recipe since we use small template frames as input
+    template = json.load(open(os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'recipe_templates', "l2b_to_spec_prism_disp.json"),'r'))
+    
+    recipe = walker.autogen_recipe(saved_files, e2eoutput_path, template=template)
+    new_step = []
+    for step in recipe['steps']:
+        if step['name'] == "crop":
+            pass
+        else:
+            new_step.append(step)
+    recipe['steps'] = new_step
+    walker.run_recipe(recipe)
+    
     logger.info("")
     
     # ================================================================================
