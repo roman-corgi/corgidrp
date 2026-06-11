@@ -256,6 +256,10 @@ def find_star(input_dataset,
     of the DM-offset satellite spot frames (``SATSPOTS=1``), then estimates the star
     location based on these median images and the initial guess provided.
 
+    Unocculted-star observations, identified by ``FPAMNAME`` values starting with ``OPEN``
+    or ``ND``, skip satellite-spot analysis. Their ``STARLOCX`` and ``STARLOCY`` values
+    are left unchanged and are not populated if missing.
+
     When ``subtract_no_offset_frames=True`` (default), satellite spot data is expected in
     three sequential equal-sized groups, all tagged ``SATSPOTS=1`` and ordered by their
     ``SCTSRT`` header timestamp (filename order is used as a fallback):
@@ -407,6 +411,27 @@ def find_star(input_dataset,
     split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=pri_split_keywords, exthdr_keywords=ext_split_keywords)
     out_frames = []
     for val, split_dataset in  zip(unique_vals, split_datasets):
+        # skip unocculted frames with FPAMNAME='OPEN_12','OPEN_34', 'ND225', or 'ND475'
+        fpamnames = [
+            str(frame.ext_hdr.get('FPAMNAME',
+                                  frame.ext_hdr.get('FPSAMNAME', ''))).strip().upper()
+            for frame in split_dataset.frames
+        ]
+        if_unocculted_star = (
+            len(fpamnames) > 0
+            and all(fpamname.startswith(('OPEN', 'ND')) for fpamname in fpamnames)
+        )
+        if if_unocculted_star:
+            for frame in split_dataset:
+                if drop_satspots_frames and frame.ext_hdr.get("SATSPOTS", 0) == 1:
+                    # if this is a satellite-spot frame, drop it.
+                    continue
+                frame.ext_hdr['HISTORY'] = (
+                    f"find_star skipped for unocculted-star FPAMNAME={frame.ext_hdr.get('FPAMNAME', '')}."
+                )
+                out_frames.append(frame)
+            continue
+
         observing_mode = []
         sci_frames = []
         sat_spot_frames = []
@@ -1400,6 +1425,10 @@ def align_polarimetry_frames(input_dataset):
     starloc0 = (processed_dataset.frames[0].ext_hdr['STARLOCX'],processed_dataset.frames[0].ext_hdr['STARLOCY'])
 
     for frame in processed_dataset:
+        # skip the unocculted frames, whhch don't need to be aligned. 
+        if frame.ext_hdr['FPAMNAME'].startswith(('OPEN', 'ND')):
+            continue
+        
         starloc = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         if starloc != starloc0:
             shift_value = (starloc0[1] - starloc[1] , starloc0[0] - starloc[0])

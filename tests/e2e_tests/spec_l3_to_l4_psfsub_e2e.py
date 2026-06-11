@@ -23,6 +23,38 @@ from corgidrp.check import (check_filename_convention, check_dimensions,
 from l1_to_l3_spec_e2e import run_l1_to_l3_e2e_test
 import warnings
 
+REFSTAR_VISITID_OFFSET = 100
+
+
+def assign_visitid_to_l3_frames(frames, visit_offset, psfref):
+    """Update L3 frame VISITID, PSFREF, and filename metadata.
+
+    Args:
+        frames (list): L3 ``corgidrp.data.Image`` frames to update in memory.
+        visit_offset (int): Offset applied to each frame's original VISITID.
+        psfref (bool): Whether these frames should be marked as reference-star
+            frames in the primary header.
+    """
+    for frame in frames:
+        base_visitid = str(frame.pri_hdr['VISITID']).strip()
+        if visit_offset == 0:
+            visitid = base_visitid
+        else:
+            try:
+                visitid = f"{int(base_visitid) + visit_offset:0{len(base_visitid)}d}"
+            except ValueError as exc:
+                raise ValueError(f"Cannot offset VISITID '{base_visitid}'") from exc
+
+        filename = frame.filename or frame.pri_hdr.get('FILENAME', '')
+        filename_parts = os.path.basename(filename).split('_', 2)
+        if len(filename_parts) == 3 and filename_parts[0] == 'cgi':
+            filename = f"cgi_{visitid}_{filename_parts[2]}"
+
+        frame.pri_hdr['VISITID'] = visitid
+        frame.pri_hdr['PSFREF'] = int(bool(psfref))
+        frame.pri_hdr['FILENAME'] = filename
+        frame.filename = filename
+
 
 def patch_eacq_to_center_if_missing(filelist):
     """Set EACQ_ROW/EACQ_COL to image center when missing or (0,0).
@@ -198,16 +230,24 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
     run_l1_to_l3_e2e_test(target_satspot_input_path, target_spot_l3_output_dir, processed_cal_path, logger, fix_headers=False)
     run_l1_to_l3_e2e_test(target_files_path, target_l3_output_dir, processed_cal_path, logger, fix_headers=False)
 
-    l3_files = []
     l3_psfref = sorted(glob.glob(os.path.join(ref_l3_output_dir, "cgi_*l3_.fits")))
-    l3_files.extend(l3_psfref)
     l3_psfref_spot = sorted(glob.glob(os.path.join(ref_spot_l3_output_dir, "cgi_*l3_.fits")))
-    l3_files.extend(l3_psfref_spot)
     l3_target = sorted(glob.glob(os.path.join(target_l3_output_dir, "cgi_*l3_.fits")))
-    l3_files.extend(l3_target)
     l3_target_spot = sorted(glob.glob(os.path.join(target_spot_l3_output_dir, "cgi_*l3_.fits")))
-    l3_files.extend(l3_target_spot)
-    l3_dataset = Dataset(l3_files)
+    l3_psfref_dataset = Dataset(l3_psfref)
+    l3_psfref_spot_dataset = Dataset(l3_psfref_spot)
+    l3_target_dataset = Dataset(l3_target)
+    l3_target_spot_dataset = Dataset(l3_target_spot)
+    assign_visitid_to_l3_frames(l3_psfref_dataset.frames, REFSTAR_VISITID_OFFSET, psfref=True)
+    assign_visitid_to_l3_frames(l3_psfref_spot_dataset.frames, REFSTAR_VISITID_OFFSET, psfref=True)
+    assign_visitid_to_l3_frames(l3_target_dataset.frames, 0, psfref=False)
+    assign_visitid_to_l3_frames(l3_target_spot_dataset.frames, 0, psfref=False)
+    l3_dataset = Dataset(np.concatenate([
+        l3_psfref_dataset.frames,
+        l3_psfref_spot_dataset.frames,
+        l3_target_dataset.frames,
+        l3_target_spot_dataset.frames,
+    ]))
     logger.info('')
 
     # Reverting changed visitids to old values.
@@ -588,5 +628,3 @@ if __name__ == "__main__":
     
     # Run the e2e test with the same nested structure logic
     test_run_end_to_end(args.e2edata_dir, args.outputdir)
-
-
