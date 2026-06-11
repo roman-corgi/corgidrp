@@ -975,7 +975,8 @@ def test_l4_companion_photometry():
 
     logger.info(f"Finding companion location in image")
     # Source is created with sigma=3.0, so FWHM = 2.355 * 3.0 = 7.07 pixels
-    companion_i_image = l4_to_tda.find_source(companion_intensity_image, fwhm=7.0, nsigma_threshold=3.0)
+    # Use N_threads=-1 to disable multiprocessing for test performance (avoids pool creation overhead)
+    companion_i_image = l4_to_tda.find_source(companion_intensity_image, fwhm=7.0, nsigma_threshold=3.0, N_threads=-1)
     companion_info = companion_i_image.ext_hdr.get('snyx000', None)
     if companion_info:
         snr, companion_y, companion_x = map(float, companion_info.split(','))

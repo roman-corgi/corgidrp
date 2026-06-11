@@ -14,7 +14,8 @@
           "SpecFilterOffset": "AUTOMATIC"
         },
         "keywords" : {
-          "subtract_no_offset_frames": false
+          "subtract_no_offset_frames": false,
+          "additional_frame_sep_extkeys": ["FSMX","FSMY"]
         }
       },
       {

@@ -1,11 +1,12 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
+import re
 import numpy as np
 from scipy.interpolate import interp1d
 import copy
 import warnings
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
-from corgidrp.detector import detector_areas, ENF
+from corgidrp.detector import detector_areas, ENF, slice_section
 
 
 def add_shot_noise_to_err(input_dataset, kgain, detector_params):
@@ -279,7 +280,8 @@ def flat_division_pol(input_dataset, flat_fieldPOL0, flat_fieldPOL45):
 
     return output_dataset
 
-def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_rms_thres=None, tt_bias_thres=None, discard_bad=True):
+def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_rms_thres=None,
+                 tt_bias_thres=None, discard_bad=True, record_selection=True):
     """
 
     Selects the frames that we want to use for further processing.
@@ -294,6 +296,7 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
         tt_rms_thres (float): maximum allowed RMS tip or tilt in image to be considered good. Default: None (not used)
         tt_bias_thres (float): maximum allowed bias in tip/tilt over the course of an image to be consdiered good. Default: None (not used)
         discard_bad (bool): if True, drops the bad frames rather than keeping them through processing
+        record_selection (bool): if True, records frame selection criteria in FRMSEL header keywords.
         
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
@@ -306,6 +309,11 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
 
     for i, frame in enumerate(pruned_dataset.frames):
         reject_reasons[i] = [] # list of rejection reasons
+        # Reject frames already marked bad by an upstream step.
+        if frame.ext_hdr.get('IS_BAD', False):
+            reject_flags[i] += 64
+            reject_reasons[i].append("IS_BAD = T")
+
         if bpix_frac < 1:
             masked_dq = np.bitwise_and(frame.dq, disallowed_bits) # handle allowed_bpix values
             numbadpix = np.size(np.where(masked_dq > 0)[0])
@@ -315,13 +323,15 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                 reject_flags[i] += 1
                 reject_reasons[i].append("bad pix frac {0:.5f} > {1:.5f}"
                                          .format(frame_badpix_frac, bpix_frac))
-        frame.ext_hdr['FRMSEL01'] = (bpix_frac, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to {0}".format(allowed_bpix)) # record selection criteria
+        if record_selection:
+            frame.ext_hdr['FRMSEL01'] = (bpix_frac, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to {0}".format(allowed_bpix)) # record selection criteria
 
         if overexp:
             if frame.ext_hdr['OVEREXP']:
                 reject_flags[i] += 2 # use distinct bits in case it's useful
                 reject_reasons[i].append("OVEREXP = T")
-        frame.ext_hdr['FRMSEL02'] = (overexp, "Are we selecting on the OVEREXP flag?") # record selection criteria
+        if record_selection:
+            frame.ext_hdr['FRMSEL02'] = (overexp, "Are we selecting on the OVEREXP flag?") # record selection criteria
 
         if tt_rms_thres is not None:
             if frame.ext_hdr['Z2VAR'] > tt_rms_thres:
@@ -336,8 +346,9 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
             tt_rms_thres_hdr = -999. # to keep type consistency
         else:
             tt_rms_thres_hdr = tt_rms_thres
-        frame.ext_hdr['FRMSEL03'] = (tt_rms_thres_hdr, "tip rms (Z2VAR) threshold") # record selection criteria
-        frame.ext_hdr['FRMSEL04'] = (tt_rms_thres_hdr, "tilt rms (Z3VAR) threshold") # record selection criteria
+        if record_selection:
+            frame.ext_hdr['FRMSEL03'] = (tt_rms_thres_hdr, "tip rms (Z2VAR) threshold") # record selection criteria
+            frame.ext_hdr['FRMSEL04'] = (tt_rms_thres_hdr, "tilt rms (Z3VAR) threshold") # record selection criteria
         
         if tt_bias_thres is not None:
             if frame.ext_hdr['Z2RES'] > tt_bias_thres:
@@ -352,8 +363,9 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
             tt_bias_thres_hdr = -999. # to keep type consistency
         else:
             tt_bias_thres_hdr = tt_bias_thres
-        frame.ext_hdr['FRMSEL05'] = (tt_bias_thres_hdr, "tip bias (Z2RES) threshold") # record selection criteria
-        frame.ext_hdr['FRMSEL06'] = (tt_bias_thres_hdr, "tilt bias (Z3RES) threshold") # record selection criteria
+        if record_selection:
+            frame.ext_hdr['FRMSEL05'] = (tt_bias_thres_hdr, "tip bias (Z2RES) threshold") # record selection criteria
+            frame.ext_hdr['FRMSEL06'] = (tt_bias_thres_hdr, "tilt bias (Z3RES) threshold") # record selection criteria
                 
         # if rejected, mark as bad in the header
         if reject_flags[i] > 0:
@@ -521,7 +533,7 @@ def correct_bad_pixels(input_dataset, bp_mask):
 
     return data
 
-def desmear(input_dataset, detector_params):
+def desmear(input_dataset, detector_params, detector_regions=None, auto_decide=False, nbins=21, rn_factor=2):
     """
     EXCAM has no shutter, and so continues to illuminate the detector during
     readout. This creates a "smearing" effect into the resulting images. The
@@ -531,51 +543,174 @@ def desmear(input_dataset, detector_params):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
         detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
+        detector_regions: (dict):  
+            A dictionary of detector geometry properties.  Keys should be as 
+            found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
+        auto_decide (bool): If True, the function will decide whether desmearing is appropriate given the current best estimate of 
+            the read noise.  If the main signal in the frame is not adequately higher than the read noise (which is not smeared), then 
+            desmearing should not be performed.  Defaults to False.
+        nbins (int): If auto_decide is True, this is the number of bins used in the histogram of the data, which is used to determine 
+            the pixel values which are not merely background.  Should be >= 3.  Defaults to 21.
+        rn_factor (float): If auto_decide is True, the mean of the relevant signal from the frame
+            must stand out rn_factor times above the read noise.
+            Defaults to 2.
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with desmear applied
 
     """
-
-    data = input_dataset.copy()
-    data_cube = data.all_data
-
+    if detector_regions is None:
+        detector_regions = detector_areas
+    
+    frames_data = input_dataset.copy() 
+    data_cube = frames_data.all_data
     rowreadtime_sec = detector_params.params['ROWREADT']
 
     for i in range(data_cube.shape[0]):
-        exptime_sec = float(data[i].ext_hdr['EXPTIME'])
-        smear = np.zeros_like(data_cube[i])
-        m = len(smear)
-        for r in range(m):
-            columnsum = 0
-            for s in range(r+1):
-                columnsum = columnsum + rowreadtime_sec/exptime_sec*((1
-                + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*data_cube[i,s,:]
-            smear[r,:] = columnsum
-        data_cube[i] -= smear
+        # Physically, smearing only happens in the area exposed to light, the image area:
+        arrtype = frames_data[i].ext_hdr['ARRTYPE']
+        # Changes to the two below (image_data and image_dq) change their original arrays as well
+        if data_cube[i].shape == (detector_regions[arrtype]['image']['rows'], detector_regions[arrtype]['image']['cols']):
+            image_data = data_cube[i]
+            image_dq = frames_data.all_dq[i]
+            image_frame_flag = True
+        else:
+            image_data = slice_section(data_cube[i], arrtype, 'image', detector_regions)
+            image_dq = slice_section(frames_data.all_dq[i], arrtype, 'image', detector_regions)
+            image_frame_flag = False
+        # we don't want to desmear things that were not smeared, like cosmic rays and their tails
+        # Best we can do:  take value of closest unmasked pixel to get an estimate of the true signal 
+        # and use that for the desmearing calculation.  
+        # For saturated non-cosmic-ray pixels, 
+        # best we can do:  assume the flux incident on that physical region is comparable to what's represented in the counts there. 
+        # This way, we at least partially correct for the smearing in those regions.
+        cosmic_mask = data.selective_dq(image_dq, val=128)
+        rows, cols = np.where(cosmic_mask > 0)
+        # fill in cosmic ray pixels with value from nearest valid pixel for desmearing purposes; restore the originals afterwards
+        image_data[rows,cols] = np.nan
+        shift = 1
+        temp_rows = rows.copy()
+        temp_cols = cols.copy()
+        max_shift = max(image_data.shape[0], image_data.shape[1])
+        while temp_rows.size > 0 and shift < max_shift:
+            #This places row_shift of 0 first to give preference to a replacement from 
+            # same row for the same amount of smear, all other things equal
+            for row_shift in np.roll(range(-shift, shift+1), -shift): 
+                for col_shift in range(-shift, shift+1):
+                    # shift to seek replacements for nan'ed pixels
+                    if row_shift != 0: #removes cases where shifts will give out-of-bounds indices
+                        temp_del_inds_r1 = np.where(temp_rows + row_shift >= image_data.shape[0])
+                        temp_del_inds_r2 = np.where(temp_rows + row_shift < 0)
+                        temp_del_inds_r = np.union1d(temp_del_inds_r1, temp_del_inds_r2)
+                        temp_rows = np.delete(temp_rows, temp_del_inds_r)
+                        temp_cols = np.delete(temp_cols, temp_del_inds_r)
+                    if col_shift != 0: #removes cases where shifts will give out-of-bounds indices
+                        temp_del_inds_c1 = np.where(temp_cols + col_shift >= image_data.shape[1])
+                        temp_del_inds_c2 = np.where(temp_cols + col_shift < 0)
+                        temp_del_inds_c = np.union1d(temp_del_inds_c1, temp_del_inds_c2)
+                        temp_rows = np.delete(temp_rows, temp_del_inds_c)
+                        temp_cols = np.delete(temp_cols, temp_del_inds_c)
+                    
+                    image_data[temp_rows, temp_cols] = image_data[temp_rows + row_shift, temp_cols + col_shift]
+                    temp_rows, temp_cols = np.where(np.isnan(image_data))
+                    if temp_rows.size == 0:
+                        break
+            shift += 1
 
-    history_msg = "Desmear applied to data"
-    header_update = {'DESMEAR' : True}
-    data.update_after_processing_step(history_msg, new_all_data=data_cube, header_entries=header_update)
+        # frames that have already been photon-counted do not have read noise 
+        # in them; they are purely photo-electrons in theory, so shouldn't desmear those.
+        desmear_flag = True # desmears if auto_decide is False
+        if auto_decide and frames_data[i].ext_hdr['ISPC'] == 0:
+            if nbins < 3:
+                raise ValueError('nbins should be 3 or more in order to determine a local minimum in the histogram.')
+            # if these are calibration pupil images, they won't have RN yet
+            # b/c convert_to_electrons() hasn't been performed.  KGAINPAR is a L1 header and should be present.
+            if 'KGAINPAR' in frames_data[i].ext_hdr:
+                kgain_cbe = frames_data[i].ext_hdr['KGAINPAR']
+            else:
+                kgain_cbe = detector_params.params['KGAINPAR']
+            if 'RN' in frames_data[i].ext_hdr: # True if convert_to_electrons() has been performed
+                read_noise_cbe = frames_data[i].ext_hdr['RN']
+                rn = read_noise_cbe # in e- units
+            else:
+                read_noise_cbe = detector_params.params['READ_N']
+                rn = read_noise_cbe/kgain_cbe # in DN units (relevant to pupil images)
+            # Read noise and CIC are not smeared, and read noise swamps CIC. 
+            # Desmear only if signal of frame is sufficiently above the read noise.
+            # use histogram of intensities to choose threshold:
+            
+            Icount, IbinEdges = np.histogram(image_data, bins=nbins)
 
-    return data
+            # find the minima in the histogram
+            bV = np.logical_and(Icount[1:-1] <= Icount[:-2],
+                                Icount[1:-1] < Icount[2:])
+
+            # vector of intensity values at the center of each bin
+            binCenter = 0.5*(IbinEdges[:-1]+IbinEdges[1:])
+
+            # List of bin values where the histogram has a miminum
+            binVal = binCenter[1:-1][bV]
+
+            # Choose the first minimum as the threshold. this will be the lowest
+            # intensity value above the background intensity level. All pixels
+            # with greater intensity must be "signal". 
+            if np.size(binVal) > 0:
+                thresh = binVal[0]
+                data_signal = image_data[image_data > thresh]
+            # If binVal is empty, the histogram has no minima except at an endpoint. 
+            else:
+                data_signal = image_data
+            if np.mean(data_signal) >= rn_factor * rn:
+                desmear_flag = True
+            else:
+                desmear_flag = False
+
+        if desmear_flag:
+            exptime_sec = float(frames_data[i].ext_hdr['EXPTIME'])
+            smear = np.zeros_like(image_data)
+            m = len(smear)
+            for r in range(m):
+                columnsum = 0
+                for s in range(r+1):
+                    columnsum = columnsum + rowreadtime_sec/exptime_sec*((1
+                    + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*image_data[s,:]
+                smear[r,:] = columnsum
+            image_data -= smear
+        
+        frames_data[i].ext_hdr['DESMEAR'] = desmear_flag
+        frames_data[i].err_hdr['DESMEAR'] = desmear_flag
+        # now restore original values in cosmic ray pixels
+        if image_frame_flag:
+            orig_data = input_dataset[i].copy().data
+        else:
+            orig_data = slice_section(input_dataset[i].copy().data, arrtype, 'image', detector_regions)
+        if desmear_flag:
+            image_data[rows, cols] = orig_data[rows, cols] - smear[rows, cols]
+        else:
+            image_data[rows, cols] = orig_data[rows, cols]
+
+    if auto_decide:
+        history_msg = "Desmear function applied to data with auto-decide on"
+    else:
+        history_msg = "Desmear function applied to data with auto-decide off"
+    frames_data.update_after_processing_step(history_msg, new_all_data=data_cube)
+
+    return frames_data
 
 def update_to_l2b(input_dataset):
     """
-    Updates the data level to L2b. Only works on L2a data.
-
-    Currently only checks that data is at the L2a level
+    Updates the data level to L2b. Works on L2a or intermediate (IM#) data.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a or IM-level)
 
     Returns:
         corgidrp.data.Dataset: same dataset now at L2b-level
     """
-    # check that we are running this on L1 data
+    # check that we are running this on L2a or intermediate data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATALVL'] != "L2a":
-            err_msg = "{0} needs to be L2a data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
+        if not re.match(r'^(L2a|IM\d+)$', orig_frame.ext_hdr['DATALVL']):
+            err_msg = "{0} needs to be L2a or IM data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
             raise ValueError(err_msg)
 
     # we aren't altering the data
@@ -585,8 +720,8 @@ def update_to_l2b(input_dataset):
         # update header
         frame.ext_hdr['DATALVL'] = "L2b"
         # update filename convention. The file convention should be
-        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_l2a", "_l2b", 1)
+        # "CGI_[datalevel_*]" so we replace the first data level marker
+        frame.filename = re.sub(r'_(?:l2a|im\d+)', '_l2b', frame.filename, count=1)
         #updating filename in the primary header
         frame.pri_hdr['FILENAME'] = frame.filename
 

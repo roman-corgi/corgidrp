@@ -21,6 +21,7 @@ import corgidrp.l4_to_tda as l4_to_tda
 from corgidrp.pol import calc_stokes_unocculted
 import corgidrp.corethroughput as corethroughput
 import corgidrp.check as check
+from pyklip.instruments.utils.wcsgen import generate_wcs
 
 from corgidrp import star_center
 
@@ -445,18 +446,26 @@ def test_align_frames():
         left_image_value=1, right_image_value=2,
         star_center=injected_position_pol0, amplitude_multiplier=0)
     image_WP1_nfov_sp_nooffset.ext_hdr['SCTSRT'] = sctsrt_no_offset
+    wcs_header = generate_wcs(0, [image_WP1_nfov_sp_nooffset.ext_hdr['NAXIS1']//2, image_WP1_nfov_sp_nooffset.ext_hdr['NAXIS1']//2], platescale=0.0218).to_header()
+    image_WP1_nfov_sp_nooffset.ext_hdr.extend(wcs_header, update=True)
 
     image_WP1_nfov_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(
         dpamname='POL0', observing_mode='NFOV',
         left_image_value=1, right_image_value=2,
         star_center=injected_position_pol0, amplitude_multiplier=1000)
     image_WP1_nfov_sp.ext_hdr['SCTSRT'] = sctsrt_pos_offset
+    wcs_header = generate_wcs(0, [image_WP1_nfov_sp.ext_hdr['NAXIS1']//2, image_WP1_nfov_sp.ext_hdr['NAXIS1']//2], platescale=0.0218).to_header()
+    image_WP1_nfov_sp.ext_hdr.extend(wcs_header, update=True)
 
     image_WP1_nfov_sp_neg = copy.deepcopy(image_WP1_nfov_sp)
     image_WP1_nfov_sp_neg.ext_hdr['SCTSRT'] = sctsrt_neg_offset
+    wcs_header = generate_wcs(0, [image_WP1_nfov_sp_neg.ext_hdr['NAXIS1'] // 2, image_WP1_nfov_sp_neg.ext_hdr['NAXIS1'] // 2], platescale=0.0218).to_header()
+    image_WP1_nfov_sp.ext_hdr.extend(wcs_header, update=True)
 
     image_WP1_nfov = mocks.create_mock_l2b_polarimetric_image(dpamname='POL0',
      observing_mode='NFOV', left_image_value=1, right_image_value=2)
+    wcs_header = generate_wcs(0, [image_WP1_nfov.ext_hdr['NAXIS1'] // 2, image_WP1_nfov.ext_hdr['NAXIS1'] // 2], platescale=0.0218).to_header()
+    image_WP1_nfov.ext_hdr.extend(wcs_header, update=True)
 
     # POL45 satspot frames
     image_WP2_nfov_sp_nooffset = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(
@@ -464,18 +473,26 @@ def test_align_frames():
         left_image_value=1, right_image_value=2,
         star_center=injected_position_pol45, amplitude_multiplier=0)
     image_WP2_nfov_sp_nooffset.ext_hdr['SCTSRT'] = sctsrt_no_offset
+    wcs_header = generate_wcs(0, [image_WP2_nfov_sp_nooffset.ext_hdr['NAXIS1']//2, image_WP2_nfov_sp_nooffset.ext_hdr['NAXIS1']//2], platescale=0.0218).to_header()
+    image_WP2_nfov_sp_nooffset.ext_hdr.extend(wcs_header, update=True)
 
     image_WP2_nfov_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(
         dpamname='POL45', observing_mode='NFOV',
         left_image_value=1, right_image_value=2,
         star_center=injected_position_pol45, amplitude_multiplier=1000)
     image_WP2_nfov_sp.ext_hdr['SCTSRT'] = sctsrt_pos_offset
+    wcs_header = generate_wcs(0, [image_WP2_nfov_sp.ext_hdr['NAXIS1']//2, image_WP2_nfov_sp.ext_hdr['NAXIS1']//2], platescale=0.0218).to_header()
+    image_WP2_nfov_sp.ext_hdr.extend(wcs_header, update=True)
 
     image_WP2_nfov_sp_neg = copy.deepcopy(image_WP2_nfov_sp)
     image_WP2_nfov_sp_neg.ext_hdr['SCTSRT'] = sctsrt_neg_offset
+    wcs_header = generate_wcs(0, [image_WP2_nfov_sp_neg.ext_hdr['NAXIS1'] // 2, image_WP2_nfov_sp_neg.ext_hdr['NAXIS1'] // 2], platescale=0.0218).to_header()
+    image_WP2_nfov_sp_neg.ext_hdr.extend(wcs_header, update=True)
 
     image_WP2_nfov = mocks.create_mock_l2b_polarimetric_image(dpamname='POL45',
      observing_mode='NFOV', left_image_value=1, right_image_value=2)
+    wcs_header = generate_wcs(0, [image_WP2_nfov.ext_hdr['NAXIS1'] // 2, image_WP2_nfov.ext_hdr['NAXIS1'] // 2], platescale=0.0218).to_header()
+    image_WP2_nfov.ext_hdr.extend(wcs_header, update=True)
 
     # Input order: no-offset, +offset, -offset satspot frames then science frame per POL.
     # After split and find_star (drop_satspots_frames=False), frame layout:
@@ -513,6 +530,24 @@ def test_align_frames():
     assert np.isclose(starloc_pol0[1] - starloc_pol45[1], injected_y_slice_0 - injected_y_slice_45, atol=0.1)
     # Align the pol 45 data with the pol 0 data
     output_dataset_aligned = l3_to_l4.align_polarimetry_frames(dataset_with_center)
+
+    # check that CRPIX==STARLOC after alignment
+    assert output_dataset_aligned.frames[0].ext_hdr['STARLOCX'] == output_dataset_aligned.frames[0].ext_hdr['CRPIX1']
+    assert output_dataset_aligned.frames[0].ext_hdr['STARLOCY'] == output_dataset_aligned.frames[0].ext_hdr['CRPIX2']
+    assert output_dataset_aligned.frames[1].ext_hdr['STARLOCX'] == output_dataset_aligned.frames[1].ext_hdr['CRPIX1']
+    assert output_dataset_aligned.frames[1].ext_hdr['STARLOCY'] == output_dataset_aligned.frames[1].ext_hdr['CRPIX2']
+    assert output_dataset_aligned.frames[2].ext_hdr['STARLOCX'] == output_dataset_aligned.frames[2].ext_hdr['CRPIX1']
+    assert output_dataset_aligned.frames[2].ext_hdr['STARLOCY'] == output_dataset_aligned.frames[2].ext_hdr['CRPIX2']
+    assert output_dataset_aligned.frames[3].ext_hdr['STARLOCX'] == output_dataset_aligned.frames[3].ext_hdr['CRPIX1']
+    assert output_dataset_aligned.frames[3].ext_hdr['STARLOCY'] == output_dataset_aligned.frames[3].ext_hdr['CRPIX2']
+    assert output_dataset_aligned.frames[4].ext_hdr['STARLOCX'] == output_dataset_aligned.frames[4].ext_hdr['CRPIX1']
+    assert output_dataset_aligned.frames[4].ext_hdr['STARLOCY'] == output_dataset_aligned.frames[4].ext_hdr['CRPIX2']
+    assert output_dataset_aligned.frames[5].ext_hdr['STARLOCX'] == output_dataset_aligned.frames[5].ext_hdr['CRPIX1']
+    assert output_dataset_aligned.frames[5].ext_hdr['STARLOCY'] == output_dataset_aligned.frames[5].ext_hdr['CRPIX2']
+    assert output_dataset_aligned.frames[6].ext_hdr['STARLOCX'] == output_dataset_aligned.frames[6].ext_hdr['CRPIX1']
+    assert output_dataset_aligned.frames[6].ext_hdr['STARLOCY'] == output_dataset_aligned.frames[6].ext_hdr['CRPIX2']
+    assert output_dataset_aligned.frames[7].ext_hdr['STARLOCX'] == output_dataset_aligned.frames[7].ext_hdr['CRPIX1']
+    assert output_dataset_aligned.frames[7].ext_hdr['STARLOCY'] == output_dataset_aligned.frames[7].ext_hdr['CRPIX2']
 
     # Check that the pol 45 frames are now aligned on the pol 0 frames.
     # Use the +offset satspot frame (frames[5]) which has satellite spots for centroiding.

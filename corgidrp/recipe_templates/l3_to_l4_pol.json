@@ -19,6 +19,12 @@
         {
             "name": "find_star"
         },
+            {
+            "name": "combine_frames_per_visit",
+            "keywords":{
+                "num_frames_scaling": false
+            }
+        },
         {
             "name": "align_polarimetry_frames"
         },

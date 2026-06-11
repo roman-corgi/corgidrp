@@ -47,13 +47,29 @@
 	    },
 		"keywords" : {
 				"mode" : "full",
-                "dataset_copy" : false
+                "dataset_copy" : false,
+				"cosm_filter" : 1
             }
+		},
+		{
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            },
+			"keywords" : {
+				"auto_decide" : true
+			}
 	},
-	{
-	    "name" : "calibrate_kgain",
-	    "keywords" : {
-	        "detector_regions" : {
+		{
+		    "name" : "frame_select",
+		    "keywords" : {
+		        "record_selection" : false
+		    }
+		},
+		{
+		    "name" : "calibrate_kgain",
+		    "keywords" : {
+		        "detector_regions" : {
 		    "SCI" : {
 		        "frame_rows" : 1200,
 			"frame_cols" : 2200,

@@ -38,6 +38,8 @@ def test_dark_sub():
     """
     Generate mock input data and pass into dark subtraction function
     """
+    # Reset random seed to ensure deterministic behavior regardless of test execution order
+    np.random.seed(456)
     corgidrp.track_individual_errors = True # this test uses individual error components
 
     ###### create simulated data

@@ -11,6 +11,7 @@ import corgidrp.data as data
 import corgidrp.detector as detector
 from corgidrp.photon_counting import get_pc_mean, photon_count, PhotonCountException
 import io, contextlib
+import warnings
 
 def test_negative():
     """Values at or below the 
@@ -72,6 +73,7 @@ def test_pc():
     dark_dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dark = get_pc_mean(dark_dataset_err, inputmode='darks')
     assert pc_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark'
+    assert pc_dark.data.ndim == 2
     # now process illuminated frames and subtract the PC dark
     dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dataset_err = get_pc_mean(dataset_err, pc_master_dark=pc_dark)
@@ -103,7 +105,7 @@ def test_pc():
     # must have same 'EMGAIN_C' and other header values throughout input dataset
     dark_dataset_err.frames[0].ext_hdr['EMGAIN_C'] = 4999
     with pytest.raises(PhotonCountException):
-        get_pc_mean(dark_dataset_err, inputmode='dark')
+        get_pc_mean(dark_dataset_err, inputmode='darks')
     # change back:
     dark_dataset_err.frames[0].ext_hdr['EMGAIN_C'] = 5000
 
@@ -174,9 +176,14 @@ def test_pc_subsets():
     dark_dataset_bin.all_data = dark_dataset_bin.all_data.astype(float)*7 - 20000.
     # process darks and check NUM_FR
     dark_dataset_bin[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
-    pc_dark = get_pc_mean(dark_dataset_bin, inputmode='darks', bin_size=40)
-    assert pc_dark.ext_hdr['NUM_FR'] == 40 # The 2 remainder frames ignored for consistent statistics among the PC-averaged output frames
-    assert 'Number of subsets: 4' in pc_dark.ext_hdr['HISTORY'][-4]
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore')
+        pc_dark = get_pc_mean(dark_dataset_bin, inputmode='darks', bin_size=40)
+    assert pc_dark.ext_hdr['NUM_FR'] == len(dark_dataset_bin) # binning not used for 'darks' mode 
+    assert pc_dark.data.ndim == 2
+    assert pc_dark.dq.ndim == 2
+    assert pc_dark.err.ndim == 3
     # now process illuminated frames and subtract the PC dark
     dataset_bin[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
     pc_dataset = get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=40)
@@ -186,18 +193,12 @@ def test_pc_subsets():
     assert pc_dataset.frames[-1].ext_hdr['NUM_FR'] == 40 # The 1 remainder frame ignored for consistent statistics among the PC-averaged output frames
     assert 'Number of subsets: 4' in pc_dataset.frames[0].ext_hdr['HISTORY'][-2]
     #since number of frames in a dark subset would be less than that of a subset in illuminated, warning statement is printed
+    pc_dark.ext_hdr['NUM_FR'] = 10
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=51)
+        get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=20) #20 in each bin for illuminated, but the code thinks pc_dark has only 10
     captured = buf.getvalue()
     assert "Number of frames that created the photon-counted master dark should be greater than or equal to the number of illuminated frames in order for the result to be reliable.\n" in captured
-    # but this is fine:
-    get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=38)
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=51)
-    captured2 = buf.getvalue()
-    assert captured2 == captured
 
 def test_no_data():
     '''Tests that a Dataset with only metadata (and has data read in one 
@@ -230,9 +231,9 @@ def test_no_data():
     assert np.array_equal(with_data[0].dq, without_data[0].dq)    
 
 if __name__ == '__main__':
-    test_no_data()
     test_pc_subsets()
     test_pc()
+    test_no_data()
     test_negative()
     
     

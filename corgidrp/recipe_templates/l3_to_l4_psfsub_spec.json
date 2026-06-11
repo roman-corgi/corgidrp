@@ -22,6 +22,12 @@
         {
             "name" : "find_spec_star"
         },
+            {
+            "name": "combine_frames_per_visit",
+            "keywords": {
+                "num_frames_scaling": false
+            }
+        },
         {
             "name" : "spec_psf_subtraction"
         },
