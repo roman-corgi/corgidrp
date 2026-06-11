@@ -336,11 +336,11 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | FSAM_V     | float      | 12238.0                        | FSAM absolute position of the V-axis in microns                                                                          |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSAMNAME   | str        | R1C2                           | Closest named FSAM position, calculated from FSAM_H/V and FSAM lookup table                                              |
+| FSAMNAME   | str        | OPEN                           | Closest named FSAM position, calculated from FSAM_H/V and FSAM lookup table                                              |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSAMSP_H   | float      | 24087.0                        | FSAM set point H. The default H position corresponding to the closest FSAM named position                                |
+| FSAMSP_H   | float      | 30677.2                        | FSAM set point H. The default H position corresponding to the closest FSAM named position                                |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
-| FSAMSP_V   | float      | 12238.0                        | FSAM set point V. The default V position corresponding to the closest FSAM named position                                |
+| FSAMSP_V   | float      | 2959.5                         | FSAM set point V. The default V position corresponding to the closest FSAM named position                                |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | CFAM_H     | float      | 2329.2                         | CFAM absolute position of the H-axis in microns                                                                          |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
