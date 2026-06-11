@@ -264,16 +264,16 @@ def validate_cgi_filename(filepath, expected_suffix):
 
 custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'NRECIPES', 'FILE0', 'DATETIME', 'FTIMEUTC', 'DETPIX0X', 'DETPIX0Y', 'PYKLIPV']
 
-def is_recipe_header_key(name):
-    """Return True for generated recipe-history header keywords.
+def is_dynamic_recipe_header_key(name):
+    """Return True for dynamic numbered recipe-history header keywords.
 
     Args:
         name (str): FITS header keyword name to check.
 
     Returns:
-        bool: True when ``name`` is a recipe-history keyword.
+        bool: True when ``name`` is ``RECIPE2``, ``RECIPE3``, etc.
     """
-    return name == 'RECIPE' or name == 'NRECIPES' or bool(re.fullmatch(r'RECIPE[2-9][0-9]*', str(name)))
+    return bool(re.fullmatch(r'RECIPE([2-9]|[1-9][0-9]+)', str(name)))
 
 def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_check=False):
     """
@@ -321,7 +321,9 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                     if skip_hdu_structure_check:
                         if 'NAXIS' in name.upper():
                             continue
-                    # Skip keywords that vary with processing history
+                    # Skip keywords that vary with processing history.
+                    # RECIPE and NRECIPES are static data-format keywords;
+                    # numbered RECIPE2+ keywords are dynamic history entries.
                     if name.startswith("FILE") and len(name) > 4 and name[4:].isdigit():
                         continue
                     if name.startswith("FILE_") and len(name) > 5 and name[5:].isdigit():
@@ -330,7 +332,7 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                         continue
                     if name.startswith("HIERARCH FILE_") and len(name) > 14 and name[14:].isdigit():
                         continue
-                    if is_recipe_header_key(name):
+                    if is_dynamic_recipe_header_key(name):
                         continue
                     # Skip table header/delimiter rows
                     if name and dtype and name != 'Keyword' and name != '=' * len(name) and name != '-' * len(name) and not name.isdigit():
