@@ -16,7 +16,8 @@ from corgidrp import star_center
 from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
 from astropy.io import fits
-from scipy.ndimage import generic_filter, shift
+from scipy.ndimage import shift
+from numpy.lib.stride_tricks import sliding_window_view
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation, star_pos_spec
 from corgidrp import pol
 from corgidrp import fluxcal
@@ -24,7 +25,30 @@ from astropy.io.fits.verify import VerifyWarning
 from astropy.wcs import FITSFixedWarning
 from pytest import approx
 
-def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
+def _nanmedian_filter_vectorized(arr, kernelsize):
+    """Compute nanmedian over a sliding spatial window for every pixel in arr.
+
+    Works for any array dimensionality; the spatial axes are assumed to be the
+    last two.
+
+    Args:
+        arr (numpy.ndarray): input array with NaN at bad-pixel locations.
+        kernelsize (int): side length of the square median-filter window.
+
+    Returns:
+        numpy.ndarray: filtered array of the same shape as arr.
+    """
+    half_k = kernelsize // 2
+    pad = [(0, 0)] * (arr.ndim - 2) + [(half_k, half_k), (half_k, half_k)]
+    padded = np.pad(arr, pad, mode='constant', constant_values=np.nan)
+    windows = sliding_window_view(padded, (kernelsize, kernelsize), axis=(-2, -1))
+    flat = windows.reshape(windows.shape[:-2] + (-1,))   # (..., H, W, k*k)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        return np.nanmedian(flat, axis=-1)
+
+
+def replace_bad_pixels(input_dataset, kernelsize=3, dq_thresh=1, vectorized_threshold=0.01):
     """Interpolate over bad pixels in image and error arrays using a median filter.
     TODO: Add additional options for bad pixel replacement (e.g. 2d interpolation that
     can handle nans, constant value, etc.)
@@ -33,43 +57,73 @@ def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
         input_dataset (corgidrp.data.Dataset): input L3 dataset with bad pixels
         kernelsize (int, optional): Size of median filter window in pixels. Defaults to 3.
         dq_thresh (int, optional): Minimum DQ value for a pixel to be replaced. Defaults to 1.
+        vectorized_threshold (float, optional): Bad-pixel fraction above which a
+            full-array vectorized nanmedian filter is used instead of a sparse
+            per-pixel loop. The vectorized path is faster when many pixels are
+            bad; the sparse path is faster when very few are. Defaults to 0.01.
 
     Returns:
-        corgidrp.data.Dataset: A copy of the dataset with the bad pixels and error values interpolated over. 
+        corgidrp.data.Dataset: A copy of the dataset with the bad pixels and error values interpolated over.
         The bad pixel map is unchanged.
     """
 
-    # Copy input dataset
     dataset = input_dataset.copy()
     im_data = dataset.all_data
     im_err = dataset.all_err
 
-    # Get the pixels where the dq array is above the threshold
     im_dq_bool = dataset.all_dq >= dq_thresh
-    
-    # Set the bad pixels to np.nan
+        
     im_data[im_dq_bool] = np.nan
-    
-    # Apply the correct dq frame to each error frame
-    for f,frame in enumerate(im_err):
-        for e,_ in enumerate(frame):
-            im_err[f][e] = np.where(im_dq_bool[f], np.nan,im_err[f][e])
+    # Broadcast dq mask across the error-layer axis (axis 1 of im_err)
+    im_err[:] = np.where(im_dq_bool[:, np.newaxis], np.nan, im_err)
 
-    # Interpolate over the bad pixels using nanmedian
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', category=RuntimeWarning) #suppress warnings about all-NaN slices in the median filter
-        im_filtered = generic_filter(im_data,np.nanmedian,size=kernelsize,axes=[-1,-2])
-        err_filtered = generic_filter(im_err,np.nanmedian,size=kernelsize,axes=[-1,-2])
-    
-    # Replace the bad pixels with the interpolated pixels
-    im_replaced = np.where(np.isnan(im_data),im_filtered,im_data)
-    err_replaced = np.where(np.isnan(im_err),err_filtered,im_err)
-    
-    # Update dataset
-    bp_count = np.sum(np.isnan(im_data))
+    bp_count = int(np.sum(im_dq_bool))
+    im_replaced = im_data.copy()
+    err_replaced = im_err.copy()
+
+    if bp_count > 0:
+        bad_fraction = bp_count / im_dq_bool.size
+        if bad_fraction >= vectorized_threshold:
+            # Vectorized path: fast for high bad-pixel fractions.
+            # Applies a full-array sliding-window nanmedian, then copies results
+            # only at bad-pixel locations.
+            im_filtered = _nanmedian_filter_vectorized(im_data, kernelsize)
+            err_filtered = _nanmedian_filter_vectorized(im_err, kernelsize)
+            im_replaced = np.where(im_dq_bool, im_filtered, im_data)
+            err_replaced = np.where(im_dq_bool[:, np.newaxis], err_filtered, im_err)
+        else:
+            # Sparse path: fast for low bad-pixel fractions.
+            # Visits only bad-pixel locations; O(n_bad) nanmedian calls instead
+            # of O(n_total).
+            # im_data axes: (n_frames, [extra...], H, W)
+            # im_err  axes: (n_frames, n_err, [extra...], H, W)
+            half_k = kernelsize // 2
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                for idx in np.argwhere(im_dq_bool):
+                    row, col = int(idx[-2]), int(idx[-1])
+                    r0 = max(0, row - half_k)
+                    r1 = min(im_data.shape[-2], row + half_k + 1)
+                    c0 = max(0, col - half_k)
+                    c1 = min(im_data.shape[-1], col + half_k + 1)
+
+                    frame_idx = int(idx[0])
+                    mid = tuple(int(x) for x in idx[1:-2])
+
+                    data_prefix = (frame_idx,) + mid
+                    im_replaced[data_prefix + (row, col)] = np.nanmedian(
+                        im_data[data_prefix][r0:r1, c0:c1]
+                    )
+
+                    for e in range(im_err.shape[1]):
+                        err_prefix = (frame_idx, e) + mid
+                        err_replaced[err_prefix + (row, col)] = np.nanmedian(
+                            im_err[err_prefix][r0:r1, c0:c1]
+                        )
+
     history_msg = f"Interpolated over {bp_count} bad pixels with median filter size {kernelsize}."
     dataset.update_after_processing_step(history_msg,
-                                         new_all_data=im_replaced, 
+                                         new_all_data=im_replaced,
                                          new_all_err=err_replaced)
 
     return dataset
@@ -192,25 +246,47 @@ def find_star(input_dataset,
               thetaOffsetGuess=0,
               satellite_spot_parameters=None,
               drop_satspots_frames=True,
+              subtract_no_offset_frames=True,
               pri_split_keywords = None,
               ext_split_keywords = None):
     """
-    Determines the star position within a coronagraphic dataset by analyzing frames that 
-    contain satellite spots (indicated by ``SATSPOTS=True`` in the image header). The 
-    function computes the median of all science frames (``SATSPOTS=False``) and the median 
-    of all satellite spot frames (``SATSPOTS=True``), then estimates the star location 
-    based on these median images and the initial guess provided.
+    Determines the star position within a coronagraphic dataset by analyzing frames that
+    contain satellite spots (indicated by ``SATSPOTS=1`` in the image header). The
+    function computes the median of all science frames (``SATSPOTS=0``) and the median
+    of the DM-offset satellite spot frames (``SATSPOTS=1``), then estimates the star
+    location based on these median images and the initial guess provided.
 
-    The star's (x, y) location is stored in each frame's extension header under 
+    Unocculted-star observations, identified by ``FPAMNAME`` values starting with ``OPEN``
+    or ``ND``, skip satellite-spot analysis. Their ``STARLOCX`` and ``STARLOCY`` values
+    are left unchanged and are not populated if missing.
+
+    When ``subtract_no_offset_frames=True`` (default), satellite spot data is expected in
+    three sequential equal-sized groups, all tagged ``SATSPOTS=1`` and ordered by their
+    ``SCTSRT`` header timestamp (filename order is used as a fallback):
+
+        1. No-offset frames (first third): DM has no probe offset; no satellite spots,
+           only speckles/PSF.
+        2. Positive-offset frames (middle third): DM at +1.0 probe offset; spots present.
+        3. Negative-offset frames (last third): DM at -1.0 probe offset; spots present.
+
+    The median of the no-offset frames is passed as ``img_ref`` to
+    ``star_center_from_satellite_spots``, which uses it to suppress static speckles and
+    astrophysical sources when estimating the star center.
+
+    When ``subtract_no_offset_frames=False``, all ``SATSPOTS=1`` frames are treated as
+    offset (spot-bearing) frames and ``img_ref`` is set to zeros (no background
+    subtraction). No three-group structure is assumed or required.
+
+    The star's (x, y) location is stored in each frame's extension header under
     ``STARLOCX`` and ``STARLOCY``.
 
-    In case of polarimetric data, the star location is estimated on the first slice and 
-    the second slice is aligned on it. POL 0 and POL 45 are processed independantly 
+    In case of polarimetric data, the star location is estimated on the first slice and
+    the second slice is aligned on it. POL 0 and POL 45 are processed independantly
 
-    You can replace many of the default settings for by adjusting the satellite_spot_parameters 
-    dictionary. You only need to replace the parameters of interest and the rest will stay as defaults. 
+    You can replace many of the default settings for by adjusting the satellite_spot_parameters
+    dictionary. You only need to replace the parameters of interest and the rest will stay as defaults.
 
-    satellite_spot_parameters of the form: 
+    satellite_spot_parameters of the form:
          offset : dict
                 Parameters for estimating the offset of the star center:
 
@@ -253,29 +329,39 @@ def find_star(input_dataset,
                 nIter : int
                     Number of iterations refining the radial separation.
 
-    
+
 
     Args:
         input_dataset (corgidrp.data.Dataset):
-            A dataset of L3-level frames. Frames should be labeled in their primary 
-            headers with ``SATSPOTS=False`` (science frames) or ``SATSPOTS=True`` 
-            (satellite spot frames).
+            A dataset of L3-level frames. Frames should be labeled in their primary
+            headers with ``SATSPOTS=0`` (science frames) or ``SATSPOTS=1``
+            (satellite spot frames). When ``subtract_no_offset_frames=True``, the total
+            number of ``SATSPOTS=1`` frames must be divisible by 3, reflecting the
+            no-offset / positive-offset / negative-offset acquisition groups.
         star_coordinate_guess (tuple of float or None, optional):
             Initial guess for the star's (x, y) location as absolute coordinates.
             If ``None``, defaults to the center of the median satellite spot image.
             Defaults to None.
         thetaOffsetGuess (float, optional):
-            Initial guess for any angular rotation of the star center 
+            Initial guess for any angular rotation of the star center
             (in degrees, for example). Defaults to 0.
         satellite_spot_parameters (dict, optional):
             Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
             can contain the following keys and structure. Only provided parameters will be changed,
             otherwise defaults for the mode will be used:
-            If None, default parameters corresponding to the specified observing_mode will be used.     
+            If None, default parameters corresponding to the specified observing_mode will be used.
         drop_satspots_frames (bool, optional):
-            If True, frames with satellite spots (``SATSPOTS=True``) will be removed from 
+            If True, frames with satellite spots (``SATSPOTS=1``) will be removed from
             the returned dataset. Defaults to True.
-        pri_split_keywords (list of str, optional): 
+        subtract_no_offset_frames (bool, optional):
+            If True, the ``SATSPOTS=1`` frames are assumed to follow the three-group
+            acquisition structure (no-offset / +offset / -offset). The median of the
+            no-offset frames is passed as ``img_ref`` to
+            ``star_center_from_satellite_spots`` so that it can suppress static speckles
+            and astrophysical sources internally. If False, all ``SATSPOTS=1`` frames are
+            used as the offset median and ``img_ref`` is set to zeros; no three-group
+            structure is assumed. Defaults to True.
+        pri_split_keywords (list of str, optional):
             List of primary header keywords to use for splitting the dataset into subsets.
             If None, defaults to ['VISITID']. Defaults to None.
         ext_split_keywords (list of str, optional):
@@ -286,23 +372,24 @@ def find_star(input_dataset,
 
     Returns:
         corgidrp.data.Dataset:
-            The original dataset, augmented with the star's (x, y) location stored in 
-            the extension header (``ext_hdr``) of each frame under the keys 
+            The original dataset, augmented with the star's (x, y) location stored in
+            the extension header (``ext_hdr``) of each frame under the keys
             ``STARLOCX`` and ``STARLOCY``.
 
     Raises:
         AssertionError:
-            If any frames have an invalid ``SATSPOTS`` keyword (not 0 or 1), or if 
-            the frames do not all share the same observing mode (as determined by 
+            If any frames have an invalid ``SATSPOTS`` keyword (not 0 or 1), or if
+            the frames do not all share the same observing mode (as determined by
             the ``FSMPRFL`` keyword).
+        ValueError:
+            If ``subtract_no_offset_frames=True`` and the number of ``SATSPOTS=1``
+            frames is not divisible by 3.
 
     Notes:
-        • This function merges the science frames (for reference) and the satellite 
-          spot frames (for analysis) by taking a median image of each set.
-        • The star center is computed using the median images and the 
+        • This function merges the science frames (for reference) and the DM-offset
+          satellite spot frames (for analysis) by taking a median image of each set.
+        • The star center is computed using the median images and the
           ``star_center.star_center_from_satellite_spots`` routine.
-        • Future enhancements may include separate handling of positive vs. negative 
-          satellite spot frames once the relevant metadata keywords are defined.
         • This routine can fail, if the guess position is off by more than a few pixels.
           More than 2 pixels on any axis leads almost systematically to failure
           A significantly wrong guess of the angle offset can also lead to failure.
@@ -316,7 +403,7 @@ def find_star(input_dataset,
 
     if pri_split_keywords is None:
         pri_split_keywords = ['VISITID']
-    
+
     if ext_split_keywords is None:
         ext_split_keywords = ['DPAMNAME']
 
@@ -324,15 +411,36 @@ def find_star(input_dataset,
     split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=pri_split_keywords, exthdr_keywords=ext_split_keywords)
     out_frames = []
     for val, split_dataset in  zip(unique_vals, split_datasets):
+        # skip unocculted frames with FPAMNAME='OPEN_12','OPEN_34', 'ND225', or 'ND475'
+        fpamnames = [
+            str(frame.ext_hdr.get('FPAMNAME',
+                                  frame.ext_hdr.get('FPSAMNAME', ''))).strip().upper()
+            for frame in split_dataset.frames
+        ]
+        if_unocculted_star = (
+            len(fpamnames) > 0
+            and all(fpamname.startswith(('OPEN', 'ND')) for fpamname in fpamnames)
+        )
+        if if_unocculted_star:
+            for frame in split_dataset:
+                if drop_satspots_frames and frame.ext_hdr.get("SATSPOTS", 0) == 1:
+                    # if this is a satellite-spot frame, drop it.
+                    continue
+                frame.ext_hdr['HISTORY'] = (
+                    f"find_star skipped for unocculted-star FPAMNAME={frame.ext_hdr.get('FPAMNAME', '')}."
+                )
+                out_frames.append(frame)
+            continue
+
         observing_mode = []
         sci_frames = []
         sat_spot_frames = []
         for frame in split_dataset.frames:
             satspots = frame.ext_hdr["SATSPOTS"]
-            if satspots == False:
+            if satspots == 0:
                 sci_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
-            elif satspots == True:
+            elif satspots == 1:
                 sat_spot_frames.append(frame)
                 observing_mode.append(frame.ext_hdr['FSMPRFL'])
             else:
@@ -343,16 +451,39 @@ def find_star(input_dataset,
 
         observing_mode = observing_mode[0]
 
+        if subtract_no_offset_frames:
+            # Split sat spot frames into the three acquisition groups by SCTSRT order.
+            # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
+            if len(sat_spot_frames) % 3 != 0:
+                raise ValueError(
+                    f"Expected the number of SATSPOTS=1 frames to be divisible by 3 "
+                    f"(no-offset / +offset / -offset groups), but got {len(sat_spot_frames)}."
+                )
+            if all('SCTSRT' in f.ext_hdr for f in sat_spot_frames):
+                sat_spot_frames_sorted = sorted(sat_spot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
+            else:
+                sat_spot_frames_sorted = sorted(sat_spot_frames, key=lambda f: f.filename)
+            n_per_group = len(sat_spot_frames_sorted) // 3
+            no_offset_frames = sat_spot_frames_sorted[:n_per_group]
+            offset_frames = sat_spot_frames_sorted[n_per_group:]
+        else:
+            offset_frames = sat_spot_frames
+
         sci_dataset = data.Dataset(sci_frames)
-        sat_spot_dataset = data.Dataset(sat_spot_frames)
+        offset_dataset = data.Dataset(offset_frames)
 
         tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
         # See if the satellite spot parameters are provided, if not used defaults
         if satellite_spot_parameters is not None:
             tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
-        # Compute median images
-        img_ref = np.nanmedian(sci_dataset.all_data, axis=0)
-        img_sat_spot = np.nanmedian(sat_spot_dataset.all_data, axis=0)
+        # Compute median images. When subtract_no_offset_frames is True, use the
+        # no-offset median as img_ref so star_center_from_satellite_spots handles
+        # the background subtraction internally; otherwise use the science median.
+        img_sat_spot = np.nanmedian(offset_dataset.all_data, axis=0)
+        if subtract_no_offset_frames:
+            img_ref = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
+        else:
+            img_ref = np.zeros_like(img_sat_spot)
 
         # if polarimetry
         if 'POL0' in val  or 'POL45' in val: 
@@ -377,7 +508,7 @@ def find_star(input_dataset,
             #align second slice on first slice and drop satellite spot images if necessary
             shift_value = np.flip(star_xy_list[0]-star_xy_list[1])
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
                     aligned_slice = shift(frame.data[1], shift_value)
                     frame.data[1] = aligned_slice
                     frame.ext_hdr['STARLOCX'] =star_xy_list[0][0]
@@ -406,7 +537,7 @@ def find_star(input_dataset,
                 processed_dataset = sci_dataset
 
             for frame in split_dataset:
-                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == False:
+                if not drop_satspots_frames or frame.ext_hdr["SATSPOTS"] == 0:
                     frame.ext_hdr['STARLOCX'] =star_xy[0]
                     frame.ext_hdr['STARLOCY'] =star_xy[1]
                     frame.ext_hdr['HISTORY'] = (
@@ -885,6 +1016,16 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
         sci_hd['CD2_2'] = astr_hdr.wcs.cd[1, 1]
         processed_data.ext_hdr = sci_hd
 
+        #update CPIX/STARLOC
+        if sci_hd['CRPIX1'] != xcen or sci_hd['CRPIX2'] != ycen:
+            crpix1_rot, crpix2_rot = corgidrp.spec.rotate_points((sci_hd['CRPIX1'], sci_hd['CRPIX2']), np.deg2rad(rotation_angle), (xcen, ycen))
+            sci_hd['CRPIX1'] = crpix1_rot
+            sci_hd['CRPIX2'] = crpix2_rot
+        if 'STARLOCX' in sci_hd and 'STARLOCY' in sci_hd:
+            starlocx_rot, starlocy_rot = corgidrp.spec.rotate_points((sci_hd['STARLOCX'], sci_hd['STARLOCY']), np.deg2rad(rotation_angle), (xcen, ycen))
+            sci_hd['STARLOCX'] = starlocx_rot
+            sci_hd['STARLOCY'] = starlocy_rot
+
         #############
         ## HDU ERR ##
         err_data = processed_data.err
@@ -908,7 +1049,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     return processed_dataset
 
 
-def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
+def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
     """ 
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -918,6 +1059,12 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         spec_filter_offset (corgidrp.data.SpecFilterOffset): instance of SpecFilterOffset calibration class
         template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
                                                   path is taken
+        subtract_no_offset_frames (bool, optional): If True, the ''SATSPOTS=1'' frames are assumed to follow the three-group acquisition structure 
+        (no-offset / +offset / -offset). The no-offset median is subtracted from the offset median before star-center estimation to suppress static speckles and 
+        astrophysical sources. If False, all ''SATSPOTS=1'' frames are used directly as the offset (spot-bearing) median with no background subtraction and no 
+        three-group structure assumed. Defaults to True.
+        additional_frame_sep_prikeys (list of str, optional): Additional primary header keywords (apart from VISITID) used to separate frames before zeropoint calculation. Default is None.
+        additional_frame_sep_extkeys (list of str, optional): Extension header keywords used to separate frames before zeropoint calculation. Default is None.
         xcent_guess (float): initial x guess for the centroid fit for all frames
         ycent_guess (float): initial y guess for the centroid fit for all frames
         bb_nb_dx (float): horizontal image offset between the narrowband and broadband filters, in EXCAM pixels. 
@@ -934,6 +1081,9 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     dpamname = dataset.frames[0].ext_hdr["DPAMNAME"]
     if not dpamname.startswith("PRISM"):
         raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
+    if dataset.frames[0].ext_hdr["FPAMNAME"] == 'OPEN_34':
+        warnings.warn("The dataset has FPAMNAME = OPEN_34, identicating that this is a non-coronagraphic spectroscopy observation, setting subtract_no_offset_frames = False")
+        subtract_no_offset_frames = False
 
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
@@ -958,41 +1108,94 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     else:
         raise AttributeError("No narrowband frames found in input dataset")
     
-    if xcent_guess is not None and ycent_guess is not None:
-        n = len(sat_dataset)
-        initial_cent = {"xcent": np.repeat(xcent_guess, n),
-                        "ycent": np.repeat(ycent_guess, n)}
-    else:
-        initial_cent = None
-    spot_centroids = compute_psf_centroid(dataset = sat_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
-    
-    nb_filter = sat_dataset[0].ext_hdr["CFAMNAME"]
-    bb_filter = nb_filter[0]
-    cen_wave, _, _, _ = read_cent_wave(nb_filter)
-    xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
-    xoff_bb, yoff_bb = spec_filter_offset.get_offsets(bb_filter)
-    # Correct the centroid for the filter-to-filter image offset, so that
-    # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
-    if bb_nb_dx is not None and bb_nb_dy is not None:
-        x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
-        y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
-    else:
-        x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
-        y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
-    x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
-    y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
-    if return_all or with_science == False:
-        sci_dataset = dataset
+    # Default is split satspot/science dataset according to VISITID
+    pri_keys = ["VISITID"]
+    ext_keys = additional_frame_sep_extkeys
+    if additional_frame_sep_prikeys is not None:
+        pri_keys = ["VISITID"] + additional_frame_sep_prikeys
+    satspot_dataset, keywords_sat = sat_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
+    if with_science:
+        science_dataset, keywords_sci = sci_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
 
-    for frame in sci_dataset:
-        frame.ext_hdr["WAVLEN0"] = cen_wave
-        frame.ext_hdr["WV0_X"] = x0
-        frame.ext_hdr["WV0_XERR"] = x0err
-        frame.ext_hdr["WV0_Y"] = y0
-        frame.ext_hdr["WV0_YERR"] = y0err
-        frame.ext_hdr["WV0_DIMX"] = sat_dataset[0].ext_hdr['NAXIS1']
-        frame.ext_hdr["WV0_DIMY"] = sat_dataset[0].ext_hdr['NAXIS2']
-                              
+    all_science_frames = []
+
+    for matched_index, keyword in enumerate(keywords_sat):
+
+        if subtract_no_offset_frames:    
+            satspot_subset = satspot_dataset[int(matched_index)]
+            satspot_frames = []
+            for frame in satspot_subset:
+                satspot_frames.append(frame)
+            # Split sat spot frames into the three acquisition groups by SCTSRT order.
+            # Data collection order: N no-offset frames, N +offset frames, N -offset frames.
+            if len(satspot_frames) % 3 != 0:
+                raise ValueError(f"Expected the number of refstar SATSPOTS=1 frames to be divisible by 3 "
+                    f"(no-offset / +offset / -offset groups), but got {len(satspot_frames)}.")
+            if all('SCTSRT' in f.ext_hdr for f in satspot_frames):
+                satspot_frames_sorted = sorted(satspot_frames, key=lambda f: f.ext_hdr['SCTSRT'])
+            else:
+                satspot_frames_sorted = sorted(satspot_frames, key=lambda f: f.filename)
+            n_per_group = len(satspot_frames_sorted) // 3
+            no_offset_frames = satspot_frames_sorted[:n_per_group]
+            offset_frames = satspot_frames_sorted[n_per_group:]
+ 
+            img_no_offset = np.nanmedian(data.Dataset(no_offset_frames).all_data, axis=0)
+            for frame in data.Dataset(offset_frames):
+                frame.data = frame.data - img_no_offset
+
+            offset_dataset = data.Dataset(offset_frames)
+
+        else:
+            satspot_subset = satspot_dataset[int(matched_index)]
+            offset_dataset = satspot_subset
+
+        if xcent_guess is not None and ycent_guess is not None:
+            n = len(offset_dataset)
+            initial_cent = {"xcent": np.repeat(xcent_guess, n),
+                            "ycent": np.repeat(ycent_guess, n)}
+        else:
+            initial_cent = None
+        spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
+    
+        nb_filter = offset_dataset[0].ext_hdr["CFAMNAME"]
+        bb_filter = nb_filter[0]
+        cen_wave, _, _, _ = read_cent_wave(nb_filter)
+        xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
+        xoff_bb, yoff_bb = spec_filter_offset.get_offsets(bb_filter)
+        # Correct the centroid for the filter-to-filter image offset, so that
+        # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
+        if bb_nb_dx is not None and bb_nb_dy is not None:
+            x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
+            y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
+        else:
+            x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
+            y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
+        x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
+        y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+
+        if return_all or with_science == False:
+            science_subset = offset_dataset
+        
+        if with_science:
+            matched_index_sci = [i for i, key in enumerate(keywords_sci) if key == keyword]
+            science_subset = science_dataset[int(matched_index_sci[0])]
+        
+
+        science_frames = []
+        for frame in science_subset:
+            frame.ext_hdr["WAVLEN0"] = cen_wave
+            frame.ext_hdr["WV0_X"] = x0
+            frame.ext_hdr["WV0_XERR"] = x0err
+            frame.ext_hdr["WV0_Y"] = y0
+            frame.ext_hdr["WV0_YERR"] = y0err
+            frame.ext_hdr["WV0_DIMX"] = offset_dataset[0].ext_hdr['NAXIS1']
+            frame.ext_hdr["WV0_DIMY"] = offset_dataset[0].ext_hdr['NAXIS2']
+            science_frames.append(frame)
+
+        all_science_frames += science_frames
+
+    sci_dataset = data.Dataset(all_science_frames)
+
     history_msg = "wavelength zeropoint values added to header"
     sci_dataset.update_after_processing_step(history_msg)
     return sci_dataset
@@ -1222,6 +1425,10 @@ def align_polarimetry_frames(input_dataset):
     starloc0 = (processed_dataset.frames[0].ext_hdr['STARLOCX'],processed_dataset.frames[0].ext_hdr['STARLOCY'])
 
     for frame in processed_dataset:
+        # skip the unocculted frames, whhch don't need to be aligned. 
+        if frame.ext_hdr['FPAMNAME'].startswith(('OPEN', 'ND')):
+            continue
+        
         starloc = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         if starloc != starloc0:
             shift_value = (starloc0[1] - starloc[1] , starloc0[0] - starloc[0])
@@ -1229,6 +1436,8 @@ def align_polarimetry_frames(input_dataset):
             frame.data[1] = shift( frame.data[1], shift_value)
             frame.ext_hdr['STARLOCX'] = starloc0[0]
             frame.ext_hdr['STARLOCY'] = starloc0[1]
+        frame.ext_hdr['CRPIX1'] = starloc0[0]
+        frame.ext_hdr['CRPIX2'] = starloc0[1]
 
     history_msgs = "Images centered on star location."
 
@@ -1955,7 +2164,7 @@ def combine_spec(input_dataset, collapse="mean", num_frames_scaling=True):
                     'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR']) 
+                    'Z2VAR', 'Z3VAR','WAVELEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR']) 
     #combine frames                       
     dataset = combine_subexposures(dataset, collapse=collapse, num_frames_scaling=num_frames_scaling, combine_other_hdus=True)
     #certain headers are added in combine_subexposures, we manually add them in

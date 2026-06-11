@@ -5,8 +5,8 @@ from astropy.io import fits
 
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
 import corgidrp.check as check
-from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords, typical_bool_keywords
-
+from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords
+import corgidrp
 
 def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     """
@@ -15,11 +15,14 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     removed.  This function takes the bad-pixels maps into account when taking
     the mean.
 
-    The two lists must be the same length, and each 2D array in each list must
-    be the same size, both within a list and across lists.
+    The first two inputs can be lists.  If the first two inputs are np.ndarray 
+    (a single frame or a stack), the function will accommodate and convert them 
+    to lists of arrays.  If the first input is a Dataset, RAM-heavy mode is assumed, 
+    and the second input is irrelevant since the DQ map for each frame of the input 
+    Dataset will be used to construct the bad-pixel maps.  
 
-    If the inputs are instead np.ndarray (a single frame or a stack),
-    the function will accommodate and convert them to lists of arrays.
+    Unless the first input is a Dataset, the first two inputs must be the same length, and each 2D array in each list must
+    be the same size, both within a list and across lists.
 
     Also Includes outputs for processing darks used for calibrating the
     master dark.
@@ -28,11 +31,12 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
         dataset_or_image_list (data.Dataset, list, or array_like): Dataset or list (or stack) of L2b data frames
     (with no bad pixels applied to them).
         bpmap_list (list or array_like): List (or stack) of bad-pixel maps
-        associated with L2b data frames. Each must be 0 (good) or 1 (bad)
-        at every pixel. If first input is a Dataset, this input is ignored.
+    associated with L2b data frames. Each must be 0 (good) or 1 (bad)
+    at every pixel. If first input is a Dataset, this input is ignored.
         err (bool):  If True, calculates the standard error over all
-        the frames.  Intended for the corgidrp.Data.Dataset.all_err
-        arrays. Defaults to False.
+    the frames.  Intended for the corgidrp.Data.Dataset.all_err
+    arrays. Defaults to False.   
+
 
     Returns:
         comb_image (array_like): Mean-combined frame from input list data.
@@ -411,7 +415,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         the effect of any DQ masking.  If False, all data is evenly weighted in
         the least squares fit.  Defaults to True.
     detector_regions (dict):
-        a dictionary of detector geometry properties.  Keys should be as found
+        A dictionary of detector geometry properties.  Keys should be as found
         in detector_areas in detector.py.
         Defaults to None, in which case detector_areas from detector.py is used.
 
@@ -905,7 +909,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     noise_maps.ext_hdr['DRPNFILE'] = int(np.round(np.sum(mean_num_good_fr)))
     l2a_data_filename = dataset[-1].filename.split('.fits')[0]
     noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
-    noise_maps.filename = re.sub('_l[0-9].', '', noise_maps.filename)
+    noise_maps.filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', noise_maps.filename)
     noise_maps.ext_hdr.set('FPN_IMM', FPN_image_mean, 'mean of the image-area fixed-pattern noise (e-). -999. if no value supplied.')
     noise_maps.ext_hdr.set('CIC_IMM', CIC_image_mean, 'mean of the image-area clock-induced charge (e-). -999. if no value supplied.')
     noise_maps.ext_hdr.set('DC_IMM', DC_image_mean, 'mean of the image-area dark current (e-/s). -999. if no value supplied.')

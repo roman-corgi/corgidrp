@@ -278,7 +278,8 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     telem_rows = slice(telem_rows_start, telem_rows_end)
     proc_dark = Process(bad_pix, eperdn, fwc_em_e, fwc_pp_e,
                  bias_offset, em_gain, exptime,
-                 nonlin_path)
+                 nonlin_path, sat_thresh=0.99, plat_thresh=0.85,
+                 cosm_filter=2) # last 3 keyword arguments match what is now in DRP
     dark_frames = []
     bp_frames = []
     filelist = []
@@ -315,7 +316,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     trad_dark_data[telem_rows] = np.nan
 
     # Use allclose for float32 save/load and small numerical differences (rtol/atol=1e-5)
-    assert np.allclose(TVAC_trad_dark, trad_dark_data, rtol=1e-5, atol=1e-5, equal_nan=True)
+    # Recent change to cosmic ray detection to cover the entire frame instead of just the image area; no equivalent 
+    # in II&T code, but the image areas should agree. 
+    assert np.allclose(TVAC_trad_dark[13:13+1024,1088:1088+1024], trad_dark_data[13:13+1024,1088:1088+1024], rtol=1e-5, atol=1e-5, equal_nan=True)
     print('e2e test for trad_dark calibration passed')
     
     # remove temporary caldb file
@@ -553,9 +556,23 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     assert trad_dark.ext_hdr['BUNIT'] == 'detected electron'
     assert trad_dark.err_hdr['BUNIT'] == 'detected electron'
     assert trad_dark.ext_hdr['IS_SYNTH'] == 0
-    test_filepath = trad_dark_data_filelist[-1].split('.fits')[0] + '_drk_cal.fits'
-    test_filename = os.path.basename(test_filepath)
-    test_filename = re.sub('_l[0-9].', '', test_filename)
+    # pull SCTSRT to get latest file tiemstamp if it's there
+    if all(fits.getheader(filepath, 1).get("SCTSRT") is not None for filepath in trad_dark_data_filelist):
+        latest_input_file = max(
+            enumerate(trad_dark_data_filelist),
+            key=lambda item: (
+                str(fits.getheader(item[1], 1)["SCTSRT"]),
+                item[0],
+            ),
+        )[1]
+    # if not, pull timestamp from filename
+    else:
+        latest_input_file = max(
+            enumerate(trad_dark_data_filelist),
+            key=lambda item: (os.path.basename(item[1]).split('_')[2] if len(os.path.basename(item[1]).split('_')) > 2 else '', item[0]),
+        )[1]
+    test_filename = os.path.basename(latest_input_file).split('.fits')[0] + '_drk_cal.fits'
+    test_filename = re.sub(r'_(?:l[0-9][ab_]|im\d+)', '', test_filename)
     assert(trad_dark.filename == test_filename)
     print('e2e test for trad_dark_im calibration passed')
 
@@ -585,5 +602,5 @@ if __name__ == "__main__":
     # args = ap.parse_args(args_here)
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_trad_dark(e2edata_dir, outputdir)
     test_trad_dark_im(e2edata_dir, outputdir)
+    test_trad_dark(e2edata_dir, outputdir)

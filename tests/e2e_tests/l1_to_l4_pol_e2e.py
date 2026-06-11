@@ -3,11 +3,13 @@
 #the need for l3_to_l4_pol_e2e.py. 
 
 import argparse
+import copy
 import os
 import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime, timedelta
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -24,6 +26,166 @@ from corgidrp.check import (check_filename_convention,
 import warnings
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
+
+POL_VISITID_OFFSETS = {'POL0': 0, 'POL45': 100}
+UNOCCULTED_VISITID_OFFSET = 1000
+
+
+def visitid_for_pol_mode(base_visitid, dpamname, visit_offset=0):
+    """Return a VISITID shifted by polarimetry analyzer state and visit type.
+
+    Args:
+        base_visitid (str or int): Original FITS primary-header VISITID.
+        dpamname (str): Polarimetry analyzer state, e.g. ``POL0`` or ``POL45``.
+        visit_offset (int, optional): Additional offset for a different
+            observing visit type, such as unocculted/off-axis frames. Defaults
+            to 0.
+
+    Returns:
+        str: Updated VISITID with the original string width preserved.
+    """
+    base_visitid = str(base_visitid).strip()
+    dpamname = str(dpamname).strip()
+    offset = visit_offset + POL_VISITID_OFFSETS.get(dpamname, 0)
+    if offset == 0:
+        return base_visitid
+
+    try:
+        return f"{int(base_visitid) + offset:0{len(base_visitid)}d}"
+    except ValueError as exc:
+        raise ValueError(f"Cannot offset VISITID '{base_visitid}' for {dpamname}") from exc
+
+
+def apply_pol_visitids_to_l1_files(filelist, source_filelist=None, visit_offset=0, update_files=True):
+    """Build/apply L1 VISITIDs split by target, pol mode, and observing mode.
+
+    Args:
+        filelist (list): L1 FITS files whose primary VISITID headers should be
+            updated in place, or files used to build the returned VISITID map
+            when ``update_files`` is False.
+        source_filelist (list, optional): L1 FITS files used to derive the
+            target/POL0 base VISITID map. Defaults to filelist.
+        visit_offset (int, optional): Additional offset applied to all derived
+            VISITIDs for a separate observing mode, such as unocculted/off-axis
+            frames. Defaults to 0.
+        update_files (bool, optional): Whether to update ``filelist`` headers in
+            place. If False, only return the target/DPAMNAME VISITID map.
+            Defaults to True.
+
+    Returns:
+        list or dict: The input filelist after updating headers, or the
+        target/DPAMNAME -> VISITID map when ``update_files`` is False.
+    """
+    if source_filelist is None:
+        source_filelist = filelist
+
+    target_entries = {}
+    for filepath in source_filelist:
+        with fits.open(filepath) as hdul:
+            target = hdul[0].header.get('TARGET', '')
+            dpamname = hdul[1].header.get('DPAMNAME', '')
+            visitid = str(hdul[0].header.get('VISITID', '')).strip()
+        visitids_by_dpam = target_entries.setdefault(target, {})
+        visitids_by_dpam[dpamname] = visitid
+
+    visitids_by_target = {}
+    # For each target, use its POL0 VISITID as the base visit(same as original VISITID from the header).VISITID of other
+    # polarimetry modes are assigned by applying their mode-specific offset to that target's base VISITID.
+    # There is a addition offset to  VISITID for unocculated frames.
+    for target, visitids_by_dpam in target_entries.items():
+        if 'POL0' in visitids_by_dpam:
+            base_visitid = visitids_by_dpam['POL0']
+        else:
+            base_visitid = min(visitids_by_dpam.values())
+        visitids_by_target[target] = {
+            dpamname: visitid_for_pol_mode(
+                base_visitid,
+                dpamname,
+                visit_offset=visit_offset,
+            )
+            for dpamname in visitids_by_dpam
+        }
+
+    if not update_files:
+        return visitids_by_target
+
+    for filepath in filelist:
+        with fits.open(filepath, mode='update') as hdul:
+            target = hdul[0].header.get('TARGET', '')
+            dpamname = hdul[1].header.get('DPAMNAME', '')
+            visitid = visitids_by_target[target][dpamname]
+            hdul[0].header['VISITID'] = visitid
+            hdul.flush()
+    return filelist
+
+
+def fake_satspot_frame_for_visit(visitid, output_dir, filepath=None,
+                                 template_img=None, science_img=None,
+                                 fake_time=None, exptime_ratio=None):
+    """Create or copy one L1 satellite-spot frame for a requested visit split.
+
+    Args:
+        visitid (str): VISITID to write into the saved frame.
+        output_dir (str): Directory where the FITS file should be saved.
+        filepath (str, optional): Existing L1 satellite-spot FITS file to copy.
+        template_img (corgidrp.data.Image): Existing L1 satellite-spot frame used
+            for headers and metadata when generating a fake no-offset frame.
+        science_img (corgidrp.data.Image, optional): L1 science frame used as
+            fake no-offset data.
+        fake_time (datetime.datetime, optional): Timestamp used for ``SCTSRT`` and
+            filename ordering ahead of the real +offset/-offset frames.
+        exptime_ratio (float, optional): Scale factor matching the template
+            exposure time to the science exposure time.
+
+    Returns:
+        str: Path to the copied or generated L1 satellite-spot file.
+    """
+    if filepath is not None:
+        filename_parts = os.path.basename(filepath).split('_', 2)
+        if len(filename_parts) == 3 and filename_parts[0] == 'cgi':
+            filename = f"cgi_{visitid}_{filename_parts[2]}"
+        else:
+            filename = os.path.basename(filepath)
+
+        with fits.open(filepath) as hdul:
+            hdul_copy = fits.HDUList([hdu.copy() for hdu in hdul])
+        hdul_copy[0].header['VISITID'] = visitid
+        hdul_copy[0].header['FILENAME'] = filename
+        output_path = os.path.join(output_dir, filename)
+        hdul_copy.writeto(output_path, overwrite=True)
+        hdul_copy.close()
+
+        return output_path
+
+    required_fake_inputs = {
+        'template_img': template_img,
+        'science_img': science_img,
+        'fake_time': fake_time,
+        'exptime_ratio': exptime_ratio,
+    }
+    missing_inputs = [
+        name for name, value in required_fake_inputs.items() if value is None
+    ]
+    if missing_inputs:
+        raise ValueError(
+            "Missing required inputs for fake no-offset satspot frame: "
+            + ", ".join(missing_inputs)
+        )
+
+    fake_frame = copy.deepcopy(template_img)
+    fake_frame.data[:] = science_img.data[:] * exptime_ratio
+    if fake_frame.err is not None:
+        fake_frame.err[:] = science_img.err[:] * exptime_ratio
+    fake_frame.pri_hdr['VISITID'] = visitid
+    fake_frame.ext_hdr['SATSPOTS'] = 1
+    fake_frame.ext_hdr['SCTSRT'] = fake_time.isoformat()
+    time_str = fake_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
+    filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+    fake_frame.pri_hdr['FILENAME'] = filename
+    fake_frame.save(filedir=output_dir, filename=filename)
+
+    return fake_frame.filepath
+
 
 def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     """Run the complete L1 to L3 polarimetry data end-to-end test.
@@ -350,13 +512,13 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         os.makedirs(input_data_dir)
 
     # Update headers
-    # TO DO: pol sims should have the correct VISTYPE, currently undefined
     input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
+    input_data_filelist = apply_pol_visitids_to_l1_files(input_data_filelist)
 
     for f in input_data_filelist:
-        hdulist = fits.open(f)
-        hdulist[1].header['FSMPRFL'] = 'NFOV'
-        hdulist.writeto(f, overwrite=True)
+        with fits.open(f, mode='update') as hdulist:
+            hdulist[1].header['FSMPRFL'] = 'NFOV'
+            hdulist.flush()
 
     # Validate all input images
     input_dataset = data.Dataset(input_data_filelist)
@@ -420,31 +582,82 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info('')
 
     ##############################################
-    # Step 1/2 b: Do the stap spot data. 
-    logger.info('Running L1 to L2a on the polarimetry satspots...')
-    input_satspots_filenames = os.listdir(os.path.join(l1_datadir,"sat_spots"))
-    input_files = np.array(sorted([os.path.join(l1_datadir, "sat_spots", f) for f in input_satspots_filenames if f.endswith('l1_.fits')]))
-    logger.info(f'Found {len(input_files)} sat spot files in input directory: {l1_datadir}/sat_spots')
-    sat_spot_dir = os.path.join(l4_outputdir,"sat_spots")
+    # Step 1/2 b: Process satellite spot data L1 -> L3
+    logger.info('Running satellite spot data through L1 -> L2a -> L2b -> L3...')
+    satspot_l1_dir = os.path.join(l1_datadir, "sat_spots")
+    sat_spot_dir = os.path.join(l4_outputdir, "sat_spots")
+    os.makedirs(sat_spot_dir, exist_ok=True)
 
-    #Split the input data by targets
+    satspot_l1_files = np.array(sorted([
+        os.path.join(satspot_l1_dir, f)
+        for f in os.listdir(satspot_l1_dir) if f.endswith('l1_.fits')
+    ]))
+    satspot_l1_files = np.array(apply_pol_visitids_to_l1_files(
+        satspot_l1_files,
+        source_filelist=input_data_filelist,
+    ))
+    logger.info(f'Found {len(satspot_l1_files)} L1 sat spot files in {satspot_l1_dir}')
+
+    # Existing satspot data only has +/- offset frames, but find_star expects
+    # three equal groups: no-offset, +offset, -offset.  We inject fake no-offset
+    # frames (science background data, no DM probe) at L1 so they flow through
+    # the full pipeline and sort first (year-2000 timestamps) into the no-offset
+    # group at L3.  Frames are grouped by (TARGET, DPAMNAME) — the same split
+    # find_star uses — and one real frame is dropped when the count is odd to
+    # keep each group size even so that n_fake = K/2 gives a divisible-by-3 total.
+    science_img = data.Image(input_data_filelist[0])
+    science_exptime = science_img.ext_hdr['EXPTIME']
+
+    satspot_targets = np.array([fits.getheader(f)['TARGET'] for f in satspot_l1_files])
+    fake_l1_paths = []
+    accepted_real_files = []
+    fake_base_time = datetime(2000, 1, 1, 0, 0, 0)
+
+    for target in np.unique(satspot_targets):
+        target_files = satspot_l1_files[satspot_targets == target]
+        dpamnames = np.array([fits.getheader(f, ext=1)['DPAMNAME'] for f in target_files])
+
+        for dpamname in np.unique(dpamnames):
+            group_files = target_files[dpamnames == dpamname]
+            if len(group_files) % 2 != 0:
+                group_files = group_files[:-1]  # drop one frame to make count even
+
+            template_img = data.Image(group_files[0])
+            visitid = template_img.pri_hdr.get('VISITID', '')
+            accepted_real_files.extend(list(group_files))
+            exptime_ratio = template_img.ext_hdr['EXPTIME'] / science_exptime
+
+            # group_files contains only +offset and -offset satspot frames.
+            # Add one fake no-offset frame for each +offset/-offset pair so
+            # find_star sees three equal groups: no-offset, +offset, -offset.
+            for _ in range(len(group_files) // 2):
+                fake_l1_paths.append(fake_satspot_frame_for_visit(
+                    visitid=visitid,
+                    output_dir=sat_spot_dir,
+                    template_img=template_img,
+                    science_img=science_img,
+                    fake_time=fake_base_time,
+                    exptime_ratio=exptime_ratio,
+                ))
+                fake_base_time += timedelta(seconds=1)
+
+    # Rebuild input list: fake frames first (early timestamps sort them into the
+    # no-offset group), followed by the accepted real frames.
+    input_files = np.concatenate([np.array(fake_l1_paths), np.array(accepted_real_files)])
     input_targets = np.array([fits.getheader(f)['TARGET'] for f in input_files])
-    unique_targets = np.unique(input_targets)
-    # import IPython; IPython.embed()
-    for target in unique_targets:
-        filelist = input_files[np.where(input_targets == target)]
+
+    for target in np.unique(input_targets):
+        filelist = input_files[input_targets == target]
         walker.walk_corgidrp(list(filelist), "", sat_spot_dir)
     l2a_satspot_files = np.array([os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l2a.fits')])
-    logger.info(f'L1 to L2a complete for satspots. Generated {len(l2a_satspot_files)} L2a files.')
+    logger.info(f'L1 -> L2a complete for satspots. Generated {len(l2a_satspot_files)} L2a files.')
 
-    logger.info('Running L2a to L2b on the polarimetry satspots...')
     input_targets = np.array([fits.getheader(f)['TARGET'] for f in l2a_satspot_files])
-    unique_targets = np.unique(input_targets)
-    for target in unique_targets:
+    for target in np.unique(input_targets):
         filelist = l2a_satspot_files[input_targets == target]
         walker.walk_corgidrp(list(filelist), "", sat_spot_dir)
     l2b_satspot_files = [os.path.join(sat_spot_dir, f) for f in os.listdir(sat_spot_dir) if f.endswith('_l2b.fits')]
-    logger.info(f'L2a to L2b complete for satspots. Generated {len(l2b_satspot_files)} L2b files.')    
+    logger.info(f'L2a -> L2b complete for satspots. Generated {len(l2b_satspot_files)} L2b files.')
 
     #Don't need to split them for L3 - data can be more inhomogeneous. 
     logger.info('Running L2b to L3 on the polarimetry satspots...')
@@ -463,6 +676,12 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info(f'Found {len(input_offaxis_filenames)} off-axis files in input directory: {l1_datadir}/off_axis')
     input_files = np.array(sorted([os.path.join(l1_datadir, "off_axis", f) for f in input_offaxis_filenames if f.endswith('l1_.fits')]))
     off_axis_dir = os.path.join(l4_outputdir,"off_axis")
+    os.makedirs(off_axis_dir, exist_ok=True)
+    input_files = np.array(apply_pol_visitids_to_l1_files(
+        input_files,
+        source_filelist=input_data_filelist,
+        visit_offset=UNOCCULTED_VISITID_OFFSET,
+    ))
     
     #Split the input data by targets
     input_targets = np.array([fits.getheader(f)['TARGET'] for f in input_files])

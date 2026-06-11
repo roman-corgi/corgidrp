@@ -389,6 +389,8 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     filters = []
     for idx, frame in enumerate(dataset):
         cfam = frame.ext_hdr['CFAMNAME']
+        if cfam.endswith("F"):
+            cfam = cfam[0]
         filters.append(cfam)
         psf_data = frame.data
         if xcent is None:
@@ -401,6 +403,8 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
             found_cfam = False
             for k, temp_frame in enumerate(template_dataset):
                 cfam_temp = temp_frame.ext_hdr['CFAMNAME']
+                if cfam_temp.endswith("F"):
+                    cfam_temp = cfam_temp[0]
                 if cfam == cfam_temp:
                     temp_psf_data = temp_frame.data
                     temp_x = xcent_temp[k]
@@ -474,6 +478,8 @@ def read_cent_wave(band, filter_file = None):
     data = ascii.read(filter_file, format = 'csv', data_start = 1)
     filter_names = data.columns[0]
     band = band.upper()
+    if band.endswith("F"):
+        band = band[0]
     if band not in filter_names:
         raise ValueError("{0} is not in table band names {1}".format(band, filter_names))
     ret_list = []
@@ -594,7 +600,7 @@ def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_fil
 
     #PRISM2 not yet available
     if prism == 'PRISM2':
-        subband_list = ['2A', '2B', '2C', '2F']
+        subband_list = ['2A', '2B', '2C']
         ref_cfam = '2'
         ref_wavlen = 660.
     else:
@@ -617,9 +623,7 @@ def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_fil
     yoff = []
     for band in filters:
         band_str = band.strip()
-        if band_str == ref_cfam:
-            pass
-        elif band_str not in subband_list:
+        if band_str != ref_cfam and band_str not in subband_list:
             warnings.warn("measured band {0} is not in the sub band list {1} of the used prism".format(band_str, subband_list))
         else:
             cen_wave = read_cent_wave(band_str, filter_file = band_center_file)
@@ -629,13 +633,13 @@ def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_fil
             yoff.append(offset_sub[1] - yoff_band)
     if len(center_wavel) < 4:
         raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(center_wavel)))
-    if len(center_wavel) != len(centroid_psf.xfit) -1:
+    if len(center_wavel) != len(centroid_psf.xfit):
         raise ValueError ("number of measured sub-bands {0} does not fit to the measured number of centroids {1}".format(len(center_wavel), len(centroid_psf.xfit)))
     center_wavel = np.array(center_wavel)
-    xfit = centroid_psf.xfit[:-1] - np.array(xoff)
-    yfit = centroid_psf.yfit[:-1] - np.array(yoff)
-    xfit_err = centroid_psf.xfit_err[:-1]
-    yfit_err = centroid_psf.yfit_err[:-1]
+    xfit = centroid_psf.xfit[:] - np.array(xoff)
+    yfit = centroid_psf.yfit[:] - np.array(yoff)
+    xfit_err = centroid_psf.xfit_err[:]
+    yfit_err = centroid_psf.yfit_err[:]
     (clocking_angle,
      clocking_angle_uncertainty) = estimate_dispersion_clocking_angle(xfit, yfit, weights = 1. / yfit_err)
 

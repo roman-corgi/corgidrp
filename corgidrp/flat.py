@@ -394,7 +394,6 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
     		data.FlatField (corgidrp.data.FlatField): a master flat corresponding to Pol0 or Pol 45 for flat calibration using on sky images of planet in band specified
     		
 	"""
-    
     if im_size is None:
         # assume square images
         im_size = dataset[0].data.shape[0]
@@ -443,8 +442,8 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
 
         if sources is not None:
 
-            x_centroids = sources['xcentroid']*8
-            y_centroids = sources['ycentroid']*8
+            x_centroids = sources['x_centroid']*8
+            y_centroids = sources['y_centroid']*8
 
             pol1_x = int(x_centroids[0])
             pol1_y = int(y_centroids[0])

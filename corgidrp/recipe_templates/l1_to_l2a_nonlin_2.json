@@ -46,7 +46,24 @@
                 "KGain" : "AUTOMATIC, OPTIONAL"
             },
             "keywords" : {
-                "dataset_copy" : false
+                "mode" : "full",
+                "dataset_copy" : false,
+                "cosm_filter" : 1
+            }
+        },
+        {
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            },
+            "keywords" : {
+				"auto_decide" : true
+			}
+        },
+        {
+            "name": "update_to_intermediate",
+            "keywords": {
+                "intermediate_level": 2
             }
         },
         {

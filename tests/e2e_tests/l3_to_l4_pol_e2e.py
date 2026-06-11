@@ -24,6 +24,98 @@ from corgidrp.check import (check_filename_convention, check_dimensions,
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+POL_VISITID_OFFSETS = {'POL0': 0, 'POL45': 100}
+UNOCCULTED_VISITID_OFFSET = 1000
+
+
+def visitid_for_pol_mode(base_visitid, dpamname, visit_offset=0):
+    """Return a VISITID shifted by polarimetry analyzer state and visit type.
+
+    Args:
+        base_visitid (str or int): Original FITS primary-header VISITID.
+        dpamname (str): Polarimetry analyzer state, e.g. ``POL0`` or ``POL45``.
+        visit_offset (int): Additional offset for a different observing visit
+            type, such as unocculted/ND frames.
+
+    Returns:
+        str: Updated VISITID with the original string width preserved.
+    """
+    base_visitid = str(base_visitid).strip()
+    dpamname = str(dpamname).strip()
+    offset = visit_offset + POL_VISITID_OFFSETS.get(dpamname, 0)
+    if offset == 0:
+        return base_visitid
+
+    try:
+        return f"{int(base_visitid) + offset:0{len(base_visitid)}d}"
+    except ValueError as exc:
+        raise ValueError(f"Cannot offset VISITID '{base_visitid}' for {dpamname}") from exc
+
+
+def fake_satspot_frame_for_visit(targetname, wollaston, rotation_angle, astrom_cal,
+                                 image_size, wide_psf_sigma, star_amplitude,
+                                 satspot_amplitude, sctsrt, visit_offset=0):
+    """Create one L3 satellite-spot frame assigned to a requested visit split.
+
+    Args:
+        targetname (str): Target name to write into the primary header.
+        wollaston (str): Polarimetry analyzer state to write as ``DPAMNAME``.
+        rotation_angle (float): Telescope roll angle to write as ``PA_APER``.
+        astrom_cal (corgidrp.data.AstrometricCalibration): Astrometric
+            calibration used to compute ``NORTHANG``.
+        image_size (int): Height and width of each split polarimetric image.
+        wide_psf_sigma (float): Gaussian width for the central star model.
+        star_amplitude (float): Amplitude of the central star model.
+        satspot_amplitude (float): Amplitude multiplier for the satellite spots.
+        sctsrt (str): Timestamp used to order no-offset/+offset/-offset groups.
+        visit_offset (int): Additional offset for assigning the frame to a
+            different visit type, such as unocculted/ND frames.
+
+    Returns:
+        corgidrp.data.Image: L3 satellite-spot frame with updated headers.
+    """
+    image_wp_nfov_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(
+        dpamname=wollaston,
+        observing_mode='NFOV',
+        left_image_value=1,
+        right_image_value=1,
+        bg_sigma=1,
+        amplitude_multiplier=satspot_amplitude,
+    )
+
+    temp_dataset = data.Dataset([image_wp_nfov_sp])
+    temp_dataset = l2b_to_l3.divide_by_exptime(temp_dataset)
+    split_dataset = l2b_to_l3.split_image_by_polarization_state(temp_dataset)
+    split_dataset = l2b_to_l3.update_to_l3(split_dataset)
+    split_frame = split_dataset.frames[0]
+
+    split_frame.data[0] += mocks.gaussian_array(
+        amp=star_amplitude,
+        array_shape=[image_size, image_size],
+        sigma=wide_psf_sigma,
+    ) + np.random.normal(loc=0.0, scale=1, size=(image_size, image_size))
+    split_frame.data[1] += mocks.gaussian_array(
+        amp=star_amplitude,
+        array_shape=[image_size, image_size],
+        sigma=wide_psf_sigma,
+    ) + np.random.normal(loc=0.0, scale=1, size=(image_size, image_size))
+
+    split_frame.pri_hdr['TARGET'] = targetname
+    split_frame.ext_hdr['DPAMNAME'] = wollaston
+    split_frame.pri_hdr['VISITID'] = visitid_for_pol_mode(
+        split_frame.pri_hdr['VISITID'],
+        wollaston,
+        visit_offset=visit_offset,
+    )
+    split_frame.pri_hdr['PA_APER'] = rotation_angle
+    split_frame.ext_hdr['NORTHANG'] = astrom_cal.northangle-(rotation_angle-astrom_cal.pri_hdr['PA_APER'])
+    split_frame.ext_hdr['SATSPOTS'] = True
+    split_frame.ext_hdr['SCTSRT'] = sctsrt
+    split_frame.ext_hdr['FSMPRFL'] = 'NFOV'
+
+    return split_frame
+
+
 @pytest.mark.e2e
 def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     # create output dir first
@@ -253,7 +345,8 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
     number_nd_images = 3
     number_of_science_images = 4
-    number_of_sat_spot_images = 2
+    number_of_sat_spot_images = 3  # must be divisible by 3: no-offset, +offset, -offset groups
+    satspot_sctsrt = ['2024-01-01T00:00:01', '2024-01-01T00:00:02', '2024-01-01T00:00:03']
 
     wide_psf_sigma = 10
 
@@ -299,6 +392,9 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                     #Update Headers
                     stellar_sys_wp_img.pri_hdr['TARGET'] = targetname
                     stellar_sys_wp_img.ext_hdr['DPAMNAME'] = wollaston
+                    stellar_sys_wp_img.pri_hdr['VISITID'] = visitid_for_pol_mode(
+                        stellar_sys_wp_img.pri_hdr['VISITID'], wollaston
+                    )
                     stellar_sys_wp_img.pri_hdr['PA_APER'] = rotation_angle
                     stellar_sys_wp_img.ext_hdr['NORTHANG'] = astrom_cal.northangle-(rotation_angle-astrom_cal.pri_hdr['PA_APER'])
                     stellar_sys_wp_img.ext_hdr['FSMPRFL'] = 'NFOV'
@@ -312,43 +408,24 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
 
                     input_image_list.append(stellar_sys_wp_img)
 
-            ## Make the normal science data with sat spots
+            ## Make the satellite spot data in three groups:
+            ## i=0: no-offset (amplitude=0), i=1: +offset, i=2: -offset.
+            ## SCTSRT is set in ascending order so find_star can recover the group ordering.
             for i in range(number_of_sat_spot_images):
+                # No-offset group has no satellite spots; offset groups have spots.
+                satspot_amplitude = 0 if i == 0 else stokes_info["amplitude"] * 1000
                 for wollaston in polarizers.keys():
-                    pol_angles = polarizers[wollaston]
-                    # find intensities at each polarizer angle for star 1
-                    stellar_sys_o_beam = (pol.lin_polarizer_mueller_matrix(pol_angles[0]) @ stellar_sys_stokes)[0]
-                    stellar_sys_e_beam = (pol.lin_polarizer_mueller_matrix(pol_angles[1]) @ stellar_sys_stokes)[0]
-
-                    
-                    #Here we'll make the simmed images the same as in the unit test test_align_frames() in test_polarimetry.py
-                    image_WP_nfov_sp = mocks.create_mock_l2b_polarimetric_image_with_satellite_spots(dpamname=wollaston,
-                    observing_mode='NFOV',
-                    left_image_value=1,
-                    right_image_value=1,
-                    bg_sigma=1,
-                    amplitude_multiplier=stokes_info["amplitude"]*1000)
-
-                    #Split the images
-                    temp_dataset = data.Dataset([image_WP_nfov_sp])
-                    temp_dataset = l2b_to_l3.divide_by_exptime(temp_dataset)
-                    split_dataset = l2b_to_l3.split_image_by_polarization_state(temp_dataset)
-                    split_dataset = l2b_to_l3.update_to_l3(split_dataset)
-
-                    split_frame = split_dataset.frames[0]
-
-                    #Add in the central star
-                    split_frame.data[0] += mocks.gaussian_array(amp=stokes_info["amplitude"],array_shape=[image_size,image_size],sigma=wide_psf_sigma) + np.random.normal(loc=0.0, scale=1, size=(image_size,image_size))
-                    split_frame.data[1] += mocks.gaussian_array(amp=stokes_info["amplitude"],array_shape=[image_size,image_size],sigma=wide_psf_sigma) + np.random.normal(loc=0.0, scale=1, size=(image_size,image_size))
-
-                    #Update Headers
-                    split_frame.pri_hdr['TARGET'] = targetname
-                    split_frame.ext_hdr['DPAMNAME'] = wollaston
-                    split_frame.pri_hdr['PA_APER'] = rotation_angle
-                    split_frame.ext_hdr['NORTHANG'] = astrom_cal.northangle-(rotation_angle-astrom_cal.pri_hdr['PA_APER'])
-                    split_frame.ext_hdr['SATSPOTS'] = True
-
-                    input_image_list.append(split_frame)
+                    input_image_list.append(fake_satspot_frame_for_visit(
+                        targetname,
+                        wollaston,
+                        rotation_angle,
+                        astrom_cal,
+                        image_size,
+                        wide_psf_sigma,
+                        stokes_info["amplitude"],
+                        satspot_amplitude,
+                        satspot_sctsrt[i],
+                    ))
 
 
     #Build the ND Datasets - For each target cycle over rotation angles and Wollastons
@@ -381,6 +458,11 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
                 #Update Headers
                 stellar_nd_wp_img.pri_hdr['TARGET'] = targetname
                 stellar_nd_wp_img.ext_hdr['DPAMNAME'] = wollaston
+                stellar_nd_wp_img.pri_hdr['VISITID'] = visitid_for_pol_mode(
+                    stellar_nd_wp_img.pri_hdr['VISITID'],
+                    wollaston,
+                    visit_offset=UNOCCULTED_VISITID_OFFSET,
+                )
                 stellar_nd_wp_img.ext_hdr['FPAMNAME'] = "ND225"
                 stellar_nd_wp_img.pri_hdr['PA_APER'] = rotation_angle
                 stellar_nd_wp_img.ext_hdr['NORTHANG'] = astrom_cal.northangle-(rotation_angle-astrom_cal.pri_hdr['PA_APER'])

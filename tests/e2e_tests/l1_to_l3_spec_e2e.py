@@ -45,14 +45,15 @@ def patch_l2b_eacq_to_cropped_center(filelist):
             h['EACQ_COL'] = (n1 - 1) / 2.0
 
 
-def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
+def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger, fix_headers=True):
     """Run the complete L1 to L3 spectroscopy data end-to-end test.
     
     Args:
-        l1_datadir (str): Path to L1 input data directory
-        l3_outputdir (str): Path to output directory
-        processed_cal_path (str): Path to calibration files directory
-        logger (logging.Logger): Logger instance for output
+        l1_datadir (str): Path to L1 input data directory.
+        l3_outputdir (str): Path to output directory.
+        processed_cal_path (str): Path to calibration files directory.
+        logger (logging.Logger): Logger instance for output.
+        fix_headers (bool, optional): Fix headers for sims generated using TVAC data, not required for corgisim generated files. Default is True.
         
     Returns:
         list: List of L3 output filenames
@@ -60,7 +61,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     
     # ================================================================================
     # (1) Setup Calibrations
-    # ================================================================================
+    # ================================================================================    
     logger.info('='*80)
     logger.info('Pre-test: Set up calibration files')
     logger.info('='*80)
@@ -261,7 +262,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     input_files = [f for f in all_files if f.endswith('l1_.fits')]
     if not input_files:
         raise FileNotFoundError(f"No files ending in 'l1_.fits' found in {l1_datadir}")
-    
+
     input_data_filelist = [os.path.join(l1_datadir, f) for f in input_files]
     
     # Create input_data subfolder
@@ -269,8 +270,15 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Update L1 headers for sims files
-    input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
+    if fix_headers:
+        # Update L1 headers only for old sims files (TVAC data). New corgisim files have all relevant headers.
+        input_data_filelist = check.fix_hdrs_for_tvac(input_data_filelist, input_data_dir)
+    #Delete COMMENT header keywords in L1 primary header, if present. Those are artifacts from corgisim.
+    for f in input_data_filelist:
+        try:
+            fits.delval(f, 'COMMENT', ext=0)
+        except:
+            pass
 
     ### Adhoc fix to extremely high exposure time (>100s) in satspot files, better fixes would involve using full-well capacity (fwc) instead
     for file in input_data_filelist:
@@ -279,7 +287,7 @@ def run_l1_to_l3_e2e_test(l1_datadir, l3_outputdir, processed_cal_path, logger):
             if 'ISPC' in fits_file[1].header:
                 fits_file[1].header['ISPC'] = int(fits_file[1].header['ISPC'])
             fits_file[0].header['VISTYPE'] = 'CGIVST_TDD_OBS'
-            if fits_file[1].header['EMGAIN_C'] == 200:
+            if 'refstar' in l1_datadir:
                 logger.info(f"Filename: {fits_file[0].header['FILENAME']}")
                 logger.info(f"Original exposure time: {fits_file[1].header['EXPTIME']}")
                 if fits_file[1].header['EXPTIME'] >= 100:
@@ -606,7 +614,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'#'/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l3 spectroscopy end-to-end test with recipe chaining")

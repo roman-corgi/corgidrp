@@ -1082,12 +1082,12 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ndfilter_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing ND Filter Spectroscopy ===")
-    nds_data_files = glob.glob(os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "*_nds_cal.fits"))
+    nds_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_nd_filter_spec_e2e", "*_nds_cal.fits"))
     nds_data_file = max(nds_data_files, key=os.path.getmtime)
 
     validate_cgi_filename(nds_data_file, 'nds_cal')
 
-    generate_fits_excel_documentation(nds_data_file, os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "nds_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(nds_data_file, os.path.join(e2eoutput_path, "l1_to_nd_filter_spec_e2e", "nds_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1110,12 +1110,12 @@ def test_ndfilter_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_specfluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Spectroscopy Flux Calibration ===")
-    sfl_data_files = glob.glob(os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "*_sfl_cal.fits"))
+    sfl_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_spec_fluxcal_e2e", "*_sfl_cal.fits"))
     sfl_data_file = max(sfl_data_files, key=os.path.getmtime)
 
     validate_cgi_filename(sfl_data_file, 'sfl_cal')
 
-    generate_fits_excel_documentation(sfl_data_file, os.path.join(e2eoutput_path, "nd_filter_spec_e2e", "sfl_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(sfl_data_file, os.path.join(e2eoutput_path, "l1_to_spec_fluxcal_e2e", "sfl_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):

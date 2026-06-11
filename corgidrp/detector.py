@@ -388,7 +388,7 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
     pixel values drop below 0.85*fwc.
 
     Use cosm_filter to determine the smallest plateaus (in pixels) that will
-    be identified. A reasonable value is 2.
+    be identified. A reasonable value is 1 or 2.  
 
     Args:
         cube (array_like, float):
@@ -400,9 +400,9 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
         sat_thresh (float):
             Multiplication factor for fwc that determines saturated cosmic pixels.
         plat_thresh (float):
-            Multiplication factor for fwc that determines edges of cosmic plateu.
+            Multiplication factor for fwc that determines edges of cosmic plateau.
         cosm_filter (int):
-            Minimum length in pixels of cosmic plateus to be identified.
+            Minimum length in pixels of cosmic plateaus to be identified.
         cosm_box (int):
             Number of pixels out from an identified cosmic head (i.e., beginning of
             the plateau) to mask out.
@@ -451,18 +451,10 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
     if detector_regions is None:
         detector_regions = detector_areas
 
-    if mode=='full':
-        im_num_rows = detector_regions[arrtype]['image']['rows']
-        im_num_cols = detector_regions[arrtype]['image']['cols']
-        im_starting_row = detector_regions[arrtype]['image']['r0c0'][0]
-        im_ending_row = im_starting_row + im_num_rows
-        im_starting_col = detector_regions[arrtype]['image']['r0c0'][1]
-        im_ending_col = im_starting_col + im_num_cols
-    else:
-        im_starting_row = 0
-        im_ending_row = mask.shape[1] - 1 # - 1 to get the index, not size
-        im_starting_col = 0
-        im_ending_col = mask.shape[2] - 1 # - 1 to get the index, not size
+    im_starting_row = 0
+    im_ending_row = mask.shape[1] - 1 # - 1 to get the index, not size
+    im_starting_col = 0
+    im_ending_col = mask.shape[2] - 1 # - 1 to get the index, not size
 
     # Do a cheap prefilter for rows that don't have anything bright
     max_rows = np.max(cube, axis=-1,keepdims=True)

@@ -33,7 +33,9 @@ def test_nonlin_cal_e2e(
         before running the steps through the walker.  Also, the II&T code did not correct for cosmic rays, 
         but the CORGI DRP does by default.  So, we set the keyword apply_dq=False 
         below before running the steps through the walker in order to be able to 
-        compare the results with the II&T code.
+        compare the results with the II&T code.  Also, the DRP code is inherently 
+        different from the original II&T code in that it handles cosmic rays 
+        more robustly.
 
         Args:
         e2edata_path (str): Location of L1 data used to generate the non-linearity
@@ -69,17 +71,17 @@ def test_nonlin_cal_e2e(
     input_data_dir = os.path.join(e2eoutput_path, 'input_l1')
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
-    
+
     # Create calibrations subfolder
     calibrations_dir = os.path.join(e2eoutput_path, 'calibrations')
     if not os.path.exists(calibrations_dir):
         os.makedirs(calibrations_dir)
-    
+
     # Create tvac_reference subfolder and copy reference nonlinearity calibration
     tvac_reference_dir = os.path.join(e2eoutput_path, 'tvac_reference')
     if not os.path.exists(tvac_reference_dir):
         os.makedirs(tvac_reference_dir)
-    
+
     # Copy TVAC reference nonlinearity calibration file
     tvac_nonlin_file = os.path.join(tvac_caldir, 'nonlin_8_11_25.fits')
     if os.path.exists(tvac_nonlin_file):
@@ -146,10 +148,10 @@ def test_nonlin_cal_e2e(
 
     # KGain
     kgain_val = 8.7
-    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                     input_dataset=mock_input_dataset)
     mocks.rename_files_to_cgi_format(list_of_fits=[kgain], output_dir=calibrations_dir, level_suffix="krn_cal")
-    
+
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
@@ -158,7 +160,7 @@ def test_nonlin_cal_e2e(
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(kgain)
-    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # now get any default cal files that might be needed; if any reside in the folder that are not
     # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
     # means the ones above will be preferentially selected
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
@@ -170,6 +172,9 @@ def test_nonlin_cal_e2e(
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
             step['keywords']['n_cal'] = 14 # set n_cal to 14 to match the number of frames used to produce the II&T result (so we can compare results)
+            step['keywords']['percent_pupil'] = 0 # no restriction on size of unmasked pupil used for processing, as there is no such restriction in II&T code
+            step['keywords']['extrapolate'] = True # extrapolate beyond bounds of data as is done in II&T
+    recipe[0][1]['steps'].pop(3) # II&T code does not desmear
     output_filepaths = walker.run_recipe(recipe[0][0], save_recipe_file=True)
     recipe[0][1]['inputs'] = output_filepaths
     output_filepaths1 = walker.run_recipe(recipe[0][1], save_recipe_file=True)
@@ -204,7 +209,7 @@ def test_nonlin_cal_e2e(
     rel_out_tvac_perc = 100*(nonlin_out_table[1:,1:]/nonlin_tvac_table[1:,1:]-1)
 
     # Summary figure
-    if False: 
+    if False:
         plt.figure(figsize=(10,6))
         em_list = nonlin_out_table[0,1:]
         for i_em, em_val in enumerate(em_list):
@@ -217,12 +222,13 @@ def test_nonlin_cal_e2e(
         plt.grid()
         plt.savefig(os.path.join(e2eoutput_path,nonlin_drp_filename[:-5]+".png"))
         print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
-            f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
+            f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' +
             f'rms={np.std(rel_out_tvac_perc):1.1e} %')
         print(f'Figure saved: {os.path.join(e2eoutput_path,nonlin_drp_filename[:-5])}.png')
 
-    # Set a quantitative test for the comparison
-    assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
+    # Set a quantitative test for the comparison: difference of < 3.5%
+    assert np.less(np.abs(rel_out_tvac_perc).max(), 3.5)
+    assert np.abs(nonlin_out_table[1:,1:]-nonlin_tvac_table[1:,1:]).max() < 0.015
 
     check.compare_to_mocks_hdrs(nonlin_drp_filepath)
 

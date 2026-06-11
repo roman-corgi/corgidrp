@@ -190,6 +190,11 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # for no weighting:
     recipe = walker.autogen_recipe(stack_arr_files, noisemap_outputdir)
     ### Modify a keyword
+    for step in recipe[0]['steps']:
+        if step['name'] == "detect_cosmic_rays":
+            step['keywords']['sat_thresh'] = 0.7 # what is used for TVAC data in II&T code
+            step['keywords']['plat_thresh'] = 0.7 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_filter'] = 1 # what is used for TVAC data in II&T code
     for step in recipe[1]['steps']:
         if step['name'] == "calibrate_darks":
             step['keywords'] = {}
@@ -215,11 +220,16 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     
     # Reference (F_map, C_map, D_map) from II&T calibrate_darks_lsq, corgidrp_noisemap from DRP
     # atol=1e-4: intermediate L2a files are saved as float32, introducing quantization error
-    # at (0,1052) this causes a ~1.9e-5 diff that exceeds the rtol-only tolerance
-    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-5, atol=1e-4, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-5, atol=1e-4, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-5, atol=1e-4, equal_nan=True)
-    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 1e-5
+    # at (0,1052) this causes a ~1.9e-5 diff that exceeds the rtol-only tolerance.
+    # Recent change to cosmic ray detection to cover the entire frame instead of just the image area; no equivalent 
+    # in II&T code, but the image areas should agree.  EXCEPT that there is a cosmic ray just on the upper edge of at least one 
+    # input frame's image area which is not flagged as originating in the image area in the II&T code but is identified in the DRP cosmic ray 
+    # flagging, so there is a small discrepancy in the final products for that row (row index 13).  So we exclude that row below.  This discrepancy 
+    # also increased the difference in bias offset estimates to slightly below 4e-5.
+    assert np.allclose(corgidrp_noisemap.data[0][14:14+1024,1088:1088+1024], F_map[14:14+1024,1088:1088+1024], rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[1][14:14+1024,1088:1088+1024], C_map[14:14+1024,1088:1088+1024], rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[2][14:14+1024,1088:1088+1024], D_map[14:14+1024,1088:1088+1024], rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 4e-5
     pass
 
     check.compare_to_mocks_hdrs(corgidrp_noisemap_fname)
@@ -526,7 +536,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     #e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/Users/kevinludwick/Documents/DRP_E2E_Test_Files_v2/E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")
@@ -538,5 +548,5 @@ if __name__ == "__main__":
     
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_noisemap_calibration_from_l2a(e2edata_dir, outputdir)
     test_noisemap_calibration_from_l1(e2edata_dir, outputdir)
+    test_noisemap_calibration_from_l2a(e2edata_dir, outputdir)
