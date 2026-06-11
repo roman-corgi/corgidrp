@@ -173,7 +173,7 @@ def _validate_template_structure(user_template, default_template_path, recipe_fi
             )
             raise ValueError(error_msg)
 
-def _set_recipe_header(frame, recipe, prev_recipes=None, ram_heavy_last_filepath=None):
+def _set_recipe_header(frame, recipe, prev_recipes=None, is_last_frame=True):
     """
     Write the current recipe (and any prior chain recipes) into frame.ext_hdr.
     Clears any stale RECIPEn / NRECIPES keys before writing.
@@ -182,19 +182,21 @@ def _set_recipe_header(frame, recipe, prev_recipes=None, ram_heavy_last_filepath
     For a chained recipe: RECIPE = prev_recipes[0], RECIPE2 = prev_recipes[1], ...,
     RECIPE{N} = recipe, NRECIPES = N.
 
-    For non-last frames in a RAM-heavy unchained run, pass ram_heavy_last_filepath
-    to store a compact pointer instead of repeating the full input list in every header.
+    RAM-heavy recipes store a compact "See RECIPE header value in <last_input>"
+    pointer instead of repeating the full input list in every frame header.
+    For the current recipe this is only applied to non-last frames (is_last_frame=False)
+    so that at least one frame retains the full input list. For prev_recipes the
+    compaction is always applied since those recipes already saved their full
+    input list during their own run.
 
     Args:
         frame (corgidrp.data.Image): frame whose ext_hdr to update
         recipe (dict): the recipe that is currently being executed
         prev_recipes (list): ordered list of recipes that ran before this one in
             the chain. Empty list or None means this is a standalone recipe.
-        ram_heavy_last_filepath (str): filepath of the last frame in the dataset.
-            When provided for an unchained recipe, the stored recipe uses a compact
-            "See RECIPE header value in <path>" reference instead of the full input
-            list, keeping per-frame header sizes small for large RAM-heavy datasets.
-            Only applied when prev_recipes is empty/None.
+        is_last_frame (bool): True if this is the last frame in the dataset.
+            Non-last frames of a RAM-heavy recipe store a compact input pointer
+            rather than the full input list. Defaults to True.
     """
     # Remove any leftover extra recipe headers from a previous chain
     if 'NRECIPES' in frame.ext_hdr:
@@ -204,21 +206,24 @@ def _set_recipe_header(frame, recipe, prev_recipes=None, ram_heavy_last_filepath
                 del frame.ext_hdr['RECIPE{0}'.format(idx)]
         del frame.ext_hdr['NRECIPES']
 
-    # For unchained RAM-heavy non-last frames, store a compact pointer to avoid
-    # repeating ~26000 input filepaths in every frame header
-    if ram_heavy_last_filepath is not None and not prev_recipes:
-        recipe_to_store = recipe.copy()
-        recipe_to_store["inputs"] = "See RECIPE header value in {0}".format(ram_heavy_last_filepath)
-    else:
-        recipe_to_store = recipe
+    def _compact(r, force=False):
+        """Compact a RAM-heavy recipe's input list to a single pointer."""
+        if (force or r.get("ram_heavy", False)) and isinstance(r.get("inputs"), list) and r["inputs"]:
+            return dict(r, inputs="See RECIPE header value in {0}".format(r["inputs"][-1]))
+        return r
+
+    # For the current recipe: compact inputs on non-last frames only
+    recipe_to_store = _compact(recipe, force=False) if not is_last_frame else recipe
 
     if not prev_recipes:
         frame.ext_hdr['RECIPE'] = json.dumps(recipe_to_store)
     else:
-        # First recipe in the chain occupies RECIPE for backwards compatibility
-        frame.ext_hdr['RECIPE'] = json.dumps(prev_recipes[0])
+        # First recipe in the chain occupies RECIPE for backwards compatibility.
+        # prev_recipes are always compacted when RAM-heavy since those runs
+        # already saved the full input list in their own last output frame.
+        frame.ext_hdr['RECIPE'] = json.dumps(_compact(prev_recipes[0]))
         for idx, r in enumerate(prev_recipes[1:], start=2):
-            frame.ext_hdr['RECIPE{0}'.format(idx)] = json.dumps(r)
+            frame.ext_hdr['RECIPE{0}'.format(idx)] = json.dumps(_compact(r))
         n = len(prev_recipes) + 1
         frame.ext_hdr['RECIPE{0}'.format(n)] = json.dumps(recipe_to_store)
         frame.ext_hdr['NRECIPES'] = n
@@ -857,15 +862,12 @@ def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
             if recipe["inputs"]:
                 if ram_heavy_bool:
                     curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
-                    last_filepath = curr_dataset[-1].filepath
                 else:
                     curr_dataset = data.Dataset(filelist)
-                    last_filepath = None
                 # Write recipe chain headers to all frames, clearing any stale ones
                 frames = list(curr_dataset)
                 for j, frame in enumerate(frames):
-                    ref = last_filepath if j < len(frames) - 1 else None
-                    _set_recipe_header(frame, recipe, prev_recipes, ram_heavy_last_filepath=ref)
+                    _set_recipe_header(frame, recipe, prev_recipes, is_last_frame=(j == len(frames) - 1))
             # execute each pipeline step
             print('Executing recipe: {0}'.format(recipe['name']))
             if isinstance(filelist, list):
@@ -922,8 +924,7 @@ def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
                             # also update the recipe headers now that calibs are resolved
                             lof = list(list_of_frames)
                             for j, frame in enumerate(lof):
-                                ref = last_filepath if j < len(lof) - 1 else None
-                                _set_recipe_header(frame, recipe, prev_recipes, ram_heavy_last_filepath=ref)
+                                _set_recipe_header(frame, recipe, prev_recipes, is_last_frame=(j == len(lof) - 1))
 
                         # load the calibration files in from disk
                         for calib in step["calibs"]:
