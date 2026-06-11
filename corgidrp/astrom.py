@@ -415,7 +415,7 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     
     return found_sources
 
-def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.02, platescale_guess=21.8, platescale_tol=0.1):
+def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012, platescale_guess=21.8, platescale_tol=0.1):
     ''' 
     Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
@@ -753,7 +753,7 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1):
         length_diffs[i] = diff
 
     # estimate the platescale from each combination
-    platescale = np.mean(length_diffs)
+    platescale = np.median(length_diffs)
 
     # NORTH ANGLE    
     angle_diffs = np.empty(len(combo_list))
@@ -771,7 +771,7 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1):
         dtheta = np.arctan2(np.sin(np.radians(pa_sky - pa_image)), np.cos(np.radians(pa_sky - pa_image)))
         angle_diffs[i] = np.degrees(dtheta)
 
-    north_angle = np.mean(angle_diffs)
+    north_angle = np.median(angle_diffs)
     
     return platescale, north_angle
 
@@ -852,7 +852,7 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
         image_centerings[i,:] = [xi_center, yi_center]
 
     # average all offsets in x,y directions [pix]
-    boresight_x, boresight_y = np.mean(boresights[:,0]), np.mean(boresights[:,1])
+    boresight_x, boresight_y = np.median(boresights[:,0]), np.median(boresights[:,1])
 
     # convert back to corrected RA, DEC of target
     # image_center_RA = target_coordinate[0] - ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
@@ -1046,7 +1046,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
                 sub_array = data_array[count - frames_to_combine: count]
                 file_name = input_dataset[count].filename
 
-            comb = np.mean(sub_array, axis=0)
+            comb = np.median(sub_array, axis=0)
             im = corgidrp.data.Image(comb, pri_hdr=input_dataset[count - frames_to_combine].pri_hdr, ext_hdr=input_dataset[0].ext_hdr)
             im.filename = file_name
             image_objects.append(im)
@@ -1085,10 +1085,10 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         astroms.append(astrom_cal)
 
     # average the calibration properties over all frames
-    avg_ra = np.mean([astro.avg_offset[0] for astro in astroms])  # this is the average ra offset [deg]
-    avg_dec = np.mean([astro.avg_offset[1] for astro in astroms])
-    avg_platescale = np.mean([astro.platescale for astro in astroms])
-    avg_northangle = np.mean([astro.northangle for astro in astroms])
+    avg_ra = np.median([astro.avg_offset[0] for astro in astroms])  # this is the average ra offset [deg]
+    avg_dec = np.median([astro.avg_offset[1] for astro in astroms])
+    avg_platescale = np.median([astro.platescale for astro in astroms])
+    avg_northangle = np.median([astro.northangle for astro in astroms])
 
     # compute the distortion map coeffs
     if find_distortion:
