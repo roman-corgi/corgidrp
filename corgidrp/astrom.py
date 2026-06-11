@@ -451,7 +451,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
     tri_dist_star = [(dstar1, source1), (dstar2, source2), (dstar3, source3)]
     tri_dist_star.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
-    long_star, mid_star, short_star = tri_dist_star[0][1], tri_dist_star[1][1], tri_dist_star[2][1]
+    short_star, mid_star, long_star = tri_dist_star[0][1], tri_dist_star[1][1], tri_dist_star[2][1]
 
     # the shortest to longest sides get reordered to l1, l2, l3
     l1, l2, l3 = np.sort([l12, l23, l31])
@@ -509,15 +509,15 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
     tri_dist_coords = [(dcoord1, coord1), (dcoord2, coord2), (dcoord3, coord3)]
     tri_dist_coords.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
-    long_coord, mid_coord, short_coord = tri_dist_coords[0][1], tri_dist_coords[1][1], tri_dist_coords[2][1]
-
+    short_coord, mid_coord, long_coord = tri_dist_coords[0][1], tri_dist_coords[1][1], tri_dist_coords[2][1]
+    
     # now use the side length to separations with best fit triangle to define a pseudo plate scale
     best_l1, best_l2, best_l3 = field_side_lengths[best_ind]
     initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))  # [deg/mas]
 
     # find the angle between the `target` star and the other two, in the image and in the field
-    rot_image = np.array([angle_between((long_star['x'], long_star['y']), (s['x'], s['y'])) for s in [mid_star, short_star]])
-    rot_field = np.array([long_coord.position_angle(t).deg for t in [mid_coord, short_coord]])
+    rot_image = np.array([angle_between((short_star['x'], short_star['y']), (s['x'], s['y'])) for s in [mid_star, long_star]])
+    rot_field = np.array([short_coord.position_angle(t).deg for t in [mid_coord, long_coord]])
     # use arctan2 to handle angle wrapping when calculating the difference between the reference field angle and the image
     dtheta1 = np.arctan2(np.sin(np.radians(rot_field[0] - rot_image[0])), np.cos(np.radians(rot_field[0] - rot_image[0])))
     dtheta2 = np.arctan2(np.sin(np.radians(rot_field[1] - rot_image[1])), np.cos(np.radians(rot_field[1] - rot_image[1])))
@@ -534,14 +534,14 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     new_hdr['CD1_2'] = cdmatrix[0,1]
     new_hdr['CD2_1'] = cdmatrix[1,0]
     new_hdr['CD2_2'] = cdmatrix[1,1]
-    new_hdr['CRPIX1'] = long_star['x']
-    new_hdr['CRPIX2'] = long_star['y']
+    new_hdr['CRPIX1'] = short_star['x']
+    new_hdr['CRPIX2'] = short_star['y']
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
     new_hdr['CDELT1'] = (initial_platescale * 0.001) / 3600.
     new_hdr['CDELT2'] = (initial_platescale * 0.001) / 3600.
-    new_hdr['CRVAL1'] = long_coord.ra.value
-    new_hdr['CRVAL2'] = long_coord.dec.value
+    new_hdr['CRVAL1'] = short_coord.ra.value
+    new_hdr['CRVAL2'] = short_coord.dec.value
     w = astropy.wcs.WCS(new_hdr)
 
     # transform the subfield skycoords to pixel locations
