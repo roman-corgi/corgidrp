@@ -10,7 +10,7 @@
         {
             "name" : "boresight_calibration",
             "keywords" : {
-                "find_threshold" : 400,
+                "find_threshold" : 25,
                 "find_distortion" : true,
                 "position_error" : 0.5
             }

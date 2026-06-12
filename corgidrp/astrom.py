@@ -231,20 +231,11 @@ def angle_between(pos1, pos2):
     """
     
     xdif = pos2[0] - pos1[0]
-    ydif = pos2[1] - pos1[1]  
+    ydif = pos2[1] - pos1[1] 
 
-    if xdif<0:
-        if ydif<0:
-            angle = np.pi - np.arctan(xdif/ydif)
-        else:
-            angle = - np.arctan(xdif/ydif)
-    else:
-        if ydif<0:
-            angle = - np.arctan(xdif/ydif) + np.pi
-        else: 
-            angle = (2*np.pi) - np.arctan(xdif/ydif)
-            
-    return angle * 180/np.pi
+    dtheta = np.mod(np.arctan2(ydif, xdif) - np.pi/2, 2*np.pi)  # this is in radians
+
+    return np.degrees(dtheta)
 
 
 def get_polar_dist(seppa1,seppa2):
@@ -450,25 +441,27 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     source1, source2, source3 = sources[0], sources[1], sources[2]
 
     # define the side length to perimeter ratio for the triangle made from these sources [pixels]
-    l1, l2, l3 = np.sqrt(np.power(source1['x'] - source2['x'], 2) + np.power(source1['y'] - source2['y'], 2)), np.sqrt(np.power(source2['x'] - source3['x'], 2) + np.power(source2['y'] - source3['y'], 2)), np.sqrt(np.power(source3['x'] - source1['x'], 2) + np.power(source3['y'] - source1['y'], 2))
-    perimeter = l1 + l2 + l3
+    l12, l23, l31 = np.sqrt(np.power(source1['x'] - source2['x'], 2) + np.power(source1['y'] - source2['y'], 2)), np.sqrt(np.power(source2['x'] - source3['x'], 2) + np.power(source2['y'] - source3['y'], 2)), np.sqrt(np.power(source3['x'] - source1['x'], 2) + np.power(source3['y'] - source1['y'], 2))
+    perimeter = l12 + l23 + l31
+
+    # keep track of which star is furthest from and closest to the other 2
+    dstar1 = l12 + l31
+    dstar2 = l23 + l12
+    dstar3 = l23 + l31
+
+    tri_dist_star = [(dstar1, source1), (dstar2, source2), (dstar3, source3)]
+    tri_dist_star.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
+    short_star, mid_star, long_star = tri_dist_star[0][1], tri_dist_star[1][1], tri_dist_star[2][1]
 
     # the shortest to longest sides get reordered to l1, l2, l3
-    l1, l2, l3 = np.sort([l1, l2, l3])
-
+    l1, l2, l3 = np.sort([l12, l23, l31])
     a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
 
     # define a search field and load in RA, DEC, Vmag
     field = ascii.read(field_path)
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     
-    ymid, xmid = image.data.shape   # fit gaussian to find target x,y location (assuming near center)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        pf, fw, targetx, targety = fakes.gaussfit2d(frame= image.data, xguess= (xmid-1)//2, yguess= (ymid-1)//2)
-
-    target_skycoord = SkyCoord(ra= target[0], dec= target[1], unit='deg')
-    subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - rad) & (field['DEC'] <= target[1] + rad))]
+    subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - (rad*(np.cos(np.radians(target[1]))))) & (field['DEC'] <= target[1] + (rad*np.cos(np.radians(target[1])))))]
 
     bright_order_subfield = subfield.copy()
     bright_order_subfield.sort(keys='VMAG')
@@ -477,7 +470,6 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     # create all combinations of triangles with the brightest field sources
     combos = list(compute_combinations(range(len(brightest_field)), r=3))
 
-    #a_prime, b_prime, c_prime = np.empty(len(combos)), np.empty(len(combos)), np.empty(len(combos))
     skycoords = SkyCoord(ra= brightest_field['RA'], dec= brightest_field['DEC'], unit='deg')
     field_side_lengths = np.empty((len(combos), 3))
     best_sky_ind = np.nan
@@ -507,22 +499,33 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
             best_ind = i
             best_sky_ind = ind
 
+    # keep track of which best fit skycoord is the farthest from the other two
+    j, k, l = best_sky_ind
+    coord1, coord2, coord3 = skycoords[j], skycoords[k], skycoords[l]
+
+    dcoord1 = coord1.separation(coord2).mas + coord1.separation(coord3).mas
+    dcoord2 = coord2.separation(coord3).mas + coord2.separation(coord1).mas
+    dcoord3 = coord3.separation(coord1).mas + coord3.separation(coord2).mas
+
+    tri_dist_coords = [(dcoord1, coord1), (dcoord2, coord2), (dcoord3, coord3)]
+    tri_dist_coords.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
+    short_coord, mid_coord, long_coord = tri_dist_coords[0][1], tri_dist_coords[1][1], tri_dist_coords[2][1]
+    
     # now use the side length to separations with best fit triangle to define a pseudo plate scale
     best_l1, best_l2, best_l3 = field_side_lengths[best_ind]
     initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))  # [deg/mas]
 
-    # find pseudo north angle from difference in triangle rotations from the target value
-    # using found target pixel
-  
-    # rot_image = np.array([angle_between(((xmid-1) //2, (ymid-1) //2), (s['x'], s['y'])) for s in [source1, source2, source3]])
-    rot_image = np.array([angle_between((targetx, targety), (s['x'], s['y'])) for s in [source1, source2, source3]])
-    rot_field = np.array([target_skycoord.position_angle(t).deg for t in skycoords[[best_sky_ind]]])
-
-    initial_northangle = np.abs(np.mean(rot_field - rot_image))
+    # find the angle between the `target` star and the other two, in the image and in the field
+    rot_image = np.array([angle_between((short_star['x'], short_star['y']), (s['x'], s['y'])) for s in [mid_star, long_star]])
+    rot_field = np.array([short_coord.position_angle(t).deg for t in [mid_coord, long_coord]])
+    # use arctan2 to handle angle wrapping when calculating the difference between the reference field angle and the image
+    dtheta1 = np.arctan2(np.sin(np.radians(rot_field[0] - rot_image[0])), np.cos(np.radians(rot_field[0] - rot_image[0])))
+    dtheta2 = np.arctan2(np.sin(np.radians(rot_field[1] - rot_image[1])), np.cos(np.radians(rot_field[1] - rot_image[1])))
+    initial_northangle = np.mean([dtheta1, dtheta2])
 
     # make a new image header with the pseudo platescale and north angle to find matchings
     # allow for some error window and assign the closest star to each source
-    vert_ang = np.radians(initial_northangle)
+    vert_ang = initial_northangle   # this is in radians
     pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
     cdmatrix = pc * (initial_platescale * 0.001) / 3600.
 
@@ -531,16 +534,14 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     new_hdr['CD1_2'] = cdmatrix[0,1]
     new_hdr['CD2_1'] = cdmatrix[1,0]
     new_hdr['CD2_2'] = cdmatrix[1,1]
-    # new_hdr['CRPIX1'] = (np.shape(image.data)[1]-1) // 2
-    # new_hdr['CRPIX2'] = (np.shape(image.data)[0]-1) // 2
-    new_hdr['CRPIX1'] = targetx
-    new_hdr['CRPIX2'] = targety
+    new_hdr['CRPIX1'] = short_star['x']
+    new_hdr['CRPIX2'] = short_star['y']
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
     new_hdr['CDELT1'] = (initial_platescale * 0.001) / 3600.
     new_hdr['CDELT2'] = (initial_platescale * 0.001) / 3600.
-    new_hdr['CRVAL1'] = target[0]
-    new_hdr['CRVAL2'] = target[1]
+    new_hdr['CRVAL1'] = short_coord.ra.value
+    new_hdr['CRVAL2'] = short_coord.dec.value
     w = astropy.wcs.WCS(new_hdr)
 
     # transform the subfield skycoords to pixel locations
@@ -582,7 +583,6 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
         if key not in image.ext_hdr:
             image.ext_hdr[key] = string
-
 
     return matched_image_to_field
 
@@ -684,7 +684,7 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
 
     return residuals
 
-def compute_platescale_and_northangle(image, source_info, center_coord, center_radius=0.9):
+def compute_platescale_and_northangle(image, source_info, center_radius=1):
     """
     Used to find the platescale and north angle of the image. Calculates the platescale for each pair of stars in the image
     and returns the averged platescale. Calculates the north angle for pairs of stars with the center target
@@ -693,9 +693,9 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
     Args:
         image (numpy.ndarray): 2D array of image data 
         source_info (astropy.table.Table): Estimated pixel positions of sources and true sky positions, must have column names 'x', 'y', 'RA', 'DEC'
-        center_coord (tuple):
-            (float): RA coordinate of the target pointing
-            (float): Dec coordinate of the target pointing
+        # center_coord (tuple):
+        #     (float): RA coordinate of the target pointing
+        #     (float): Dec coordinate of the target pointing
         center_radius (float): Percent of the image radius used to crop the image and compute plate scale and north angle from (default: 1 -- ie: the full image is used)
 
     Returns:
@@ -714,21 +714,14 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
         guesses = source_info
         skycoords = SkyCoord(ra = guesses['RA'], dec= guesses['DEC'], unit='deg', frame='icrs')
 
-    # translate the center_coord param into a skycoord
-    if type(center_coord) != tuple:
-        raise TypeError('center_coord must be a tuple coordinate (RA,DEC)')
-    else:
-        center_coord = SkyCoord(ra = center_coord[0], dec= center_coord[1], unit='deg', frame='icrs')
-
-    # use only center quadrant
     imageshape = np.shape(image)
     cut = 1 - center_radius
     suby, subx = imageshape[0] * cut, imageshape[1] * cut
     center_source_inds = np.where((guesses['x'] >= subx) & (guesses['x'] <= imageshape[1] - subx) & (guesses['y'] >= suby) & (guesses['y'] <= imageshape[0] - suby))
-    sub_guesses = guesses[center_source_inds]
+    sub_guesses = guesses[center_source_inds]   # these are already guassian fit to find exact pixel location
     sub_skycoords = skycoords[center_source_inds]
 
-    # Platescale calculation
+    # PLATESCALE
     # create random combinations of stars
     all_combinations = list(compute_combinations(sub_guesses))
     if len(all_combinations) > 200:
@@ -737,85 +730,48 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
     else:
         combo_list = np.array(all_combinations)
 
-    # gather the skycoord separations for all combinations
-    seps = np.empty(len(combo_list))
+
+    length_diffs = np.empty(len(combo_list))
     for i,c in enumerate(combo_list):
+        # calculate the sky separation btw all combos of stars
         star1 = sub_skycoords[c[0]]
         star2 = sub_skycoords[c[1]]
 
-        sep = star1.separation(star2).mas
-        seps[i] = sep
+        sep_sky = star1.separation(star2).mas
 
-    # find the separations in pixel space on the image between all combinations
-    pixseps = np.empty(len(combo_list))
-    for i,c in enumerate(combo_list):
+        # calculate the image separation between the same combos of stars
         star1 = sub_guesses[c[0]]
         star2 = sub_guesses[c[1]]
-
         xguess = star2['x'] - star1['x']
         yguess = star2['y'] - star1['y']
         
         (xoff, yoff), _ = measure_offset(image, xstar_guess=star1['x'], ystar_guess=star1['y'], xoffset_guess= xguess, yoffset_guess= yguess)
+        sep_pix = np.sqrt(np.power(xoff,2) + np.power(yoff,2))
 
-        pixsep = np.sqrt(np.power(xoff,2) + np.power(yoff,2))
-        pixseps[i] = pixsep
+        # calc the ratio of sky to pixel separation for each star pair
+        diff = sep_sky / sep_pix
+        length_diffs[i] = diff
 
-    # estimate the platescale from each combination and find the mean
-    platescales = seps / pixseps
-    platescale = np.mean(platescales)
+    # estimate the platescale from each combination
+    platescale = np.median(length_diffs)
 
-    # North angle calculation
-    # find the true centerings of the sources in the image from the guesses and save into a table
-    xs = np.empty(len(sub_guesses))
-    ys = np.empty(len(sub_guesses))
-    for i, (gx, gy) in enumerate(zip(sub_guesses['x'], sub_guesses['y'])):
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=RuntimeWarning)
-            pf, fw, x, y = fakes.gaussfit2d(frame= image, xguess= gx, yguess=gy)
-        xs[i] = x
-        ys[i] = y
+    # NORTH ANGLE    
+    angle_diffs = np.empty(len(combo_list))
+    for i,c in enumerate(combo_list):       # compute pa sky vs image for each star combination
+        star1 = sub_guesses[c[0]]
+        star2 = sub_guesses[c[1]]
 
-    sources = astropy.table.Table()
-    sources['x'] = xs
-    sources['y'] = ys
+        coord1 = sub_skycoords[c[0]]
+        coord2 = sub_skycoords[c[1]]
 
-    # find the sky position angles between the center star and all others
-    pa_sky = np.empty(len(sub_skycoords))
-    for i, star in enumerate(sub_skycoords):
-        pa = center_coord.position_angle(star).deg
-        pa_sky[i] = pa
+        pa_image = angle_between((star1['x'], star1['y']), (star2['x'], star2['y']))    # these are both in [deg]
+        pa_sky = coord1.position_angle(coord2).deg
 
-    # find the pixel position angles
-    pa_pixel = np.empty(len(sub_guesses))
-    for i, (x, y) in enumerate(zip(xs, ys)):
-        pa = angle_between(((np.shape(image)[0]-1)//2, (np.shape(image)[1]-1)//2), (x,y))
-        pa_pixel[i] = pa
+        # difference in angle between sky and image
+        dtheta = np.arctan2(np.sin(np.radians(pa_sky - pa_image)), np.cos(np.radians(pa_sky - pa_image)))
+        angle_diffs[i] = np.degrees(dtheta)
 
-    # find the difference between the measured and true positon angles
-    offset = np.empty(len(sub_guesses))
-    # locate a potential comparison with self
-    if len(np.where((sub_skycoords.ra.value == center_coord.ra.value) & (sub_skycoords.dec.value == center_coord.dec.value))[0]) > 0:
-        same_ind = np.where((sub_skycoords.ra.value == center_coord.ra.value) & (sub_skycoords.dec.value == center_coord.dec.value))[0][0]
-    else:
-        same_ind = None
-
-    for i, (sky, pix) in enumerate(zip(pa_sky, pa_pixel)):
-        if i != same_ind:
-            numerator = np.sin(np.radians(sky - pix))
-            denominator = np.cos(np.radians(sky - pix))
-            north_offset = np.degrees(np.arctan(numerator / denominator))
-            # if sky > pix:
-            #     north_offset = sky - pix
-            # else:
-            #     north_offset = sky - pix + 360 
-            offset[i] = north_offset
-
-    # get rid of the comparison with self if it exists
-    if same_ind != None:
-        offset = np.delete(offset, same_ind)
-
-    # use the median to avoid bias
-    north_angle = np.mean(offset)
+    north_angle = np.median(angle_diffs)
     
     return platescale, north_angle
 
@@ -896,7 +852,7 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
         image_centerings[i,:] = [xi_center, yi_center]
 
     # average all offsets in x,y directions [pix]
-    boresight_x, boresight_y = np.mean(boresights[:,0]), np.mean(boresights[:,1])
+    boresight_x, boresight_y = np.median(boresights[:,0]), np.median(boresights[:,1])
 
     # convert back to corrected RA, DEC of target
     # image_center_RA = target_coordinate[0] - ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
@@ -908,13 +864,13 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return boresight_ra, boresight_dec
 
-def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, position_error=None):
+def format_distortion_inputs(input_dataset, source_matches, position_error=None):
     ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
     
     Args:
         input_dataset (corgidrp.data.dataset): corgidrp dataset object with images to compute the distortion from
         source_matches (list of astropy.table.Table() objects): List of length N for N frames in the input dataset. Tables must columns 'x','y','RA','DEC' as pixel locations and corresponding sky positons
-        ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference position to compute pairs with
+        # ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference position to compute pairs with
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
                         Should be changed later to accept non-uniform errors
         
@@ -934,15 +890,16 @@ def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, positi
     for frame_ind in range(len(input_dataset)):
         input_image = input_dataset[frame_ind].data
 
-        # create all combinations of the target star with all others
-        combo_list = range(len(source_matches[frame_ind]))
         skycoords = SkyCoord(ra= source_matches[frame_ind]['RA'], dec= source_matches[frame_ind]['DEC'], unit='deg', frame='icrs')
-        target_coord = SkyCoord(ra= ref_star_pos[frame_ind]['RA'], dec= ref_star_pos[frame_ind]['DEC'], unit='deg', frame='icrs')
-    
-        for pair_ind in combo_list:
+        # compute combinations of all pairs of stars
+        combos = list(compute_combinations(range(len(source_matches[frame_ind])), r=2))
+        # pair_ind = 1
+        # while pair_ind < len(source_matches[frame_ind]):    # compare the first source with all others
+        for pair_ind in combos: # restrict to using only the first ~200 combinations
+        # for pair_ind in combo_list:
             # get the pixel offset
-            star1 = ref_star_pos[frame_ind]
-            star2 = source_matches[frame_ind][pair_ind]
+            star1 = source_matches[frame_ind][pair_ind[0]]  
+            star2 = source_matches[frame_ind][pair_ind[1]]
     
             x_guess = star2['x'] - star1['x']
             y_guess = star2['y'] - star1['y']
@@ -950,8 +907,8 @@ def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, positi
             (dx, dy), (xfit_err, yfit_err, _) = measure_offset(input_image, star2['x'], star2['y'], x_guess, y_guess, guessflux=10000)
     
             # get the true sky offset [mas]
-            true1 = target_coord
-            true2 = skycoords[pair_ind]
+            true1 = skycoords[pair_ind[0]]  
+            true2 = skycoords[pair_ind[1]]
         
             # get true sky separation and position angle
             true_sep = true1.separation(true2).mas
@@ -979,12 +936,11 @@ def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, positi
 
     return first_stars, offsets, true_offsets, errs
 
-def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, platescale, northangle, fitorder=3, initial_guess=None):
+def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, northangle, fitorder=3, initial_guess=None):
     ''' 
     Function that computes the legendre polynomial coefficients that describe the image distortion map * must run format_disotrtio_inputs() first *
 
     Args:
-        input_dataset (corgidrp.data.Dataset): corgidrp dataset object with images to compute the distortion from
         pos1 (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
         meas_offset (np.array): 2D array of the (delta_x, delta_y) values for each star from the first star position
         sky_offset (np.array): 2D array of the (delta_ra, delta_dec) offsets between the matched stars in the reference field
@@ -998,13 +954,6 @@ def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, 
         distortion_coeffs (tuple): The legendre coefficients (np.array) and polynomial order used for the fit (int)
 
     '''
-
-    ## SET FITTING PARAMS
-    # assume all images in dataset have the same shape
-    input_image = input_dataset[0].data
-    x0 = np.shape(input_image)[1] // 2
-    y0 = np.shape(input_image)[0] // 2
-    
     # define fitting params            
     fitparams = (fitorder + 1)**2
     
@@ -1063,7 +1012,6 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
                     matched_sources_multiframe.append(matched_sources)
                 else:
                     matched_sources_multiframe.append(field_matches[0])
-        # elif len(field_matches) == len(dataset): # this needs to be if the len(field_matches >1)
         elif len(field_matches) > 1:  # unique matches for each frame case
             if len(field_matches) != len(dataset):
                 raise TypeError('field_matches must be a single str/ astropy.table OR the same length as input_dataset')
@@ -1074,8 +1022,6 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
                         matched_sources_multiframe.append(matched_sources)
                     else:
                         matched_sources_multiframe = field_matches
-        # else:
-        #     raise TypeError('field_matches must be a single str or the same length as input_dataset')
 
     # load in field data to refer to
     if field_path == 'JWST_CALFIELD2020.csv':
@@ -1100,7 +1046,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
                 sub_array = data_array[count - frames_to_combine: count]
                 file_name = input_dataset[count].filename
 
-            comb = np.mean(sub_array, axis=0)
+            comb = np.median(sub_array, axis=0)
             im = corgidrp.data.Image(comb, pri_hdr=input_dataset[count - frames_to_combine].pri_hdr, ext_hdr=input_dataset[0].ext_hdr)
             im.filename = file_name
             image_objects.append(im)
@@ -1109,8 +1055,6 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     # create a place to store all the calibration measurements
     astroms = []
-    target_coord_tables = []
-
     hold_matches = []   # place to hold the auto-found source matches for each frame
     corrected_positions_boresight = []      # place to hold the corrected target position based on boresight offsets for each frame
 
@@ -1120,20 +1064,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
-        target_coord_tab = astropy.table.Table()
-        target_coord_tab['x'] = [(np.shape(image)[1]-1) // 2]    # assume the target is at the center of the image
-        target_coord_tab['y'] = [(np.shape(image)[0]-1) // 2]
-        target_coord_tab['RA'] = [target_coordinate[0]]
-        target_coord_tab['DEC'] = [target_coordinate[1]]
-        target_coord_tables.append(target_coord_tab)
-   
+
         # compute the calibration properties
         found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
         matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
         # if len(hold_matches) < 1:
         hold_matches.append(matched_sources)
 
-        cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate, center_radius=center_radius)
+        cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
         # calculate the corrected target position based on ra, dec offsets
         corr_ra, corr_dec = target_coordinate[0] - ra, target_coordinate[1] - dec
@@ -1147,16 +1085,16 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         astroms.append(astrom_cal)
 
     # average the calibration properties over all frames
-    avg_ra = np.mean([astro.avg_offset[0] for astro in astroms])  # this is the average ra offset [deg]
-    avg_dec = np.mean([astro.avg_offset[1] for astro in astroms])
-    avg_platescale = np.mean([astro.platescale for astro in astroms])
-    avg_northangle = np.mean([astro.northangle for astro in astroms])
+    avg_ra = np.median([astro.avg_offset[0] for astro in astroms])  # this is the average ra offset [deg]
+    avg_dec = np.median([astro.avg_offset[1] for astro in astroms])
+    avg_platescale = np.median([astro.platescale for astro in astroms])
+    avg_northangle = np.median([astro.northangle for astro in astroms])
 
     # compute the distortion map coeffs
     if find_distortion:
         # use the found matches for distortion
-        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, source_matches=hold_matches, ref_star_pos=target_coord_tables, position_error=position_error)
-        distortion_coeffs, order = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
+        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, source_matches=hold_matches, position_error=position_error)
+        distortion_coeffs, order = compute_distortion(first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
         # set default coeffs to produce zero distortion
         fitparams = (fitorder + 1)**2
