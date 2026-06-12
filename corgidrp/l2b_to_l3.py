@@ -393,7 +393,6 @@ def crop(input_dataset, sizexy=None, centerxy=None):
                                left_pad:sizexy[0]-right_pad] = frame.err[:,y1+below_pad:y2-above_pad,
                                                                          x1+left_pad:x2-right_pad]
             cropped_frame_dq = np.full(sizexy[::-1],np.nan).astype(int)
-            print(cropped_frame_dq)
             cropped_frame_dq[below_pad:sizexy[1]-above_pad,
                                left_pad:sizexy[0]-right_pad] = frame.dq[y1+below_pad:y2-above_pad,
                                                                           x1+left_pad:x2-right_pad]
