@@ -228,6 +228,8 @@ def fit_psf_centroid(psf_data, psf_template,
         xcom_template, ycom_template = (np.rint(xcent_template), np.rint(ycent_template))
 
     if xcent_guess is None or ycent_guess is None:
+        #filter NaNs
+        psf_data[np.isnan(psf_data)] = 0
         median_filt_psf = ndi.median_filter(psf_data, size=2)
         xcom_data, ycom_data = np.rint(get_center_of_mass(median_filt_psf))
     else:

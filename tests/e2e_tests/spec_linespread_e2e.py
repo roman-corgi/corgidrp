@@ -9,11 +9,11 @@ import pytest
 import argparse
 import warnings
 from astropy.io.fits.verify import VerifyWarning
-import json
+
 from corgidrp.data import Dataset, LineSpread
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
-import corgidrp.walker as walker
+from corgidrp.walker import walk_corgidrp
 import corgidrp
 import corgidrp.caldb as caldb
 from corgidrp.check import (check_filename_convention, check_dimensions, 
@@ -67,8 +67,11 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         psf_array_spot = fits.getdata(file_path_spot, ext=0)
         # Create dataset with mock headers and noise
         pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+        ext_hdr["LSAMNAME"] = "SPEC"
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
+        ext_hdr["EACQ_COL"] = np.shape(psf_array_spot)[2]/2
+        ext_hdr["EACQ_ROW"] = np.shape(psf_array_spot)[1]/2
         # Add random noise for reproducibility
         np.random.seed(5)
         read_noise = 200
@@ -154,19 +157,12 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     logger.info('Running e2e recipe...')
-    
-    ### delete the crop step function in the recipe since we use small template frames as input
-    template = json.load(open(os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'recipe_templates', "l2b_to_spec_linespread.json"),'r'))
-    
-    recipe = walker.autogen_recipe(saved_files, e2eoutput_path, template=template)
-    new_step = []
-    for step in recipe['steps']:
-        if step['name'] == "crop":
-            pass
-        else:
-            new_step.append(step)
-    recipe['steps'] = new_step
-    walker.run_recipe(recipe)
+    recipe = walk_corgidrp(
+        filelist=saved_files, 
+        CPGS_XML_filepath="",
+        outputdir=e2eoutput_path,
+        template="l2b_to_spec_linespread.json"
+    )
     logger.info("")
     
     # ================================================================================
