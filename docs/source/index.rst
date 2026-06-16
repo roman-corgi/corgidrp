@@ -17,4 +17,7 @@ The CoronaGraph Instrument Data Reduction Pipeline ``corgidrp`` is a Python-base
 
    installation
    tutorial
+   walker_and_recipes
+   contributing
+   changelog
    data_formats/index
