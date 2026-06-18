@@ -249,8 +249,7 @@ def fit_psf_centroid(psf_data, psf_template,
     amp_guess = np.sum(psf_data_nonan) / np.sum(psf_template)
     guess_params = (xoffset_guess, yoffset_guess, amp_guess)
     registration_result = optimize.minimize(psf_registration_costfunc, guess_params,
-                                         args=(template_stamp, data_stamp),
-                                         method='Nelder-Mead')
+                                         args=(template_stamp, data_stamp), method = "Powell")
 
     if not registration_result.success:
         print(f"Warning: Registration optimization did not converge: {registration_result.message}")
