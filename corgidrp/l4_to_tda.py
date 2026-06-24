@@ -601,38 +601,33 @@ def convert_to_flux(input_dataset, fluxcal_factor):
 def compute_flux_ratio_noise(input_data, NDcalibration, unocculted_star_data, unocculted_star_loc=None, requested_separations=None, halfwidth=None,
                              nsigma=1, small_sample_correction=False):
     '''
-    Uses the PSF-subtracted frame and its algorithm throughput vs separation to
-    produce a calibrated n-sigma flux ratio noise curve, also accounting for the throughput of the coronagraph.
-    It calculates flux ratio noise curve value for each radial separation from the subtracted star location, interpolating KLIP and core throughput values at these input separations.
-    It uses unocculted star images (or a dataset of them) and ND transmission to determine the integrated flux of the Gaussian-fit star (in the dataset case, each frame is assumed to correspond to the frames
-    in input_data), and an estimate of planet flux in input_data (per frame, if this is a dataset) is made by calculating the integrated flux of a Gaussian with amplitude equal to
-    the annular noise and FWHM equal to that used for KLIP algorithm througput for each radial separation.
+    Parse input_data, which can be a single PSF-subtracted image or a dataset of PSF-subtracted images, and the associated arguments to produce a calibrated n-sigma flux-ratio noise curve
+    for each and every input_data frame.
+
+    This function is a wrapper calling _compute_flux_ratio_noise_frame on each and every input_data frame, with the corresponding set of arguments.
 
     Args:
-        input_data (corgidrp.data.Image or corgidrp.data.Dataset): a PSF-subtracted image or a dataset of PSF-subtracted images.
+        input_data (corgidrp.data.Image or corgidrp.data.Dataset): PSF-subtracted image or dataset of PSF-subtracted images.
         NDcalibration (corgidrp.data.NDFilterSweetSpotDataset): ND filter calibration.
-        unocculted_star_data (corgidrp.data.Image or corgidrp.data.Dataset): an unocculted star image or a dataset
-            of unocculted star images corresponding to the images in input_data (in this case, it should have the same number of frames as input_data, with 1-to-1 correspondence).
-        unocculted_star_loc (1-D or 2-D integer array, optional): pixel coordinates of the unocculted star (image case) or array of pixel coordinates of the unocculted stars (dataset case,
-        with coordinates according to the order given in the unocculted_star_data). For an Image-type input, provide [row, col]. For a Dataset-type input, provide a 2xN array whose first row is row positions and whose
-            second row is column positions. If None, the peak pixel location is used for each frame. Defaults to None.
-        requested_separations (float array, optional): separations at which to compute the flux ratio noise curve.  If None, the separations used for
-            the core throughput are used (e.g., no interpolation needed).  Defaults to None.
-        halfwidth (float, optional): halfwidth of the annulus to use for noise calculation.  If None, half
-            of the minimum spacing between separation distances (if it isn't uniform spacing) is used.  Defaults to None.
-        nsigma (float, optional): sigma multiplier for the noise curve. E.g. nsigma=5 produces a 5-sigma
-            contrast curve. Defaults to 1.
-        small_sample_correction (bool, optional): if True, apply the small sample statistics correction
-            from Mawet et al. (2014) using the Student's t-distribution. Defaults to False.
+        unocculted_star_data (corgidrp.data.Image or corgidrp.data.Dataset): unocculted star image or dataset of unocculted star images corresponding to the frames in input_data
+            (for a Dataset-type input_data, it should have the same number of frames as input_data, with 1-to-1 correspondence).
+        unocculted_star_loc (1-D or 2-D integer array, optional): pixel coordinates of the unocculted star (image case) or array of pixel coordinates of the unocculted star in each and every frame (dataset case,
+            with coordinates according to the order given in unocculted_star_data). For an Image-type input, provide [row, col]. For a Dataset-type input, provide a 2xN array
+            whose first row is row positions and whose second row is column positions. If None, the peak pixel location is used for each and every frame. Defaults to None.
+        requested_separations (float array, optional): separations at which to compute the flux-ratio noise curve.
+            If None, the separations from the KLIP throughput extension are used. Defaults to None.
+        halfwidth (float, optional): halfwidth of the annulus to use for the noise calculation. If None, half of the minimum spacing between separation values is used. Defaults to None.
+        nsigma (float, optional): sigma multiplier for the noise curve. E.g., nsigma=5 produces a 5-sigma contrast curve. Defaults to 1.
+        small_sample_correction (bool, optional): if True, apply the small-sample statistics correction from Mawet et al. (2014) using the Student's t-distribution. Defaults to False.
 
     Returns:
-        corgidrp.data.Image or corgidrp.data.Dataset: input data, of Image type or Dataset type, with an additional extension header 'FRN_CRV' for every frame,
-        containing the calibrated flux ratio noise curve as a function of radial separation. The data in that extension, for a given frame, is a (2+M)xN array, where:
-            --the first row contains the separation radii in pixels
-            --the second row contains the separation radii in milli-arcseconds (mas)
-            --and the M rows contain the corresponding flux ratio noise curve values for the M KL mode truncations (maintaining the KL index ordering).
+        corgidrp.data.Image or corgidrp.data.Dataset: copy of the input image, or dataset containing copies of the input frames, with an added 'FRN_CRV' extension HDU for each and every output frame,
+            containing the calibrated flux-ratio noise curve as a function of radial separation. The data in that extension, for a given frame, is a (2+M)xN array, where:
+                --the first row contains the separation radii in pixels;
+                --the second row contains the separation radii in milli-arcseconds (mas);
+                --and the M rows contain the corresponding flux-ratio-noise-curve values for the M KL mode truncations (maintaining the KL index ordering).
 
-            TODO:  Add uncertainty to flux ratio noise curve based on uncertainties in core throughput and algorithm throughput if those are implemented in the future.
+            TODO: Add uncertainty to the flux-ratio noise curve based on uncertainties in core throughput and in algorithm throughput, if those are implemented in the future.
     '''
 
     if isinstance(input_data, Image):
@@ -640,7 +635,7 @@ def compute_flux_ratio_noise(input_data, NDcalibration, unocculted_star_data, un
         if not isinstance(unocculted_star_data, Image):
             raise TypeError('unocculted_star_data must be of Image type when input_data is of Image type.')
 
-        return _compute_flux_ratio_noise_image(input_data, NDcalibration, unocculted_star_data,
+        return _compute_flux_ratio_noise_frame(input_data, NDcalibration, unocculted_star_data,
                                                unocculted_star_loc=unocculted_star_loc,
                                                requested_separations=requested_separations,
                                                halfwidth=halfwidth, nsigma=nsigma,
@@ -663,7 +658,7 @@ def compute_flux_ratio_noise(input_data, NDcalibration, unocculted_star_data, un
                     unocculted_star_loc[1][i],
                 ])
 
-            output_frames.append(_compute_flux_ratio_noise_image(input_image, NDcalibration, unocculted_star_data[i],
+            output_frames.append(_compute_flux_ratio_noise_frame(input_image, NDcalibration, unocculted_star_data[i],
                                                                  unocculted_star_loc=star_loc,
                                                                  requested_separations=requested_separations,
                                                                  halfwidth=halfwidth, nsigma=nsigma,
@@ -671,26 +666,35 @@ def compute_flux_ratio_noise(input_data, NDcalibration, unocculted_star_data, un
 
         return Dataset(output_frames)
 
-    raise TypeError('input_data must be a corgidrp.data.Image or corgidrp.data.Dataset.')
+    raise TypeError('input_data must be a corgidrp.data.Image or a corgidrp.data.Dataset.')
 
 
-def _compute_flux_ratio_noise_image(input_image, NDcalibration, unocculted_star_image, unocculted_star_loc=None, requested_separations=None, halfwidth=None,
+def _compute_flux_ratio_noise_frame(input_image, NDcalibration, unocculted_star_image, unocculted_star_loc=None, requested_separations=None, halfwidth=None,
                                     nsigma=1, small_sample_correction=False):
     '''
-    Compute a flux-ratio noise curve for a single PSF-subtracted Image.
+    Compute a calibrated n-sigma flux-ratio noise curve for a single PSF-subtracted image, from an input PSF-subtracted image and associated algorithm throughput vs separation, also accounting for the throughput of the coronagraph.
+
+    This function calculates a flux-ratio noise curve value for each and every given radial separation from the subtracted star location, interpolating KLIP-throughput and core-throughput values at these input separations.
+    It uses an unocculted star image and ND transmission to determine the integrated flux of the Gaussian-fit star. An estimate of planet flux in input_image is made by calculating the integrated flux of a Gaussian
+    with amplitude equal to the annular noise and FWHM equal to that used for KLIP algorithm throughput for each and every radial separation.
 
     Args:
-        input_image (corgidrp.data.Image): PSF-subtracted image.
+        input_image (corgidrp.data.Image): single PSF-subtracted image.
         NDcalibration (corgidrp.data.NDFilterSweetSpotDataset): ND filter calibration.
         unocculted_star_image (corgidrp.data.Image): unocculted star image corresponding to input_image.
         unocculted_star_loc (1-D integer array, optional): [row, col] pixel coordinates of the unocculted star. If None, the peak pixel location is used. Defaults to None.
-        requested_separations (float array, optional): separations at which to compute the flux-ratio noise curve.
-        halfwidth (float, optional): halfwidth of the annulus to use for noise calculation.
-        nsigma (float, optional): sigma multiplier for the noise curve. Defaults to 1.
-        small_sample_correction (bool, optional): if True, apply the small sample statistics correction.
+        requested_separations (float array, optional): separations at which to compute the flux-ratio noise curve. If None, the separations from the KLIP throughput extension are used. Defaults to None.
+        halfwidth (float, optional): halfwidth of the annulus to use for the noise calculation. If None, half of the minimum spacing between separation values is used. Defaults to None.
+        nsigma (float, optional): sigma multiplier for the noise curve. E.g., nsigma=5 produces a 5-sigma contrast curve. Defaults to 1.
+        small_sample_correction (bool, optional): if True, apply the small-sample statistics correction from Mawet et al. (2014) using the Student's t-distribution. Defaults to False.
+
 
     Returns:
-        corgidrp.data.Image: copy of input_image with an added 'FRN_CRV' extension.
+        corgidrp.data.Image: copy of the input image with an added 'FRN_CRV' extension HDU, containing the calibrated flux-ratio noise curve as a function of radial separation.
+            The data in that extension is a (2+M)xN array, where:
+                --the first row contains the separation radii in pixels;
+                --the second row contains the separation radii in milli-arcseconds (mas);
+                --and the M rows contain the corresponding flux-ratio-noise-curve values for the M KL mode truncations (maintaining the KL index ordering).
     '''
 
     output_image = input_image.copy()
