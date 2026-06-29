@@ -4,15 +4,23 @@ Installation Guide
 Quick Installation
 -------------------
 
-As the code is very much still in development, clone this repository, enter the top-level folder, and run the following command:
+Install the latest release with:
 
 .. code-block:: bash
 
+    pip install corgidrp
+
+To get the latest bleeding-edge changes, clone the repository and install in editable mode instead:
+
+.. code-block:: bash
+
+    git clone https://github.com/roman-corgi/corgidrp.git
+    cd corgidrp
     pip install -e .
 
 Then you can import ``corgidrp`` like any other Python package!
 
-The installation will create a configuration folder in your home directory called ``.corgidrp``. 
+The installation will create a configuration folder in your home directory called ``.corgidrp``.
 That configuration directory will be used to locate things on your computer such as the location of the calibration database and the pipeline configuration file. The configuration file stores settings such as whether to track each individual error term added to the noise.
 
 For Developers
