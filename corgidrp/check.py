@@ -1299,3 +1299,28 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
         # otherwise, could have been '-999', which is fine (still str)
 
     return (adjusted_pri_hdr, adjusted_img_hdr)
+
+def check_uniq_keyword(dataset, keyword):
+    """
+    checks the uniqueness of a pri_hdr or ext_hdr keyword in the frames of a dataset
+    
+    Args:
+       dataset(data.Dataset): input dataset to check on
+       keyword(str): pri_hdr or ext_hdr keyword
+       
+    Returns:
+       boolean: True in case of an unique keyword, False in case not
+    """
+    uni_hd = []
+    for frame in dataset:
+        if keyword in frame.pri_hdr:
+            uni_hd.append(frame.pri_hdr[keyword])
+        elif keyword in frame.ext_hdr:
+            uni_hd.append(frame.ext_hdr[keyword])
+        else:
+            raise AttributeError("keyword {0} not in header".format(keyword))
+    uni = False
+    if len(np.unique(uni_hd)) == 1:
+        uni = True
+ 
+    return uni
