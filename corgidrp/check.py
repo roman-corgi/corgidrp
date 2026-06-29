@@ -1305,8 +1305,8 @@ def check_uniq_keyword(dataset, keyword):
     checks the uniqueness of a pri_hdr or ext_hdr keyword in the frames of a dataset
     
     Args:
-       dataset(data.Dataset): input dataset to check on
-       keyword(str): pri_hdr or ext_hdr keyword
+       dataset (data.Dataset): input dataset to check on
+       keyword (str): pri_hdr or ext_hdr keyword
        
     Returns:
        boolean: True in case of an unique keyword, False in case not
