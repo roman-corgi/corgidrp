@@ -6,9 +6,7 @@ import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.data as data
 import corgidrp.walker as walker
-import corgidrp.nd_filter_calibration as nd_filter_calibration
 from corgidrp import caldb, check
-from astropy.time import Time
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -16,7 +14,7 @@ thisfile_dir = os.path.dirname(__file__)
 @pytest.mark.e2e
 def test_l1_to_nd_filter_e2e(e2edata_path, e2eoutput_path):
     # grab input L1 data, consisting of dim (no ND) and bright (ND 475) stars
-    l1_input_data_dir = os.path.join(e2edata_path, "ND_sims", "L1")
+    l1_input_data_dir = os.path.join(e2edata_path, "ND_sims")
     l1_input_data_list = glob.glob(os.path.join(l1_input_data_dir, "*_l1_*.fits"))
 
     # Initialize a connection to the calibration database
@@ -25,16 +23,8 @@ def test_l1_to_nd_filter_e2e(e2edata_path, e2eoutput_path):
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
         os.remove(tmp_caldb_csv)
-
-    # grab calibration files for processing L1 data
-    cal_dir =os.path.join(e2edata_path, "ND_sims", "Cals") 
     db = caldb.CalDB()
-    db.scan_dir_for_new_entries(cal_dir)
-
-    # add detector params to caldb
-    detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
-    detector_params.save(filedir=corgidrp.config_folder)
-    db.create_entry(detector_params)
+    db.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     # create empty output directory
     test_outputdir = os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e")
