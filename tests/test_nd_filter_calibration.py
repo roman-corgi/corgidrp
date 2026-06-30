@@ -32,8 +32,8 @@ def print_pass():
 # Global variables and constants
 # ---------------------------------------------------------------------------
 BRIGHT_STARS = ['Vega']
-DIM_STARS = ['TYC 4424-1286-1',
-             'GSC 02581-02323']
+DIM_STARS = ['TYC 4424-1286-1']
+            # 'GSC 02581-02323']
 
 # takes a long time to run with all stars
 #BRIGHT_STARS = ['109 Vir', 'Vega', 'Eta Uma', 'Lam Lep']
