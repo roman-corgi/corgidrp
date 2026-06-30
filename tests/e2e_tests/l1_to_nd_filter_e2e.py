@@ -1,5 +1,6 @@
 import os, shutil, glob, argparse
 import pytest
+import warnings
 
 import corgidrp
 import corgidrp.mocks as mocks
@@ -48,26 +49,26 @@ def test_l1_to_nd_filter_e2e(e2edata_path, e2eoutput_path):
     for file in os.listdir(l2b_outputdir):
         os.remove(os.path.join(l2b_outputdir, file))
     
-    # run walker
-    walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
+    # suppress warnings in the pipeline
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=UserWarning)
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
 
-    """
-    # 5. Load product & assert if calculated OD matches the input
-    nd_file = glob.glob(os.path.join(simdata_dir, "*_ndf_cal*.fits"))
+
+    # 5. Load product & assert if calculated OD matches what is expected
+    nd_file = glob.glob(os.path.join(l2b_outputdir, "*_ndf_cal*.fits"))
     nd_cal  = data.NDFilterSweetSpotDataset(nd_file[0])
 
     recovered_od = float(nd_cal.od_values[0])  # use the first entry for the check
-    print("Calculated OD:", recovered_od)
-    print("Input OD:", od_truth)
-    assert recovered_od == pytest.approx(od_truth, abs=1e-1)
+    assert recovered_od == pytest.approx(4.75, abs=1e-1)
 
     check.compare_to_mocks_hdrs(nd_file[0])
-    """
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
-    print("ND‑filter E2E test passed")
+    print("L1 to ND‑filter E2E test passed")
 
 # ----------------------------------------------------------------------
 if __name__ == "__main__":
