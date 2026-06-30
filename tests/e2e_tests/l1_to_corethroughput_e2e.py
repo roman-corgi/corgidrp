@@ -202,7 +202,7 @@ if __name__ == "__main__":
     outputdir = thisfile_dir
     e2edata_path = '/home/eshen12345/dev/E2E_Test_Data'
 
-    ap = argparse.ArgumentParser(description='run the l21 to CoreThroughput end-to-end test')
+    ap = argparse.ArgumentParser(description='run the l1 to CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,
                     help='Path to CGI_TVAC_Data Folder [%(default)s]')
     ap.add_argument('-o', '--outputdir', default=outputdir,
