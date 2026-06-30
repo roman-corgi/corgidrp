@@ -182,12 +182,14 @@ def _set_recipe_header(frame, recipe, prev_recipes=None, is_last_frame=True):
     For a chained recipe: RECIPE = prev_recipes[0], RECIPE2 = prev_recipes[1], ...,
     RECIPE{N} = recipe, NRECIPES = N.
 
-    RAM-heavy recipes store a compact "See RECIPE header value in <last_input>"
+    RAM-heavy recipes store a compact "See RECIPE header value in <anchor>"
     pointer instead of repeating the full input list in every frame header.
     For the current recipe this is only applied to non-last frames (is_last_frame=False)
-    so that at least one frame retains the full input list. For prev_recipes the
-    compaction is always applied since those recipes already saved their full
-    input list during their own run.
+    so that at least one frame retains the full input list. For prev_recipes,
+    non-last frames receive a compact pointer while the last frame always receives
+    the full recipe content. Storing the full recipe on the last frame avoids
+    depending on an anchor file that may be overwritten by a later chain running
+    to the same output directory.
 
     Args:
         frame (corgidrp.data.Image): frame whose ext_hdr to update
@@ -207,23 +209,41 @@ def _set_recipe_header(frame, recipe, prev_recipes=None, is_last_frame=True):
         del frame.ext_hdr['NRECIPES']
 
     def _compact(r, force=False):
-        """Compact a RAM-heavy recipe's input list to a single pointer."""
-        if (force or r.get("ram_heavy", False)) and isinstance(r.get("inputs"), list) and r["inputs"]:
-            return dict(r, inputs="See RECIPE header value in {0}".format(r["inputs"][-1]))
-        return r
+        """Compact a RAM-heavy recipe's input list to a single pointer.
 
-    # For the current recipe: compact inputs on non-last frames only
-    recipe_to_store = _compact(recipe, force=False) if not is_last_frame else recipe
+        For RAM-heavy recipes, the pointer uses the recipe's anchor output file
+        (recorded in r['_recipe_anchor'] after the recipe's save step), falling
+        back to the last input file.  Internal underscore-prefixed keys are
+        stripped before serialisation.
+        """
+        r_clean = {k: v for k, v in r.items() if not k.startswith('_')}
+        if (force or r.get("ram_heavy", False)) and isinstance(r.get("inputs"), list) and r["inputs"]:
+            target = r.get("_recipe_anchor") or r["inputs"][-1]
+            return dict(r_clean, inputs="See RECIPE header value in {0}".format(target))
+        return r_clean
+
+    # For the current recipe: compact inputs on non-last frames only.
+    # Strip internal keys from the full recipe too so they don't reach FITS headers.
+    if not is_last_frame:
+        recipe_to_store = _compact(recipe, force=False)
+    else:
+        recipe_to_store = {k: v for k, v in recipe.items() if not k.startswith('_')}
 
     if not prev_recipes:
         frame.ext_hdr['RECIPE'] = json.dumps(recipe_to_store)
     else:
         # First recipe in the chain occupies RECIPE for backwards compatibility.
-        # prev_recipes are always compacted when RAM-heavy since those runs
-        # already saved the full input list in their own last output frame.
-        frame.ext_hdr['RECIPE'] = json.dumps(_compact(prev_recipes[0]))
-        for idx, r in enumerate(prev_recipes[1:], start=2):
-            frame.ext_hdr['RECIPE{0}'.format(idx)] = json.dumps(_compact(r))
+        # For the last frame: store prev_recipes in full so the complete input list
+        # is available directly without following a pointer (which could point to a
+        # file later overwritten by a parallel chain writing to the same directory).
+        # For non-last frames: compact RAM-heavy prev_recipes to a pointer.
+        for idx_pr, pr in enumerate(prev_recipes):
+            key = 'RECIPE' if idx_pr == 0 else 'RECIPE{0}'.format(idx_pr + 1)
+            if is_last_frame:
+                pr_to_store = {k: v for k, v in pr.items() if not k.startswith('_')}
+            else:
+                pr_to_store = _compact(pr)
+            frame.ext_hdr[key] = json.dumps(pr_to_store)
         n = len(prev_recipes) + 1
         frame.ext_hdr['RECIPE{0}'.format(n)] = json.dumps(recipe_to_store)
         frame.ext_hdr['NRECIPES'] = n
@@ -859,6 +879,10 @@ def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
         save_step = False
         output_filepaths = []
         for filelist in filelist_chunks:
+            # anchor_sctsrt tracks which frame should hold the full recipe in RAM-heavy mode.
+            # Initialised to the SCTSRT of the last input frame; updated below when a
+            # sorting/filtering step removes that frame from the dataset.
+            anchor_sctsrt = None
             if recipe["inputs"]:
                 if ram_heavy_bool:
                     curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
@@ -868,6 +892,8 @@ def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
                 frames = list(curr_dataset)
                 for j, frame in enumerate(frames):
                     _set_recipe_header(frame, recipe, prev_recipes, is_last_frame=(j == len(frames) - 1))
+                if ram_heavy_bool and frames:
+                    anchor_sctsrt = frames[-1].ext_hdr.get('SCTSRT')
             # execute each pipeline step
             print('Executing recipe: {0}'.format(recipe['name']))
             if isinstance(filelist, list):
@@ -893,6 +919,13 @@ def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
                     save_data(curr_dataset, recipe["outputdir"], suffix=suffix, ram_heavy_save=ram_heavy_save)
                     if isinstance(curr_dataset, data.Dataset):
                         output_filepaths += [frame.filepath for frame in curr_dataset]
+                        # Record the anchor output file so downstream compact pointers
+                        # can reference the frame that holds the full input list.
+                        if ram_heavy_bool and anchor_sctsrt is not None:
+                            for frame in curr_dataset:
+                                if frame.ext_hdr.get('SCTSRT') == anchor_sctsrt:
+                                    recipe["_recipe_anchor"] = frame.filepath
+                                    break
                     else:
                         output_filepaths += [curr_dataset.filepath]
                     save_step = True
@@ -948,11 +981,38 @@ def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
 
                     # make sure recipe headers are propagated to any newly created frames
                     if isinstance(curr_dataset, data.Dataset):
-                        for frame in curr_dataset:
-                            if "RECIPE" not in frame.ext_hdr:
-                                _set_recipe_header(frame, recipe, prev_recipes)
-                    elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
-                        _set_recipe_header(curr_dataset, recipe, prev_recipes)
+                        if ram_heavy_bool and anchor_sctsrt is not None:
+                            # In RAM-heavy mode a sorting/filtering step (e.g.
+                            # sort_pupilimg_frames) may remove the anchor frame from the
+                            # dataset.  When that happens, promote the frame with the
+                            # highest SCTSRT in the surviving dataset to anchor so that
+                            # at least one output file will hold the full input list.
+                            frames_now = list(curr_dataset)
+                            sctsrts = {f.ext_hdr.get('SCTSRT') for f in frames_now}
+                            if anchor_sctsrt not in sctsrts and frames_now:
+                                new_anchor = max(frames_now,
+                                                 key=lambda f: f.ext_hdr.get('SCTSRT', 0))
+                                anchor_sctsrt = new_anchor.ext_hdr.get('SCTSRT')
+                                for frame in frames_now:
+                                    is_anc = (frame.ext_hdr.get('SCTSRT') == anchor_sctsrt)
+                                    _set_recipe_header(frame, recipe, prev_recipes,
+                                                       is_last_frame=is_anc)
+                            else:
+                                for frame in curr_dataset:
+                                    if "RECIPE" not in frame.ext_hdr:
+                                        _set_recipe_header(frame, recipe, prev_recipes,
+                                                           is_last_frame=(frame.ext_hdr.get('SCTSRT') == anchor_sctsrt))
+                        else:
+                            for frame in curr_dataset:
+                                if "RECIPE" not in frame.ext_hdr:
+                                    _set_recipe_header(frame, recipe, prev_recipes)
+                    elif hasattr(curr_dataset, 'ext_hdr'):
+                        # Single Image-like output (e.g. NonLinCal, KGainCal): always
+                        # (re)write recipe headers with is_last_frame=True so the
+                        # full prev_recipe chain is stored inline, even if ext_hdr was
+                        # inherited from a non-last input frame.
+                        _set_recipe_header(curr_dataset, recipe, prev_recipes,
+                                           is_last_frame=True)
 
         if not save_step:
             output_filepaths = None
