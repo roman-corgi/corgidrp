@@ -14,7 +14,7 @@ thisfile_dir = os.path.dirname(__file__)
 @pytest.mark.e2e
 def test_l1_to_nd_filter_e2e(e2edata_path, e2eoutput_path):
     # grab input L1 data, consisting of dim (no ND) and bright (ND 475) stars
-    l1_input_data_dir = os.path.join(e2edata_path, "ND_sims")
+    l1_input_data_dir = os.path.join(e2edata_path, "ND_sims", "L1")
     l1_input_data_list = glob.glob(os.path.join(l1_input_data_dir, "*_l1_*.fits"))
 
     # Initialize a connection to the calibration database
@@ -23,8 +23,11 @@ def test_l1_to_nd_filter_e2e(e2edata_path, e2eoutput_path):
     # remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
         os.remove(tmp_caldb_csv)
+
+    # grab calibration files for processing L1 data
+    cal_dir =os.path.join(e2edata_path, "ND_sims", "Cals") 
     db = caldb.CalDB()
-    db.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    db.scan_dir_for_new_entries(cal_dir)
 
     # create empty output directory
     test_outputdir = os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e")
@@ -32,17 +35,12 @@ def test_l1_to_nd_filter_e2e(e2edata_path, e2eoutput_path):
         shutil.rmtree(test_outputdir)
     os.makedirs(test_outputdir)
     l2b_outputdir = os.path.join(test_outputdir, "l2b_results")
-    if not os.path.exists(l2b_outputdir):
-        os.mkdir(l2b_outputdir)
-
-    # clean up by removing old files
-    for file in os.listdir(l2b_outputdir):
-        os.remove(os.path.join(l2b_outputdir, file))
+    os.makedirs(l2b_outputdir)
     
     # suppress warnings in the pipeline
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=UserWarning)
-        warnings.simplefilter("ignore", category=RuntimeWarning)
+        warnings.simplefilter("ignore", category=UserWarning) # warning about OD variation
+        warnings.simplefilter("ignore", category=RuntimeWarning) # warning about different EM gain between bright and dark frames
         walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
 
 
@@ -52,8 +50,9 @@ def test_l1_to_nd_filter_e2e(e2edata_path, e2eoutput_path):
 
     recovered_od = float(nd_cal.od_values[0])  # use the first entry for the check
     assert recovered_od == pytest.approx(4.75, abs=1e-1)
-
     check.compare_to_mocks_hdrs(nd_file[0])
+    assert nd_cal.ext_hdr["DATATYPE"] == "NDFilterSweetSpotDataset"
+    assert nd_cal.ext_hdr["DATALVL"] == "CAL"
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
