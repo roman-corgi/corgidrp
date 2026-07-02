@@ -562,10 +562,10 @@ def test_uniq_keyword():
     image1 = Image(img, err = err, dq = dq,pri_hdr = prhd, ext_hdr = exthd)
     image2 = Image(img, err = err, dq = dq,pri_hdr = prhd1, ext_hdr = exthd)
     dataset = Dataset([image1, image2])
-    assert check_uniq_keyword(dataset, "TARGET") == False
+    assert check_uniq_keyword(dataset, "TARGET")[0] == False
     dataset1 = Dataset([image1, image1])
-    assert check_uniq_keyword(dataset1, "TARGET") == True
-
+    assert check_uniq_keyword(dataset1, "TARGET")[0] == True
+    assert len(check_uniq_keyword(dataset, "TARGET")[1]) == 2
 
 
 if __name__ == '__main__':

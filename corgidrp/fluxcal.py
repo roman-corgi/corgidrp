@@ -481,12 +481,13 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
     """
     d_or_i = dataset_or_image.copy()
     if isinstance(d_or_i, corgidrp.data.Dataset):
-        if corgidrp.check.check_uniq_keyword(d_or_i, "TARGET"):
-            #take the mean of images in the dataset
+        uni, uni_list = corgidrp.check.check_uniq_keyword(d_or_i, "VISITID")
+        if uni:
+            #take the median of images in the dataset
             image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
             dataset = d_or_i
         else:
-            raise AttributeError("dataset of different targets cannot be medianed")
+            raise AttributeError("dataset of different VISITIDs {0} cannot be medianed".format(uni_list))
     else:
         image = d_or_i
         dataset = corgidrp.data.Dataset([image])
@@ -616,12 +617,13 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
     """
     d_or_i = dataset_or_image.copy()
     if isinstance(d_or_i, corgidrp.data.Dataset):
-        if corgidrp.check.check_uniq_keyword(d_or_i, "TARGET"):
-            #take the mean of images in the dataset
+        uni, uni_list = corgidrp.check.check_uniq_keyword(d_or_i, "VISITID")
+        if uni:
+            #take the median of images in the dataset
             image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
             dataset = d_or_i
         else:
-            raise AttributeError("dataset of different targets cannot be medianed")
+            raise AttributeError("dataset of different VISITIDs {0} cannot be medianed".format(uni_list))
     else:
         image = d_or_i
         dataset = corgidrp.data.Dataset([image])
@@ -855,12 +857,13 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr
     """
     d_or_i = dataset_or_image.copy()
     if isinstance(d_or_i, corgidrp.data.Dataset):
-        if corgidrp.check.check_uniq_keyword(d_or_i, "TARGET"):
-            #take the mean of images in the dataset
+        uni, uni_list = corgidrp.check.check_uniq_keyword(d_or_i, "VISITID")
+        if uni:
+            #take the median of images in the dataset
             image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
             dataset = d_or_i
         else:
-            raise AttributeError("dataset of different targets cannot be medianed")
+            raise AttributeError("dataset of different VISITIDs {0} cannot be medianed".format(uni_list))
     else:
         image = d_or_i
         dataset = corgidrp.data.Dataset([image])

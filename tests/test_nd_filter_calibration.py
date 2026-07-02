@@ -32,8 +32,8 @@ def print_pass():
 # Global variables and constants
 # ---------------------------------------------------------------------------
 BRIGHT_STARS = ['Vega']
-DIM_STARS = ['TYC 4424-1286-1']
-            # 'GSC 02581-02323']
+DIM_STARS = ['TYC 4424-1286-1',
+             'GSC 02581-02323']
 
 # takes a long time to run with all stars
 #BRIGHT_STARS = ['109 Vir', 'Vega', 'Eta Uma', 'Lam Lep']
@@ -481,8 +481,8 @@ def test_nd_filter_calibration_with_fluxcal(dim_dir, stars_dataset_cached, phot_
         img.ext_hdr['DATALVL'] = 'L3'
 
     # Convert list of Image objects into a Dataset
-    dim_dataset = Dataset(dim_images)
-
+    # calibrate_fluxcal_aper can only deal with on target/visitid
+    dim_dataset = Dataset([dim_images[0]])
     # 1) Generate a flux calibration object from the single image
     if phot_method == "Aperture":
         phot_kwargs = {

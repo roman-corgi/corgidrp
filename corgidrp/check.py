@@ -1309,7 +1309,7 @@ def check_uniq_keyword(dataset, keyword):
        keyword (str): pri_hdr or ext_hdr keyword
        
     Returns:
-       boolean: True in case of an unique keyword, False in case not
+       boolean, list: True in case of an unique keyword, False in case not, additionally list of unique keywords
     """
     uni_hd = []
     for frame in dataset:
@@ -1323,4 +1323,4 @@ def check_uniq_keyword(dataset, keyword):
     if len(np.unique(uni_hd)) == 1:
         uni = True
  
-    return uni
+    return uni, np.unique(uni_hd)
