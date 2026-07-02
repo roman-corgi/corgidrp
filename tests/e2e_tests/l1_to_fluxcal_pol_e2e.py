@@ -46,11 +46,13 @@ def test_l1_to_fluxcal_pol_e2e(e2edata_path, e2eoutput_path):
         warnings.simplefilter("ignore", category=RuntimeWarning)
         walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
 
-    # grab calibration file and print output
+    # grab calibration file
     fluxcal_file = glob.glob(os.path.join(l2b_outputdir, '*abf_cal*.fits'))[0]
     flux_fac = data.FluxcalFactor(fluxcal_file)
-    print("used color filter", flux_fac.filter)
-    print("used ND filter", flux_fac.nd_filter)
+    
+    # check color filter and ND filter are assigned correctly
+    assert flux_fac.filter == "1F"
+    assert flux_fac.nd_filter == "ND475"
     print("fluxcal factor", flux_fac.fluxcal_fac)
     print("fluxcal factor error", flux_fac.fluxcal_err)
 
