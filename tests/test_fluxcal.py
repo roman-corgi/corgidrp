@@ -105,11 +105,11 @@ def test_colorcor():
     ## BB of an O5 star
     bbscale = 1.e-21 * u.erg/(u.s * u.cm**2 * u.AA * u.steradian)
     flux_source = BlackBody(scale = bbscale, temperature=54000.0 * u.K)
-    K_bb = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, flux_source(wave))
+    K_bb = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, flux_source(wave).value)
     assert K_bb == pytest.approx(1., 0.01)
     
     flux_source = BlackBody(scale = bbscale, temperature=100. * u.K)
-    K_bb = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, flux_source(wave))
+    K_bb = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, flux_source(wave).value)
     assert K_bb > 2#weakest star to be detected
     # sanity check
     K = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, calspec_flux)
