@@ -4,6 +4,7 @@ import re
 import numpy as np
 import corgidrp.data as data
 import corgidrp.check as check
+from scipy.ndimage import median_filter
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
                     detector_regions=None, use_imaging_area = False, dataset_copy=True):
@@ -161,7 +162,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
                        plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10,
                        mode='image', detector_regions=None, pct_oversat_lim=20,
-                       dataset_copy=True, discard_oversat=False):
+                       dataset_copy=True, discard_oversat=False, median_filter_mode=False):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -210,6 +211,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
         discard_oversat (bool): if True, discard frames that exceed pct_oversat_lim, preserving the previous behavior.
             If False, keep them, mark IS_BAD, and skip cosmic ray identification for those frames. Defaults to False.
+        median_filter_mode (bool): If True, a median filter is utilized to construct the cosmic ray mask instead of the usual cosmic ray masking.  Defaults to False.
 
     Returns:
         corgidrp.data.Dataset:
@@ -217,6 +219,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     """
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
+    #sat_thresh = 800/90000 #XXX
+    median_filter_mode = True #XXX
 
     if detector_regions is None:
         detector_regions = detector_areas
@@ -306,17 +310,42 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             cosm_tail_i = 0
         else:
             cosm_tail_i = cosm_tail
-        m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
-                        fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
-                        sat_thresh=sat_thresh,
-                        plat_thresh=plat_thresh,
-                        cosm_filter=cosm_filter,
-                        cosm_box=cosm_box,
-                        cosm_tail=cosm_tail_i,
-                        mode=mode,
-                        detector_regions=detector_regions,
-                        arrtype=arrtype
-                        ) * cr_dqval
+        if median_filter_mode:
+            med_mask = median_filter(crmasked_cube[i,:,:], size=(10,5))#XXX
+            diff = crmasked_cube[i,:,:] - med_mask
+            Icount, IbinEdges = np.histogram(diff, bins=21)#XXX
+
+            # find the minima in the histogram
+            bV = np.logical_and(Icount[1:-1] <= Icount[:-2],
+                                Icount[1:-1] < Icount[2:])
+
+            # vector of intensity values at the center of each bin
+            binCenter = 0.5*(IbinEdges[:-1]+IbinEdges[1:])
+
+            # List of bin values where the histogram has a miminum
+            binVal = binCenter[1:-1][bV]
+
+            # Choose the first minimum as the threshold. this will be the lowest
+            # intensity value above the background intensity level. All pixels
+            # with greater intensity must be "signal". 
+            if np.size(binVal) > 0:
+                thresh = binVal[0]
+                m2[i,:,:] = (crmasked_cube[i,:,:] > thresh).astype(int) * cr_dqval
+            # If binVal is empty, the histogram has no minima except at an endpoint. 
+            else:
+                m2[i,:,:] = np.zeros_like(crmasked_cube[i,:,:])
+        else:
+            m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
+                            fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
+                            sat_thresh=sat_thresh,
+                            plat_thresh=plat_thresh,
+                            cosm_filter=cosm_filter,
+                            cosm_box=cosm_box,
+                            cosm_tail=cosm_tail_i,
+                            mode=mode,
+                            detector_regions=detector_regions,
+                            arrtype=arrtype
+                            ) * cr_dqval
 
     # add the two masks to the all_dq mask
     new_all_dq = np.bitwise_or(crmasked_dataset.all_dq, m1)
