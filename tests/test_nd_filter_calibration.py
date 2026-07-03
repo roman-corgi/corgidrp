@@ -1,5 +1,6 @@
 import os
 import glob
+import time
 from pathlib import Path
 import numbers
 import numpy as np
@@ -9,13 +10,11 @@ import re
 import copy
 from termcolor import cprint
 
-import corgidrp
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
-import corgidrp.l2b_to_l3 as l2b_tol3
 import corgidrp.data as data 
 from corgidrp.data import (Image, Dataset, FluxcalFactor,
-    NDFilterSweetSpotDataset, NDSpectroscopy, FpamFsamCal)
+    NDFilterSweetSpotDataset, NDSpectroscopy)
 import corgidrp.mocks as mocks
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -142,6 +141,8 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
         flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
         flux_image.ext_hdr['DATALVL'] = 'L3'
         dim_star_images.append(flux_image)
+        # introduce wait time to have different file names to not overwrite each other 
+        time.sleep(1)
     return dim_star_images
 
 
@@ -187,6 +188,8 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
                 flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
                 flux_image.ext_hdr['DATALVL'] = 'L3'
                 bright_star_images.append(flux_image)
+                # introduce wait time to have different file names to not overwrite each other 
+                time.sleep(1)
     return bright_star_images
 
 
