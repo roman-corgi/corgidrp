@@ -34,7 +34,6 @@ from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy
 import datetime
 import glob
 import shutil
-import random
 from corgidrp import pol
 
 from emccd_detect.emccd_detect import EMCCDDetect
@@ -3019,9 +3018,6 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
     prihdr['TARGET'] = target_name
-    # when a new target file is created the VISITID should change
-    if target_name != 'Vega':
-        prihdr['VISITID'] = prihdr['VISITID'][:-1] + str(random.randint(0,9)) 
 
     exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
     exthdr['FPAMNAME'] = fpamname

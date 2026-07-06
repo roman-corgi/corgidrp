@@ -1,6 +1,7 @@
 import os
 import glob
 import time
+import random
 from pathlib import Path
 import numbers
 import numpy as np
@@ -140,6 +141,10 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
         # ND filter calibration requires photoelectron/s units (L3 data)
         flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
         flux_image.ext_hdr['DATALVL'] = 'L3'
+        # when a new target file is created the VISITID should change
+        visit_old = flux_image.pri_hdr['VISITID']
+        flux_image.pri_hdr['VISITID'] = visit_old[:-1] + str(random.randint(0,9)) 
+
         dim_star_images.append(flux_image)
         # introduce wait time to have different file names to not overwrite each other 
         time.sleep(1)
@@ -187,6 +192,9 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
                 # ND filter calibration requires photoelectron/s units (L3 data)
                 flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
                 flux_image.ext_hdr['DATALVL'] = 'L3'
+                # when a new target file is created the VISITID should change
+                visit_old = flux_image.pri_hdr['VISITID']
+                flux_image.pri_hdr['VISITID'] = visit_old[:-1] + str(random.randint(0,9)) 
                 bright_star_images.append(flux_image)
                 # introduce wait time to have different file names to not overwrite each other 
                 time.sleep(1)
