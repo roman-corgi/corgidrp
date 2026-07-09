@@ -42,8 +42,6 @@ def test_l1_to_polcal_e2e(e2edata_path, e2eoutput_path):
     with warnings.catch_warnings():
         # suppress warning about number of detectornoisemap frames
         warnings.simplefilter("ignore", category=UserWarning)
-        # suppress warnings about frames having different header values
-        # warnings.simplefilter("ignore", category=RuntimeWarning)
         walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
     
 
@@ -53,7 +51,7 @@ def test_l1_to_polcal_e2e(e2edata_path, e2eoutput_path):
     mm = mueller_matrix.data
 
     # check the mueller matrix elements against the normalized mueller matrix used in corgisim to create the input files
-    # also skip circular polarization elements (row/column 4) since that cannot be detected and calibrated for
+    # skip circular polarization elements (row/column 4) since that cannot be detected and calibrated for
     assert mm[0,0] == 1 # I->I should be normalized to 1
     # for main diagonal elements, check it is within 5% accuracy
     rtol = 0.05
