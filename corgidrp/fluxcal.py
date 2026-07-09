@@ -364,9 +364,24 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
         method=method,
         subpixels=subpixels
     )
+
+    # compute renormalization factor to account for lost flux if significant amount of NaN shows up in the aperture (for example cosmic rays)
+    # sum all good pixels (non NaNs) over the aperture
+    good_pixels = aper.do_photometry(
+        (~image.dq.astype(bool)).astype(float),
+        method=method,
+        subpixels=subpixels
+    )[0][0]
+
+    # find fraction of the aperture without NaNs
+    if good_pixels > 0:
+        correction_factor = aper.area / good_pixels
+    else:
+        # edge case where the aperture is all NaN, propagate NaN instead of a count of 0
+        correction_factor = np.nan
     
-    flux = aperture_sums[0] / frac_enc_energy
-    flux_err = aperture_sums_errs[0] / frac_enc_energy
+    flux = (correction_factor * aperture_sums[0]) / frac_enc_energy
+    flux_err = (correction_factor * aperture_sums_errs[0]) / frac_enc_energy
     
     if background_sub:
         return flux, flux_err, back
