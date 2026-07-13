@@ -232,7 +232,7 @@ def _compute_od_for_file(entry, target, phot_method, phot_kwargs, ref_fpam_name,
 
 
 def process_bright_target(target, files, cal_factor, od_raster_threshold,
-                          gaussian_kernel_size, phot_method="Aperture", phot_kwargs=None):
+                          phot_method="Aperture", phot_kwargs=None, gaussian_kernel_size=3):
     """
     Process bright star files for one target to compute optical density (OD)
     and (x, y) centroids for each dithered observation.
@@ -409,10 +409,10 @@ def create_nd_filter_cal(stars_dataset,
                          od_raster_threshold = 0.1,
                          phot_method="Aperture",
                          flux_or_irr="irr",
-                         gaussian_kernel_size=3,
                          phot_kwargs=None,
                          fluxcal_factor=None,
-                         calspec_files = None):
+                         calspec_files = None,
+                         gaussian_kernel_size=3):
     """
     Main ND Filter calibration workflow:
       1. Split dataset into dim and bright stars based on FPAMNAME keyword (or use cal factor input for dim)
@@ -427,13 +427,13 @@ def create_nd_filter_cal(stars_dataset,
         od_raster_threshold (float): Threshold for flagging OD variations.
             # TO DO: figure out what a reasonable value for this should be 
         phot_method (str): Photometry method ("Aperture" or "Gaussian").
-        flux_or_irr (str): Either 'flux' or 'irr' for the calibration approach.
-        gaussian_kernel_size (int): Size of gaussian kernel used to make the PSF centroid algorithm more robust against noise. 
+        flux_or_irr (str): Either 'flux' or 'irr' for the calibration approach. 
         phot_kwargs (dict, optional): Extra arguments for the actual photometry function 
             (e.g., aper_phot).
         fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): A pre-computed flux factor calibration product to use
             if dim stars are not included as part of the input dataset
         calspec_files (list, optional): list of calspec filepaths
+        gaussian_kernel_size (int): Size of gaussian kernel used to make the PSF centroid algorithm more robust against noise.
 
     Returns:
         sweet_spot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter calibration product for the dataset given
@@ -484,8 +484,8 @@ def create_nd_filter_cal(stars_dataset,
             continue
         print(f"Processing bright target files: {target}")
         star_data = process_bright_target(target, files, cal_factor,
-                                          od_raster_threshold, gaussian_kernel_size,
-                                          phot_method, phot_kwargs)
+                                          od_raster_threshold, phot_method, 
+                                          phot_kwargs, gaussian_kernel_size=gaussian_kernel_size)
         flux_results[target] = star_data
 
         od_var_flag = star_data['flag']
