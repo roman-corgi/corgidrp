@@ -12,7 +12,7 @@ Install the latest release with `pip install corgidrp`. See the [Installation gu
 
 ## How to Contribute
 
-See the [Contributing guide](https://corgidrp.readthedocs.io/en/latest/contributing.html) on ReadTheDocs for the full contributor workflow, including pipeline step conventions, unit testing, end-to-end testing, linting, design principles, and FAQ.
+See the [Contributing guide](https://corgidrp.readthedocs.io/en/latest/contributing.html) on ReadTheDocs for the full contributor workflow, including pipeline step conventions, unit testing, end-to-end testing, linting, design principles, AI policy, and FAQ.
 
 ## Change Log
 
