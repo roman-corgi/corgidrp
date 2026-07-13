@@ -39,7 +39,7 @@ def test_l1_to_nd_filter_e2e(e2edata_path, e2eoutput_path):
     
     # suppress warnings in the pipeline
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=UserWarning) # warning about OD variation
+        warnings.simplefilter("ignore", category=UserWarning) # warning about detector noisemap calibration
         warnings.simplefilter("ignore", category=RuntimeWarning) # warning about different EM gain between bright and dark frames
         walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
 
