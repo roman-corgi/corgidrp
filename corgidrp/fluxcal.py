@@ -364,24 +364,9 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
         method=method,
         subpixels=subpixels
     )
-
-    # compute renormalization factor to account for lost flux if significant amount of NaN shows up in the aperture (for example cosmic rays)
-    # sum all good pixels (non NaNs) over the aperture
-    good_pixels = aper.do_photometry(
-        (~image.dq.astype(bool)).astype(float),
-        method=method,
-        subpixels=subpixels
-    )[0][0]
-
-    # find fraction of the aperture without NaNs
-    if good_pixels > 0:
-        correction_factor = aper.area / good_pixels
-    else:
-        # edge case where the aperture is all NaN, propagate NaN instead of a count of 0
-        correction_factor = np.nan
     
-    flux = (correction_factor * aperture_sums[0]) / frac_enc_energy
-    flux_err = (correction_factor * aperture_sums_errs[0]) / frac_enc_energy
+    flux = aperture_sums[0] / frac_enc_energy
+    flux_err = aperture_sums_errs[0] / frac_enc_energy
     
     if background_sub:
         return flux, flux_err, back
@@ -496,9 +481,13 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
     """
     d_or_i = dataset_or_image.copy()
     if isinstance(d_or_i, corgidrp.data.Dataset):
-        #take the median of images in the dataset
-        image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
-        dataset = d_or_i
+        uni, uni_list = corgidrp.check.check_uniq_keyword(d_or_i, "VISITID")
+        if uni:
+            #take the median of images in the dataset
+            image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
+            dataset = d_or_i
+        else:
+            raise AttributeError("dataset of different VISITIDs {0} cannot be medianed".format(uni_list))
     else:
         image = d_or_i
         dataset = corgidrp.data.Dataset([image])
@@ -628,9 +617,13 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
     """
     d_or_i = dataset_or_image.copy()
     if isinstance(d_or_i, corgidrp.data.Dataset):
-        #take the mean of images in the dataset
-        image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
-        dataset = d_or_i
+        uni, uni_list = corgidrp.check.check_uniq_keyword(d_or_i, "VISITID")
+        if uni:
+            #take the median of images in the dataset
+            image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
+            dataset = d_or_i
+        else:
+            raise AttributeError("dataset of different VISITIDs {0} cannot be medianed".format(uni_list))
     else:
         image = d_or_i
         dataset = corgidrp.data.Dataset([image])
@@ -864,9 +857,13 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr
     """
     d_or_i = dataset_or_image.copy()
     if isinstance(d_or_i, corgidrp.data.Dataset):
-        #take the mean of images in the dataset
-        image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
-        dataset = d_or_i
+        uni, uni_list = corgidrp.check.check_uniq_keyword(d_or_i, "VISITID")
+        if uni:
+            #take the median of images in the dataset
+            image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
+            dataset = d_or_i
+        else:
+            raise AttributeError("dataset of different VISITIDs {0} cannot be medianed".format(uni_list))
     else:
         image = d_or_i
         dataset = corgidrp.data.Dataset([image])
