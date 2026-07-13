@@ -279,15 +279,13 @@ def generate_mueller_matrix_cal(input_dataset,
     # extract the target names
     pol_ref_targets = pol_ref["TARGET"].tolist()
 
-    # split the datasets into different targets
-    _, targets = dataset.split_dataset(prihdr_keywords=["TARGET"])
+    frame_targets = [image.pri_hdr["TARGET"] for image in dataset]
 
-    n_targets = np.unique(targets).shape[0]
     # check that all the targets from the dataset are in the pol reference file
-    for target in targets:
+    for target in frame_targets:
         if target not in pol_ref_targets:
             raise ValueError(f"Target {target} not found in polarization reference file.")
-    
+
     # measure the normalized difference for each dataset
     stokes_vectors = []
     stokes_vector_errs = []
@@ -302,11 +300,12 @@ def generate_mueller_matrix_cal(input_dataset,
 
     # generate the matrix of meausurements six columns [1 q_star, u_star, 0,0,0] for q_measured
     # and [0,0,0, 1, q_star, u_star] for u_measured #Where Q and U have been rotated by the PA_APER angle: 
-    Q_ref_err_sq = np.zeros(len(targets))
-    U_ref_err_sq = np.zeros(len(targets))
-    cov_QU_ref = np.zeros(len(targets))
+    Q_ref_err_sq = np.zeros(len(dataset))
+    U_ref_err_sq = np.zeros(len(dataset))
+    cov_QU_ref = np.zeros(len(dataset))
     stokes_matrix = np.zeros((2*len(dataset), 6))
-    for i, target in enumerate(targets):
+    for i, image in enumerate(dataset):
+        target = image.pri_hdr["TARGET"]
         pol_row = pol_ref[pol_ref["TARGET"] == target]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
         PA = pol_row["PA"].values[0] + rotation_angles[i] # in degrees
@@ -357,7 +356,7 @@ def generate_mueller_matrix_cal(input_dataset,
     #   Var(m_k) += c_Q^2 * Var(Q_ref) + 2*c_Q*c_U * Cov(Q_ref,U_ref) + c_U^2 * Var(U_ref)
     # where c_Q = A^+[k,2i]*m[1] + A^+[k,2i+1]*m[4], c_U = A^+[k,2i]*m[2] + A^+[k,2i+1]*m[5].
     ref_var = np.zeros(6)
-    for i in range(len(targets)):
+    for i in range(len(dataset)):
         c_Q = (stokes_matrix_inv[:, 2*i]   * mueller_elements[1] +
                stokes_matrix_inv[:, 2*i+1] * mueller_elements[4])
         c_U = (stokes_matrix_inv[:, 2*i]   * mueller_elements[2] +
