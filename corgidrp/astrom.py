@@ -24,9 +24,7 @@ def centroid(frame):
         frame (np.ndarray): 2D array to compute centering
 
     Returns:
-        tuple:
-            xcen (float): X centroid coordinate
-            ycen (float): Y centroid coordinate
+        tuple: (xcen, ycen) X and Y centroid coordinates.
 
     """
     y, x = np.indices(frame.shape)
@@ -48,10 +46,9 @@ def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None, gaussia
                                                            If None, defaults to the brightest pixel.
         gaussian_kernel_size (int or None, optional): Size of the gaussian kernel convolved with the frame through before guessing the center.
                                                     If None, no filtering is done. 
+
     Returns:
-        tuple:
-            xcen (float): X centroid coordinate.
-            ycen (float): Y centroid coordinate.
+        tuple: (xcen, ycen) X and Y centroid coordinates.
     """
 
     # 1) Unpack initial guess or fall back to brightest pixel
