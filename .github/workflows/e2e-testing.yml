@@ -16,13 +16,13 @@ jobs:
       group: E2E-Testing
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6
     - name: Set up Git LFS
       run: |
         git lfs install
         git lfs pull
     - name: Set up Python 3.12
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v6
       with:
         python-version: "3.12"
     - name: Install dependencies
