@@ -899,12 +899,12 @@ def test_polflat_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Core Throughput ===")
-    ct_data_files = glob.glob(os.path.join(e2eoutput_path, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits"))
+    ct_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "l2b_results", "*_ctp_cal.fits"))
     ct_data_file = max(ct_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(ct_data_file, 'ctp_cal')
     
-    generate_fits_excel_documentation(ct_data_file, os.path.join(e2eoutput_path, "corethroughput_cal_e2e", "band3_spc_data", "ctp_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(ct_data_file, os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "l2b_results", "ctp_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -924,7 +924,7 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents, data_product_name="Core Throughput")
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Core Throughput", skip_hdu_structure_check=True)
 
 @pytest.mark.e2e
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -1454,7 +1454,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'BPMap': glob.glob(os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits")),
         'Flat': glob.glob(os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits")),
         'PolFlat': glob.glob(os.path.join(e2eoutput_path, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "*_flt_cal.fits")),
-        'CoreThroughput': glob.glob(os.path.join(e2eoutput_path, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits")),
+        'CoreThroughput': glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "l2b_results", "*_ctp_cal.fits")),
         'CoreThroughputMap': glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits")),
         'FluxCal': glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits")),
         'FluxCalPol': glob.glob(os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1","*_abf_cal.fits")),

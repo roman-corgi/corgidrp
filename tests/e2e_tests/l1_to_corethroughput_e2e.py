@@ -32,7 +32,7 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
     """
     
     # create output directory if none exists
-    test_outputdir = os.path.join(e2eoutput_path, "l1_to_corethrpughput_e2e")
+    test_outputdir = os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e")
     if os.path.exists(test_outputdir):
         shutil.rmtree(test_outputdir)
     os.makedirs(test_outputdir)
