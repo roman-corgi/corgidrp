@@ -1320,12 +1320,12 @@ def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing ND Mueller Matrix ===")
-    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_ndm_cal.fits"))
+    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "*_ndm_cal.fits"))
     polcal_data_file = max(polcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(polcal_data_file, 'ndm_cal')
     
-    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "polcal_e2e", "ndm_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "ndm_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
