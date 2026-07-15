@@ -13,6 +13,8 @@ import pyklip.fakes as fakes
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.optimize import OptimizeWarning
+from scipy.ndimage import median_filter
+from astropy.convolution import convolve, Gaussian2DKernel
 
 def centroid(frame):
     """
@@ -22,9 +24,7 @@ def centroid(frame):
         frame (np.ndarray): 2D array to compute centering
 
     Returns:
-        tuple:
-            xcen (float): X centroid coordinate
-            ycen (float): Y centroid coordinate
+        tuple: (xcen, ycen) X and Y centroid coordinates.
 
     """
     y, x = np.indices(frame.shape)
@@ -35,7 +35,7 @@ def centroid(frame):
     return xcen, ycen
 
 
-def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None):
+def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None, gaussian_kernel_size=None):
     """
     Finds the centroid in a sub-region around a given initial guess (or the brightest pixel if no guess is provided).
 
@@ -44,17 +44,23 @@ def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None):
         roi_radius (int or float): Half-size of the box around the initial guess or brightest pixel.
         centering_initial_guess (tuple or None, optional): (x_init, y_init) as initial guess for centroiding.
                                                            If None, defaults to the brightest pixel.
+        gaussian_kernel_size (int or None, optional): Size of the gaussian kernel convolved with the frame through before guessing the center.
+                                                    If None, no filtering is done. 
 
     Returns:
-        tuple:
-            xcen (float): X centroid coordinate.
-            ycen (float): Y centroid coordinate.
+        tuple: (xcen, ycen) X and Y centroid coordinates.
     """
 
     # 1) Unpack initial guess or fall back to brightest pixel
     if centering_initial_guess is not None and None not in centering_initial_guess:
         peak_x, peak_y = int(round(centering_initial_guess[0])), int(round(centering_initial_guess[1]))
+    elif gaussian_kernel_size is not None:
+        # smooth out the frame before taking brightest pixel
+        kernel = Gaussian2DKernel(gaussian_kernel_size)
+        filtered_frame = convolve(frame, kernel, nan_treatment='interpolate', preserve_nan=False)
+        peak_y, peak_x = np.unravel_index(np.nanargmax(filtered_frame), frame.shape)
     else:
+        # take the brightest pixel directly with no filtering
         peak_y, peak_x = np.unravel_index(np.nanargmax(frame), frame.shape)
 
     # 2) Define the subarray (region of interest) around the peak

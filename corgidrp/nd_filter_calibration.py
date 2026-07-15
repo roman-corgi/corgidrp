@@ -170,7 +170,7 @@ def compute_avg_calibration_factor(dim_stars_dataset, phot_method, calspec_files
 # =============================================================================
 
 def _compute_od_for_file(entry, target, phot_method, phot_kwargs, ref_fpam_name,
-                         ref_fpam_h, ref_fpam_v, ref_cfam_name, expected_flux):
+                         ref_fpam_h, ref_fpam_v, ref_cfam_name, expected_flux, gaussian_kernel_size):
     """
     Helper subfunction to:
       1. Validate FPAM/CFAM metadata vs. the reference.
@@ -188,6 +188,7 @@ def _compute_od_for_file(entry, target, phot_method, phot_kwargs, ref_fpam_name,
         ref_fpam_v (float): The reference FPAM vertical position.
         ref_cfam_name (str): The reference CFAM name for validation.
         expected_flux (float): The expected flux value for computing OD in erg/(s*cm^2)
+        gaussian_kernel_size (int): Size of gaussian kernel used to make the PSF centroid algorithm more robust against noise.  
 
     Returns:
         tuple:
@@ -211,16 +212,16 @@ def _compute_od_for_file(entry, target, phot_method, phot_kwargs, ref_fpam_name,
         )
 
     # Centroid
-    x_center, y_center = centroid_with_roi(entry.data)
+    x_center, y_center = centroid_with_roi(entry.data, gaussian_kernel_size=gaussian_kernel_size)
     if np.isnan(x_center) or np.isnan(y_center):
         print(f"Warning: Centroid could not be computed for {entry}")
         return None, None, None
 
     # Photometry
     if phot_method == "Aperture":
-        phot_result = fluxcal.aper_phot(entry, **phot_kwargs)
+        phot_result = fluxcal.aper_phot(entry, centering_initial_guess=(x_center, y_center), **phot_kwargs)
     elif phot_method == "Gaussian":
-        phot_result = fluxcal.phot_by_gauss2d_fit(entry, **phot_kwargs)
+        phot_result = fluxcal.phot_by_gauss2d_fit(entry, centering_initial_guess=(x_center, y_center), **phot_kwargs)
     else:
         raise ValueError("phot_method must be Aperture or Gaussian.")
 
@@ -231,7 +232,7 @@ def _compute_od_for_file(entry, target, phot_method, phot_kwargs, ref_fpam_name,
 
 
 def process_bright_target(target, files, cal_factor, od_raster_threshold,
-                          phot_method="Aperture", phot_kwargs=None):
+                          phot_method="Aperture", phot_kwargs=None, gaussian_kernel_size=3):
     """
     Process bright star files for one target to compute optical density (OD)
     and (x, y) centroids for each dithered observation.
@@ -245,6 +246,7 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
         files (corgidrp.data.Dataset): Dataset of bright star images
         cal_factor (float or corgidrp.data.FluxcalFactor): Calibration factor.
         od_raster_threshold (float): Threshold for flagging OD variations.
+        gaussian_kernel_size (int): Size of gaussian kernel used to make the PSF centroid algorithm more robust against noise.  
         phot_method (str): Photometry method to use ("Aperture" or "Gaussian").
         phot_kwargs (dict, optional): Dictionary of keyword arguments to forward to the photometry function.
     
@@ -276,7 +278,8 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
         od, x_center, y_center = _compute_od_for_file(entry, target, phot_method, 
                                                       phot_kwargs, common_fpam_name, 
                                                       common_fpam_h, common_fpam_v, 
-                                                      ref_cfam_name, expected_flux)
+                                                      ref_cfam_name, expected_flux,
+                                                      gaussian_kernel_size)
         
         # Skip if centroid was not valid
         if od is None:
@@ -408,7 +411,8 @@ def create_nd_filter_cal(stars_dataset,
                          flux_or_irr="irr",
                          phot_kwargs=None,
                          fluxcal_factor=None,
-                         calspec_files = None):
+                         calspec_files = None,
+                         gaussian_kernel_size=3):
     """
     Main ND Filter calibration workflow:
       1. Split dataset into dim and bright stars based on FPAMNAME keyword (or use cal factor input for dim)
@@ -423,12 +427,13 @@ def create_nd_filter_cal(stars_dataset,
         od_raster_threshold (float): Threshold for flagging OD variations.
             # TO DO: figure out what a reasonable value for this should be 
         phot_method (str): Photometry method ("Aperture" or "Gaussian").
-        flux_or_irr (str): Either 'flux' or 'irr' for the calibration approach.
+        flux_or_irr (str): Either 'flux' or 'irr' for the calibration approach. 
         phot_kwargs (dict, optional): Extra arguments for the actual photometry function 
             (e.g., aper_phot).
         fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): A pre-computed flux factor calibration product to use
             if dim stars are not included as part of the input dataset
         calspec_files (list, optional): list of calspec filepaths
+        gaussian_kernel_size (int): Size of gaussian kernel used to make the PSF centroid algorithm more robust against noise.
 
     Returns:
         sweet_spot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter calibration product for the dataset given
@@ -479,8 +484,8 @@ def create_nd_filter_cal(stars_dataset,
             continue
         print(f"Processing bright target files: {target}")
         star_data = process_bright_target(target, files, cal_factor,
-                                          od_raster_threshold, phot_method,
-                                          phot_kwargs)
+                                          od_raster_threshold, phot_method, 
+                                          phot_kwargs, gaussian_kernel_size=gaussian_kernel_size)
         flux_results[target] = star_data
 
         od_var_flag = star_data['flag']
