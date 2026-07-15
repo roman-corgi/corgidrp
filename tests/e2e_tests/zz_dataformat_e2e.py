@@ -1379,12 +1379,12 @@ def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_spec_prism_disp_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Spectroscopy Prism Dispersion ===")
-    spec_prism_disp_data_files = glob.glob(os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "*_dpm_cal.fits"))
+    spec_prism_disp_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_dispersion_e2e", "l2b_results", "*_dpm_cal.fits"))
     spec_prism_disp_data_file = max(spec_prism_disp_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(spec_prism_disp_data_file, 'dpm_cal')
     
-    generate_fits_excel_documentation(spec_prism_disp_data_file, os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "dpm_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(spec_prism_disp_data_file, os.path.join(e2eoutput_path, "l1_to_dispersion_e2e", "l2b_results", "dpm_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
