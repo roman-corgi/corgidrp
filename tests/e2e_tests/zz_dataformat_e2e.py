@@ -626,7 +626,7 @@ def test_l3_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Coronagraphic ===")
-    l4_data_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e")
+    l4_data_dir = os.path.join(e2eoutput_path, "l1_to_l4_e2e", "l1_to_l4")
     l4_data_files = glob.glob(os.path.join(l4_data_dir, "*_l4_.fits"))
     l4_data_file = max(l4_data_files, key=os.path.getmtime)
     
@@ -1445,7 +1445,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'L3': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_e2e", "l2b_to_l3", "*_l3_.fits")),
         'L3_Spec': glob.glob(os.path.join(e2eoutput_path, "l1_to_l3_spec_e2e", "analog", "*_l3_.fits")),
         'L3_Pol': glob.glob(os.path.join(e2eoutput_path, "l1_to_l3_pol_e2e", "analog", "*_l3_.fits")),
-        'L4_Coron': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_e2e", "*_l4_.fits")),
+        'L4_Coron': glob.glob(os.path.join(e2eoutput_path, "l1_to_l4_e2e", "l1_to_l4", "*_l4_.fits")),
         'L4_Noncoron': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e", "*_l4_.fits")),
         'L4_Pol': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_pol_e2e", "*_l4_.fits")),
         'L4_Spec_Coron': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_spec_psfsub_e2e", "*_l4_.fits")),
@@ -1457,17 +1457,17 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'CoreThroughput': glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "l2b_results", "*_ctp_cal.fits")),
         'CoreThroughputMap': glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits")),
         'FluxCal': glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits")),
-        'FluxCalPol': glob.glob(os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1","*_abf_cal.fits")),
+        'FluxCalPol': glob.glob(os.path.join(e2eoutput_path, "l1_to_fluxcal_pol_e2e", "l2b_results","*_abf_cal.fits")),
         'KGain': glob.glob(os.path.join(e2eoutput_path, "kgain_cal_e2e", "*_krn_cal.fits")),
         'MuellerMatrix': glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_mmx_cal.fits")),
         'NonLin': glob.glob(os.path.join(e2eoutput_path, "nonlin_cal_e2e", "*_nln_cal.fits")),
         'NDFilter': glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e", "l2b_results", "*_ndf_cal.fits")),
-        'NDMueller': glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_ndm_cal.fits")),
+        'NDMueller': glob.glob(os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "*_ndm_cal.fits")),
         'NoiseMaps': glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits")),
         'Dark': glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits")),
         'TrapPump': glob.glob(os.path.join(e2eoutput_path, "trap_pump_cal_e2e", "*_tpu_cal.fits")),
-        'SpecLineSpread': glob.glob(os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "*_lsf_cal.fits")),
-        'SpecPrismDisp': glob.glob(os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "*_dpm_cal.fits")),
+        'SpecLineSpread': glob.glob(os.path.join(e2eoutput_path, "l1_to_linespread_e2e", "l2b_results", "*_lsf_cal.fits")),
+        'SpecPrismDisp': glob.glob(os.path.join(e2eoutput_path, "l1_to_dispersion_e2e", "l2b_results", "*_dpm_cal.fits")),
     }
     
     # Get the most recent file for each data product
