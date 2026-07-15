@@ -687,7 +687,7 @@ def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Polarimetry ===")
-    l4_pol_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_pol_e2e")
+    l4_pol_data_dir = os.path.join(e2eoutput_path, "l1_to_l4_pol_e2e", "analog")
     l4_pol_data_files = glob.glob(os.path.join(l4_pol_data_dir, "*_l4_.fits"))
     l4_pol_data_file = max(l4_pol_data_files, key=os.path.getmtime)
     
@@ -1447,7 +1447,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'L3_Pol': glob.glob(os.path.join(e2eoutput_path, "l1_to_l3_pol_e2e", "analog", "*_l3_.fits")),
         'L4_Coron': glob.glob(os.path.join(e2eoutput_path, "l1_to_l4_e2e", "l1_to_l4", "*_l4_.fits")),
         'L4_Noncoron': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e", "*_l4_.fits")),
-        'L4_Pol': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_pol_e2e", "*_l4_.fits")),
+        'L4_Pol': glob.glob(os.path.join(e2eoutput_path, "l1_to_l4_pol_e2e", "analog", "*_l4_.fits")),
         'L4_Spec_Coron': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_spec_psfsub_e2e", "*_l4_.fits")),
         'L4_Spec_Noncoron': glob.glob(os.path.join(e2eoutput_path, "l1_to_l4_spec_noncoron_e2e", "analog", "*_l4_.fits")),
         'Astrom': glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits")),
