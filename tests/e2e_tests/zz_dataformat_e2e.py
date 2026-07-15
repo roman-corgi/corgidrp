@@ -924,7 +924,7 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        compare_docs(ref_doc_contents, doc_contents, data_product_name="Core Throughput", skip_hdu_structure_check=True)
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Core Throughput")
 
 @pytest.mark.e2e
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
