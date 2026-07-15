@@ -1350,12 +1350,12 @@ def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Spectroscopy Line Spread Function ===")
-    spec_linespread_data_files = glob.glob(os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "*_lsf_cal.fits"))
+    spec_linespread_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_linespread_e2e", "l2b_results", "*_lsf_cal.fits"))
     spec_linespread_data_file = max(spec_linespread_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(spec_linespread_data_file, 'lsf_cal')
     
-    generate_fits_excel_documentation(spec_linespread_data_file, os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "lsf_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(spec_linespread_data_file, os.path.join(e2eoutput_path, "l1_to_linespread_e2e", "l2b_results", "lsf_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
