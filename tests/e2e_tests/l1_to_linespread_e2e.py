@@ -200,7 +200,7 @@ def test_l1_to_linespread(e2edata_path, e2eoutput_path):
     this_caldb, _ = setup_caldb(
         l1_datadir, processed_cal_path, calibrations_dir)    
     # define the raw science data to process, only faint star in filter 3D
-    l1_filelist = ["cgi_0200001001001001001_20260331T1543360_l1_.fits", "cgi_0200001001001001001_20260331T1543370_l1_.fits", "cgi_0200001001001001001_20260331T1543390_l1_.fits"]
+    l1_filelist = ["cgi_0200001001001001001_20260331t1543360_l1_.fits", "cgi_0200001001001001001_20260331t1543370_l1_.fits", "cgi_0200001001001001001_20260331t1543390_l1_.fits"]
     l1_data_filelist=[os.path.join(l1_datadir, file) for file in l1_filelist]
     
     ####### Run the walker on some test_data
