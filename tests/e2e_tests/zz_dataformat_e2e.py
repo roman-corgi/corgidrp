@@ -1052,19 +1052,19 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing ND Filter ===")
-    nonlin_data_files = glob.glob(os.path.join(e2eoutput_path, "nd_filter_cal_e2e", "*_ndf_cal.fits"))
-    nonlin_data_file = max(nonlin_data_files, key=os.path.getmtime)
+    nd_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e", "l2b_results", "*_ndf_cal.fits"))
+    nd_data_file = max(nd_data_files, key=os.path.getmtime)
     
-    validate_cgi_filename(nonlin_data_file, 'ndf_cal')
+    validate_cgi_filename(nd_data_file, 'ndf_cal')
     
-    generate_fits_excel_documentation(nonlin_data_file, os.path.join(e2eoutput_path, "nd_filter_cal_e2e", "ndf_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(nd_data_file, os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e", "l2b_results", "ndf_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
         os.mkdir(doc_dir)
 
 
-    with fits.open(nonlin_data_file) as hdulist:
+    with fits.open(nd_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
 
     doc_filepath = os.path.join(doc_dir, "ndfilter.rst")
@@ -1461,7 +1461,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'KGain': glob.glob(os.path.join(e2eoutput_path, "kgain_cal_e2e", "*_krn_cal.fits")),
         'MuellerMatrix': glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_mmx_cal.fits")),
         'NonLin': glob.glob(os.path.join(e2eoutput_path, "nonlin_cal_e2e", "*_nln_cal.fits")),
-        'NDFilter': glob.glob(os.path.join(e2eoutput_path, "nd_filter_cal_e2e", "*_ndf_cal.fits")),
+        'NDFilter': glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e", "l2b_results", "*_ndf_cal.fits")),
         'NDMueller': glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_ndm_cal.fits")),
         'NoiseMaps': glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits")),
         'Dark': glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits")),
