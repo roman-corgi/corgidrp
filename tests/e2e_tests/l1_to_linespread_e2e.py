@@ -261,8 +261,11 @@ if __name__ == "__main__":
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1-> LineSpread end-to-end test")
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
+                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     outputdir = args.outputdir
+    e2edata_dir = args.e2edata_dir
     test_l1_to_linespread(e2edata_dir, outputdir)
