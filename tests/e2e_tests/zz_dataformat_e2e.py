@@ -1264,12 +1264,12 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Flux Calibration Polarimetry ===")
-    fluxcal_pol_data_files = glob.glob(os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1", "*_abf_cal.fits"))
+    fluxcal_pol_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_fluxcal_pol_e2e", "l2b_results", "*_abf_cal.fits"))
     fluxcal_pol_data_file = max(fluxcal_pol_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(fluxcal_pol_data_file, 'abf_cal')
     
-    generate_fits_excel_documentation(fluxcal_pol_data_file, os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1", "abf_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(fluxcal_pol_data_file, os.path.join(e2eoutput_path, "l1_to_fluxcal_pol_e2e", "l2b_results", "abf_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
 
