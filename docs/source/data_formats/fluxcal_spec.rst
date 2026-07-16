@@ -1,4 +1,4 @@
-.. _fluxcal-spec-label:
+.. _fluxcalspec-label:
 
 Spectroscopy Flux Calibration Data Product
 ===========================================
