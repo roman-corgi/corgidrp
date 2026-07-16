@@ -92,9 +92,7 @@ def detect_dead_pixels_from_flat(flat, ffrac, fwidth):
     flag any pixel which is < 80% of the mean value in a 32-pixel box
     centered on the pixel.  (Centration will use FFT rules, where odd-sized
     widths center on the pixel, and even-sized place the pixel to the right of
-    center, e.g.:
-     odd: [. x .]
-     even: [. . x .]
+    center, e.g., odd: [. x .] and even: [. . x .]).
     For boxes near the edge, only the subset of pixels within the box will be
     used for the calculation.
 

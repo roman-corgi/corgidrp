@@ -1457,7 +1457,7 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
     Takes in polarimetric L3 images and their unocculted polarimetric observations,
     computes and subtracts off the stellar polarization component from each image
     TODO: make issue about error propagation, need to check that it is done correctly
-          and make changes if necessary to ensure the errors are accurate
+    and make changes if necessary to ensure the errors are accurate
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations

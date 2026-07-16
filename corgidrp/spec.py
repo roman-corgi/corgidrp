@@ -122,9 +122,9 @@ def psf_registration_costfunc(p, template, data):
     Cost function for a least-squares fit to register a PSF with a fitting template.
 
     Args:
-        p (tuple): shift and scale parameters: 
-                    (x-axis shift in pixels, y-axis shift in pixels, 
-                     amplitude scale factor)
+        p (tuple): shift and scale parameters:
+            (x-axis shift in pixels, y-axis shift in pixels,
+            amplitude scale factor)
         template (numpy.ndarray): PSF tempate array, 2d
         data (numpy.ndarray): PSF data array, 2d
 
@@ -204,19 +204,26 @@ def fit_psf_centroid(psf_data, psf_template,
                 this must be an odd number.
 
     Returns:
-        xfit (float): Data PSF x centroid obtained from the template fit, 
-                array pixels
-        yfit (float): Data PSF y centroid obtained from the template fit, 
-                array pixels
-        gauss2d_xfit (float): Data PSF x centroid estimated by a 2-D Gaussian fit to 
-                the main lobe of the PSF
-        gauss2d_yfit (float): Data PSF y centroid estimated by a 2-D Gaussian fit to 
-                the main lobe of the PSF
-        peakpix_snr (float): Peak-pixel signal-to-noise ratio
-        x_precis (float): Statistical precision of the x centroid fit, estimated from
-                peak-pixel S/N ratio
-        y_precis (float): Statistical precision of the y centroid fit, estimated from
-                peak-pixel S/N ratio
+        tuple:
+            xfit (float): Data PSF x centroid obtained from the template fit,
+            array pixels
+
+            yfit (float): Data PSF y centroid obtained from the template fit,
+            array pixels
+
+            gauss2d_xfit (float): Data PSF x centroid estimated by a 2-D Gaussian fit to
+            the main lobe of the PSF
+
+            gauss2d_yfit (float): Data PSF y centroid estimated by a 2-D Gaussian fit to
+            the main lobe of the PSF
+
+            peakpix_snr (float): Peak-pixel signal-to-noise ratio
+
+            x_precis (float): Statistical precision of the x centroid fit, estimated from
+            peak-pixel S/N ratio
+
+            y_precis (float): Statistical precision of the y centroid fit, estimated from
+            peak-pixel S/N ratio
     """
     if not isinstance(halfheight, int):
         raise ValueError("halfheight must be an integer")
@@ -519,14 +526,15 @@ def estimate_dispersion_clocking_angle(xpts, ypts, weights):
 
 def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wavlen, pixel_pitch_um=13.0):
     """ 
-    Given arrays of wavelengths and positions, fit two polynomials:  
-    1. Displacement from a reference wavelength along the dispersion axis, 
-       in millimeters as a function of wavelength  
+    Given arrays of wavelengths and positions, fit two polynomials:
+
+    1. Displacement from a reference wavelength along the dispersion axis,
+       in millimeters as a function of wavelength
     2. Wavelength as a function of displacement along the dispersion axis
 
     Args:
         wavlens (numpy.ndarray): Array of wavelengths corresponding to the
-        centroid data points
+            centroid data points
         xpts (numpy.ndarray): Array of x coordinates in EXCAM pixels
         ypts (numpy.ndarray): Array of y coordinates in EXCAM pixels
         cent_errs (numpy.ndarray): Array of centroid uncertainties in EXCAM pixels
@@ -535,14 +543,18 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
         pixel_pitch_um (float): EXCAM pixel pitch in microns
 
     Returns:
-        pfit_pos_vs_wavlen (numpy.ndarray): polynomial coefficients for the
-        position vs wavelength fit
-        cov_pos_vs_wavlen (numpy.ndarray): covariance matrix of the polynomial
-        coefficients for the position vs wavelength fit
-        pfit_wavlen_vs_pos (numpy.ndarray): polynomial coefficients for the
-        wavelength vs position fit
-        cov_wavlen_vs_pos (numpy.ndarray): covariance matrix of the polynomial
-        coefficients for the wavelength vs position fit
+        tuple:
+            pfit_pos_vs_wavlen (numpy.ndarray): polynomial coefficients for the
+            position vs wavelength fit
+
+            cov_pos_vs_wavlen (numpy.ndarray): covariance matrix of the polynomial
+            coefficients for the position vs wavelength fit
+
+            pfit_wavlen_vs_pos (numpy.ndarray): polynomial coefficients for the
+            wavelength vs position fit
+
+            cov_wavlen_vs_pos (numpy.ndarray): covariance matrix of the polynomial
+            coefficients for the wavelength vs position fit
     """
     pixel_pitch_mm = pixel_pitch_um * 1E-3
 
@@ -835,10 +847,12 @@ def star_spec_registration(
         observed with the same CFAM filter, and acquired over a grid of FSM
         offsets. By default, the grid of FSM offsets spans a 3×3 FSM offset grid. 
         Each of the L2b images must have the following header keywords:
-          – FSMX, FSMY (float64)
-          – CFAMNAME (same for all images)
-          – FSAMNAME = OPEN, R1C2, R6C5, R3C1
-      pathfiles_template (array): array of path and filenames containing the 
+
+        - FSMX, FSMY (float64)
+        - CFAMNAME (same for all images)
+        - FSAMNAME = OPEN, R1C2, R6C5, R3C1
+
+      pathfiles_template (array): array of path and filenames containing the
         simulated star spectrum that are used as a template to find the image
         in dataset_fsm that best matches it.
       slit_align_err (float64): Distance between the source and the center of
@@ -1102,13 +1116,14 @@ def slit_transmission(
 
     Returns:
       SlitTransmission calibration product containing:
-        1/ Slit transmission map derived at different locations by interpolation.
-        2/ Corresponding locations along EXCAM +X direction with respect to the
-          zero-point in (fractional) EXCAM pixels where the slit transmission has
-          been derived.
-        3/ Corresponding locations along EXCAM +Y direction with respect to the
-          zero-point in (fractional) EXCAM pixels where the slit transmission has
-          been derived.
+
+      1. Slit transmission map derived at different locations by interpolation.
+      2. Corresponding locations along EXCAM +X direction with respect to the
+         zero-point in (fractional) EXCAM pixels where the slit transmission has
+         been derived.
+      3. Corresponding locations along EXCAM +Y direction with respect to the
+         zero-point in (fractional) EXCAM pixels where the slit transmission has
+         been derived.
     """
     # Confirm spectroscopy configuration for different PAMs
     # CFAM

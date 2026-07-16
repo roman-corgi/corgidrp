@@ -272,31 +272,29 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
     
     
 def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=44, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512):
-    """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
-    The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
+    """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image.
+    The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared.
 
-    
-        Args:
-            dataset (corgidrp.data.Dataset): a dataset of image frames of uranus or neptune that are raster scanned (L2a-level)
-            planet (str): neptune or uranus
-            band (str): 1 or 4
-            up_radius (int): Number of pixels on either side of centroided planet images (=55 pixels for Neptune and uranus)
-            im_size (int): x-dimension of the input image (in pixels; default is size of input dataset; = 420 for the HST images)
-            N (int): Number of images to be combined for creating a matched filter (defaults to 1, may not work for N>1 right now)
-            rad_mask (float): radius in pixels used for creating a mask for band (band1=1.25, band4=1.75)
-            planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
-            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV (defaults to 44 pix for Band1 HLC; 165 pixels for full shaped pupil FOV).
-            n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to None; rest of the FOV to reach 1024)
-            sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad. 
-                                     If both sky_annulus_rin and sky_annulus_rout = None, skips sky subtraciton.
-            sky_annulus_rout (float): Outer radius of annulus to use for sky subtraction. In units of planet_rad. 
-            image_center_x (int): x coordinate of the center pixel of the final image 
-            image_center_y (int): y coordinate of the center pixel of the final image
-            
-    	Returns:
-    		data.FlatField (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
-    		
-	"""
+    Args:
+        dataset (corgidrp.data.Dataset): a dataset of image frames of uranus or neptune that are raster scanned (L2a-level)
+        planet (str): neptune or uranus
+        band (str): 1 or 4
+        up_radius (int): Number of pixels on either side of centroided planet images (=55 pixels for Neptune and uranus)
+        im_size (int): x-dimension of the input image (in pixels; default is size of input dataset; = 420 for the HST images)
+        N (int): Number of images to be combined for creating a matched filter (defaults to 1, may not work for N>1 right now)
+        rad_mask (float): radius in pixels used for creating a mask for band (band1=1.25, band4=1.75)
+        planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
+        n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV (defaults to 44 pix for Band1 HLC; 165 pixels for full shaped pupil FOV).
+        n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to None; rest of the FOV to reach 1024)
+        sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad.
+            If both sky_annulus_rin and sky_annulus_rout = None, skips sky subtraciton.
+        sky_annulus_rout (float): Outer radius of annulus to use for sky subtraction. In units of planet_rad.
+        image_center_x (int): x coordinate of the center pixel of the final image
+        image_center_y (int): y coordinate of the center pixel of the final image
+
+    Returns:
+        data.FlatField: a master flat for flat calibration using on sky images of planet in band specified
+    """
     if im_size is None:
         # assume square images
         im_size = dataset[0].data.shape[0]
@@ -362,38 +360,36 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
     return(onsky_flatfield)
 
 def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=None, observing_mode='NFOV', n_pad=None, fwhm_guess=20,sky_annulus_rin=2, sky_annulus_rout=4,plate_scale=0.0218,image_center_x=512,image_center_y=512,separation_diameter_arcsec=7.5,alignment_angle_WP1=0,alignment_angle_WP2=45,dpamname=None):
-    """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
-    The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
+    """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image.
+    The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared.
 
-    
-        Args:
-            dataset (corgidrp.data.Dataset): a dataset of image frames that are raster scanned (L2a-level)
-            planet (str): neptune or uranus
-            band (str): 1 or 4
-            up_radius (int): Number of pixels on either side of centroided planet images (=55 pixels for Neptune and uranus)
-            im_size (int): x-dimension of the input image (in pixels; default is size of input dataset; = 420 for the HST images)
-            N (int): Number of images to be combined for creating a matched filter (defaults to 1, may not work for N>1 right now)
-            rad_mask (float): radius in pixels used for creating a mask for band (band1=1.25, band4=1.75)
-            planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
-            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV (defaults to 44 pix for Band1 HLC; 165 pixels for full shaped pupil FOV).
-            observing_mode (string): observing mode of the coronagraph
-            n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to None; rest of the FOV to reach 1024)
-            fwhm_guess (int):FWHM guess for the planet image which is downsampled by a factor of 8
-            sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad. 
-                                     If both sky_annulus_rin and sky_annulus_rout = None, skips sky subtraciton.
-            sky_annulus_rout (float): Outer radius of annulus to use for sky subtraction. In units of planet_rad. 
-            plate_scale (float): platescale estimated from calibration (0.0218)
-            image_center_x (int): x coordinate of the center pixel of the final image with two orthogonal pol components
-            image_center_y (int): y coordinate of the center pixel of the final image with two orthogonal pol components
-            separation_diameter_arcsec (float): separation between the two orthogonal pol components in arcsecs
-            alignment_angle_WP1 (int): wollaston prism angle for Pol0 - 0
-            alignment_angle_WP2 (int): wollaston prism angle for Pol45- 45
-            dpamname (str): wollaston prism POL0 or POL45. Defaults to DPAMNAME in the header.
-            
-    	Returns:
-    		data.FlatField (corgidrp.data.FlatField): a master flat corresponding to Pol0 or Pol 45 for flat calibration using on sky images of planet in band specified
-    		
-	"""
+    Args:
+        dataset (corgidrp.data.Dataset): a dataset of image frames that are raster scanned (L2a-level)
+        planet (str): neptune or uranus
+        band (str): 1 or 4
+        up_radius (int): Number of pixels on either side of centroided planet images (=55 pixels for Neptune and uranus)
+        im_size (int): x-dimension of the input image (in pixels; default is size of input dataset; = 420 for the HST images)
+        N (int): Number of images to be combined for creating a matched filter (defaults to 1, may not work for N>1 right now)
+        rad_mask (float): radius in pixels used for creating a mask for band (band1=1.25, band4=1.75)
+        planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
+        n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV (defaults to 44 pix for Band1 HLC; 165 pixels for full shaped pupil FOV).
+        observing_mode (string): observing mode of the coronagraph
+        n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to None; rest of the FOV to reach 1024)
+        fwhm_guess (int):FWHM guess for the planet image which is downsampled by a factor of 8
+        sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad.
+            If both sky_annulus_rin and sky_annulus_rout = None, skips sky subtraciton.
+        sky_annulus_rout (float): Outer radius of annulus to use for sky subtraction. In units of planet_rad.
+        plate_scale (float): platescale estimated from calibration (0.0218)
+        image_center_x (int): x coordinate of the center pixel of the final image with two orthogonal pol components
+        image_center_y (int): y coordinate of the center pixel of the final image with two orthogonal pol components
+        separation_diameter_arcsec (float): separation between the two orthogonal pol components in arcsecs
+        alignment_angle_WP1 (int): wollaston prism angle for Pol0 - 0
+        alignment_angle_WP2 (int): wollaston prism angle for Pol45- 45
+        dpamname (str): wollaston prism POL0 or POL45. Defaults to DPAMNAME in the header.
+
+    Returns:
+        data.FlatField: a master flat corresponding to Pol0 or Pol 45 for flat calibration using on sky images of planet in band specified
+    """
     if im_size is None:
         # assume square images
         im_size = dataset[0].data.shape[0]

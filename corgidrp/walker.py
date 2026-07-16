@@ -503,10 +503,12 @@ def guess_template(dataset):
         dataset (corgidrp.data.Dataset): a Dataset to process
 
     Returns:
-        str or list: the best template filename, a list of multiple template filenames, or a list of template chains
-        bool: whether multiple recipes are chained together. If True, the output of the first recipe
-              should be used as the input to the second recipe. If False, the same input should be used
-              for all recipes. This keyworkd is irrelevant if only a single recipe is returned.
+        tuple:
+            str or list: the best template filename, a list of multiple template filenames, or a list of template chains
+
+            bool: whether multiple recipes are chained together. If True, the output of the first recipe
+            should be used as the input to the second recipe. If False, the same input should be used
+            for all recipes. This keyworkd is irrelevant if only a single recipe is returned.
     """
     image = dataset[0] # first image for convenience
 

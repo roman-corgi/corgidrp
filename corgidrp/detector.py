@@ -292,20 +292,14 @@ def unpack_geom(arrtype, key, detector_regions=None):
     """Safely check format of geom sub-dictionary and return values.
 
     Args:
-        arrtype: str
-        Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-        key: str
-        Desired section
-        detector_regions: dict
-        a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
+        arrtype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        key (str): Desired section
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
-        rows: int
-        Number of rows of frame
-        cols : int
-        Number of columns of frame
-        r0c0: tuple
-        Tuple of (row position, column position) of corner closest to (0,0)
+        rows (int): Number of rows of frame
+        cols (int): Number of columns of frame
+        r0c0 (tuple): Tuple of (row position, column position) of corner closest to (0,0)
     """
     if detector_regions is None:
         detector_regions = detector_areas
@@ -321,19 +315,13 @@ def imaging_area_geom(arrtype, detector_regions=None):
     in reference to full frame.  Different from normal image area.
 
     Args:
-        arrtype: str
-        Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-        detector_regions: dict
-        a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
-
+        arrtype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
-        rows: int
-        Number of rows of imaging area
-        cols : int
-        Number of columns of imaging area
-        r0c0: tuple
-        Tuple of (row position, column position) of corner closest to (0,0)
+        rows (int): Number of rows of imaging area
+        cols (int): Number of columns of imaging area
+        r0c0 (tuple): Tuple of (row position, column position) of corner closest to (0,0)
     """
     if detector_regions is None:
         detector_regions = detector_areas
@@ -358,17 +346,12 @@ def imaging_slice(arrtype, frame, detector_regions=None):
     acting on only the image frame.
 
     Args:
-        arrtype: str
-        Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-        frame: array_like
-        Input frame
-        detector_regions: dict
-        a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
+        arrtype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        frame (array_like): Input frame
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
-        sl: array_like
-        Imaging slice
-
+        sl (array_like): Imaging slice
     """
     rows, cols, r0c0 = imaging_area_geom(arrtype, detector_regions)
     sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
@@ -439,8 +422,10 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
     ledge of the plateau and kills the plateau (specified by cosm_filter) and
     the tail (specified by cosm_tail).
 
-    |<-------- streak row is the whole row ----------------------->|
-     ......|<-plateau->|<------------------tail---------->|.........
+    ::
+
+        |<-------- streak row is the whole row ----------------------->|
+         ......|<-plateau->|<------------------tail---------->|.........
 
     B Nemati and S Miller - UAH - 02-Oct-2018
     Kevin Ludwick - UAH - 2024
@@ -546,8 +531,8 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
 def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
 	"""Calculates the lowest full well capacity saturation threshold for each frame.
 
-	Args:
-    	emgain_arr (np.array): 1D array of the EM gain value for each frame.
+    Args:
+        emgain_arr (np.array): 1D array of the EM gain value for each frame.
         fwcpp_arr (np.array): 1D array of the full-well capacity in the image
             frame (before em gain readout) value for each frame.
         fwcem_arr (np.array): 1D array of the full-well capacity in the EM gain
