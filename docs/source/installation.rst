@@ -46,6 +46,5 @@ This will install the II&T repositories ``cal`` and ``proc_cgi_frame``.
 Troubleshooting
 ----------------
 If you run into any issues with things in the ``.corgidrp`` directory not being found properly when you run the pipeline, such as a ``DetectorParams`` file, ``caldb``, or configuration settings, your ``corgidrp`` is configured into a weird state. Report the bug to our GitHub issue tracker, including both the error message and the state of your ``.corgidrp`` folder. 
-
 If you don't want to wait for us to troubleshoot the bug and deploy a fix, you can probably resolve the issue by completely deleting your ``.corgidrp`` folder and rerunning the code (the code will automatically remake it). This, however, means you will lose any changes you've made to your settings as well as your calibration database.
 

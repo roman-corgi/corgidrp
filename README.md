@@ -8,7 +8,7 @@ Further documentation (including expected file formats) can be found on the read
 
 ## Install
 
-Install the latest release with `pip install corgidrp`. See the [Installation guide](https://corgidrp.readthedocs.io/en/latest/installation.html) on ReadTheDocs for full instructions, including developer setup (Git LFS, linting, end-to-end tests) and troubleshooting.
+Install the latest release with `pip install corgidrp`. See the [Installation guide](https://corgidrp.readthedocs.io/en/latest/installation.html) on ReadTheDocs for full instructions, including developer setup (Git LFS, linting, test environment) and troubleshooting.
 
 ## How to Contribute
 
