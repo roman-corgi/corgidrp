@@ -459,6 +459,11 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     tri_dist_star.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
     short_star, mid_star, long_star = tri_dist_star[0][1], tri_dist_star[1][1], tri_dist_star[2][1]
 
+    print(f"  image dist sums: dstar1={dstar1:.2f}, dstar2={dstar2:.2f}, dstar3={dstar3:.2f}")
+    print(f"    sorted -> short=({short_star['x']:.1f},{short_star['y']:.1f}) "
+        f"mid=({mid_star['x']:.1f},{mid_star['y']:.1f}) "
+        f"long=({long_star['x']:.1f},{long_star['y']:.1f})")
+
     # the shortest to longest sides get reordered to l1, l2, l3
     l1, l2, l3 = np.sort([l12, l23, l31])
     a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
@@ -525,6 +530,14 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     tri_dist_coords = [(dcoord1, coord1), (dcoord2, coord2), (dcoord3, coord3)]
     tri_dist_coords.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
     short_coord, mid_coord, long_coord = tri_dist_coords[0][1], tri_dist_coords[1][1], tri_dist_coords[2][1]
+    print(f"  field dist sums: dcoord1={dcoord1:.2f}, dcoord2={dcoord2:.2f}, dcoord3={dcoord3:.2f}")
+    print(f"    sorted -> short=({short_coord.ra.value:.6f},{short_coord.dec.value:.6f}) "
+          f"mid=({mid_coord.ra.value:.6f},{mid_coord.dec.value:.6f}) "
+          f"long=({long_coord.ra.value:.6f},{long_coord.dec.value:.6f})")
+    print(f"    ratios (should all be ~{platescale_guess}): "
+          f"{tri_dist_coords[0][0]/tri_dist_star[0][0]:.2f}, "
+          f"{tri_dist_coords[1][0]/tri_dist_star[1][0]:.2f}, "
+          f"{tri_dist_coords[2][0]/tri_dist_star[2][0]:.2f}")
     
     # now use the side length to separations with best fit triangle to define a pseudo plate scale
     best_l1, best_l2, best_l3 = field_side_lengths[best_ind]
@@ -536,6 +549,34 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     # use arctan2 to handle angle wrapping when calculating the difference between the reference field angle and the image
     dtheta1 = np.arctan2(np.sin(np.radians(rot_field[0] - rot_image[0])), np.cos(np.radians(rot_field[0] - rot_image[0])))
     dtheta2 = np.arctan2(np.sin(np.radians(rot_field[1] - rot_image[1])), np.cos(np.radians(rot_field[1] - rot_image[1])))
+
+    # --- convention check on the short->mid pair ---
+    dx_pix = mid_star['x'] - short_star['x']
+    dy_pix = mid_star['y'] - short_star['y']
+    print(f"  [short->mid] dx_pix={dx_pix:.2f}, dy_pix={dy_pix:.2f}")
+    print(f"    angle_between (CCW from +y): {angle_between((short_star['x'], short_star['y']), (mid_star['x'], mid_star['y'])):.3f} deg")
+    print(f"    raw atan2(dy,dx) (CCW from +x): {np.degrees(np.arctan2(dy_pix, dx_pix)):.3f} deg")
+    print(f"    sky position_angle (E of N): {short_coord.position_angle(mid_coord).deg:.3f} deg")
+    d_ra_mas = (mid_coord.ra.deg - short_coord.ra.deg) * 3600e3 * np.cos(np.radians(short_coord.dec.deg))
+    d_dec_mas = (mid_coord.dec.deg - short_coord.dec.deg) * 3600e3
+    print(f"    d_ra={d_ra_mas:.1f} mas (E+), d_dec={d_dec_mas:.1f} mas (N+)")
+    print(f"    sky sep={short_coord.separation(mid_coord).mas:.1f} mas, "
+          f"pix sep={np.sqrt(dx_pix**2 + dy_pix**2):.2f} px")
+
+    # same for short->long
+    dx_pix_l = long_star['x'] - short_star['x']
+    dy_pix_l = long_star['y'] - short_star['y']
+    print(f"  [short->long] dx_pix={dx_pix_l:.2f}, dy_pix={dy_pix_l:.2f}")
+    print(f"    angle_between: {angle_between((short_star['x'], short_star['y']), (long_star['x'], long_star['y'])):.3f} deg")
+    print(f"    sky position_angle: {short_coord.position_angle(long_coord).deg:.3f} deg")
+    d_ra_l = (long_coord.ra.deg - short_coord.ra.deg) * 3600e3 * np.cos(np.radians(short_coord.dec.deg))
+    d_dec_l = (long_coord.dec.deg - short_coord.dec.deg) * 3600e3
+    print(f"    d_ra={d_ra_l:.1f} mas (E+), d_dec={d_dec_l:.1f} mas (N+)")
+
+    # sum check
+    print(f"  SUM check: {np.degrees(np.arctan2(np.sin(np.radians(rot_field[0] + rot_image[0])), np.cos(np.radians(rot_field[0] + rot_image[0])))):.3f}, "
+         f"{np.degrees(np.arctan2(np.sin(np.radians(rot_field[1] + rot_image[1])), np.cos(np.radians(rot_field[1] + rot_image[1])))):.3f}")
+
     initial_northangle = np.mean([dtheta1, dtheta2])
 
     # make a new image header with the pseudo platescale and north angle to find matchings
