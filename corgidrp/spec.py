@@ -792,14 +792,14 @@ def get_shift_correlation(
       images.
 
     Args:
-      img_data (array): first two dimensional array.
-      img_template (array): second two dimensional array. Its size must be the same or
-      less than img1, because img2 is the noiseless template used to find the
-      spectrum on the L2b data and it is a cropped frame.
+        img_data (array): first two dimensional array.
+        img_template (array): second two dimensional array. Its size must be the same or
+        less than img1, because img2 is the noiseless template used to find the
+        spectrum on the L2b data and it is a cropped frame.
 
     Returns:
-      Image shift in image pixels that maximizes the phase correlation of the
-      first image with the second one.
+        np.array: Image shift in image pixels that maximizes the phase correlation of the
+        first image with the second one.
     """
     if np.any(img_data.shape < img_template.shape):
         raise Exception('The template image cannot have a larger size then the data one')  
@@ -830,40 +830,38 @@ def star_spec_registration(
     halfheight=40):
     """ This function addresses:
 
-      CGI-REQT-5465 – Given (1) a series of cleaned images of a prism-dispersed
-      unocculted star observed through the FSAM slit mask, observed with the
-      same CFAM filter, and acquired over a grid of FSM offsets and (2) an
-      estimate of the spectroscopic target source position on EXCAM and its
-      alignment error from the FSAM slit, the CTC GSW should identify the
-      dispersed star image whose PSF-to-FSAM slit alignment most closely matches
-      that of the target source.
+    CGI-REQT-5465 – Given (1) a series of cleaned images of a prism-dispersed
+    unocculted star observed through the FSAM slit mask, observed with the
+    same CFAM filter, and acquired over a grid of FSM offsets and (2) an
+    estimate of the spectroscopic target source position on EXCAM and its
+    alignment error from the FSAM slit, the CTC GSW should identify the
+    dispersed star image whose PSF-to-FSAM slit alignment most closely matches
+    that of the target source.
 
-      NOTE: This calibration is repeated for each roll angle in the observation
-      campaign
+    NOTE: This calibration is repeated for each roll angle in the observation
+    campaign
   
     Args:
-      dataset_fsm (Dataset): Dataset containing a series of L2b cleaned images of a
-        prism-dispersed unocculted star observed through the FSAM slit mask,
-        observed with the same CFAM filter, and acquired over a grid of FSM
-        offsets. By default, the grid of FSM offsets spans a 3×3 FSM offset grid. 
-        Each of the L2b images must have the following header keywords:
+        dataset_fsm (Dataset): Dataset containing a series of L2b cleaned images of a
+            prism-dispersed unocculted star observed through the FSAM slit mask,
+            observed with the same CFAM filter, and acquired over a grid of FSM
+            offsets. By default, the grid of FSM offsets spans a 3×3 FSM offset grid. 
+            Each of the L2b images must have the following header keywords:
+            - FSMX, FSMY (float64)
+            - CFAMNAME (same for all images)
+            - FSAMNAME = OPEN, R1C2, R6C5, R3C1
+        pathfiles_template (array): array of path and filenames containing the
+            simulated star spectrum that are used as a template to find the image
+            in dataset_fsm that best matches it.
+        slit_align_err (float64): Distance between the source and the center of
+            the slit aperture, measured along the narrow axis of the slit aperture,
+            in units of mas. It is determined after each observation by
+            looking at the data.
+        halfheight: 1/2 the height of the box used for the fit.
 
-        - FSMX, FSMY (float64)
-        - CFAMNAME (same for all images)
-        - FSAMNAME = OPEN, R1C2, R6C5, R3C1
-
-      pathfiles_template (array): array of path and filenames containing the
-        simulated star spectrum that are used as a template to find the image
-        in dataset_fsm that best matches it.
-      slit_align_err (float64): Distance between the source and the center of
-        the slit aperture, measured along the narrow axis of the slit aperture,
-        in units of mas. It is determined after each observation by
-        looking at the data.
-      halfheight: 1/2 the height of the box used for the fit.
-
-    Returns:
-      Filenames with the star image whose PSF-to-FSAM slit alignment most
-      closely matches that of the target source.
+        Returns:
+            list: Filenames with the star image whose PSF-to-FSAM slit alignment most
+            closely matches that of the target source.
       
     """
     # Confirm spectroscopy configuration for different PAMs
