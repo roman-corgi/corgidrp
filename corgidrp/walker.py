@@ -949,9 +949,10 @@ def _get_satellite_spot_info_from_xml(xml_tree):
         sat_spot_output['num_spots'] += 1
         for i, field in enumerate(fields):
             value = field.split("=")[1]
+            spot_key = f"spot{sat_spot_output['num_spots']}_{key[i]}"
             if i <=2:
-                sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = float(value)
+                sat_spot_output[spot_key] = float(value)
             else:
-                sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = str(value)
+                sat_spot_output[spot_key] = str(value)
 
     return sat_spot_output
