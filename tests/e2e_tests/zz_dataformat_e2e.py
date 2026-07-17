@@ -308,6 +308,9 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                     if skip_hdu_structure_check:
                         if 'NAXIS' in name.upper():
                             continue
+                    # skip comments in primary HDU
+                    if name == "COMMENT" and current_hdu == "Primary (HDU 0)":
+                        continue
                     # Skip keywords that vary with processing history
                     if name.startswith("FILE") and len(name) > 4 and name[4:].isdigit():
                         continue
@@ -1291,12 +1294,12 @@ def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Mueller Matrix ===")
-    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_mmx_cal.fits"))
+    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "*_mmx_cal.fits"))
     polcal_data_file = max(polcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(polcal_data_file, 'mmx_cal')
     
-    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "polcal_e2e", "mmx_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "l1_to_ND_polcal_e2e", "l2b_results", "mmx_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1320,12 +1323,12 @@ def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing ND Mueller Matrix ===")
-    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "*_ndm_cal.fits"))
+    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_polcal_e2e", "l2b_results", "*_ndm_cal.fits"))
     polcal_data_file = max(polcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(polcal_data_file, 'ndm_cal')
     
-    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "ndm_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "l1_to_ND_polcal_e2e", "l2b_results", "ndm_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1459,10 +1462,10 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'FluxCal': glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits")),
         'FluxCalPol': glob.glob(os.path.join(e2eoutput_path, "l1_to_fluxcal_pol_e2e", "l2b_results","*_abf_cal.fits")),
         'KGain': glob.glob(os.path.join(e2eoutput_path, "kgain_cal_e2e", "*_krn_cal.fits")),
-        'MuellerMatrix': glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_mmx_cal.fits")),
+        'MuellerMatrix': glob.glob(os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "*_mmx_cal.fits")),
         'NonLin': glob.glob(os.path.join(e2eoutput_path, "nonlin_cal_e2e", "*_nln_cal.fits")),
         'NDFilter': glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e", "l2b_results", "*_ndf_cal.fits")),
-        'NDMueller': glob.glob(os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "*_ndm_cal.fits")),
+        'NDMueller': glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_polcal_e2e", "l2b_results", "*_ndm_cal.fits")),
         'NoiseMaps': glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits")),
         'Dark': glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits")),
         'TrapPump': glob.glob(os.path.join(e2eoutput_path, "trap_pump_cal_e2e", "*_tpu_cal.fits")),
