@@ -2,7 +2,7 @@
 This is the data reduction pipeline for the Nancy Grace Roman Space Telescope Coronagraph Instrument
 
 ![Testing Badge](https://github.com/roman-corgi/corgidrp/actions/workflows/python-app.yml/badge.svg)
-[![Documentation Status](https://img.shields.io/readthedocs/corgidrp)](https://corgidrp.readthedocs.io/en/latest/)
+[![Documentation Status](https://readthedocs.org/projects/corgidrp/badge/?version=latest)](https://corgidrp.readthedocs.io/en/latest/)
 
 Further documentation (including expected file formats) can be found on the readthedocs site [here](https://corgidrp.readthedocs.io/). 
 
