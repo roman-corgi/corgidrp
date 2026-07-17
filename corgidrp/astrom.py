@@ -463,6 +463,9 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     l1, l2, l3 = np.sort([l12, l23, l31])
     a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
 
+    print(f"  3 brightest: {[(s['x'], s['y']) for s in [source1, source2, source3]]}")
+    print(f"  image triangle: l1={l1:.2f} l2={l2:.2f} l3={l3:.2f}")
+
     # define a search field and load in RA, DEC, Vmag
     field = ascii.read(field_path)
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
@@ -482,6 +485,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     smallest_lsq = 1e10
     best_ind = np.nan
 
+    n_gated = 0
     for i, ind in enumerate(combos):
         j, k, l = ind
         s1, s2, s3 = skycoords[j], skycoords[k], skycoords[l]
@@ -495,8 +499,10 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
         # make sure plate scale is within tolerance of the guess or else discard this possibility
         if ((len1 / l1) > platescale_guess* (1 + platescale_tol)) or ((len2 / l2) > platescale_guess* (1 + platescale_tol)) or ((len3 / l3) > platescale_guess* (1 + platescale_tol)):
             ap, bp, cp = 0, 0, 0
+            n_gated += 1
         if ((len1 / l1) < platescale_guess* (1 - platescale_tol)) or ((len2 / l2) < platescale_guess* (1 - platescale_tol)) or ((len3 / l3) < platescale_guess* (1 - platescale_tol)):
             ap, bp, cp = 0, 0, 0
+            n_gated += 1
 
         # find the best fit to the brightest image triangle
         lstsq = (a - ap)**2 + (b - bp)**2 + (c - cp)**2
@@ -504,8 +510,11 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
             smallest_lsq = lstsq
             best_ind = i
             best_sky_ind = ind
+    print(f"  gated {n_gated}/{len(combos)} combos on platescale tol")
 
     # keep track of which best fit skycoord is the farthest from the other two
+    print(f"  smallest_lsq={smallest_lsq:.6f}, best_ind={best_ind}, best_sky_ind={best_sky_ind}")
+    print(f"  implied platescale range: {[f'{fl/il:.2f}' for fl, il in zip(field_side_lengths[best_ind], [l1,l2,l3])]}")
     j, k, l = best_sky_ind
     coord1, coord2, coord3 = skycoords[j], skycoords[k], skycoords[l]
 
@@ -776,6 +785,8 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1):
         # difference in angle between sky and image
         dtheta = np.arctan2(np.sin(np.radians(pa_sky - pa_image)), np.cos(np.radians(pa_sky - pa_image)))
         angle_diffs[i] = np.degrees(dtheta)
+    print(f"    angle_diffs: median={np.median(angle_diffs):.2f}, std={np.std(angle_diffs):.2f}, n={len(angle_diffs)}")
+    print(f"    first 10: {angle_diffs[:10]}")
 
     north_angle = np.median(angle_diffs)
     
@@ -1007,6 +1018,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     """
     # load in the data considering multiple frames in the data
     dataset = input_dataset.copy()
+    print(f"boresight_calibration: {len(dataset)} frames")
 
     # load in the source matches if automated source finder is not being used
     matched_sources_multiframe = []
@@ -1074,10 +1086,30 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         # compute the calibration properties
         found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
         matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
+
+        # duplicate checker
+        from collections import Counter
+        radec = list(zip(matched_sources['RA'], matched_sources['DEC']))
+        dupes = {k: v for k, v in Counter(radec).items() if v > 1}
+        print(f"  {len(dupes)} catalog stars matched to multiple detections: {dupes}")
+
+        
+        print(f"frame {i}: matched_sources =")
+        print(matched_sources)
+        for a, b in [(0, 1), (0, 2), (1, 2)]:
+            s1, s2 = matched_sources[a], matched_sources[b]
+            pix_sep = np.sqrt((s2['x'] - s1['x'])**2 + (s2['y'] - s1['y'])**2)
+            c1 = SkyCoord(ra=s1['RA'], dec=s1['DEC'], unit='deg')
+            c2 = SkyCoord(ra=s2['RA'], dec=s2['DEC'], unit='deg')
+            sky_sep = c1.separation(c2).mas
+            print(f"  pair ({a},{b}): pix_sep={pix_sep:.2f} px, sky_sep={sky_sep:.1f} mas, "
+                f"implied platescale={sky_sep/pix_sep:.2f}")
+        
         # if len(hold_matches) < 1:
         hold_matches.append(matched_sources)
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
+        print(f"frame {i}: platescale={cal_properties[0]:.4f}, northangle={cal_properties[1]:.4f}, RA/DEC={target_coordinate}")
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
         # calculate the corrected target position based on ra, dec offsets
         corr_ra, corr_dec = target_coordinate[0] - ra, target_coordinate[1] - dec
