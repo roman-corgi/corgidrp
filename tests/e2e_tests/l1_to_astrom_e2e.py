@@ -10,11 +10,9 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
-import corgidrp.detector as detector
 import corgidrp.astrom as astrom
 from corgidrp import caldb
 from corgidrp import check
-from corgidrp.check import compare_to_mocks_hdrs
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -31,7 +29,8 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
 
     # grab input L1 data 
     l1_input_data_dir = os.path.join(e2edata_path, "astrom_sims")
-    l1_input_data_list = glob.glob(os.path.join(l1_input_data_dir, "*_l1_*.fits"))
+    l1_input_data_list = sorted(glob.glob(os.path.join(l1_input_data_dir, "*_l1_*.fits")))
+
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -55,13 +54,31 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     # run pipeline
     walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
 
-    # check output
-    astrom_cal_files = glob.glob(os.path.join(l2b_outputdir, '*_ast_cal.fits'))
-    astrom_cal = data.AstrometricCalibration(astrom_cal_files[0])
-    print(f'platescale: {astrom_cal.platescale}')
-    print(f'north angle: {astrom_cal.northangle}')
-    print(f'RA: {astrom_cal.boresight[0]}')
-    print(f'DEC: {astrom_cal.boresight[1]}')
+    # expected values from simulation input
+    expected_platescale = 21.8 # mas/pixel
+    expected_north_angle = -45
+    # compute the expected ra and dec offset due to detector placement at (532, 505) instead of (512, 512)
+    dx_pix, dy_pix = 532 - 512, 505 - 512 
+    # get expected offsets in ra and dec, units of mas
+    expected_ra_offset  = dx_pix * expected_platescale
+    expected_dec_offset = dy_pix* expected_platescale
+
+    # check that the recovered platescale, north angle, and offsets match up
+    astrom_cal_file = glob.glob(os.path.join(l2b_outputdir, '*_ast_cal.fits'))[0]
+    astrom_cal = data.AstrometricCalibration(astrom_cal_file)
+    actual_platescale = astrom_cal.platescale
+    actual_north_angle = astrom_cal.northangle
+    actual_ra_offset  = astrom_cal.avg_offset[0] * 3.6e6 # convert from deg to mas
+    actual_dec_offset = astrom_cal.avg_offset[1] * 3.6e6
+    assert expected_platescale == pytest.approx(astrom_cal.platescale, rel=0.05)
+    assert expected_north_angle == pytest.approx(actual_north_angle, abs=0.05)
+    assert expected_ra_offset == pytest.approx(actual_ra_offset, abs=30)
+    assert expected_dec_offset == pytest.approx(actual_dec_offset, abs=30)
+
+    # check headers
+    check.compare_to_mocks_hdrs(astrom_cal_file)
+    assert astrom_cal.ext_hdr["DATATYPE"] == "AstrometricCalibration"
+    assert astrom_cal.ext_hdr["DATALVL"] == "CAL"
 
 if __name__ == "__main__":
     outputdir = thisfile_dir
