@@ -15,6 +15,9 @@ ERR HDU array: (1,c)
 DQ HDU array: (c)
 Below is an example.
 
+Note that there might be multiple/different number of header keywords describing the on-sky position of the input data used to
+make the calibration depending on the number of dithers/observed fields.
+
 +-------+------------------+----------+----------------------+
 | Index | Name             | Datatype | Array Size           |
 +=======+==================+==========+======================+
