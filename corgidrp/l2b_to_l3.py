@@ -319,13 +319,14 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             prism = exthdr['DPAMNAME']
             slit = exthdr['FSAMNAME']
             cor_mode = exthdr['LSAMNAME']
-            spec_slits = ['R1C2', 'R2C3', 'R2C4', 'R2C5', 'R3C1', 'R3C2', 'R4C6', 'R5C1', 'R5C2', 'R6C3', 'R6C4', 'R6C5']
+            spec_slits = ['R1C2', 'R2C2', 'R2C3', 'R2C4', 'R2C5', 'R3C1', 'R3C2', 'R4C6', 'R5C1', 'R5C2', 'R6C3', 'R6C4', 'R6C5']
             spec_prisms = ['PRISM2', 'PRISM3']
             color_filters = ['1', '1A', '1B', '1C', '2', '2A', '2B', '2C', '3', '3A', '3B', '3C', '3D', '3E', '3F', '3G', '4', '4A', '4B', '4C']
             # outer working angle in lambda/D
             cor_outer_working_angle = {
                 'WFOV': 20.1,
-                'SPEC': 9.1
+                'SPEC': 9.1,
+                'SPECROT': 9.1
             }
             # Skip cropping by default if observation is non-coronagraphic
             if cor_mode == 'OPEN':
