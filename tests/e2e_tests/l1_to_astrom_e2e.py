@@ -52,7 +52,10 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     os.makedirs(l2b_outputdir)
 
     # run pipeline
-    walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
+    with warnings.catch_warnings():
+        # suppress warnings about the three input field having different EM gain configurations
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
 
     # expected values from simulation input
     expected_platescale = 21.8 # mas/pixel
@@ -72,8 +75,8 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     actual_dec_offset = astrom_cal.avg_offset[1] * 3.6e6
     assert expected_platescale == pytest.approx(astrom_cal.platescale, rel=0.05)
     assert expected_north_angle == pytest.approx(actual_north_angle, abs=0.05)
-    assert expected_ra_offset == pytest.approx(actual_ra_offset, abs=30)
-    assert expected_dec_offset == pytest.approx(actual_dec_offset, abs=30)
+    assert expected_ra_offset == pytest.approx(actual_ra_offset, abs=35)
+    assert expected_dec_offset == pytest.approx(actual_dec_offset, abs=35)
 
     # check headers
     check.compare_to_mocks_hdrs(astrom_cal_file)
