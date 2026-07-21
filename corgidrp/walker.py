@@ -595,8 +595,8 @@ def guess_template(dataset):
                 recipe_filename = ["l2a_build_trad_dark_image_1.json", "l2a_build_trad_dark_image_2.json"] #"l2a_build_trad_dark_image.json"
                 chained = True
         else:
-            # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
-            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
+            # Check if this is spectroscopy data (DPAMNAME in [PRISM3, PRISM2], not sure of VISTYPE yet)
+            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') in ['PRISM3', 'PRISM2']
 
             is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']
 
@@ -667,7 +667,7 @@ def guess_template(dataset):
     elif image.ext_hdr['DATALVL'] == "L3":
         if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l3_to_l4_pol.json"
-        elif image.ext_hdr['DPAMNAME'] == 'PRISM3':
+        elif image.ext_hdr['DPAMNAME'] in ['PRISM3', 'PRISM2']:
             if image.pri_hdr['VISTYPE'] != 'CGIVST_CAL_SPEC_TGTREF':
                 # coronagraphic spec obs - PSF subtraction
                 recipe_filename = "l3_to_l4_psfsub_spec.json"
