@@ -61,7 +61,7 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     expected_platescale = 21.8 # mas/pixel
     expected_north_angle = -45
     # compute the expected ra and dec offset due to detector placement at (532, 505) instead of (512, 512)
-    dx_pix, dy_pix = 532 - 512, 505 - 512 
+    dx_pix, dy_pix = 533 - 512, 506 - 512 
     # get expected offsets in ra and dec, units of mas
     expected_ra_offset  = dx_pix * expected_platescale
     expected_dec_offset = dy_pix* expected_platescale
@@ -75,8 +75,8 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     actual_dec_offset = astrom_cal.avg_offset[1] * 3.6e6
     assert expected_platescale == pytest.approx(astrom_cal.platescale, rel=0.05)
     assert expected_north_angle == pytest.approx(actual_north_angle, abs=0.05)
-    assert expected_ra_offset == pytest.approx(actual_ra_offset, abs=35)
-    assert expected_dec_offset == pytest.approx(actual_dec_offset, abs=35)
+    assert expected_ra_offset == pytest.approx(actual_ra_offset, abs=10)
+    assert expected_dec_offset == pytest.approx(actual_dec_offset, abs=10)
 
     # check headers
     check.compare_to_mocks_hdrs(astrom_cal_file)

@@ -11,7 +11,8 @@
             "name" : "boresight_calibration",
             "keywords" : {
                 "combine_frames" : true,
-                "find_threshold" : 25
+                "find_threshold" : 25,
+                "search_rad" : 0.006
             }
         },
         {
