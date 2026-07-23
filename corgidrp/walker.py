@@ -580,8 +580,7 @@ def guess_template(dataset):
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
             chained = True
         else:
-            recipe_filename = "l1_to_l2a_basic.json"
-              # science data and all else (including photon counting)
+            recipe_filename = "l1_to_l2a_basic.json" # science data and all else (including photon counting)
 
     # L2a -> L2b data processing
     elif image.ext_hdr['DATALVL'] == "L2a":
