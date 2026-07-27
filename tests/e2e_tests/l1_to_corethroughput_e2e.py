@@ -86,6 +86,30 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
     assert ct_cal_drp.ext_hdr["DATATYPE"] == "CoreThroughputCalibration"
     assert ct_cal_drp.ext_hdr["DATALVL"] == "CAL"
 
+    # load in the new corethroughput calibration file, call walker again to create CT map
+    this_caldb.scan_dir_for_new_entries(l2b_outputdir)
+
+    # test corethroughput map
+    ctmap_l1_input_dir = os.path.join(e2edata_path, "ctmap_sims")
+
+    l2a_outputdir = os.path.join(test_outputdir, "l2a_sci_output")
+    ctmap_outputdir = os.path.join(test_outputdir, "ctmap_output")
+    if not os.path.exists(l2a_outputdir):
+        os.mkdir(l2a_outputdir)
+    for file in os.listdir(l2a_outputdir):
+        os.remove(os.path.join(ctmap_outputdir, file))
+    if not os.path.exists(ctmap_outputdir):
+        os.mkdir(ctmap_outputdir)
+    for file in os.listdir(ctmap_outputdir):
+        os.remove(os.path.join(ctmap_outputdir, file))
+    
+    ctmap_l1_input_filelist = [os.path.join(ctmap_l1_input_dir, os.listdir(ctmap_l1_input_dir)[i]) for i in range(len(os.listdir(ctmap_l1_input_dir))) if os.listdir(ctmap_l1_input_dir)[i].endswith("l1_.fits")]
+
+    # run the walker
+    walker.walk_corgidrp(ctmap_l1_input_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
+    l2a_input_filelist = [os.path.join(l2a_outputdir, os.listdir(l2a_outputdir)[i]) for i in range(len(os.listdir(l2a_outputdir))) if os.listdir(l2a_outputdir)[i].endswith("l2a.fits")]
+    walker.walk_corgidrp(l2a_input_filelist, "", ctmap_outputdir, template="l2a_to_corethroughput_map.json")
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
