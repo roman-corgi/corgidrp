@@ -372,6 +372,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         else:
             dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
         dq[good_inds] = 0 
+        # flag pixels with negative values as a result of the application of
+        # PC with photometric corections (corr_photon_count); these were too bright for PC
+        dq[np.where(mean_expected < 0)] = 256 
         pc_means.append(mean_expected)
         dqs.append(dq)
         
@@ -547,8 +550,8 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter, mask_indices):
         lam_est_m -= func / dfunc
 
     if np.nanmin(lam_est_m.data[mask_indices]) < 0:
-        raise PhotonCountException('negative number of photon counts; '
-        'try decreasing the frametime')
+        warnings.warn('negative number of photon counts; '
+        'try decreasing the frametime if these are not isolated, spurious pixels')
 
     # Fill zero values back in
     lam = lam_est_m.filled(0)
