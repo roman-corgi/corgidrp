@@ -48,17 +48,13 @@ def test_pc():
     Tests that an exception occurs if the photon-counted master dark does not have the header 'PCTHRESH'.
 
     Tests that an exception occurs if the photon-counted master dark has a 'PCTHRESH' value than the one to be used on the illuminated dataset.
-
-    Tests that a negative value resulting from PC (pixel too bright and not caught by cosmic ray/saturation flagging) is flagged in the DQ with 256.
     '''
     np.random.seed(555)
     dataset_err, dark_dataset_err, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=160, cosmic_rate=0, full_frame=False, smear=False) 
     # instead of running through walker, just do the pre-processing steps simply
     # using EM gain=5000 and kgain=7 and bias=20000 and read noise = 100 and QE=0.9 (quantum efficiency), from mocks.create_photon_countable_frames()
-    temp_pix_vals = [] # for testing negative PC output value later
     for f in dataset_err.frames:
         f.data = f.data.astype(float)*7 - 20000.
-        temp_pix_vals.append(f.data[20,20])
     for f in dark_dataset_err.frames:
         f.data = f.data.astype(float)*7 - 20000.
     dataset_err.all_data = dataset_err.all_data.astype(float)*7 - 20000.
@@ -93,18 +89,7 @@ def test_pc():
     assert pc_dataset_err[0].dq[2,2] == 1
     # err for (3,3) is above the 95th percentile of error: 
     assert pc_dataset_err[0].err[0][3,3]>np.nanpercentile(pc_dataset_err[0].err,95)
-
-    for f in dataset_err.frames[:144]: # most frames but not all; this way calc_lam_approx() doesn't get a negative for the initial approximation so that it reaches the Newton method
-        f.data[20,20] = 400000 #88000 # in e-; low enough to miss saturation but bright enough to be bad for PC
-    pc_dataset_err = get_pc_mean(dataset_err)
-    # the DQ for 20,20 should by 256 since that pixel was too bright for PC 
-    assert pc_dataset_err[0].dq[20,20] == 256
-    # set 20,20 back to what it was:
-    for i in range(len(dataset_err.frames)):
-        dataset_err[i].data[20,20] = temp_pix_vals[i] 
-        dataset_err[i].ext_hdr['EXPTIME']
     
-
     # also when niter<1, exception
     with pytest.raises(PhotonCountException):
         get_pc_mean(dataset_err, niter=0)
@@ -245,7 +230,29 @@ def test_no_data():
     assert np.array_equal(with_data[0].err, without_data[0].err)
     assert np.array_equal(with_data[0].dq, without_data[0].dq)    
 
+def test_neg_output():
+    '''Tests that a negative value resulting from PC (pixel too bright and not caught by cosmic ray/saturation flagging) is flagged in the DQ with 256.'''
+    np.random.seed(555)
+    # don't need PC master dark for this test
+    N = 40
+    dataset_err, _, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=N, Ndarks=1, cosmic_rate=0, read_noise=200., bias=2000, full_frame=False, smear=False) 
+    # instead of running through walker, just do the pre-processing steps simply
+    # using EM gain=5000 and kgain=7 and bias=2000 and read noise = 100 and QE=0.9 (quantum efficiency), from mocks.create_photon_countable_frames()
+    for f in dataset_err.frames:
+        f.data = f.data.astype(float)*7 - 2000.
+    dataset_err.all_data = dataset_err.all_data.astype(float)*7 - 2000.
+    dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
+
+    for f in dataset_err.frames[:int(.75*N)]: # most frames but not all; this way calc_lam_approx() doesn't get a negative for the initial approximation so that it reaches the Newton method
+        f.data[20,20] = 88000 # in e-; low enough to miss saturation but bright enough to be bad for PC
+    dataset_err.all_data[:int(.75*N),20,20] = 88000
+    pc_dataset_err = get_pc_mean(dataset_err)
+
+    # the DQ for 20,20 should by 256 since that pixel was too bright for PC 
+    assert pc_dataset_err[0].dq[20,20] == 256
+ 
 if __name__ == '__main__':
+    test_neg_output()
     test_pc()
     test_pc_subsets()
     test_no_data()
