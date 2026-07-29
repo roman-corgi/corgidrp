@@ -311,7 +311,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         else:
             cosm_tail_i = cosm_tail
         if median_filter_mode:
-            med_mask = median_filter(crmasked_cube[i,:,:], size=(10,5))#XXX
+            med_mask = median_filter(crmasked_cube[i,:,:], size=(10,10))#XXX
             diff = crmasked_cube[i,:,:] - med_mask
             Icount, IbinEdges = np.histogram(diff, bins=21)#XXX
 
@@ -321,6 +321,17 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
             # vector of intensity values at the center of each bin
             binCenter = 0.5*(IbinEdges[:-1]+IbinEdges[1:])
+
+            # find index of local max in histogram
+            bVmax = np.logical_and(Icount[1:-1] >= Icount[:-2],
+                                Icount[1:-1] > Icount[2:])
+
+            # if there is a local max (e.g., background), restrict the local minimum 
+            # to be above this
+            if np.size(binCenter[1:-1][bVmax]) > 0:
+                binValmax = np.argmax(Icount[1:-1][bVmax])
+                IcountMaxInd = np.where(Icount[1:-1] == Icount[1:-1][bVmax][binValmax])[0]
+                bV[:int(IcountMaxInd)+1] = False
 
             # List of bin values where the histogram has a miminum
             binVal = binCenter[1:-1][bV]
