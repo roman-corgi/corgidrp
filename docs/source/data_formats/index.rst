@@ -3,6 +3,7 @@
 Data Formats
 ============
 Note:  HDU dimension sizes are subject to change (after L2b), but the number of dimensions is not.
+
 .. toctree::
    :maxdepth: 1
    :caption: Science Data Types
@@ -38,6 +39,7 @@ Note:  HDU dimension sizes are subject to change (after L2b), but the number of 
    lsf_cal.rst
    mmx_cal.rst
    ndfilter.rst
+   ndfilter_spec.rst
    ndm_cal.rst
    noisemaps.rst
    nonlin.rst

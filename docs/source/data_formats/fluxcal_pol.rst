@@ -1,4 +1,4 @@
-.. _fluxcalfactor-label:
+.. _fluxcalpol-label:
 
 FluxcalFactor Data Product
 ========================================

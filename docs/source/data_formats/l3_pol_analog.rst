@@ -1,4 +1,4 @@
-.. _l3-label:
+.. _l3pol-label:
 
 L3 Polarimetry Analog Data Product
 ========================================
