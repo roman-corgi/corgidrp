@@ -496,16 +496,19 @@ def generate_ct_cal(
         combined_img_frames = []
         # add the pupil dataset back into the datasets split by dither
         dither_datasets.append(corgidrp.data.Dataset(pupil_frames))
-        for dither_dataset in dither_datasets:
-            # grab all frames in the dataset
-            data_array = [frame.data for frame in dither_dataset]
-            # median combine
-            comb = np.nanmedian(data_array, axis=0)
-            # create image object
-            im = corgidrp.data.Image(comb, pri_hdr=dither_dataset[0].pri_hdr, ext_hdr=dither_dataset[0].ext_hdr)
-            im.filename = dither_dataset[-1].filename
-            combined_img_frames.append(im)
-        dataset = corgidrp.data.Dataset(combined_img_frames)
+        # only combine frames if each dataset actually contains multiple frames, if each individual frame is already
+        # unique in dither position then the original input dataset works fine as is
+        if len(dither_datasets) < len(dataset):
+            for dither_dataset in dither_datasets:
+                # grab all frames in the dataset
+                data_array = [frame.data for frame in dither_dataset]
+                # median combine
+                comb = np.nanmedian(data_array, axis=0)
+                # create image object
+                im = corgidrp.data.Image(comb, pri_hdr=dither_dataset[0].pri_hdr, ext_hdr=dither_dataset[0].ext_hdr)
+                im.filename = dither_dataset[-1].filename
+                combined_img_frames.append(im)
+            dataset = corgidrp.data.Dataset(combined_img_frames)
 
     # All frames must have the same CFAM filter
     cfam_list = []
