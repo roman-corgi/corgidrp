@@ -80,7 +80,45 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
     corethroughput_drp_file = glob.glob(os.path.join(l2b_outputdir,
         '*ctp_cal.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
-
+    
+    # check that the calibration finds the correct PSF locations
+    ct_x, ct_y, ct_vals = ct_cal_drp.ct_excam
+    recovered_psf_locs = [(ct_x[i], ct_y[i]) for i in range(len(ct_x))] # put into list of tuples
+    # using simulation parameters, compute where we expect the PSFs to be
+    platescale = 21.74 # detector platescale in mas
+    xcen, ycen = 512, 512 # detector center
+    # angle and separation parameters for PSF dithering in simulation
+    step_rad = [0, 120 * (np.pi/180), 240 * (np.pi/180)] # 0, 120, 240 are the dither angles in degrees, we convert it to radians for computation directly here
+    sep_mas = [160, 300, 470]
+    # compute expected excam PSF position for each combination of angles and separations
+    expected_psf_locs = []
+    for theta in step_rad:
+        for r in sep_mas:
+            # get x and y offset in mas first, then convert to pixels
+            dx_pix = - (r * np.cos(theta)) / platescale # negative sign to account for axis reflection between RA and pixel coordinates
+            dy_pix = (r * np.sin(theta)) / platescale
+            # add offset to center to get expected positions
+            expected_psf_locs.append((xcen + dx_pix, ycen + dy_pix))
+    # since the recovered psf locations might be ordered differently
+    # for each recovered location, we compare it to the list of expected locations and get the closest distance match
+    # we then check that this distance match is within a certain tolerance to verify the recovered location is correct
+    for loc in recovered_psf_locs:
+        # keep track of the minimum distance between the recovered location and the expected psf locations
+        min_dist = np.inf # initialize it to some large number to start
+        min_dist_idx = -1
+        for i in range(len(expected_psf_locs)):
+            expected_loc = expected_psf_locs[i]
+            # distance between this particular recovered psf location to this particular expected psf location
+            dist = np.sqrt((loc[0] - expected_loc[0])**2 + (loc[1] - expected_loc[1])**2)
+            # check if this is smaller than the current minimum distance measurement, update if so
+            if dist < min_dist:
+                min_dist = dist
+                min_dist_idx = i
+        # assert the minimum distance difference is within a small tolerance
+        tol = 3
+        assert min_dist < tol
+        # remove the corresponding index from the expected psf locations list to prevent accidental double counting
+        del expected_psf_locs[min_dist_idx]
     # check headers
     check.compare_to_mocks_hdrs(corethroughput_drp_file, header_template=mocks.create_default_calibration_product_headers)
     assert ct_cal_drp.ext_hdr["DATATYPE"] == "CoreThroughputCalibration"
@@ -115,6 +153,7 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
 
     # Print success message
     print('e2e test for corethroughput calibration with mock data passed')
+
     
 
 if __name__ == "__main__":
