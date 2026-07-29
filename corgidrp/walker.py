@@ -158,7 +158,7 @@ def _validate_template_structure(user_template, default_template_path, recipe_fi
         # Extract step names from both templates
         user_steps = [step['name'] for step in user_template.get('steps', [])]
         default_steps = [step['name'] for step in default_template.get('steps', [])]
-    
+
         # Check if step names and order match
         if user_steps != default_steps:
             error_msg = (
@@ -801,12 +801,11 @@ def run_recipe(recipe, save_recipe_file=True):
             if recipe["inputs"]:
                 if ram_heavy_bool:
                     curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
-                    recipe_temp = recipe.copy()
-                    # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
-                    recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
                 else:
                     curr_dataset = data.Dataset(filelist)
-                    recipe_temp = recipe
+                recipe_temp = recipe.copy()
+                # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
+                recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
                 # write the recipe into the image extension header
                 curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
                 if len(curr_dataset) > 1:
