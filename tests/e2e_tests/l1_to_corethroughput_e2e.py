@@ -85,7 +85,7 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
     ct_x, ct_y, ct_vals = ct_cal_drp.ct_excam
     recovered_psf_locs = [(ct_x[i], ct_y[i]) for i in range(len(ct_x))] # put into list of tuples
     # using simulation parameters, compute where we expect the PSFs to be
-    platescale = 21.74 # detector platescale in mas
+    platescale = 21.8 # detector platescale in mas
     xcen, ycen = 512, 512 # detector center
     # angle and separation parameters for PSF dithering in simulation
     step_rad = [0, 120 * (np.pi/180), 240 * (np.pi/180)] # 0, 120, 240 are the dither angles in degrees, we convert it to radians for computation directly here
@@ -119,6 +119,7 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
         assert min_dist < tol
         # remove the corresponding index from the expected psf locations list to prevent accidental double counting
         del expected_psf_locs[min_dist_idx]
+
     # check headers
     check.compare_to_mocks_hdrs(corethroughput_drp_file, header_template=mocks.create_default_calibration_product_headers)
     assert ct_cal_drp.ext_hdr["DATATYPE"] == "CoreThroughputCalibration"
@@ -147,6 +148,16 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(ctmap_l1_input_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
     l2a_input_filelist = [os.path.join(l2a_outputdir, os.listdir(l2a_outputdir)[i]) for i in range(len(os.listdir(l2a_outputdir))) if os.listdir(l2a_outputdir)[i].endswith("l2a.fits")]
     walker.walk_corgidrp(l2a_input_filelist, "", ctmap_outputdir, template="l2a_to_corethroughput_map.json")
+
+    # grab ctmap file
+    ctmap_file = glob.glob(os.path.join(ctmap_outputdir,
+        '*ctm_cal.fits'))[0]
+    ct_map = data.CoreThroughputMap(ctmap_file)
+
+    # check headers
+    check.compare_to_mocks_hdrs(ctmap_file)
+    assert ct_map.ext_hdr["DATATYPE"] == "CoreThroughputMap"
+    assert ct_cal_drp.ext_hdr["DATALVL"] == "CAL"
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
