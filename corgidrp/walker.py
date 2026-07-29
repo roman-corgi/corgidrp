@@ -373,10 +373,10 @@ def autogen_recipe(filelist, outputdir, template=None):
                         for partial_dataset, isPc in zip(split_datasets, unique_vals):
                             if "pc" in recipe["name"] and isPc == 1:
                                 for frame in partial_dataset:
-                                    recipe["inputs"].append(frame.filename)
+                                    recipe["inputs"].append(frame.filepath)
                             elif "pc" not in recipe["name"] and isPc == 0:
                                 for frame in partial_dataset:
-                                    recipe["inputs"].append(frame.filename)
+                                    recipe["inputs"].append(frame.filepath)
 
                     else:
                         for filename in filelist:
