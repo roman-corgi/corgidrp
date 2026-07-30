@@ -119,11 +119,6 @@ def test_expected_flux_ratio_noise():
     # now see what the step function gives, with and without a supplied star location guess:
     frn_dataset_nostarloc = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, halfwidth=3)
     frn_dataset_starloc = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, unocculted_star_loc=np.array([[17],[15]]), halfwidth=3)
-    frn_image_starloc = compute_flux_ratio_noise(psfsub_dataset_rdi[0], nd_cal, star_dataset[0], unocculted_star_loc=np.array([17,15]), halfwidth=3)
-    assert isinstance(frn_dataset_starloc, data.Dataset)
-    assert isinstance(frn_image_starloc, data.Image)
-    assert 'FRN_CRV' in frn_image_starloc.hdu_list
-    assert np.array_equal(frn_image_starloc.hdu_list['FRN_CRV'].data, frn_dataset_starloc[0].hdu_list['FRN_CRV'].data)
 
     for frn_dataset in [frn_dataset_nostarloc, frn_dataset_starloc]:
         for frame in frn_dataset:
