@@ -832,6 +832,7 @@ def test_subtract_stellar_polarization_mm_errors():
     Tests that nonzero Mueller matrix errors are correctly propagated through
     subtract_stellar_polarization, and that the function handles NaN entries
     in the MM error array (for fixed elements) without producing NaN outputs.
+    Also checks that doubling the MM errors increases the output errors.
     Uses 2 target stars (8 frames) to match the existing test.
     """
     # reuse the same mock setup as test_subtract_stellar_polarization
@@ -952,6 +953,27 @@ def test_subtract_stellar_polarization_mm_errors():
     for f_err, f_zero in zip(out_err.frames, out_zero.frames):
         assert np.allclose(f_err.data, f_zero.data), \
             "Data values should be unchanged — only errors are affected by MM err"
+
+    # --- Run 3: doubled MM errors ---
+    sys_mm_cal_err_2x = data.MuellerMatrix(
+        system_mueller_matrix, pri_hdr=mm_prihdr.copy(),
+        ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[4:],
+        err=mm_err * 2)
+    nd_mm_cal_err_2x = data.NDMuellerMatrix(
+        nd_mueller_matrix, pri_hdr=mm_prihdr.copy(),
+        ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[:4],
+        err=mm_err * 2)
+    out_err_2x = l3_to_l4.subtract_stellar_polarization(
+        input_dataset=input_dataset.copy(),
+        system_mueller_matrix_cal=sys_mm_cal_err_2x,
+        nd_mueller_matrix_cal=nd_mm_cal_err_2x)
+
+    # larger MM errors should give larger output errors
+    for f_2x, f_err in zip(out_err_2x.frames, out_err.frames):
+        assert np.all(f_2x.err >= f_err.err), \
+            "Output errors should not decrease when MM calibration errors are doubled"
+        assert np.any(f_2x.err > f_err.err), \
+            "Output errors should increase when MM calibration errors are doubled"
 
 
 def test_combine_polarization_states():
