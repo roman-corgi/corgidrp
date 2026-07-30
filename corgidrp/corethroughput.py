@@ -107,7 +107,7 @@ def get_psf_pix(
     """
     psf_pix = []
     for psf in dataset:
-        psf_pix += [astrom.centroid_with_roi(psf.data,roi_radius=roi_radius,gaussian_kernel_size=5)]
+        psf_pix += [astrom.centroid_with_roi(psf.data,roi_radius=roi_radius)]
     return np.array(psf_pix)
 
 def get_psf_ct(
