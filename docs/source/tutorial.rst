@@ -10,4 +10,5 @@ These tutorials aim to introduce you to different aspects of the `corgidrp` code
    :maxdepth: 1
    :caption: Test Tutorials
 
+   walker_and_recipes
    l1_to_l2b_e2e.rst 

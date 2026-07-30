@@ -13,8 +13,8 @@ import corgidrp.check as check
 
 def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
     """_summary_
-    NOTE: CT excam locations have (0,0) as the bottom left corner 
-      of the bottom left pixel
+    NOTE: CT excam locations have (0,0) as the bottom left corner
+    of the bottom left pixel
 
     TODO: Calculate subpixel shifts if star or PSF model aren't
         perfectly in the center of a pixel
@@ -235,15 +235,16 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
         num_processes (int): number of processes for parallelizing the PSF subtraction
         
-    Returns: 
-        np.array: array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps 
+    Returns:
+        np.array: array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps
         is the number of separations sampled. Index 0 contains the separations sampled, and each following index
-        contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode 
-        truncation choice. An example for 4 KL mode truncation choices, using r1 and r2 for separations and n_seps=2: 
-            [ [[r1,r1],[r2,r2]], 
-            [[KL_thpt_r1_KL1, FWHM_r1_KL1],[KL_thpt_r2_KL1, FWHM_r2_KL1]], 
-            [[KL_thpt_r1_KL2, FWHM_r1_KL2],[KL_thpt_r2_KL2, FWHM_r2_KL2]], 
-            [[KL_thpt_r1_KL3, FWHM_r1_KL3],[KL_thpt_r2_KL3, FWHM_r2_KL3]], 
+        contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode
+        truncation choice. An example for 4 KL mode truncation choices, using r1 and r2 for separations and n_seps=2::
+
+            [ [[r1,r1],[r2,r2]],
+            [[KL_thpt_r1_KL1, FWHM_r1_KL1],[KL_thpt_r2_KL1, FWHM_r2_KL1]],
+            [[KL_thpt_r1_KL2, FWHM_r1_KL2],[KL_thpt_r2_KL2, FWHM_r2_KL2]],
+            [[KL_thpt_r1_KL3, FWHM_r1_KL3],[KL_thpt_r2_KL3, FWHM_r2_KL3]],
             [[KL_thpt_r1_KL4, FWHM_r1_KL4],[KL_thpt_r2_KL4, FWHM_r2_KL4]] ]
     """
     

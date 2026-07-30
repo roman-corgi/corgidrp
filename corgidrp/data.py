@@ -1443,38 +1443,39 @@ class NonLinearityCalibration(Image):
      - Row headers (dn counts) must be monotonically increasing
      - Column headers (EM gains) must be monotonically increasing
      - Data columns (relative gain curves) must straddle 1
-     - The first row will provide the the Gain axis values (accesssed via 
-        gain_ax = non_lin_correction.data[0, 1:])
-     - The first column will provide the "count" axis value (accessed via 
-        count_ax = non_lin_correction.data[1:, 0])
-     - The rest of the array will be the calibration data (accessed via 
-     relgains = non_lin_correction.data[1:, 1:])
+     - The first row will provide the the Gain axis values (accesssed via
+       gain_ax = non_lin_correction.data[0, 1:])
+     - The first column will provide the "count" axis value (accessed via
+       count_ax = non_lin_correction.data[1:, 0])
+     - The rest of the array will be the calibration data (accessed via
+       relgains = non_lin_correction.data[1:, 1:])
 
-    For example:
-    [
-        [nan,  1,     10,    100,   1000 ], <- gain axis
-        [1,    0.900, 0.950, 0.989, 1.000],
-        [1000, 0.910, 0.960, 0.990, 1.010],
-        [2000, 0.950, 1.000, 1.010, 1.050],
-        [3000, 1.000, 1.001, 1.011, 1.060],
-         ^
-         count axis
-    ],
+    For example::
+
+        [
+            [nan,  1,     10,    100,   1000 ], <- gain axis
+            [1,    0.900, 0.950, 0.989, 1.000],
+            [1000, 0.910, 0.960, 0.990, 1.010],
+            [2000, 0.950, 1.000, 1.010, 1.050],
+            [3000, 1.000, 1.001, 1.011, 1.060],
+             ^
+             count axis
+        ],
 
     where the row headers [1, 1000, 2000, 3000] are dn counts, the column
     headers [1, 10, 100, 1000] are EM gains, and the first data column
     [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
 
-     Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file 
-        to read in OR the 2D calibration data. See above for the required format.
-        pri_hdr (astropy.io.fits.Header): the primary header (required only if 
-        raw 2D data is passed in)
-        ext_hdr (astropy.io.fits.Header): the image extension header (required 
-        only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined 
-        together to make this NonLinearityCalibration file (required only if 
-        raw 2D data is passed in)
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file
+            to read in OR the 2D calibration data. See above for the required format.
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if
+            raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required
+            only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined
+            together to make this NonLinearityCalibration file (required only if
+            raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, 
                  input_dataset=None):
@@ -2572,14 +2573,15 @@ class SlitTransmission(Image):
     """
     Contains the slit transmission map of a defined slit. This consists of an
     2D array with:
-        1/ Slit transmission map derived at different locations by interpolation.
-        2/ Corresponding locations along EXCAM +X direction with respect to the
-          zero-point in (fractional) EXCAM pixels where the slit transmission has
-          been derived.
-        3/ Corresponding locations along EXCAM +Y direction with respect to the
-          zero-point in (fractional) EXCAM pixels where the slit transmission has
-          been derived.
-  
+
+    1. Slit transmission map derived at different locations by interpolation.
+    2. Corresponding locations along EXCAM +X direction with respect to the
+       zero-point in (fractional) EXCAM pixels where the slit transmission has
+       been derived.
+    3. Corresponding locations along EXCAM +Y direction with respect to the
+       zero-point in (fractional) EXCAM pixels where the slit transmission has
+       been derived.
+
     Args:
         data_or_filepath (str or np.array): either a filepath string corresponding to an
                                         existing SlitTransmission file saved to disk or an
@@ -3239,12 +3241,12 @@ class CoreThroughputCalibration(Image):
               FpamFsamCal class. That is, a FpamFsamCal calibration file.
           method (str): Interpolation method that will be used:
               'polar-nearest': Given an (x,y) position wrt FPM's center, the
-               associated PSF is the one in the CT calibration dataset whose
-               radial distance to the FPM's center is the closest to
-               sqrt(x**2+y**2). If there is more than one CT PSF at the same
-               radial distance, choose the one whose angular distance to the
-               (x,y) location is the smallest.
-              
+              associated PSF is the one in the CT calibration dataset whose
+              radial distance to the FPM's center is the closest to
+              sqrt(x**2+y**2). If there is more than one CT PSF at the same
+              radial distance, choose the one whose angular distance to the
+              (x,y) location is the smallest.
+
         Returns:
           psf_interp_list (array): Array of interpolated PSFs for the valid
               target locations.
@@ -3903,7 +3905,8 @@ class NDFilterSweetSpotDataset(Image):
     """
     Class for an ND filter sweet spot dataset product.
     Typically stores an N×3 array of data:
-      [OD, x_center, y_center] for each measurement.
+    [OD, x_center, y_center] for each measurement.
+
     Args:
         data_or_filepath (str or np.array): Either the filepath to the FITS file 
             to read in OR the 2D array of ND filter sweet-spot data (N×3).
@@ -4062,8 +4065,9 @@ class NDSpectroscopy(Image):
     """
     Class for an ND spectroscopy sweet spot dataset product.
     Typically stores data arrays for a given set of calibrations.
-    Data (HDU0) is a N×N_wave×4 array of [wave, OD, x, y], err (HDU1) is a 
+    Data (HDU0) is a N×N_wave×4 array of [wave, OD, x, y], err (HDU1) is a
     1×N×N_wave×4 array of [wave_err, OD_err, x_err, y_err].
+
     Args:
         data_or_filepath (str or np.array): Either the filepath to the FITS file 
             to read in OR the 2D array of ND spectroscopy sweet-spot data (N×N_wave×4).

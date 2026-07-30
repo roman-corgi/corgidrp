@@ -448,22 +448,32 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
     Background subtraction can be done optionally using a user defined circular annulus.
     
     The photometry parameters are controlled via the `phot_kwargs` dictionary.
-    Defaults are provided below if these parameters are not defined. 
+    Defaults are provided below if these parameters are not defined.
+
     Accepted keywords:
         'encircled_radius' (float): The radius of the circular aperture used for photometry.
-        'frac_enc_energy' (float): The fraction of the total flux expected to be enclosed 
-            within the aperture. Must be in the range (0, 1].
-        'method' (str): The photometry method to use. For example, 'subpixel' indicates subpixel 
-            sampling for the aperture.
-        'subpixels' (int): The number of subpixels per pixel to use in the photometry calculation 
-            or improved resolution.
+
+        'frac_enc_energy' (float): The fraction of the total flux expected to be enclosed
+        within the aperture. Must be in the range (0, 1].
+
+        'method' (str): The photometry method to use. For example, 'subpixel' indicates subpixel
+        sampling for the aperture.
+
+        'subpixels' (int): The number of subpixels per pixel to use in the photometry calculation
+        or improved resolution.
+
         'background_sub' (bool): Flag indicating whether to subtract background using an annulus.
+
         'r_in' (float): The inner radius of the annulus used for background estimation.
+
         'r_out' (float): The outer radius of the annulus used for background estimation.
-        'centering_method' (str): The method for determining the star's center. Options include 
-            'xy' for centroiding or 'wcs' for WCS-based centering.
+
+        'centering_method' (str): The method for determining the star's center. Options include
+        'xy' for centroiding or 'wcs' for WCS-based centering.
+
         'centroid_roi_radius' (int or float): Half-size of the box around the peak,
-                                   in pixels. Adjust based on desired λ/D.
+        in pixels. Adjust based on desired λ/D.
+
         'centering_initial_guess' (tuple): (Optional) (x,y) initial guess to perform centroiding.
     
     Parameters:
@@ -578,21 +588,29 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
     Background subtraction can be done optionally using a user defined circular annulus.
     
     The photometry parameters are controlled via the `phot_kwargs` dictionary.
-    Defaults are provided below if these parameters are not defined. 
+    Defaults are provided below if these parameters are not defined.
+
     Accepted keywords:
         'encircled_radius' (float): The radius of the circular aperture used for photometry.
-        'frac_enc_energy' (float): The fraction of the total flux expected to be enclosed 
-            within the aperture. Must be in the range (0, 1].
-        'method' (str): The photometry method to use. For example, 'subpixel' indicates subpixel 
-            sampling for the aperture.
-        'subpixels' (int): The number of subpixels per pixel to use in the photometry calculation 
-            or improved resolution.
+
+        'frac_enc_energy' (float): The fraction of the total flux expected to be enclosed
+        within the aperture. Must be in the range (0, 1].
+
+        'method' (str): The photometry method to use. For example, 'subpixel' indicates subpixel
+        sampling for the aperture.
+
+        'subpixels' (int): The number of subpixels per pixel to use in the photometry calculation
+        or improved resolution.
+
         'background_sub' (bool): Flag indicating whether to subtract background using an annulus.
+
         'r_in' (float): The inner radius of the annulus used for background estimation.
+
         'r_out' (float): The outer radius of the annulus used for background estimation.
+
         'centroid_roi_radius' (int or float): Half-size of the box around the peak,
-                                   in pixels. Adjust based on desired λ/D.
-    
+        in pixels. Adjust based on desired λ/D.
+
     Parameters:
         dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): Image(s) to compute 
             the calibration factor. Should already be normalized for exposure time. Images must
@@ -829,17 +847,25 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr
     Background subtraction can be done optionally using a user defined circular annulus.
     
     All photometry settings are provided via the phot_kwargs dictionary.
-    Defaults are provided below if these parameters are not defined. 
+    Defaults are provided below if these parameters are not defined.
+
     Accepted keywords:
         'fwhm' (float): The expected full width at half maximum.
+
         'fit_shape' (int or tuple): Fitting region shape.
+
         'background_sub' (bool): Flag indicating whether to subtract background using an annulus.
+
         'r_in' (float): The inner radius of the annulus used for background estimation.
+
         'r_out' (float): The outer radius of the annulus used for background estimation.
-        'centering_method' (str): The method for determining the star's center. Options include 
-            'xy' for centroiding or 'wcs' for WCS-based centering.
+
+        'centering_method' (str): The method for determining the star's center. Options include
+        'xy' for centroiding or 'wcs' for WCS-based centering.
+
         'centroid_roi_radius' (int or float): Half-size of the box around the peak,
-            in pixels. Adjust based on desired λ/D.
+        in pixels. Adjust based on desired λ/D.
+
         'centering_initial_guess' (tuple): (Optional) (x,y) initial guess to perform centroiding.
 
     Parameters:
