@@ -601,7 +601,7 @@ def convert_to_flux(input_dataset, fluxcal_factor):
 def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_dataset, unocculted_star_loc=None, requested_separations=None, halfwidth=None,
                              nsigma=1, small_sample_correction=False):
     '''
-    Uses the PSF-subtracted frame and its algorithm throughput vs separation to
+    Uses the PSF-subtracted image or dataset and its algorithm throughput vs separation to
     produce a calibrated n-sigma flux ratio noise curve, also accounting for the throughput of the coronagraph.
     It calculates flux ratio noise curve value for each radial separation from the subtracted star location, interpolating KLIP and core throughput values at these input separations.
     It uses a dataset of unocculted stars and ND transmission to determine the integrated flux of the Gaussian-fit star (where each frame in the dataset is assumed to correspond to the frames
@@ -609,7 +609,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
     the annular noise and FWHM equal to that used for KLIP algorithm througput for each radial separation.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of PSF-subtracted Images
+        input_dataset (corgidrp.data.Image or corgidrp.data.Dataset): a PSF-subtracted Image or a Dataset of PSF-subtracted Images
         NDcalibration (corgidrp.data.NDFilterSweetSpotDataset): ND filter calibration
         unocculted_star_dataset (corgidrp.data.Dataset): a dataset of unocculted star Images corresponding to the Images in input_dataset.   Should have the same number of frames as input_dataset (1-to-1 correspondence).
         unocculted_star_loc (2-D float array, optional): array of coordinates of the unocculted stars according to the order given in the unocculted_star_dataset.
@@ -625,7 +625,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
             from Mawet et al. (2014) using the Student's t-distribution. Defaults to False.
 
     Returns:
-        corgidrp.data.Dataset: input dataset with an additional extension header 'FRN_CRV' for every frame, containing the
+        corgidrp.data.Image or corgidrp.data.Dataset: a copy of the input Image or Dataset with an additional extension header 'FRN_CRV' for the Image or for every Dataset frame, containing the
             calibrated flux ratio noise curve as a function of radial separation.  The data in that extension for a given frame is a (2+M)xN array,
             where:
             --the first row contains the separation radii in pixels
@@ -634,7 +634,10 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
             TODO:  Add uncertainty to flux ratio noise curve based on uncertainties in core throughput and algorithm throughput if those are implemented in the future.
     '''
     output_dataset = input_dataset.copy()
-    if len(input_dataset) != len(unocculted_star_dataset):
+    input_is_image = isinstance(input_dataset, Image)
+    if input_is_image:
+        output_dataset = Dataset([output_dataset])
+    if len(output_dataset) != len(unocculted_star_dataset):
         raise ValueError('The number of frames in input_dataset and unocculted_star_dataset must be the same.')
     for i, frame in enumerate(output_dataset.frames):
         pixscale_mas = frame.ext_hdr['PLTSCALE']  
@@ -754,6 +757,8 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         frame.add_extension_hdu('FRN_CRV', data = flux_ratio_noise_curve, header=hdr)
         history_msg = 'Added FRN_CRV (nsigma={0}, small_sample_correction={1}).'.format(nsigma, small_sample_correction)
     output_dataset.update_after_processing_step(history_msg)
+    if input_is_image:
+        return output_dataset[0]
     return output_dataset
 
 def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None):
