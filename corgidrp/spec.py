@@ -4,6 +4,7 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d, LinearNDInterpolator
+from scipy.signal import fftconvolve
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal, SpecFilterOffset, SlitTransmission
 import os
 from astropy.io import ascii, fits
@@ -245,11 +246,32 @@ def fit_psf_centroid(psf_data, psf_template,
     template_stamp = psf_template[ymin_template_cut:ymax_template_cut+1, xmin_template_cut:xmax_template_cut+1]
     data_stamp = psf_data_nonan[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1]
 
-    xoffset_guess, yoffset_guess = (0.0, 0.0)
-    amp_guess = np.sum(psf_data_nonan) / np.sum(psf_template)
-    guess_params = (xoffset_guess, yoffset_guess, amp_guess)
-    registration_result = optimize.minimize(psf_registration_costfunc, guess_params,
-                                         args=(template_stamp, data_stamp), method = "Powell")
+    # Stage 1: normalized cross-correlation for a robust integer-pixel shift.
+    def _norm_stamp(a):
+        a = a - a.mean()
+        s = a.std()
+        return a / s if s > 0 else a
+
+    xcorr = fftconvolve(_norm_stamp(data_stamp.astype(float)),
+                        _norm_stamp(template_stamp.astype(float))[::-1, ::-1],
+                        mode="full")
+    peak = np.unravel_index(np.argmax(xcorr), xcorr.shape)
+    xshift_int = int(peak[1] - (template_stamp.shape[1] - 1))
+    yshift_int = int(peak[0] - (template_stamp.shape[0] - 1))
+
+    # Stage 2: bounded Powell least-squares refinement (xshift, yshift, amplitude).
+    amp_guess = (data_stamp.sum() / template_stamp.sum()
+                 if template_stamp.sum() != 0 else 1.0)
+
+    # Bounds: shifts within ±1 pixel of the xcorr integer result;
+    registration_result = optimize.minimize(
+        psf_registration_costfunc,
+        x0=[float(xshift_int), float(yshift_int), amp_guess],
+        args=(template_stamp, data_stamp),
+        method="Powell",
+        bounds=[(xshift_int - 1.0, xshift_int + 1.0),
+                (yshift_int - 1.0, yshift_int + 1.0),
+                (0.1 * amp_guess, 10.0 * amp_guess)])
 
     if not registration_result.success:
         print(f"Warning: Registration optimization did not converge: {registration_result.message}")
