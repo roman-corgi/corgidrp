@@ -871,8 +871,7 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
         input_dataset (corgidrp.data.dataset): corgidrp dataset object with images to compute the distortion from
         source_matches (list of astropy.table.Table() objects): List of length N for N frames in the input dataset. Tables must columns 'x','y','RA','DEC' as pixel locations and corresponding sky positons
         # ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference position to compute pairs with
-        position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
-                        Should be changed later to accept non-uniform errors
+        position_error (np.array): array of the error in x and y offset between pairs of stars in x [pixel] and y [pixel], (if None, 0.5 x and y pixel error is assumed)
         
     Returns:
         first_stars (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
@@ -921,18 +920,22 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
             seps = np.append(seps, true_sep)
             pas = np.append(pas, true_pa)
     
-            if type(position_error) == type(None):
-                xerrs = np.append(xerrs, xfit_err)
-                yerrs = np.append(yerrs, yfit_err)
+            if position_error == None:
+                # if position error is not given, assume uniform 0.5 pixel error in x and y
+                xerrs = np.append(xerrs, 0.5)
+                yerrs = np.append(yerrs, 0.5)
             else:
-                xerrs = np.append(xerrs, position_error)
-                yerrs = np.append(yerrs, position_error)
+                xerrs = position_error
+                yerrs = position_error
    
     # join arrays and reshape to (1, 2, N)
     offsets = np.array([dxs, dys])
     first_stars = np.array([firstxs, firstys])
     true_offsets = np.array([seps, pas])
-    errs = np.array([xerrs, yerrs])
+    # translate xerr and yerr to sep and pa err
+    sigma_seps = np.sqrt(((dxs/np.sqrt(dxs**2 + dys**2)) * xerrs)**2 + ((dys/np.sqrt(dxs**2 + dys**2)) * yerrs)**2)
+    sigma_pas = np.sqrt((((-dys)/(dxs**2 + dys**2)) * xerrs)**2 + (((dxs)/(dxs**2 + dys**2)) * yerrs)**2)
+    errs = np.array([sigma_seps, sigma_pas])
 
     return first_stars, offsets, true_offsets, errs
 
