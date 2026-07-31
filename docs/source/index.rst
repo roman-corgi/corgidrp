@@ -12,9 +12,12 @@ The CoronaGraph Instrument Data Reduction Pipeline ``corgidrp`` is a Python-base
 
 .. toctree::
    :maxdepth: 2
+   :titlesonly:
    :caption: Table of Contents
    
 
    installation
    tutorial
+   contributing
    data_formats/index
+   changelog
