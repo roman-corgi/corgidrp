@@ -39,7 +39,7 @@ def test_astrom():
     assert isinstance(dataset[0], data.Image)
 
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=25)
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=15)
 
     # the data was generated to have the following image properties
     expected_platescale = 21.8
@@ -99,7 +99,7 @@ def test_astrom_vignette(vignette_radius=3_460):
     assert isinstance(dataset[0], data.Image)
 
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=25)
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=15)
 
     # the data was generated to have the following image properties
     expected_platescale = 21.8
@@ -159,7 +159,7 @@ def test_distortion():
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, vignette_radius=3_460, dither_pointings=4)
 
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=25, find_distortion=True, fitorder=3, position_error=0.5)
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=15, find_distortion=True, fitorder=3, position_error=None)
 
     ## check that the distortion map does not create offsets greater than 4[mas]
         # compute the distortion maps created from the best fit coeffs
