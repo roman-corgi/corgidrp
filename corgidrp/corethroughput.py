@@ -141,7 +141,8 @@ def get_psf_ct(
     """
     psf_ct = []
     for psf in dataset:
-        psf_ct += [psf.data[psf.data >= psf.data.max()/2].sum()/unocc_psf_norm]
+        peak = np.nanmax(psf.data)
+        psf_ct += [np.nansum(psf.data[psf.data >= peak/2])/unocc_psf_norm]
     psf_ct = np.array(psf_ct, dtype=float)
 
     return psf_ct
@@ -205,9 +206,10 @@ def estimate_psf_pix_and_ct(
     else:
         raise Exception('No pupil image found. At least there must be one pupil image.')
     # mean combine the total values (photo-electrons/sec) of the pupil images
+    # NaN-flagged bad/cosmic-ray pixels are excluded rather than poisoning the sum
     unocc_psf_norm = 0
     for frame in pupil_img_frames:
-        unocc_psf_norm += frame.data.sum()
+        unocc_psf_norm += np.nansum(frame.data)
     unocc_psf_norm /= len(pupil_img_frames)
     # Transform pupil counts into direct imaging counts. Recall all frames have
     # the same cfam filter or an Exception is raised
