@@ -331,7 +331,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             if np.size(binCenter[1:-1][bVmax]) > 0:
                 binValmax = np.argmax(Icount[1:-1][bVmax])
                 IcountMaxInd = np.where(Icount[1:-1] == Icount[1:-1][bVmax][binValmax])[0]
-                bV[:int(IcountMaxInd)+1] = False
+                # take first max in case there are identical max values
+                bV[:int(IcountMaxInd[0])+1] = False
 
             # List of bin values where the histogram has a miminum
             binVal = binCenter[1:-1][bV]
