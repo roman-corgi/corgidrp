@@ -81,8 +81,13 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
         '*ctp_cal.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
     
-    # check that the calibration finds the correct PSF locations
+    
     ct_x, ct_y, ct_vals = ct_cal_drp.ct_excam
+    
+    # check the corethroughput values are between 0 and 1
+    assert np.min(ct_vals) >= 0 and np.max(ct_vals) <= 1
+    
+    # check that the calibration finds the correct PSF locations
     recovered_psf_locs = [(ct_x[i], ct_y[i]) for i in range(len(ct_x))] # put into list of tuples
     # using simulation parameters, compute where we expect the PSFs to be
     platescale = 21.8 # detector platescale in mas
@@ -115,7 +120,7 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
                 min_dist = dist
                 min_dist_idx = i
         # assert the minimum distance difference is within a small tolerance
-        tol = 3
+        tol = 2
         assert min_dist < tol
         # remove the corresponding index from the expected psf locations list to prevent accidental double counting
         del expected_psf_locs[min_dist_idx]
@@ -153,6 +158,10 @@ def test_expected_results_band1_nfov_e2e(e2edata_path, e2eoutput_path):
     ctmap_file = glob.glob(os.path.join(ctmap_outputdir,
         '*ctm_cal.fits'))[0]
     ct_map = data.CoreThroughputMap(ctmap_file)
+
+    # check values are within the right range
+    ctm_x, ctm_y, ctm_vals = ct_map.data
+    assert np.min(ctm_vals) >= 0 and np.max(ctm_vals) <=  1
 
     # check headers
     check.compare_to_mocks_hdrs(ctmap_file)
