@@ -248,10 +248,12 @@ def test_neg_output():
     for f in dataset_err.frames[:int(.1*N)]: #something below the threshold so that we don't have a count for each of these frames
             f.data[20,20] = 500
     # 90 out of 100 frames gets a 1, so that the mean rate for that pixel is 0.9, above the usual e- count threshold (too big for Newton's method to converge and not appropriate for photon counting)
+    
     pc_dataset_err = get_pc_mean(dataset_err)
-
-    # the DQ for 20,20 should by 256 
-    assert pc_dataset_err[0].dq[20,20] == 256
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=UserWarning)
+        # the DQ for 20,20 should by 256 
+        assert pc_dataset_err[0].dq[20,20] == 256
  
 if __name__ == '__main__':
     test_neg_output()
