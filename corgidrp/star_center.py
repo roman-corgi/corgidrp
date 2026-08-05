@@ -972,10 +972,10 @@ def star_center_from_satellite_spots(
                     Number of iterations refining the radial separation.
 
     Returns:
-        numpy.ndarray:
-            Estimated absolute coordinates [x, y] of the star center in the spots image.
-        numpy.ndarray:
-            Calculated locations of the satellite spots. (Note: Currently returning 'None', since this isn't being used)
+        tuple:
+            numpy.ndarray: Estimated absolute coordinates [x, y] of the star center in the spots image.
+
+            numpy.ndarray: Calculated locations of the satellite spots. (Note: Currently returning 'None', since this isn't being used)
     """
 
     # check inputs

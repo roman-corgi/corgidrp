@@ -1,4 +1,4 @@
-.. _l3-label:
+.. _l3spec-label:
 
 L3 Spectroscopy Analog Data Product
 ========================================
