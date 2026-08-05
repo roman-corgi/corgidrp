@@ -234,21 +234,23 @@ def test_neg_output():
     '''Tests that a negative value resulting from PC (pixel too bright and not caught by cosmic ray/saturation flagging) is flagged in the DQ with 256.'''
     np.random.seed(555)
     # don't need PC master dark for this test
-    N = 40
-    dataset_err, _, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=N, Ndarks=1, cosmic_rate=0, read_noise=200., bias=2000, full_frame=False, smear=False) 
+    N = 100
+    dataset_err, _, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=N, Ndarks=1, cosmic_rate=0, read_noise=165, bias=2000, full_frame=False, smear=False, EMgain=8000) 
     # instead of running through walker, just do the pre-processing steps simply
-    # using EM gain=5000 and kgain=7 and bias=2000 and read noise = 100 and QE=0.9 (quantum efficiency), from mocks.create_photon_countable_frames()
+    # using EM gain=8000 and kgain=7 and bias=2000 and read noise = 165 and QE=0.9 (quantum efficiency), from mocks.create_photon_countable_frames()
     for f in dataset_err.frames:
         f.data = f.data.astype(float)*7 - 2000.
     dataset_err.all_data = dataset_err.all_data.astype(float)*7 - 2000.
     dataset_err[0].ext_hdr['HISTORY'] = '' # define a history value since get_pc_mean() uses it
 
-    for f in dataset_err.frames[:int(.75*N)]: # most frames but not all; this way calc_lam_approx() doesn't get a negative for the initial approximation so that it reaches the Newton method
-        f.data[20,20] = 88000 # in e-; low enough to miss saturation but bright enough to be bad for PC
-    dataset_err.all_data[:int(.75*N),20,20] = 88000
+    for f in dataset_err.frames[int(.1*N):]: # some frames but not all; this way calc_lam_approx() doesn't get a negative for the initial approximation so that it reaches the Newton method
+        f.data[20,20] = 3000 # in e-; something above the threshold of 5*165=825 so that we have a count for each of these frames
+    for f in dataset_err.frames[:int(.1*N)]: #something below the threshold so that we don't have a count for each of these frames
+            f.data[20,20] = 500
+    # 90 out of 100 frames gets a 1, so that the mean rate for that pixel is 0.9, above the usual e- count threshold (too big for Newton's method to converge and not appropriate for photon counting)
     pc_dataset_err = get_pc_mean(dataset_err)
 
-    # the DQ for 20,20 should by 256 since that pixel was too bright for PC 
+    # the DQ for 20,20 should by 256 
     assert pc_dataset_err[0].dq[20,20] == 256
  
 if __name__ == '__main__':
@@ -257,5 +259,6 @@ if __name__ == '__main__':
     test_pc_subsets()
     test_no_data()
     test_negative()
+    print("All tests passed.")
     
     
