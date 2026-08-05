@@ -670,7 +670,7 @@ def guess_template(dataset):
                 recipe_filename = "l2b_to_polcal.json"
                 chained = True
             else:
-                recipe_filename = ["l2b_to_l3_pol.json"]
+                recipe_filename = "l2b_to_l3_pol.json"
                 chained = True
         elif image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l2b_to_l3_pol.json"
