@@ -577,8 +577,15 @@ def guess_template(dataset):
             recipe_filename = ['trap_pump_cal_1.json', 'trap_pump_cal_2.json']
             chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_POL_SETUP':
-            recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
-            chained = True
+            # check if there are multiple FSM positions. If so, we need to do a polcal recipe. 
+            # if not, go to l3.
+            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
+            if len(fsm_unique) > 1:
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
+                chained = True
+            else:
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_l3_pol.json"]
+                chained = True
         else:
             recipe_filename = "l1_to_l2a_basic.json" # science data and all else (including photon counting)
 
@@ -656,7 +663,15 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
-            recipe_filename = "l2b_to_polcal.json"
+            # check if there are multiple FSM positions. If so, we need to do a polcal recipe. 
+            # if not, go to l3.
+            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
+            if len(fsm_unique) > 1:
+                recipe_filename = "l2b_to_polcal.json"
+                chained = True
+            else:
+                recipe_filename = ["l2b_to_l3_pol.json"]
+                chained = True
         elif image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l2b_to_l3_pol.json"
         elif 'TDD' not in image.pri_hdr['VISTYPE'] and image.pri_hdr['VISTYPE'] != "CGIVST_CAL_SPEC_TGTREF":

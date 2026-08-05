@@ -1,5 +1,5 @@
 {
-    "name" : "l1_to_3_pol",
+    "name" : "l1_to_l3_pol",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
