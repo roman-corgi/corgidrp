@@ -910,7 +910,7 @@ def test_guess_template_l1_pol_setup_no_dither():
 
 def test_guess_template_l1_pol_setup_no_dither_within_tolerance():
     """
-    Tests that L1 POL_SETUP data with NO dithers 
+    Tests that L1 POL_SETUP data with NO dithers but with small FSM offsets within tolerance 
     correctly chains through to l2b_to_l3_pol.json
     """
     test_dpamnames = ['POL0', 'POL45']
@@ -921,7 +921,7 @@ def test_guess_template_l1_pol_setup_no_dither_within_tolerance():
             frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_POL_SETUP'
             frame.ext_hdr['DATALVL'] = 'L1'
             frame.ext_hdr['DPAMNAME'] = dpamname
-            fsm_rand_offset = np.random.uniform(-0.5, 0.5)  # Random offset within ±0.1 mas
+            fsm_rand_offset = np.random.uniform(-0.5, 0.5)  # Random offset
             frame.ext_hdr['FSMX'] = fsm_rand_offset * tol  # Assign dummy FSM values to simulate dithering
             frame.ext_hdr['FSMY'] = fsm_rand_offset * tol  # Assign dummy FSM values to simulate dithering
         recipe_filename, chained = walker.guess_template(l1_dataset)
