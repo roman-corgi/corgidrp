@@ -993,7 +993,6 @@ def test_iwa_masking():
     output_dataset_wp1 = detect_cosmic_rays(dataset_wp1, detector_params, k_gain)
     dq_wp1 = output_dataset_wp1.all_dq[0]
 
-
     # inject cr at pol spots for WP2, assert it is not flagged
     dataset_wp2 = mocks.create_cr_dataset(nonlin_fits_filepath, numfiles=1, em_gain=500, numCRs=0)
     frame_wp2 = dataset_wp2[0]
@@ -1025,7 +1024,6 @@ def test_iwa_masking():
     assert not cr_flags_cor[iwa_region_cor].any() # regular imaging
     cr_flags_wp1 = (dq_wp1 & cr_dq).astype(bool)
     assert not cr_flags_wp1[iwa_region_wp1].any() # pol WP1
-    
     cr_flags_wp2 = (dq_wp2 & cr_dq).astype(bool)
     assert not cr_flags_wp2[iwa_region_wp2].any() # pol WP2
     
