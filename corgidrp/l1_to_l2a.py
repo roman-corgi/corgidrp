@@ -356,11 +356,11 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 # pol mode, two beams created by the wollaston prism
                 # instead of using the image center directly, need to find where the beams are relative to the image center
                 if prism == 'POL0':
-                    angle_rad = (pol_beam_alignment_angle_wp1 * np.pi) / 180
+                    angle_rad = (pol_beams_alignment_angle_wp1 * np.pi) / 180
                 else:
-                    angle_rad = (pol_beam_alignment_angle_wp2 * np.pi) / 180
-                dx = int(round((pol_beam_sep_diam * np.cos(angle_rad)) / (2 * platescale)))
-                dy = int(round((pol_beam_sep_diam * np.sin(angle_rad)) / (2 * platescale)))
+                    angle_rad = (pol_beams_alignment_angle_wp2 * np.pi) / 180
+                dx = int(round((pol_beams_sep_diam * np.cos(angle_rad)) / (2 * platescale)))
+                dy = int(round((pol_beams_sep_diam * np.sin(angle_rad)) / (2 * platescale)))
                 # get beam centers using computed displacement
                 centerxy_ord = [centerxy[0] - dx, centerxy[1] + dy]
                 centerxy_ext = [centerxy[0] + dx, centerxy[1] - dy]
