@@ -881,8 +881,8 @@ def test_guess_template_l1_pol_setup_dither():
             frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_POL_SETUP'
             frame.ext_hdr['DATALVL'] = 'L1'
             frame.ext_hdr['DPAMNAME'] = dpamname
-            frame.ext_hdr['FSMX'] = fsm_vals_dummy[ii]  # Assign dummy FSM values to simulate dithering
-            frame.ext_hdr['FSMY'] = fsm_vals_dummy[ii]  # Assign dummy FSM values to simulate dithering
+            frame.ext_hdr['FSMX'] = fsm_vals_dummy[ii] * 10.  # Assign dummy FSM values to simulate dithering
+            frame.ext_hdr['FSMY'] = fsm_vals_dummy[ii] * 10.  # Assign dummy FSM values to simulate dithering
         recipe_filename, chained = walker.guess_template(l1_dataset)
 
         expected_chain = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
