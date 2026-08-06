@@ -495,6 +495,41 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
 
     return step
 
+def _fsm_positions_differ(dataset, tolerance=0.1):
+    """
+    Return True if FSMX or FSMY values differ across the dataset by more than tolerance.
+
+    Args:
+        dataset (corgidrp.data.Dataset): a Dataset to process
+        tolerance (float): [mas] the tolerance for considering values different
+
+    Returns:
+        bool: True if FSMX or FSMY values across a series of images
+              differ by more than tolerance, False otherwise
+    """
+    # basic check: if there are fewer than 2 frames, they can't differ
+    if len(dataset) < 2.:
+        return False
+
+    # load header fsm vals
+    fsmx_vals = [frame.ext_hdr['FSMX'] for frame in dataset]
+    fsmy_vals = [frame.ext_hdr['FSMY'] for frame in dataset]
+
+    # starting point for comparison
+    ref_fsmx = fsmx_vals[0]
+    ref_fsmy = fsmy_vals[0]
+
+    # check x and y separately
+    if any(abs(value - ref_fsmx) > tolerance for value in fsmx_vals[1:]):
+        print("Dithering detected")
+        return True
+    if any(abs(value - ref_fsmy) > tolerance for value in fsmy_vals[1:]):
+        print("Dithering detected")
+        return True
+
+    return False
+
+
 def guess_template(dataset):
     """
     Guesses what template should be used to process a specific image
@@ -556,8 +591,7 @@ def guess_template(dataset):
                     recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", "l2b_to_spec_flux.json"]
                     chained = True
             else:
-                _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-                if len(fsm_unique) > 1:
+                if _fsm_positions_differ(dataset):
                     recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
                     chained = True
                 else:
@@ -577,10 +611,9 @@ def guess_template(dataset):
             recipe_filename = ['trap_pump_cal_1.json', 'trap_pump_cal_2.json']
             chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_POL_SETUP':
-            # check if there are multiple FSM positions. If so, we need to do a polcal recipe. 
+            # check if there are multiple FSM positions. If so, we need to do a polcal recipe.
             # if not, go to l3.
-            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-            if len(fsm_unique) > 1:
+            if _fsm_positions_differ(dataset):
                 recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
                 chained = True
             else:
@@ -652,8 +685,7 @@ def guess_template(dataset):
                 else:
                     recipe_filename = "l2b_to_spec_flux.json"
             else:
-                _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-                if len(fsm_unique) > 1:
+                if _fsm_positions_differ(dataset):
                     recipe_filename = "l2b_to_nd_filter.json"
                 else:
                     if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
@@ -663,10 +695,9 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
-            # check if there are multiple FSM positions. If so, we need to do a polcal recipe. 
+            # check if there are multiple FSM positions. If so, we need to do a polcal recipe.
             # if not, go to l3.
-            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-            if len(fsm_unique) > 1:
+            if _fsm_positions_differ(dataset):
                 recipe_filename = "l2b_to_polcal.json"
                 chained = True
             else:

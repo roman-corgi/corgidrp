@@ -856,7 +856,7 @@ def test_guess_template_l1_absflux_non_pol():
     """
     Tests that L1 ABSFLUX data without polarimetry still uses the regular flux calibration recipe
     """
-    l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=9)
     for frame in l1_dataset:
         frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_ABSFLUX_FAINT'
         frame.ext_hdr['DATALVL'] = 'L1'
@@ -875,7 +875,7 @@ def test_guess_template_l1_pol_setup_dither():
     test_dpamnames = ['POL0', 'POL45']
 
     for dpamname in test_dpamnames:
-        l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
+        l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=9)
         fsm_vals_dummy = range(len(l1_dataset))  # Dummy FSM values for dithering
         for ii, frame in enumerate(l1_dataset):
             frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_POL_SETUP'
@@ -904,6 +904,29 @@ def test_guess_template_l1_pol_setup_no_dither():
             frame.ext_hdr['DPAMNAME'] = dpamname
         recipe_filename, chained = walker.guess_template(l1_dataset)
 
+        expected_chain = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_l3_pol.json"]
+        assert recipe_filename == expected_chain
+        assert chained == True
+
+def test_guess_template_l1_pol_setup_no_dither_within_tolerance():
+    """
+    Tests that L1 POL_SETUP data with NO dithers 
+    correctly chains through to l2b_to_l3_pol.json
+    """
+    test_dpamnames = ['POL0', 'POL45']
+    tol = 1e-6
+    for dpamname in test_dpamnames:
+        l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=9)
+        for ii, frame in enumerate(l1_dataset):
+            frame.pri_hdr['VISTYPE'] = 'CGIVST_CAL_POL_SETUP'
+            frame.ext_hdr['DATALVL'] = 'L1'
+            frame.ext_hdr['DPAMNAME'] = dpamname
+            fsm_rand_offset = np.random.uniform(-0.5, 0.5)  # Random offset within ±0.1 mas
+            frame.ext_hdr['FSMX'] = fsm_rand_offset * tol  # Assign dummy FSM values to simulate dithering
+            frame.ext_hdr['FSMY'] = fsm_rand_offset * tol  # Assign dummy FSM values to simulate dithering
+        recipe_filename, chained = walker.guess_template(l1_dataset)
+
+        # this chain should mimic the dither-free case, since the FSM values are within tolerance
         expected_chain = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_l3_pol.json"]
         assert recipe_filename == expected_chain
         assert chained == True
@@ -1252,29 +1275,30 @@ def test_user_template_wrong_name_rejected_with_validation():
 
 
 if __name__ == "__main__":#
-    test_l1_to_l2b_default_calibs()
-    test_autoreducing()
-    test_auto_template_identification()
-    test_saving()
-    test_skip_missing_calib()
-    test_skip_missing_optional_calib()
-    test_jit_calibs()
-    test_generate_multiple_recipes()
-    test_chained_recipe_intermediate_levels()
-    test_cpgs_satspots()
-    test_cpgs_one_satspot()
-    test_pc_science_analog_satspots()
-    test_guess_template_l1_absflux_pol()
-    test_guess_template_l1_absflux_non_pol()
+    # test_l1_to_l2b_default_calibs()
+    # test_autoreducing()
+    # test_auto_template_identification()
+    # test_saving()
+    # test_skip_missing_calib()
+    # test_skip_missing_optional_calib()
+    # test_jit_calibs()
+    # test_generate_multiple_recipes()
+    # test_chained_recipe_intermediate_levels()
+    # test_cpgs_satspots()
+    # test_cpgs_one_satspot()
+    # test_pc_science_analog_satspots()
+    # test_guess_template_l1_absflux_pol()
+    # test_guess_template_l1_absflux_non_pol()
     test_guess_template_l1_pol_setup_dither()
     test_guess_template_l1_pol_setup_no_dither()
-    test_load_user_template_when_exists()
-    test_fallback_to_default_when_user_missing()
-    test_template_not_found_raises_error()
-    test_validation_mode_matching_structure()
-    test_validation_mode_mismatched_structure_raises()
-    test_validation_mode_disabled_allows_mismatch()
-    test_user_template_in_autogen_recipe()
-    test_user_template_wrong_name_loads_without_validation()
-    test_user_template_wrong_name_rejected_with_validation()
+    test_guess_template_l1_pol_setup_no_dither_within_tolerance()
+    # test_load_user_template_when_exists()
+    # test_fallback_to_default_when_user_missing()
+    # test_template_not_found_raises_error()
+    # test_validation_mode_matching_structure()
+    # test_validation_mode_mismatched_structure_raises()
+    # test_validation_mode_disabled_allows_mismatch()
+    # test_user_template_in_autogen_recipe()
+    # test_user_template_wrong_name_loads_without_validation()
+    # test_user_template_wrong_name_rejected_with_validation()
 
