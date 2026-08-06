@@ -498,6 +498,7 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
 def _fsm_positions_differ(dataset, tolerance=0.1):
     """
     Return True if FSMX or FSMY values differ across the dataset by more than tolerance.
+    This is an indirect way of checking if the images were dithered.
 
     Args:
         dataset (corgidrp.data.Dataset): a Dataset to process
