@@ -93,12 +93,19 @@ def test_autoreducing():
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     # check that the recipe is saved into the header.
 
-    for frame in output_dataset:
+    for frame in output_dataset[:-1]:
         assert "RECIPE" in frame.ext_hdr
         # test recipe was correctly written into the header
         # do a string comparison, easiest way to check
         hdr_recipe = json.loads(frame.ext_hdr["RECIPE"])
-        assert json.dumps(hdr_recipe) == json.dumps(recipe)
+        for key in hdr_recipe.keys():
+            if key == 'inputs':
+                continue
+            assert hdr_recipe[key] == recipe[key]
+        assert hdr_recipe['inputs'] == 'See RECIPE header value in ' + filelist[-1]
+
+    hdr_recipe_last = json.loads(output_dataset[-1].ext_hdr["RECIPE"])
+    assert json.dumps(hdr_recipe_last) == json.dumps(recipe)
 
     # clean up
     mycaldb.remove_entry(new_nonlinearity)
