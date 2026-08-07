@@ -932,12 +932,12 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Core Throughput Map ===")
-    ctmap_data_files = glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits"))
+    ctmap_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "ctmap_output", "*_ctm_cal.fits"))
     ctmap_data_file = max(ctmap_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(ctmap_data_file, 'ctm_cal')
     
-    generate_fits_excel_documentation(ctmap_data_file, os.path.join(e2eoutput_path, "ctmap_cal_e2e", "ctm_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(ctmap_data_file, os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "ctmap_output", "ctm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1458,7 +1458,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'Flat': glob.glob(os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits")),
         'PolFlat': glob.glob(os.path.join(e2eoutput_path, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "*_flt_cal.fits")),
         'CoreThroughput': glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "l2b_results", "*_ctp_cal.fits")),
-        'CoreThroughputMap': glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits")),
+        'CoreThroughputMap': glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "ctmap_output", "*_ctm_cal.fits")),
         'FluxCal': glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits")),
         'FluxCalPol': glob.glob(os.path.join(e2eoutput_path, "l1_to_fluxcal_pol_e2e", "l2b_results","*_abf_cal.fits")),
         'KGain': glob.glob(os.path.join(e2eoutput_path, "kgain_cal_e2e", "*_krn_cal.fits")),
