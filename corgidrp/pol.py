@@ -482,11 +482,11 @@ def generate_mueller_matrix_cal(input_dataset,
     
     The pol reference file should contain the known polarization properties of the targets in the dataset.
     It should be a csv file with the following columns:
-    TARGET, CFAM, P, P_err, PA, PA_err
-    where TARGET is the name of the target, CFAM is the color-filter name, P is the degree of polarization
-    in percent, P_err is the error in the degree of polarization in percent, PA is the polarization angle in
-    degrees, and PA_err is the error in the polarization angle in degrees. CFAM is matched to CFAMNAME in
-    each input frame header.
+    TARGET, [CFAM,] P, P_err, PA, PA_err
+    where TARGET is the name of the target, CFAM is the optional color-filter name, P is the degree of
+    polarization in percent, P_err is the error in the degree of polarization in percent, PA is the
+    polarization angle in degrees, and PA_err is the error in the polarization angle in degrees. When
+    present, CFAM is matched to CFAMNAME in each input frame header; otherwise TARGET must be unique.
 
     The error calculation propagates both the photometric measurement noise on the observed Stokes vectors
     and the uncertainties in the reference star polarization fraction and angle (P_err, PA_err from the
@@ -525,27 +525,39 @@ def generate_mueller_matrix_cal(input_dataset,
     pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
     pol_ref.columns = pol_ref.columns.str.strip()
     pol_ref["TARGET"] = pol_ref["TARGET"].str.strip()
-    pol_ref["CFAM"] = pol_ref["CFAM"].str.strip()
+    has_cfam = "CFAM" in pol_ref.columns
+    if has_cfam:
+        pol_ref["CFAM"] = pol_ref["CFAM"].str.strip()
 
     # split the datasets into different targets
     # Original behavior: this returns one target name per unique TARGET and drops roll states.
     # _, targets = dataset.split_dataset(prihdr_keywords=["TARGET"])
     # Keep one reference target per Stokes measurement, including each roll state.
     targets = [image.pri_hdr["TARGET"] for image in dataset]
-    cfam_names = [image.ext_hdr["CFAMNAME"] for image in dataset]
+    cfam_names = (
+        [image.ext_hdr["CFAMNAME"] for image in dataset]
+        if has_cfam else [None] * len(dataset)
+    )
 
     n_targets = np.unique(targets).shape[0]
-    # Check that every TARGET and CFAMNAME pair has one polarization reference.
+    # Select one polarization reference for every Stokes measurement.
+    pol_rows_by_measurement = []
     for target, cfam_name in zip(targets, cfam_names):
-        pol_rows = pol_ref[
-            (pol_ref["TARGET"] == target)
-            & (pol_ref["CFAM"] == cfam_name)
-        ]
+        if has_cfam:
+            pol_rows = pol_ref[
+                (pol_ref["TARGET"] == target)
+                & (pol_ref["CFAM"] == cfam_name)
+            ]
+            ref_label = f"TARGET={target}, CFAM={cfam_name}"
+        else:
+            pol_rows = pol_ref[pol_ref["TARGET"] == target]
+            ref_label = f"TARGET={target}"
         if len(pol_rows) != 1:
             raise ValueError(
-                f"Expected one polarization reference for TARGET={target}, CFAM={cfam_name}; "
+                f"Expected one polarization reference for {ref_label}; "
                 f"found {len(pol_rows)}."
             )
+        pol_rows_by_measurement.append(pol_rows)
     
     has_intensity_vectors = all(
         image.data.size >= 6 and image.err[0].size >= 6
@@ -581,10 +593,7 @@ def generate_mueller_matrix_cal(input_dataset,
     U_refs = np.zeros(len(targets))
     stokes_matrix = np.zeros((2*len(dataset), 6))
     for i, target in enumerate(targets):
-        pol_row = pol_ref[
-            (pol_ref["TARGET"] == target)
-            & (pol_ref["CFAM"] == cfam_names[i])
-        ]
+        pol_row = pol_rows_by_measurement[i]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
         PA = pol_row["PA"].values[0] - rotation_angles[i] # in degrees
         P_err = pol_row["P_err"].values[0] / 100.0 # convert from percent to fraction
