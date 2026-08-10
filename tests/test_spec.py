@@ -560,7 +560,10 @@ def test_determine_zeropoint():
 
     #test it as non-coronagraphic observation of only psf narrowband, so no science frames, a print statement should be raised
     input_dataset2 = Dataset(psf_images)
-    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset, subtract_no_offset_frames=False)
+    #passing subtract_no_offset_frames=False on OPEN_34 data should not warn about setting it to False, since it is already False
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset, subtract_no_offset_frames=False)
     assert len(dataset) > 0
     
     #only 1 fake science dataset frame

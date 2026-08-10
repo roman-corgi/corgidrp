@@ -1509,8 +1509,8 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     image.filename = f"cgi_{visitid}_{time_str}_l2b.fits"
     return image
 
-def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True,
-                       distortion_coeffs_path=None, dither_pointings=0, bpix_map=None, sim_err_map=False):
+def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
+                       distortion_coeffs_path=None, dither_pointings=0, bpix_map=None, sim_err_map=False, vignette_radius=3460):
     """
     Create simulated data for astrometric calibration.
 
@@ -1525,9 +1525,10 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         rotation (float): The north angle of the created image data (default: 45 [deg])
         add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
         distortion_coeffs_path (str): Full path to csv with the distortion coefficients and the order of polynomial used to describe distortion (default: None))
-        dither_pointings (int): Number of dithers to include with the dataset. Dither offset is assumed to be half the FoV. (default: 0)
+        dither_pointings (int): Number of dithers to include with the dataset (UP to 4 pointings). Dither offset is assumed to be 1/10 the FoV. (default: 0)
         bpix_map (np.array): 2D bad pixel map to apply to simulated data (default: None)
-        sim_err_map (boolean): If True, simulates an error map (default: False)
+        sim_err_map (boolean): If True, simulates an error map (default: False) 
+        vignette_radius (float): (Optional) The radius (from [0,0]) at which to simulate vignetting edge in [mas] (default: 3460 mas (~ 160 pixels)). No vignetting can be invoked by setting =None
 
     Returns:
         corgidrp.data.Dataset:
@@ -1549,7 +1550,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
 
     # load in the field data and restrict to 0.02 [deg] radius around target
     cal_field = ascii.read(field_path)
-    subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - subfield_radius) & (cal_field['DEC'] <= target[1] + subfield_radius))]
+    subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - (subfield_radius*(np.cos(np.radians(target[1]))))) & (cal_field['DEC'] <= target[1] + (subfield_radius*np.cos(np.radians(target[1])))))]
     cal_SkyCoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg', frame='icrs')  # save these subfield skycoords somewhere
 
     # create the simulated image header
@@ -1589,7 +1590,12 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     frame_targs = []
 
     # compute pixel positions and sky locations for the undithered image
-    pix_inds = np.where((xpix_full >= 0) & (xpix_full <= nx) & (ypix_full >= 0) & (ypix_full <= ny))[0]
+    if (vignette_radius is None) or ((vignette_radius / platescale) > np.min([nx//2, ny//2])):     # cover the case with no vignetting OR where vignette rad is larger than image size
+        pix_inds = np.where((xpix_full >= (0)) & (xpix_full <= (nx)) & (ypix_full >= (0)) & (ypix_full <= (ny)))[0]
+    else:
+        vignette = vignette_radius / platescale     # convert from [mas] to pixel radius based on platescale injected
+        pix_inds = np.where((xpix_full >= ((nx//2) - vignette)) & (xpix_full <= ((nx//2) + vignette)) & (ypix_full >= ((ny//2) - vignette)) & (ypix_full <= ((ny//2) + vignette)))[0]
+
     xpix = xpix_full[pix_inds]
     ypix = ypix_full[pix_inds]
     ras = cal_SkyCoords[pix_inds]
@@ -1610,8 +1616,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     ra_fov = 0.01741774460001011  #[deg]
     dec_fov = 0.00617760699999792  #[deg]
     ## assume the target coord has moved by half ra/dec fov based on direction
-    dither_target_ras = [target[0], target[0], target[0]+(ra_fov/2), target[0]-(ra_fov/2)]
-    dither_target_decs = [target[1]+(dec_fov/2), target[1]-(dec_fov/2), target[1], target[1]]
+    dither_target_ras = [target[0], target[0], target[0]+(ra_fov/50), target[0]-(ra_fov/50)]
+    dither_target_decs = [target[1]+(dec_fov/50), target[1]-(dec_fov/50), target[1], target[1]]
 
 
     # create dithered images if dither_pointings > 0
@@ -1641,7 +1647,12 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         # create the image data
         xpix_full, ypix_full = wcs.utils.skycoord_to_pixel(cal_SkyCoords, wcs=w)
 
-        dither_inds = np.where((xpix_full >= 0) & (xpix_full <= 1024) & (ypix_full >= 0) & (ypix_full <= 1024))[0]
+        # compute pixel positions and sky locations for the undithered image
+        if (vignette_radius is None) or ((vignette_radius / platescale) > np.min([nx//2, ny//2])):     # cover the case with no vignetting OR where vignette rad is larger than image size
+            dither_inds = np.where((xpix_full >= (0)) & (xpix_full <= (nx)) & (ypix_full >= (0)) & (ypix_full <= (ny)))[0]
+        else:
+            vignette = vignette_radius / platescale     # convert from [mas] to pixel radius based on platescale injected
+            dither_inds = np.where((xpix_full >= ((nx//2) - vignette)) & (xpix_full <= ((nx//2) + vignette)) & (ypix_full >= ((ny//2) - vignette)) & (ypix_full <= ((ny//2) + vignette)))[0]
 
         dxpix = xpix_full[dither_inds]
         dypix = ypix_full[dither_inds]
@@ -2024,7 +2035,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #190K: gain of 10-20
     emccd[190] = EMCCDDetect(
@@ -2041,7 +2060,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #195K: gain of 10-20
     # emccd[195] = EMCCDDetect(
@@ -2075,7 +2102,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #210K: gain of 10-20
     emccd[210] = EMCCDDetect(
@@ -2092,7 +2127,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #220K: gain of 10-20
     emccd[220] = EMCCDDetect(
@@ -2109,7 +2152,16 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
+            
         )
 
     #when tauc is 3e-3, that gives a mean e- field of 2090 e-
@@ -2670,7 +2722,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 nbits=nbits,
                 numel_gain_register=604,
                 meta_path=meta_path,
-                nonlin_path=nonlin_path
+                nonlin_path=nonlin_path,
+                upstream_spill_prob=None,
+                fpn_path=None,
+                bias_sigma_row=0,
+                bias_sigma_col=0,
+                fast_gain_mode=True,
+                row_read_time=0,
+                gain_CIC_Q=0,
+                tail_length=40
                 )
         # save to FITS files
         for sc in [1,2,3,4]:
@@ -2682,7 +2742,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     gain_counts = np.reshape(readout_emccd._gain_register_elements(temps[temp][sc][i].ravel()),temps[temp][sc][i].shape)
                     if gain_counts.any() >= full_well_serial:
                         raise Exception('Saturated after EM gain applied.')
-                    output_dn = readout_emccd.readout(gain_counts)
+                    output_dn = readout_emccd.readout(gain_counts,frametime)
                 else:
                     output_dn = temps[temp][sc][i]
                 prihdr, exthdr = create_default_L1_TrapPump_headers(arrtype)
@@ -2770,7 +2830,15 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7
         pixel_pitch=13e-6,  # m
         eperdn=kgain,
         nbits=64, # number of ADU bits
-        numel_gain_register=604 #number of gain register elements
+        numel_gain_register=604, #number of gain register elements
+        upstream_spill_prob=None,
+        fpn_path=None,
+        bias_sigma_row=0,
+        bias_sigma_col=0,
+        fast_gain_mode=True,
+        row_read_time=0,
+        gain_CIC_Q=0,
+        tail_length=40
         )
 
     thresh = emccd.em_gain/10 # threshold
