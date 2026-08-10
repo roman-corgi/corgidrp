@@ -93,7 +93,7 @@ def test_autoreducing():
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     # check that the recipe is saved into the header.
 
-    for frame in output_dataset[:-1]:
+    for frame in output_dataset:
         assert "RECIPE" in frame.ext_hdr
         # test recipe was correctly written into the header
         # do a string comparison, easiest way to check
