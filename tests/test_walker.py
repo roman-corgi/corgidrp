@@ -99,7 +99,7 @@ def test_autoreducing():
         # do a string comparison, easiest way to check
         hdr_recipe = json.loads(frame.ext_hdr["RECIPE"])
         assert json.dumps(hdr_recipe) == json.dumps(recipe)
-
+        
     # clean up
     mycaldb.remove_entry(new_nonlinearity)
     mycaldb.remove_entry(new_kgain)

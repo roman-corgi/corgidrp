@@ -5,7 +5,7 @@ import numpy as np
 import corgidrp.data as data
 import corgidrp.check as check
 
-def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
+def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
                     detector_regions=None, use_imaging_area = False, dataset_copy=True):
     """
     Measure and subtract the median bias in each row of the pre-scan detector region.
@@ -21,7 +21,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         detector_regions: (dict):  A dictionary of detector geometry properties.
             Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         use_imaging_area (bool): flag indicating whether to use the imaging area (like in the trap pump code) or use the defualt (equivalent to EMCCDFrame)
-        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
 
     Returns:
@@ -32,7 +32,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         output_dataset = input_dataset.copy(copy_data=False)
     else:
         output_dataset = input_dataset
-    
+
     if detector_regions is None:
         detector_regions = detector_areas
 
@@ -63,7 +63,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
         if not return_full_frame:
             # Get the image area
-            if use_imaging_area: 
+            if use_imaging_area:
                 image_data = imaging_slice(arrtype, frame_data, detector_regions=detector_regions)
                 image_dq = imaging_slice(arrtype, frame_dq, detector_regions=detector_regions)
 
@@ -77,7 +77,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
                 p_r0 = detector_regions[arrtype]['prescan']['r0c0'][0]
                 al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
 
-            else: 
+            else:
                 image_data = slice_section(frame_data, arrtype, 'image', detector_regions)
                 image_dq = slice_section(frame_dq, arrtype, 'image', detector_regions)
 
@@ -190,8 +190,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             Number of pixels in the row downstream of the end of a cosmic plateau
             to mask.  If cosm_tail is greater than the number of
             columns left to the end of the row from the cosmic
-            plateau, the cosmic masking ends at the end of the row. Defaults to 10. 
-            For EM gain = 1, no serial streaking occurs, so this is internally set to 0 
+            plateau, the cosmic masking ends at the end of the row. Defaults to 10.
+            For EM gain = 1, no serial streaking occurs, so this is internally set to 0
             in that case regardless of the input value here.
         mode (string):
             If 'image', an image-area input is assumed, and if the input
@@ -200,13 +200,13 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             If 'full', a full-frame input is assumed, and if the input tail length
             is longer than the length to the end of the full-frame row, the masking
             continues onto the next row.  Defaults to 'image'.
-        detector_regions: (dict):  
-            A dictionary of detector geometry properties.  Keys should be as 
+        detector_regions: (dict):
+            A dictionary of detector geometry properties.  Keys should be as
             found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
             and will be marked bad or discarded. Frame saturations equal to this argument are not flagged.
-        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
         discard_oversat (bool): if True, discard frames that exceed pct_oversat_lim, preserving the previous behavior.
             If False, keep them, mark IS_BAD, and skip cosmic ray identification for those frames. Defaults to False.
@@ -241,7 +241,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 emgain = frame.ext_hdr['EMGAIN_A']
             else: # otherwise use commanded EM gain
                 emgain = frame.ext_hdr['EMGAIN_C']
-            emgain_list.append(emgain)
+        emgain_list.append(emgain)
     emgain_arr = np.array(emgain_list)
     fwcpp_e_arr = np.array([detector_params.params['FWC_PP_E'] for frame in initial_dataset])
     fwcem_e_arr = np.array([detector_params.params['FWC_EM_E'] for frame in initial_dataset])
@@ -285,8 +285,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
     m1 = (crmasked_cube >= sat_fwcs_array) * sat_dqval
-    # Mask 2:  captures cosmic rays.  If EM gain is 1, no cosmic tails made since 
-    # those are only made in gain register.  
+    # Mask 2:  captures cosmic rays.  If EM gain is 1, no cosmic tails made since
+    # those are only made in gain register.
     # Do a for loop since it's calling a for loop in the sub-routine anyway
     # and can't handle different 'FWC_EM's for different frames.
     m2 = np.zeros_like(crmasked_cube)
@@ -307,7 +307,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         else:
             cosm_tail_i = cosm_tail
         m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
-                        fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
+                        fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well
                         sat_thresh=sat_thresh,
                         plat_thresh=plat_thresh,
                         cosm_filter=cosm_filter,
@@ -333,13 +333,13 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
 def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
     """
-    Perform non-linearity correction of a dataset using the corresponding non-linearity correction. We check for non-linear pixel and flag them in the DQ. 
+    Perform non-linearity correction of a dataset using the corresponding non-linearity correction. We check for non-linear pixel and flag them in the DQ.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level).
         non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity.
         threshold (float): threshold for flagging pixels in the DQ array, value above this threshold will be flagged in the DQ map as too nonlinear. By default it is set to infinity, user can change it to a different value.
-    
+
     Returns:
         (corgidrp.data.Dataset): A non-linearity corrected version of the input dataset
     """
@@ -368,7 +368,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
         current_value = linearized_dataset[i].dq[linearized_cube[i] > threshold]
         linearized_dataset[i].dq[linearized_cube[i] > threshold] = np.bitwise_or(current_value, non_linear_flag)
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
-    
+
     if non_lin_correction is not None:
         history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)
 
@@ -390,9 +390,9 @@ def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20, dataset_copy=
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
             and will be discarded, Frame saturations equal to this argument are not discarded.
-        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
-    
+
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
         pruned_sat_fwcs (list): input sat_fwcs with corresponding saturated frame fwcs removed
