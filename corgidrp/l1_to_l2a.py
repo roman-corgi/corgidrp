@@ -112,6 +112,10 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
         # Measure bias and error (standard error of the median for each row, add this to 3D image array)
         medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
+        # rare cosmic rays can spill over all the way into the "good columns" region of the next row, ruining the bias subtraction for that row
+        # Fix that by replacing such rows (which deviate by at least the median bias amount) with the median bias
+        unreliable_bias_rows = np.where(np.abs(medbyrow - np.median(medbyrow)) > np.median(medbyrow))
+        medbyrow[unreliable_bias_rows] = np.median(medbyrow)
         sterrbyrow = np.std(al_prescan[:,st:end], axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan[:,st:end].shape[1])
         if noise_maps is not None:
             bias_offset = noise_maps.bias_offset

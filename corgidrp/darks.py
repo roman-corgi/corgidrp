@@ -747,7 +747,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     else:
         W = np.ones_like(mean_err_stack) # all weighted the same
     for i in range(len(W)): #regardless of weighting, make the unreliable pixels have 0 weight in the fit
-        W[i][unreliable_pix_masks[i] == 1] = 0
+        W[i][np.where(unreliable_pix_masks[i] == 1)] = 0
     wY = W*mean_stack
     wX = np.transpose(W*np.transpose(Xx, (1,0,2,3)), (1,0,2,3))
     wXTwX = np.einsum('ji...,ik...',np.transpose(wX,(1,0,2,3)), wX)
