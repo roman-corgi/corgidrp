@@ -219,7 +219,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     """
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
-    #sat_thresh = 800/90000 #XXX
+    #sat_thresh = 2000/90000 #800/90000 #XXX
     median_filter_mode = True #XXX
 
     if detector_regions is None:
@@ -311,8 +311,13 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         else:
             cosm_tail_i = cosm_tail
         if median_filter_mode:
-            med_mask = median_filter(crmasked_cube[i,:,:], size=(10,10))#XXX
-            diff = crmasked_cube[i,:,:] - med_mask
+            # use the image area for the median filter so that the background is not biased by the prescan or overscan areas
+            if crmasked_cube[i].shape[0] == detector_regions[arrtype]['frame_rows'] and crmasked_cube[i].shape[1] == detector_regions[arrtype]['frame_cols']:
+                image_data = slice_section(crmasked_cube[i,:,:], arrtype, 'image', detector_regions)
+            else:
+                image_data = crmasked_cube[i,:,:]
+            med_mask = median_filter(image_data, size=(10,10))#XXX
+            diff = image_data - med_mask
             Icount, IbinEdges = np.histogram(diff, bins=21)#XXX
 
             # find the minima in the histogram
@@ -325,6 +330,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             # find index of local max in histogram
             bVmax = np.logical_and(Icount[1:-1] >= Icount[:-2],
                                 Icount[1:-1] > Icount[2:])
+
+            # exclude where the difference is negative
+            bV[np.where(binCenter<0)] = False
 
             # if there is a local max (e.g., background), restrict the local minimum 
             # to be above this
@@ -346,6 +354,23 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             # If binVal is empty, the histogram has no minima except at an endpoint. 
             else:
                 m2[i,:,:] = np.zeros_like(crmasked_cube[i,:,:])
+            #XXX change median_filter_mode to flagging_mode: 0 for usual, 1 for median, 2 for median and then also traditional after masking what median caught.
+            # in addition to what was just done, this will catch the cosmic rays that blend in with the background and aren't caught with median filter method.
+            im = crmasked_cube[i,:,:].copy()
+            im[m2[i,:,:] > 0] = np.nan
+            imm = flag_cosmics(cube=im,
+                                fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
+                                sat_thresh=2000/90000, #XXX sat_thresh
+                                plat_thresh=2000/90000, #XXX plat_thresh
+                                cosm_filter=3, #XXX cosm_filter
+                                cosm_box=5, #XXX cosm_box
+                                cosm_tail=0, #XXX cosm_tail
+                                mode=mode,
+                                detector_regions=detector_regions,
+                                arrtype=arrtype
+                                ) * cr_dqval
+            non_nan_inds = np.where(~np.isnan(imm))
+            m2[i][non_nan_inds] = m2[i][non_nan_inds] + imm[non_nan_inds]
         else:
             m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
                             fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 

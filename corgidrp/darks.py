@@ -553,6 +553,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             print('The number of frames in dataset is less than 1176 frames, '
             'which is the minimum number for the analog synthesized '
             'master dark')
+    unreliable_pix_masks = []
     for i in range(len(datasets)):
         frames = []
         bpmaps = []
@@ -645,13 +646,14 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
         stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(unmasked_num.max())/1
         total_err = np.sqrt(mean_err**2 + stat_std**2)
-        pixel_mask = (unmasked_num < len(datasets[i].frames)/2).astype(int)
+        pixel_mask = (unmasked_num < len(datasets[i].frames)/2).astype(int) #XXX change to user-input fraction instead of 50%
         mean_num = np.mean(unmasked_num)
         mean_frame[telem_rows] = np.nan
         mean_frames.append(mean_frame)
         total_errs.append(total_err)
         mean_num_good_fr.append(mean_num)
         unreliable_pix_map += pixel_mask
+        unreliable_pix_masks.append(pixel_mask)
         unfittable_pix_map += combined_bpmap
         # bitwise_or flag value for those that are masked all the way through for all
         # frames
@@ -670,6 +672,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         output_dqs.append(output_dq)
     output_dqs = np.stack(output_dqs)
     unreliable_pix_map = unreliable_pix_map.astype(int)
+    unreliable_pix_masks = np.stack(unreliable_pix_masks)
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
 
@@ -737,10 +740,14 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     Xx = np.broadcast_to(X[:, :, None, None], (len(EMgain_arr), 3, rows, cols))
     # weighting matrix; sub-stacks with few usable frames get a low weight
     mean_err_stack[telem_rows] = 1 # instead of 0 to avoid inf weighting
+    for fr in mean_stack:
+        fr[np.where(unfittable_pix_map >= len(datasets)-3)] = 0 # make the output noise maps return 0 for these unfittable pixels; also recorded in DQ of output 
     if weighting:
         W = 1/mean_err_stack
     else:
         W = np.ones_like(mean_err_stack) # all weighted the same
+    for i in range(len(W)): #regardless of weighting, make the unreliable pixels have 0 weight in the fit
+        W[i][unreliable_pix_masks[i] == 1] = 0
     wY = W*mean_stack
     wX = np.transpose(W*np.transpose(Xx, (1,0,2,3)), (1,0,2,3))
     wXTwX = np.einsum('ji...,ik...',np.transpose(wX,(1,0,2,3)), wX)
