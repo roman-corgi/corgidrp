@@ -4605,7 +4605,7 @@ def get_flag_to_bit_map():
         "full_well_saturated_pixel": 5,
         "non_linear_pixel": 6,
         "pixel_affected_by_cosmic_ray": 7,
-        "TBD": 8,
+        "too_bright_for_pc": 8,
     }
 
 def get_flag_to_value_map():

@@ -207,7 +207,8 @@ def estimate_psf_pix_and_ct(
     # mean combine the total values (photo-electrons/sec) of the pupil images
     unocc_psf_norm = 0
     for frame in pupil_img_frames:
-        unocc_psf_norm += frame.data.sum()
+        # prevent NaNs from corrupting the entire pupil image value
+        unocc_psf_norm += np.nansum(frame.data)
     unocc_psf_norm /= len(pupil_img_frames)
     # Transform pupil counts into direct imaging counts. Recall all frames have
     # the same cfam filter or an Exception is raised
@@ -444,6 +445,7 @@ def generate_ct_cal(
     roi_radius=3,
     cfam_version=0,
     spline_order=3,
+    combine_frames=False
     ):
     """
     Generate the elements needed to create a core throughput calibration file.
@@ -468,6 +470,8 @@ def generate_ct_cal(
         lens).
       spline_order (int): Spline order for sub-pixel centering of the PSF
         stamps. Default 3. Use 1 for linear interpolation.
+      combine_frames (boolean): Combine frames of the same FSMX/Y position, 
+        pupil images are unaffected.
 
     Returns:
       PSF cube, data quality cube, HDU list with the CT array measurements,
@@ -475,6 +479,36 @@ def generate_ct_cal(
       headers. 
     """
     dataset = dataset_in.copy()
+
+    # split dataset by dither if combine_frames is true
+    if combine_frames:
+        # first take out pupil frames from the dataset
+        pupil_frames = []
+        img_frames = []
+        for frame in dataset:
+            if frame.ext_hdr["DPAMNAME"] == "PUPIL":
+                pupil_frames.append(frame)
+            else:
+                img_frames.append(frame)
+        # split the non-pupil frames by FSM dither position
+        dither_datasets, _ = corgidrp.data.Dataset(img_frames).split_dataset(exthdr_keywords=["FSMX", "FSMY"])
+        # median combine the frames in each dither group
+        combined_img_frames = []
+        # add the pupil dataset back into the datasets split by dither
+        dither_datasets.append(corgidrp.data.Dataset(pupil_frames))
+        # only combine frames if each dataset actually contains multiple frames, if each individual frame is already
+        # unique in dither position then the original input dataset works fine as is
+        if len(dither_datasets) < len(dataset):
+            for dither_dataset in dither_datasets:
+                # grab all frames in the dataset
+                data_array = [frame.data for frame in dither_dataset]
+                # median combine
+                comb = np.nanmedian(data_array, axis=0)
+                # create image object
+                im = corgidrp.data.Image(comb, pri_hdr=dither_dataset[0].pri_hdr, ext_hdr=dither_dataset[0].ext_hdr)
+                im.filename = dither_dataset[-1].filename
+                combined_img_frames.append(im)
+            dataset = corgidrp.data.Dataset(combined_img_frames)
 
     # All frames must have the same CFAM filter
     cfam_list = []
@@ -511,7 +545,8 @@ def generate_ct_cal(
     # Values of FPAM during CT observations (needed to derive the FPM's center
     # during CT observations given a coronagraphic dataset). The values do not
     # change during CT observations
-    fpam_hv = [dataset_in[0].ext_hdr['FPAM_H'], dataset_in[0].ext_hdr['FPAM_V']]
+    offaxis = [f for f in dataset_in if f.ext_hdr.get('DPAMNAME') != 'PUPIL'] # ensure FPAM/FSAM values are not from pupil images in the dataset
+    fpam_hv = [offaxis[0].ext_hdr['FPAM_H'], offaxis[0].ext_hdr['FPAM_V']]
     fpam_hdr = fits.Header()
     fpam_hdr['COMMENT'] = 'FPAM H and V values during the core throughput observations'
     fpam_hdr['UNITS'] = 'micrometer'
@@ -519,7 +554,7 @@ def generate_ct_cal(
     # Values of FSAM during CT observations (needed to derive the FPM's center
     # during CT observations given a coronagraphic dataset). The values do not
     # change during CT observations
-    fsam_hv = [dataset_in[0].ext_hdr['FSAM_H'], dataset_in[0].ext_hdr['FSAM_V']]
+    fsam_hv = [offaxis[0].ext_hdr['FSAM_H'], offaxis[0].ext_hdr['FSAM_V']]
     fsam_hdr = fits.Header()
     fsam_hdr['COMMENT'] = 'FSAM H and V values during the core throughput observations'
     fsam_hdr['UNITS'] = 'micrometer'
