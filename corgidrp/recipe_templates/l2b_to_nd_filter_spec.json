@@ -9,6 +9,9 @@
         "name": "divide_by_exptime"
       },
       {
+          "name": "crop"
+      },
+      {
         "name": "determine_wave_zeropoint",
         "calibs": {
           "SpecFilterOffset": "AUTOMATIC"

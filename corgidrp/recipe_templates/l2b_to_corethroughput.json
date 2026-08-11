@@ -11,7 +11,10 @@
             "name": "divide_by_exptime"
         },
         {
-            "name" : "generate_ct_cal"
+            "name" : "generate_ct_cal",
+            "keywords" : {
+                "combine_frames" : true
+            }
         },
         {
             "name" : "save"

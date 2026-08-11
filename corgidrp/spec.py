@@ -4,6 +4,7 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d, LinearNDInterpolator
+from scipy.signal import fftconvolve
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal, SpecFilterOffset, SlitTransmission
 import os
 from astropy.io import ascii, fits
@@ -234,8 +235,11 @@ def fit_psf_centroid(psf_data, psf_template,
     else:
         xcom_template, ycom_template = (np.rint(xcent_template), np.rint(ycent_template))
 
+    #filter NaNs
+    psf_data_nonan = psf_data.copy()
+    psf_data_nonan[np.isnan(psf_data_nonan)] = 0
     if xcent_guess is None or ycent_guess is None:
-        median_filt_psf = ndi.median_filter(psf_data, size=2)
+        median_filt_psf = ndi.median_filter(psf_data_nonan, size=2)
         xcom_data, ycom_data = np.rint(get_center_of_mass(median_filt_psf))
     else:
         xcom_data, ycom_data = (np.rint(xcent_guess), np.rint(ycent_guess))
@@ -247,14 +251,34 @@ def fit_psf_centroid(psf_data, psf_template,
     ymin_data_cut, ymax_data_cut = (int(ycom_data) - halfheight, int(ycom_data) + halfheight)
 
     template_stamp = psf_template[ymin_template_cut:ymax_template_cut+1, xmin_template_cut:xmax_template_cut+1]
-    data_stamp = psf_data[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1]
+    data_stamp = psf_data_nonan[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1]
 
-    xoffset_guess, yoffset_guess = (0.0, 0.0)
-    amp_guess = np.sum(psf_data) / np.sum(psf_template)
-    guess_params = (xoffset_guess, yoffset_guess, amp_guess)
-    registration_result = optimize.minimize(psf_registration_costfunc, guess_params,
-                                         args=(template_stamp, data_stamp),
-                                         method='Powell')
+    # Stage 1: normalized cross-correlation for a robust integer-pixel shift.
+    def _norm_stamp(a):
+        a = a - a.mean()
+        s = a.std()
+        return a / s if s > 0 else a
+
+    xcorr = fftconvolve(_norm_stamp(data_stamp.astype(float)),
+                        _norm_stamp(template_stamp.astype(float))[::-1, ::-1],
+                        mode="full")
+    peak = np.unravel_index(np.argmax(xcorr), xcorr.shape)
+    xshift_int = int(peak[1] - (template_stamp.shape[1] - 1))
+    yshift_int = int(peak[0] - (template_stamp.shape[0] - 1))
+
+    # Stage 2: bounded Powell least-squares refinement (xshift, yshift, amplitude).
+    amp_guess = (data_stamp.sum() / template_stamp.sum()
+                 if template_stamp.sum() != 0 else 1.0)
+
+    # Bounds: shifts within ±1 pixel of the xcorr integer result;
+    registration_result = optimize.minimize(
+        psf_registration_costfunc,
+        x0=[float(xshift_int), float(yshift_int), amp_guess],
+        args=(template_stamp, data_stamp),
+        method="Powell",
+        bounds=[(xshift_int - 1.0, xshift_int + 1.0),
+                (yshift_int - 1.0, yshift_int + 1.0),
+                (0.1 * amp_guess, 10.0 * amp_guess)])
 
     if not registration_result.success:
         print(f"Warning: Registration optimization did not converge: {registration_result.message}")
@@ -262,18 +286,18 @@ def fit_psf_centroid(psf_data, psf_template,
     xfit = xcent_template + (xcom_data - xcom_template) + registration_result.x[0]
     yfit = ycent_template + (ycom_data - ycom_template) + registration_result.x[1]
 
-    psf_data_bkg = psf_data.copy()
+    psf_data_bkg = psf_data_nonan.copy()
     psf_data_bkg[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1] = np.nan
-    psf_peakpix_snr = np.max(psf_data) / np.nanstd(psf_data_bkg)
+    psf_peakpix_snr = np.max(psf_data_nonan) / np.nanstd(psf_data_bkg)
 
     (gauss2d_xfit, gauss2d_yfit, xfwhm, yfwhm, gauss2d_peakfit,
-     fitted_data_stamp, model, residual) = gaussfit2d_pix(psf_data,
+     fitted_data_stamp, model, residual) = gaussfit2d_pix(psf_data_nonan,
                                                 xguess = xfit,
                                                 yguess = yfit,
                                                 xfwhm_guess = fwhm_minor_guess,
                                                 yfwhm_guess = fwhm_major_guess,
                                                 halfwidth = 1, halfheight = halfheight,
-                                                guesspeak = np.max(psf_data), oversample = gauss2d_oversample,
+                                                guesspeak = np.max(psf_data_nonan), oversample = gauss2d_oversample,
                                                 refinefit = True)
 
     (x_precis, y_precis) = (np.abs(xfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr,
