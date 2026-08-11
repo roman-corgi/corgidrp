@@ -555,7 +555,7 @@ def test_bias_offset():
 
 
 if __name__ == "__main__":
-    test_prescan_sub()
+    test_prescan_sub() #XXX add test for bias affected by cosmic ray overspill
     test_bias_zeros_frame()
     test_bias_hvoff()
     test_bias_hvon()

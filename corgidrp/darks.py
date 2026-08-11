@@ -646,7 +646,8 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
         stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(unmasked_num.max())/1
         total_err = np.sqrt(mean_err**2 + stat_std**2)
-        pixel_mask = (unmasked_num < len(datasets[i].frames)/2).astype(int) #XXX change to user-input fraction instead of 50%
+        reliable_fraction = 0.8 #XXX should be input
+        pixel_mask = (unmasked_num <= len(datasets[i].frames)*reliable_fraction).astype(int) #XXX change to user-input fraction instead of 50%
         mean_num = np.mean(unmasked_num)
         mean_frame[telem_rows] = np.nan
         mean_frames.append(mean_frame)
@@ -739,15 +740,22 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     X = np.array([np.ones([len(EMgain_arr)]).astype(float), EMgain_arr, EMgain_arr*exptime_arr]).T  # (M,3)
     Xx = np.broadcast_to(X[:, :, None, None], (len(EMgain_arr), 3, rows, cols))
     # weighting matrix; sub-stacks with few usable frames get a low weight
-    mean_err_stack[telem_rows] = 1 # instead of 0 to avoid inf weighting
-    for fr in mean_stack:
-        fr[np.where(unfittable_pix_map >= len(datasets)-3)] = 0 # make the output noise maps return 0 for these unfittable pixels; also recorded in DQ of output 
+    for i in range(len(mean_err_stack)):
+        mean_err_stack[i][telem_rows] = 1 # instead of 0 to avoid inf weighting
+
     if weighting:
         W = 1/mean_err_stack
     else:
         W = np.ones_like(mean_err_stack) # all weighted the same
-    for i in range(len(W)): #regardless of weighting, make the unreliable pixels have 0 weight in the fit
+    for i in range(len(W)): #regardless of weighting, make the unreliable and unfittable pixels have 0 weight in the fit
         W[i][np.where(unreliable_pix_masks[i] == 1)] = 0
+        # make the output noise maps return 0 for these unfittable pixels; also recorded in DQ of output 
+        W[i][np.where(unfittable_pix_map >= len(datasets)-3)] = 0 
+        # for a mean frame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
+        unreliable_im_area = slice_section(unreliable_pix_masks[i], 'SCI', 'image', detector_regions)
+        if unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.25: #XXX user input fraction here
+            W_im_area = slice_section(W[i], 'SCI', 'image', detector_regions)  
+            W_im_area[:,:] = 0 
     wY = W*mean_stack
     wX = np.transpose(W*np.transpose(Xx, (1,0,2,3)), (1,0,2,3))
     wXTwX = np.einsum('ji...,ik...',np.transpose(wX,(1,0,2,3)), wX)
@@ -756,6 +764,9 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     params_t = np.einsum('...ij,j...', pinv_wX, wY)
     params = np.transpose(params_t,(2,0,1))
 
+    # pixels that could not be fit: set noise map values there to 0 (should be no pixels in this category)
+    for p in params:
+        p[np.where(unfittable_pix_map >= len(datasets)-3)] = 0
     #next line: checked with KKT method for including bounds
     #actually, do this after determining everything else so that
     # bias_offset, etc is accurate

@@ -114,7 +114,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
         # rare cosmic rays can spill over all the way into the "good columns" region of the next row, ruining the bias subtraction for that row
         # Fix that by replacing such rows (which deviate by at least the median bias amount) with the median bias
-        unreliable_bias_rows = np.where(np.abs(medbyrow - np.median(medbyrow)) > np.median(medbyrow))
+        unreliable_bias_rows = np.where(np.abs(medbyrow - np.median(medbyrow)) > np.median(medbyrow)) #XXX > n*np.median(medbyrow) where n is input defaults to 1
         medbyrow[unreliable_bias_rows] = np.median(medbyrow)
         sterrbyrow = np.std(al_prescan[:,st:end], axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan[:,st:end].shape[1])
         if noise_maps is not None:
@@ -362,7 +362,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             # in addition to what was just done, this will catch the cosmic rays that blend in with the background and aren't caught with median filter method.
             im = crmasked_cube[i,:,:].copy()
             im[m2[i,:,:] > 0] = np.nan
-            imm = flag_cosmics(cube=im,
+            imm = flag_cosmics(cube=np.stack([im]),
                                 fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
                                 sat_thresh=2000/90000, #XXX sat_thresh
                                 plat_thresh=2000/90000, #XXX plat_thresh
@@ -373,8 +373,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                                 detector_regions=detector_regions,
                                 arrtype=arrtype
                                 ) * cr_dqval
-            non_nan_inds = np.where(~np.isnan(imm))
-            m2[i][non_nan_inds] = m2[i][non_nan_inds] + imm[non_nan_inds]
+            non_nan_inds = np.where(~np.isnan(imm[0]))
+            m2[i][non_nan_inds] = m2[i][non_nan_inds] + imm[0][non_nan_inds]
         else:
             m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
                             fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
