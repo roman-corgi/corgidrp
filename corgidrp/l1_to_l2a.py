@@ -162,8 +162,9 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
                        plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10,
                        mode='image', detector_regions=None, pct_oversat_lim=20,
-                       dataset_copy=True, discard_oversat=False, centerxy=[512, 512],
-                       pol_beams_sep_diam=7.5, pol_beams_alignment_angle_wp1=0, pol_beams_alignment_angle_wp2=45):
+                       dataset_copy=True, discard_oversat=False, skip_coronagraph_iwa=True,
+                       platescale=0.0218, pol_beams_sep_diam=7.5, 
+                       pol_beams_alignment_angle_wp1=0, pol_beams_alignment_angle_wp2=45):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -212,18 +213,17 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
         discard_oversat (bool): if True, discard frames that exceed pct_oversat_lim, preserving the previous behavior.
             If False, keep them, mark IS_BAD, and skip cosmic ray identification for those frames. Defaults to False.
-        centerxy (array): 
-            Length 2 array containing the [x, y] coordinates of the image enter, 
-            for use in bypassing the coronagraph IWA from cosmic ray masking.
+        skip_coronagraph_iwa (bool): If True, bypasses the coronagraph inner working angle from being flagged for cosmic rays for imaging and pol modes. Defaults to True. 
+        platescale (float): The detector platescale in arcseconds/pixel. Defaults to 0.0218.
         pol_beams_sep_diam (float):
             The separation between the polarimetric ordinary and extraordinary beams on detector in arcseconds,
-            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. 
+            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 7.5.
         pol_beams_alignment_angle_wp1 (float):
             The angle in which the polarimetric ordinary and extraordinary beams created by WP1 are aligned with respect to the detector x-axis,
-            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode.
+            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 0.
         pol_beams_alignment_angle_wp2 (float):
             The angle in which the polarimetric ordinary and extraordinary beams created by WP2 are aligned with respect to the detector x-axis,
-            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode.
+            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 45. 
 
 
     Returns:
@@ -233,7 +233,6 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
 
-    platescale = 0.0218 # detector platescale in arcseconds/pixel
     mirror_diam = 2.36 # telescope mirror effective diameter in meters
 
     if detector_regions is None:
@@ -321,6 +320,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         
         curr_frame = crmasked_dataset.frames[i]
         arrtype = curr_frame.ext_hdr['ARRTYPE']
+        eacq_row = curr_frame.ext_hdr['EACQ_ROW']
+        eacq_col = curr_frame.ext_hdr['EACQ_COL']
         if emgain_list[i] == 1:
             cosm_tail_i = 0
         else:
@@ -331,8 +332,16 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         iwa_mask = np.ones_like(curr_frame.data)
         # check the coronagraph configuration used to determine IWA
         cor_mode = curr_frame.ext_hdr['LSAMNAME']
-        # ensures this computation only happens if the coronagraph is in
-        if cor_mode != 'OPEN':
+        # ensures this computation only happens if the coronagraph is in and we explicitly want to skip masking
+        if cor_mode != 'OPEN' and skip_coronagraph_iwa:
+            # determine where the coronagraph center is
+            if eacq_row is not None and eacq_col is not None and eacq_row != 0 and eacq_col != 0:
+                # use EACQ_ROW and EACQ_COL as the coronagraph center if these headers are set properly
+                centerxy = [eacq_col, eacq_row]
+            else:
+                # defaults to (512, 512) if the headers are not initialized properly
+                centerxy = [512, 512]
+            # initialize the iwa
             iwa = 0 # units of lambda/d
             if cor_mode == 'NFOV':
                 iwa = 3
