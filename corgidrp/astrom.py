@@ -979,7 +979,7 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
   
 def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
-                          combine_frames=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
+                          frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
                           pa_tolerance=0.1, keywords_to_split_dataset_by=None):
     """
     Perform the boresight calibration of a dataset.
@@ -996,13 +996,13 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
         platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
         center_radius (float): Percent of the image to compute plate scale and north angle from, centered around the image center (default: 0.9 -- ie: 90% of the image is used)
-        combine_frames (boolean or int): If True or 1, median combine all frames of the same target and instrument configuration into a singular frame.
+        frames_to_combine (boolean or int): If True or 1, median combine all frames of the same target and instrument configuration into a singular frame.
             If it is an integer value N > 1, the dataset is split into sequences of N frames to be median combined regardless of header keywords. (default: False)
         find_distortion (boolean): Used to determine if distortion map coeffs will be computed (default: False)
         fitorder (int): The order of legendre polynomials used to fit the distortion map (default: 3)
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
         initial_dist_guess (np.array): An initial guess of legendre coefficients used for fitting distortion, if None will use coeffs associated with no distortion (default: None)
-        pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) to group frames together when combine_frames is True (Default: 0.1)
+        pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) to group frames together when frames_to_combine is True (Default: 0.1)
         keywords_to_split_dataset_by (list, optional): List of additional header keywords to split the input dataset by for frame combining in addition default keywords the function uses for target, roll, and dither (default: None)
 
     Returns:
@@ -1040,8 +1040,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     # combine data frames if requested
     grouped_datasets = []
-    if int(combine_frames) > 1:
-        # group N number of frames together as specified by combine_frames
+    if int(frames_to_combine) > 1:
+        # group N number of frames together as specified by frames_to_combine
         num_frames = len(input_dataset)
         frame_counter = 0
         group = []
@@ -1050,12 +1050,12 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
             frame_counter += 1
             group.append(frame)
             # construct grouping once enough frames are accumulated or end of dataset is reached
-            if frame_counter == combine_frames or i == num_frames - 1:
+            if frame_counter == frames_to_combine or i == num_frames - 1:
                 grouped_datasets.append(corgidrp.data.Dataset(group))
                 # reset counter and grouping
                 frame_counter = 0
                 group = []
-    elif int(combine_frames) == 1: # note that we treat 1 as true here, to disable frame combining 0/False must be passed in
+    elif int(frames_to_combine) == 1: # note that we treat 1 as true here, to disable frame combining 0/False must be passed in
         # group frames based on header keywords
         # first split by PA since it requires handling of slight numerical mismatches and circular behavior
         clusters = []
@@ -1132,7 +1132,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     corrected_positions_boresight = []      # place to hold the corrected target position based on boresight offsets for each frame
 
     for i in range(len(dataset)):
-        if int(combine_frames) != 0:
+        if int(frames_to_combine) != 0:
             in_dataset = grouped_datasets[i]
         else:
             in_dataset = corgidrp.data.Dataset([dataset[i]])
