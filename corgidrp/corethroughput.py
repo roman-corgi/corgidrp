@@ -196,7 +196,7 @@ def estimate_psf_pix_and_ct(
         # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
             exthd = frame.ext_hdr
             if (exthd['DPAMNAME']=='PUPIL' and exthd['LSAMNAME']=='OPEN' and
-                exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
+                exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME'] in ['OPEN_12','OPEN_34']):
                 pupil_img_frames += [frame]
         except:
             pass
