@@ -544,6 +544,8 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     kgain_arr = np.array([])
     mean_frames = []
     total_errs = []
+    stat_errs = []
+    weights = []
     mean_num_good_fr = []
     output_dqs = []
     unreliable_pix_map = np.zeros((detector_regions['SCI']['frame_rows'],
@@ -626,9 +628,10 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
                 masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
                 sum_squares += (masked_frame - masked_mean)**2
             stat_std = np.zeros_like(sum_squares).astype(float)
-            stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds])/np.sqrt(unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
+            stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
             stat_std[zero_inds] = 0
             stat_std = np.ma.getdata(stat_std)
+            weight = unmasked_num
         else:
             masked_frames = np.ma.masked_array(frames, bpmaps)
             stat_std = np.zeros_like(frames[0]).astype(float)
@@ -652,6 +655,8 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         mean_frame[telem_rows] = np.nan
         mean_frames.append(mean_frame)
         total_errs.append(total_err)
+        stat_errs.append(stat_std)
+        weights.append(unmasked_num/len(frames)) #normalized 
         mean_num_good_fr.append(mean_num)
         unreliable_pix_map += pixel_mask
         unreliable_pix_masks.append(pixel_mask)
@@ -676,6 +681,8 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     unreliable_pix_masks = np.stack(unreliable_pix_masks)
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
+    mean_stat_err_stack = np.stack(stat_errs)
+    weights = np.stack(weights)
 
     # uncomment for RAM check
     # import psutil
@@ -737,25 +744,41 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     # matrix to be used for least squares and covariance matrix
     # Create Xx with shape (M, 3, rows, cols), where M = len(EMgain_arr)
     rows, cols = mean_stack.shape[1], mean_stack.shape[2]
+    inds_del = []
+    for i in range(len(EMgain_arr)): #regardless of weighting, make the unreliable and unfittable pixels have 0 weight in the fit
+        # for a mean frame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
+        unreliable_im_area = slice_section(unreliable_pix_masks[i], 'SCI', 'image', detector_regions)
+        if False: # XXX unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.25: #XXX user input fraction here
+            inds_del.append(i)
+    EMgain_arr = np.delete(EMgain_arr, inds_del, axis=0)
+    exptime_arr = np.delete(exptime_arr, inds_del, axis=0)
+    kgain_arr = np.delete(kgain_arr, inds_del, axis=0)
+    output_dqs = np.delete(output_dqs, inds_del, axis=0)
+    unreliable_pix_masks = np.delete(unreliable_pix_masks, inds_del, axis=0)
+    mean_stack = np.delete(mean_stack, inds_del, axis=0)
+    mean_err_stack = np.delete(mean_err_stack, inds_del, axis=0)
+    mean_stat_err_stack = np.delete(mean_stat_err_stack, inds_del, axis=0)
     X = np.array([np.ones([len(EMgain_arr)]).astype(float), EMgain_arr, EMgain_arr*exptime_arr]).T  # (M,3)
     Xx = np.broadcast_to(X[:, :, None, None], (len(EMgain_arr), 3, rows, cols))
     # weighting matrix; sub-stacks with few usable frames get a low weight
     for i in range(len(mean_err_stack)):
         mean_err_stack[i][telem_rows] = 1 # instead of 0 to avoid inf weighting
+        mean_stat_err_stack[i][telem_rows] = 1
 
     if weighting:
-        W = 1/mean_err_stack
+        W = weights #1/mean_stat_err_stack
     else:
-        W = np.ones_like(mean_err_stack) # all weighted the same
+        W = np.ones_like(mean_stat_err_stack) # all weighted the same
     for i in range(len(W)): #regardless of weighting, make the unreliable and unfittable pixels have 0 weight in the fit
-        W[i][np.where(unreliable_pix_masks[i] == 1)] = 0
+        #W[i][np.where(unreliable_pix_masks[i] == 1)] = 0
         # make the output noise maps return 0 for these unfittable pixels; also recorded in DQ of output 
         W[i][np.where(unfittable_pix_map >= len(datasets)-3)] = 0 
-        # for a mean frame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
-        unreliable_im_area = slice_section(unreliable_pix_masks[i], 'SCI', 'image', detector_regions)
-        if unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.25: #XXX user input fraction here
-            W_im_area = slice_section(W[i], 'SCI', 'image', detector_regions)  
-            W_im_area[:,:] = 0 
+        # # for a mean frame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
+        # unreliable_im_area = slice_section(unreliable_pix_masks[i], 'SCI', 'image', detector_regions)
+        # if unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.5: #XXX user input fraction here
+        #     # W_im_area = slice_section(W[i], 'SCI', 'image', detector_regions)  
+        #     # W_im_area[:,:] = 0 
+            
     wY = W*mean_stack
     wX = np.transpose(W*np.transpose(Xx, (1,0,2,3)), (1,0,2,3))
     wXTwX = np.einsum('ji...,ik...',np.transpose(wX,(1,0,2,3)), wX)
