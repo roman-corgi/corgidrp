@@ -601,19 +601,20 @@ def convert_to_flux(input_dataset, fluxcal_factor):
 def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_dataset, unocculted_star_loc=None, requested_separations=None, halfwidth=None,
                              nsigma=1, small_sample_correction=False):
     '''
-    Uses the PSF-subtracted image or dataset and its algorithm throughput vs separation to
-    produce a calibrated n-sigma flux ratio noise curve, also accounting for the throughput of the coronagraph.
+    Uses the PSF-subtracted Dataset frame and its algorithm throughput vs separation to produce a calibrated n-sigma flux-ratio noise curve,
+    also accounting for the throughput of the coronagraph. If input_dataset is an Image, it gets temporarily wrapped in a one-frame Dataset.
     It calculates flux ratio noise curve value for each radial separation from the subtracted star location, interpolating KLIP and core throughput values at these input separations.
     It uses a dataset of unocculted stars and ND transmission to determine the integrated flux of the Gaussian-fit star (where each frame in the dataset is assumed to correspond to the frames
     in the input_dataset), and an estimate of planet flux per frame of input_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to
-    the annular noise and FWHM equal to that used for KLIP algorithm througput for each radial separation.
+    the annular noise and FWHM equal to that used for KLIP algorithm throughput for each radial separation.
 
     Args:
         input_dataset (corgidrp.data.Image or corgidrp.data.Dataset): a PSF-subtracted Image or a Dataset of PSF-subtracted Images
         NDcalibration (corgidrp.data.NDFilterSweetSpotDataset): ND filter calibration
-        unocculted_star_dataset (corgidrp.data.Dataset): a dataset of unocculted star Images corresponding to the Images in input_dataset.   Should have the same number of frames as input_dataset (1-to-1 correspondence).
+        unocculted_star_dataset (corgidrp.data.Dataset): a Dataset of unocculted star Images corresponding to the input Image or the frames in the input Dataset.
+            It should have the same number of frames as input_dataset (1-to-1 correspondence); if input_dataset is an Image, it must contain one frame.
         unocculted_star_loc (2-D float array, optional): array of coordinates of the unocculted stars according to the order given in the unocculted_star_dataset.
-            The first row of the array is for row position, and the second row is for column position.
+            The array must have shape (2, N), where N is the number of unocculted-star Images. The first row of the array is for row position, and the second row is for column position.
             If None, the peak pixel location is used for each frame.  Defaults to None.
         requested_separations (float array, optional): separations at which to compute the flux ratio noise curve.  If None, the separations used for
             the core throughput are used (e.g., no interpolation needed).  Defaults to None.
@@ -625,11 +626,11 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
             from Mawet et al. (2014) using the Student's t-distribution. Defaults to False.
 
     Returns:
-        corgidrp.data.Image or corgidrp.data.Dataset: a copy of the input Image or Dataset with an additional extension header 'FRN_CRV' for the Image or for every Dataset frame, containing the
+        corgidrp.data.Image or corgidrp.data.Dataset: a copy of input_dataset, of the same type, with an additional extension header 'FRN_CRV' for the Image or for every Dataset frame, containing the
             calibrated flux ratio noise curve as a function of radial separation.  The data in that extension for a given frame is a (2+M)xN array,
             where:
             --the first row contains the separation radii in pixels
-            --the second row containts the separation radii in milli-arcseconds (mas)
+            --the second row contains the separation radii in milli-arcseconds (mas)
             --and the M rows contain the corresponding flux ratio noise curve values for the M KL mode truncations (maintaining the KL index ordering).
             TODO:  Add uncertainty to flux ratio noise curve based on uncertainties in core throughput and algorithm throughput if those are implemented in the future.
     '''
