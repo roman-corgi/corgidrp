@@ -515,9 +515,9 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
         # make sure plate scale is within tolerance of the guess or else discard this possibility
         if ((len1 / l1) > platescale_guess* (1 + platescale_tol)) or ((len2 / l2) > platescale_guess* (1 + platescale_tol)) or ((len3 / l3) > platescale_guess* (1 + platescale_tol)):
-            ap, bp, cp = 0, 0, 0
+            ap, bp, cp = -np.inf, -np.inf, -np.inf
         if ((len1 / l1) < platescale_guess* (1 - platescale_tol)) or ((len2 / l2) < platescale_guess* (1 - platescale_tol)) or ((len3 / l3) < platescale_guess* (1 - platescale_tol)):
-            ap, bp, cp = 0, 0, 0
+            ap, bp, cp = -np.inf, -np.inf, -np.inf
 
         # find the best fit to the brightest image triangle
         lstsq = (a - ap)**2 + (b - bp)**2 + (c - cp)**2
