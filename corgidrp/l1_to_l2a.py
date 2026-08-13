@@ -7,7 +7,7 @@ import corgidrp.check as check
 from scipy.ndimage import median_filter
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
-                    detector_regions=None, use_imaging_area = False, dataset_copy=True):
+                    detector_regions=None, use_imaging_area = False, dataset_copy=True, num_medians=1):
     """
     Measure and subtract the median bias in each row of the pre-scan detector region.
     This step also crops the images to just the science area, or
@@ -24,6 +24,9 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         use_imaging_area (bool): flag indicating whether to use the imaging area (like in the trap pump code) or use the defualt (equivalent to EMCCDFrame)
         dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
+        num_medians (float): If the median of a pre-scan row is off from the median value of all the rows by more than num_medians times, the 
+            row is assumed to have an unreliable pre-scan (due to a very long cosmic ray tail, for example), and the value for that row is assigned 
+            the overall median of all the rows. Defaults to 1.
 
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
@@ -114,7 +117,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
         # rare cosmic rays can spill over all the way into the "good columns" region of the next row, ruining the bias subtraction for that row
         # Fix that by replacing such rows (which deviate by at least the median bias amount) with the median bias
-        unreliable_bias_rows = np.where(np.abs(medbyrow - np.median(medbyrow)) > np.median(medbyrow)) #XXX > n*np.median(medbyrow) where n is input defaults to 1
+        unreliable_bias_rows = np.where(np.abs(medbyrow - np.median(medbyrow)) > num_medians * np.median(medbyrow)) 
         medbyrow[unreliable_bias_rows] = np.median(medbyrow)
         sterrbyrow = np.std(al_prescan[:,st:end], axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan[:,st:end].shape[1])
         if noise_maps is not None:
@@ -166,7 +169,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
                        plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10,
                        mode='image', detector_regions=None, pct_oversat_lim=20,
-                       dataset_copy=True, discard_oversat=False, median_filter_mode=False):
+                       dataset_copy=True, discard_oversat=False, median_filter_mode=0):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -215,7 +218,10 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
         discard_oversat (bool): if True, discard frames that exceed pct_oversat_lim, preserving the previous behavior.
             If False, keep them, mark IS_BAD, and skip cosmic ray identification for those frames. Defaults to False.
-        median_filter_mode (bool): If True, a median filter is utilized to construct the cosmic ray mask instead of the usual cosmic ray masking.  Defaults to False.
+        median_filter_mode (int): If 0, the "usual" method (threshold based on cosm_box, cosm_tail, etc) is employed.  If 1, a median filter is utilized to make a histogram and select an 
+            appropriate threshold for each frame.  If 2, the median filter method is used (which catches virtually all high-flux cosmic rays), and then the usual method is 
+            used on the frame's pixels which were not masked by the median filter method (which catches low-flux cosmic rays if the threshold is low enough).  For science frames, the flux 
+            levels of relevant images may be similar to that of low-flux cosmic rays, and 1 is recommended for the input in that case.  Defaults to 0.
 
     Returns:
         corgidrp.data.Dataset:
@@ -223,8 +229,10 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     """
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
+    if type(median_filter_mode) != int:
+        raise Exception('median_filter_mode must be an integer (0, 1, or 2).')
     #sat_thresh = 2000/90000 #800/90000 #XXX
-    median_filter_mode = True #XXX
+    median_filter_mode = 2 #XXX
 
     if detector_regions is None:
         detector_regions = detector_areas
@@ -314,7 +322,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             cosm_tail_i = 0
         else:
             cosm_tail_i = cosm_tail
-        if median_filter_mode:
+        if median_filter_mode > 0:
             # use the image area for the median filter so that the background is not biased by the prescan or overscan areas
             if crmasked_cube[i].shape[0] == detector_regions[arrtype]['frame_rows'] and crmasked_cube[i].shape[1] == detector_regions[arrtype]['frame_cols']:
                 image_data = slice_section(crmasked_cube[i,:,:], arrtype, 'image', detector_regions)
@@ -360,22 +368,23 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 m2[i,:,:] = np.zeros_like(crmasked_cube[i,:,:])
             #XXX change median_filter_mode to flagging_mode: 0 for usual, 1 for median, 2 for median and then also traditional after masking what median caught.
             # in addition to what was just done, this will catch the cosmic rays that blend in with the background and aren't caught with median filter method.
+        if median_filter_mode > 1:
             im = crmasked_cube[i,:,:].copy()
             im[m2[i,:,:] > 0] = np.nan
             imm = flag_cosmics(cube=np.stack([im]),
                                 fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
-                                sat_thresh=2000/90000, #XXX sat_thresh
-                                plat_thresh=2000/90000, #XXX plat_thresh
-                                cosm_filter=3, #XXX cosm_filter
-                                cosm_box=5, #XXX cosm_box
-                                cosm_tail=0, #XXX cosm_tail
+                                sat_thresh=sat_thresh, #2000/90000, #XXX sat_thresh
+                                plat_thresh=plat_thresh, #2000/90000, #XXX plat_thresh
+                                cosm_filter=cosm_filter, #3, #XXX cosm_filter
+                                cosm_box=cosm_box, #5, #XXX cosm_box
+                                cosm_tail=cosm_tail, #0, #XXX cosm_tail
                                 mode=mode,
                                 detector_regions=detector_regions,
                                 arrtype=arrtype
                                 ) * cr_dqval
             non_nan_inds = np.where(~np.isnan(imm[0]))
             m2[i][non_nan_inds] = m2[i][non_nan_inds] + imm[0][non_nan_inds]
-        else:
+        if median_filter_mode == 0:
             m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
                             fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
                             sat_thresh=sat_thresh,

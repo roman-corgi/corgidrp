@@ -29,7 +29,13 @@
             },
             "keywords" : {
                 "mode" : "full",
-                "dataset_copy" : false
+                "dataset_copy" : false,
+                "median_filter_mode" : 2,
+                "sat_thresh" : 0.00889,
+                "plat_thresh" : 0.00889,
+                "cosm_filter" : 3,
+                "cosm_box" : 5,
+                "cosm_tail" : 0
             }
         },
         {

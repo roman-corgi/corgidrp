@@ -606,7 +606,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             if np.isnan(i0).any():
                 raise ValueError('telem_rows cannot be in image area.')
             test_frame[telem_rows] = 0
-        mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
+        mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps) #XXX see what median is for big gain 0 exptime; try cutting out big exptimes; what percent for unreliable pixel corresponds to that cut? 
         mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
         if dataset[0].data is None:
             # equivalent to what is done in if statement above for datasets with data
@@ -631,7 +631,6 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
             stat_std[zero_inds] = 0
             stat_std = np.ma.getdata(stat_std)
-            weight = unmasked_num
         else:
             masked_frames = np.ma.masked_array(frames, bpmaps)
             stat_std = np.zeros_like(frames[0]).astype(float)
@@ -649,14 +648,16 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
         stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(unmasked_num.max())/1
         total_err = np.sqrt(mean_err**2 + stat_std**2)
-        reliable_fraction = 0.8 #XXX should be input
+        reliable_fraction = 0.8 #0.9 #XXX should be input
         pixel_mask = (unmasked_num <= len(datasets[i].frames)*reliable_fraction).astype(int) #XXX change to user-input fraction instead of 50%
+        print('for EM gain and exptime ', (EMgain_arr[i], exptime_arr[i]))
+        print('histogram of image area of unmasked_num: ', np.histogram(slice_section(unmasked_num,'SCI','image',detector_regions))) #XXX
         mean_num = np.mean(unmasked_num)
         mean_frame[telem_rows] = np.nan
         mean_frames.append(mean_frame)
         total_errs.append(total_err)
         stat_errs.append(stat_std)
-        weights.append(unmasked_num/len(frames)) #normalized 
+        weights.append((unmasked_num/len(frames))) #normalized 
         mean_num_good_fr.append(mean_num)
         unreliable_pix_map += pixel_mask
         unreliable_pix_masks.append(pixel_mask)
@@ -748,7 +749,9 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     for i in range(len(EMgain_arr)): #regardless of weighting, make the unreliable and unfittable pixels have 0 weight in the fit
         # for a mean frame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
         unreliable_im_area = slice_section(unreliable_pix_masks[i], 'SCI', 'image', detector_regions)
-        if False: # XXX unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.25: #XXX user input fraction here
+        print("Em gain and exptime: ", (EMgain_arr[i], exptime_arr[i]))
+        print('fraction of unreliable pixels: ', unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size) #XXX
+        if unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.05: #exptime_arr[i] > 30: #unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.1: #XXX user input fraction here
             inds_del.append(i)
     EMgain_arr = np.delete(EMgain_arr, inds_del, axis=0)
     exptime_arr = np.delete(exptime_arr, inds_del, axis=0)
@@ -758,6 +761,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     mean_stack = np.delete(mean_stack, inds_del, axis=0)
     mean_err_stack = np.delete(mean_err_stack, inds_del, axis=0)
     mean_stat_err_stack = np.delete(mean_stat_err_stack, inds_del, axis=0)
+    weights = np.delete(weights, inds_del, axis=0)
     X = np.array([np.ones([len(EMgain_arr)]).astype(float), EMgain_arr, EMgain_arr*exptime_arr]).T  # (M,3)
     Xx = np.broadcast_to(X[:, :, None, None], (len(EMgain_arr), 3, rows, cols))
     # weighting matrix; sub-stacks with few usable frames get a low weight

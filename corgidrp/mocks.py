@@ -2781,7 +2781,14 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7
         pixel_pitch=13e-6,  # m
         eperdn=kgain,
         nbits=64, # number of ADU bits
-        numel_gain_register=604 #number of gain register elements
+        numel_gain_register=604, #number of gain register elements
+        fpn_path=None,
+        bias_sigma_row=0,
+        bias_sigma_col=0,
+        fast_gain_mode=True,
+        row_read_time=0,
+        gain_CIC_Q=0,
+        tail_length=40
         )
 
     thresh = emccd.em_gain/10 # threshold
