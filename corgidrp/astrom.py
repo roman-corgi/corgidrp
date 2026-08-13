@@ -304,7 +304,7 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     
     Args:
         image_data (numpy.ndarray): 2D array of image data
-        threshold (int): Number of stars to find (default: 100)
+        threshold (int): Number of stars to find (default: 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
     
