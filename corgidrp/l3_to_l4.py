@@ -1055,7 +1055,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
+        input_dataset (corgidrp.data.Dataset): Dataset containing 2-D PSF or satellite spot images taken through the narrowband filter and slit.
         spec_filter_offset (corgidrp.data.SpecFilterOffset): instance of SpecFilterOffset calibration class
         template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
                                                   path is taken
@@ -1101,7 +1101,21 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     if "3D" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
         if with_science:
-            sci_dataset = narrow_dataset[int(np.nonzero(band != "3D")[0].item())]
+            science_bands = band[band != "3D"]
+            if len(science_bands) == 1:
+                # single science group: use it directly
+                sci_index = int(np.nonzero(band != "3D")[0].item())
+            else:
+                # Multiple non-narrowband groups present (e.g. filter-sweep sub-bands
+                # 3A/3B/3C/3E alongside the broadband): select the band-3 broadband science
+                # filter (3F or 3). Sub-band frames are dispersion-calibration frames, not
+                # science, so they are excluded from the wavelength-zeropoint-stamped output.
+                broadband = [b for b in ("3F", "3") if b in band]
+                if len(broadband) != 1:
+                    raise AttributeError("Expected a single science band or one band-3 broadband "
+                        "filter (3F/3), but found CFAMNAME groups {0}".format(list(band)))
+                sci_index = int(np.nonzero(band == broadband[0])[0].item())
+            sci_dataset = narrow_dataset[sci_index]
     elif "2C" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
         if with_science:
@@ -1285,36 +1299,58 @@ def find_spec_star(input_dataset, r_lamD=3, phi_deg=0):
     dataset.update_after_processing_step(history_msg)
     return dataset
 
-def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
+def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False,
+                 redheight = None, blueheight = None):
     """
-    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
+    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around
     the wavelength zero point with units photoelectron/s/bin.
-    
+
     Args:
-        input_dataset (corgidrp.data.Dataset): 
+        input_dataset (corgidrp.data.Dataset):
         halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
         halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
+            Used for a symmetric box when redheight/blueheight are not supplied.
         apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
-        
+        redheight (int or None): if given together with blueheight, the box extends this many
+            pixels from the zeropoint toward longer wavelength (red) and blueheight pixels toward
+            shorter wavelength (blue), replacing the symmetric halfheight. The red/blue -> +/-Y
+            direction is read from the WAVE map, so it works for either prism. Needed when the
+            zeropoint sits near a band edge (e.g. PRISM2, whose 3D zeropoint is near the red edge
+            of band 3) and a symmetric box would truncate the band.
+        blueheight (int or None): extent from the zeropoint toward shorter wavelength (blue), px.
+
     Returns:
         corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
     """
     dataset = input_dataset.copy()
-    
+    asymmetric = redheight is not None and blueheight is not None
+
     for image in dataset:
         xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
-        image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
+        wave_map = image.hdu_list["WAVE"].data
+        if asymmetric:
+            # Read which along-dispersion (+/-Y) direction is red (longer wavelength) from the
+            # WAVE map, then set an asymmetric box: redheight toward red, blueheight toward blue.
+            wave_above = wave_map[min(ycent_round + 1, wave_map.shape[0] - 1), xcent_round]
+            wave_below = wave_map[max(ycent_round - 1, 0), xcent_round]
+            if wave_above > wave_below:
+                ylo, yhi = ycent_round - blueheight, ycent_round + redheight
+            else:
+                ylo, yhi = ycent_round - redheight, ycent_round + blueheight
+        else:
+            ylo, yhi = ycent_round - halfheight, ycent_round + halfheight
+        image_cutout = image.data[ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
+        dq_cutout = image.dq[ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+        wave_cal_map_cutout = wave_map[ylo:yhi + 1,
                                                           xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ylo:yhi + 1,
                                                           xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        err_cutout = image.err[:,ycent_round - halfheight:ycent_round + halfheight + 1,
+        err_cutout = image.err[:,ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
         if "ALGO_THRU" in image.hdu_list:
-            algo_thru_cutout = image.hdu_list["ALGO_THRU"].data[ycent_round - halfheight:ycent_round + halfheight + 1]
+            algo_thru_cutout = image.hdu_list["ALGO_THRU"].data[ylo:yhi + 1]
         else:
             algo_thru_cutout = np.ones(image_cutout.shape[0])
         bad_ind = np.where(dq_cutout > 0)
@@ -1351,7 +1387,10 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
         # update algo_thru extension to match the extracted spectrum, if it exists
         if "ALGO_THRU" in image.hdu_list:
             image.hdu_list["ALGO_THRU"].data = algo_thru_spec
-    history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
+    if asymmetric:
+        history_msg = "spectral extraction within a box of half width of {0}, redheight {1}, blueheight {2} and with ".format(halfwidth, redheight, blueheight) + weight_str
+    else:
+        history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
     dataset.update_after_processing_step(history_msg)
     return dataset
 
