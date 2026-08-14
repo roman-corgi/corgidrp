@@ -34,7 +34,8 @@ calspec_names= {
 'bps bs 17447-0067': '1802271_stiswfcnic_006.fits',
 'tyc 4424-1286-1': '1732526_stisnic_009.fits',
 'gsc 02581-02323': 'p330e_stiswfcnic_007.fits',
-'tyc 4207-219-1': '1740346_stisnic_005.fits'
+'tyc 4207-219-1': '1740346_stisnic_005.fits',
+'tyc 7056-1141-1': 'hd37962_stis_011.fits'
 }
 
 calspec_url = 'https://archive.stsci.edu/hlsps/reference-atlases/cdbs/current_calspec/'
