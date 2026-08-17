@@ -1109,13 +1109,16 @@ def test_extract_spec():
     input_ds = output_dataset.copy()
     spec_dataset = l3_to_l4.extract_spec(input_ds)
     image = spec_dataset[0]
-    #halfwidth = 9, size: 2 * 9 + 1
-    assert np.shape(image.hdu_list["SPEC"].data) == (19,)
-    assert np.shape(image.hdu_list["SPEC_DQ"].data) == (19,)
-    assert np.shape(image.hdu_list["SPEC_ERR"].data) == (1,19)
-    assert np.shape(image.hdu_list["SPEC_WAVE"].data) == (19,)
-    assert np.shape(image.hdu_list["SPEC_WAVE_ERR"].data) == (19,)
-    
+    #the template frames are PRISM3, so the DPAMNAME default applies: 13 + 37 + 1 rows
+    assert np.shape(image.hdu_list["SPEC"].data) == (51,)
+    assert np.shape(image.hdu_list["SPEC_DQ"].data) == (51,)
+    assert np.shape(image.hdu_list["SPEC_ERR"].data) == (1,51)
+    assert np.shape(image.hdu_list["SPEC_WAVE"].data) == (51,)
+    assert np.shape(image.hdu_list["SPEC_WAVE_ERR"].data) == (51,)
+    #an explicit halfheight suppresses the DPAMNAME default: 2 * 9 + 1 rows
+    sym_image = l3_to_l4.extract_spec(output_dataset.copy(), halfheight = 9)[0]
+    assert np.shape(sym_image.hdu_list["SPEC"].data) == (19,)
+
     assert np.array_equal(input_ds[0].data, image.data)
     
     err_im = input_ds[0].copy()
@@ -1153,8 +1156,7 @@ def test_extract_spec_asymmetric():
     """
     extract_spec with redheight/blueheight should extract an asymmetric along-dispersion
     box (redheight+blueheight+1 rows) about the zeropoint, with the red/blue direction read
-    from the WAVE map. Needed for PRISM2, whose zeropoint sits near the band edge. The
-    default (no redheight/blueheight) must remain the symmetric halfheight behavior.
+    from the WAVE map. Needed because the zeropoint is not centered in band 3. 
     """
     redheight, blueheight = 4, 12
 
@@ -1166,9 +1168,66 @@ def test_extract_spec_asymmetric():
     assert np.shape(image.hdu_list["SPEC_WAVE"].data) == (redheight + blueheight + 1,)
     assert "redheight" in str(image.ext_hdr["HISTORY"])
 
-    # default (symmetric) behavior is unchanged: 2*halfheight+1 = 19 rows
-    sym = l3_to_l4.extract_spec(output_dataset.copy())
+    # an explicit halfheight gives the symmetric behavior: 2*halfheight+1 = 19 rows
+    sym = l3_to_l4.extract_spec(output_dataset.copy(), halfheight = 9)
     assert np.shape(sym[0].hdu_list["SPEC"].data) == (19,)
+
+
+def test_extract_spec_dpam_defaults():
+    """
+    extract_spec with no height keywords should take its along-dispersion extents from the
+    DPAMNAME of the frame: PRISM3 -> redheight 13, blueheight 37 -> 51 rows, PRISM2 -> redheight 10,
+    blueheight 28 -> 39 rows. A DPAM element other than those two prisms is an error unless the
+    caller specifies the box explicitly.
+    """
+    # the template header carries DPAMNAME = PRISM3
+    prism3 = l3_to_l4.extract_spec(output_dataset.copy())[0]
+    assert np.shape(prism3.hdu_list["SPEC"].data) == (51,)
+    # red is toward -Y here, so the zeropoint row sits at index redheight of the extracted array
+    assert np.argmax(prism3.hdu_list["SPEC"].data) == 13
+    assert "PRISM3" in str(prism3.ext_hdr["HISTORY"])
+
+    # Override DPAMNAME on the same frame. The WAVE map still comes from the PRISM3 dispersion
+    # model, but only the selection of the (redheight, blueheight) pair is under test
+    prism2_ds = output_dataset.copy()
+    prism2_ds[0].ext_hdr['DPAMNAME'] = 'PRISM2'
+    prism2 = l3_to_l4.extract_spec(prism2_ds)[0]
+    assert np.shape(prism2.hdu_list["SPEC"].data) == (39,)
+    assert np.argmax(prism2.hdu_list["SPEC"].data) == 10
+    assert "PRISM2" in str(prism2.ext_hdr["HISTORY"])
+
+    # explicit heights override the DPAMNAME default
+    explicit = l3_to_l4.extract_spec(prism2_ds, redheight = 4, blueheight = 12)[0]
+    assert np.shape(explicit.hdu_list["SPEC"].data) == (17,)
+
+    # only one of the pair given: the other side comes from the DPAMNAME default
+    with pytest.warns(UserWarning):
+        one_sided = l3_to_l4.extract_spec(output_dataset.copy(), redheight = 4)[0]
+    assert np.shape(one_sided.hdu_list["SPEC"].data) == (42,)
+
+    # a DPAM element that is not one of the two prisms is not valid for prism spectroscopy
+    imaging_ds = output_dataset.copy()
+    imaging_ds[0].ext_hdr['DPAMNAME'] = 'IMAGING'
+    with pytest.raises(AttributeError):
+        l3_to_l4.extract_spec(imaging_ds)
+
+    # unless the caller specifies the box explicitly, in which case DPAMNAME is not consulted
+    imaging_symmetric = l3_to_l4.extract_spec(imaging_ds, halfheight = 9)[0]
+    assert np.shape(imaging_symmetric.hdu_list["SPEC"].data) == (19,)
+
+
+def test_extract_spec_clipping():
+    """
+    An extraction box that runs off the array should be clipped to the array bounds with a
+    warning, instead of silently returning an empty or truncated cutout.
+    """
+    edge_ds = output_dataset.copy()
+    # the PRISM3 default box would span rows -8:42 about this zeropoint
+    edge_ds[0].ext_hdr['WV0_Y'] = 5
+    with pytest.warns(UserWarning):
+        clipped = l3_to_l4.extract_spec(edge_ds)[0]
+    assert np.shape(clipped.hdu_list["SPEC"].data) == (43,)
+    assert "clipped" in str(clipped.ext_hdr["HISTORY"])
 
 
 def test_slit_trans():
@@ -1724,6 +1783,9 @@ if __name__ == "__main__":
     test_star_spec_registration()
     test_linespread_function()
     test_extract_spec()
+    test_extract_spec_asymmetric()
+    test_extract_spec_dpam_defaults()
+    test_extract_spec_clipping()
     test_slit_trans()
     test_star_pos()
     test_filter_offset()

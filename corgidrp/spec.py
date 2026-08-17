@@ -530,6 +530,28 @@ def read_cent_wave(band, filter_file = None):
         ret_list.append(data.columns[i][filter_names == band][0])
     return ret_list
 
+# Default along-dispersion spectral extraction extents (EXCAM pixels) measured from the
+# wavelength zero point, keyed on the DPAM (prism) name. "red" is the direction of increasing
+# wavelength, "blue" of decreasing wavelength; extract_spec maps those onto +/-Y using the
+# WAVE map. 
+DEFAULT_SPEC_EXTRACT_HEIGHTS = {'PRISM2': (10, 28), 'PRISM3': (13, 37)}
+
+def get_default_spec_extract_heights(dpamname):
+    """
+    Look up the default along-dispersion spectral extraction extents for a prism.
+
+    Args:
+        dpamname (str): DPAM element name from the frame ext_hdr, 'PRISM2' or 'PRISM3'.
+
+    Returns:
+        tuple: (redheight, blueheight) in EXCAM pixels measured from the wavelength zero point.
+    """
+    key = str(dpamname).strip().upper()
+    if key not in DEFAULT_SPEC_EXTRACT_HEIGHTS:
+        raise AttributeError("PRISM2 and PRISM3 are the only valid DPAM settings for prism "
+                             "spectroscopy, not " + str(dpamname))
+    return DEFAULT_SPEC_EXTRACT_HEIGHTS[key]
+
 def estimate_dispersion_clocking_angle(xpts, ypts, weights):
     """ 
     Estimate the clocking angle of the dispersion axis based on the centroids of
