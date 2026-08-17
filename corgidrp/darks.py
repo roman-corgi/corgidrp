@@ -3,7 +3,7 @@ import re
 import warnings
 from astropy.io import fits
 
-from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
+from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas, ENF
 import corgidrp.check as check
 from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords
 import corgidrp
@@ -353,7 +353,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
 class CalDarksLSQException(Exception):
     """Exception class for calibrate_darks_lsq."""
 
-def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regions=None):
+def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regions=None, fpn_fid=4.9, cic_fid=0.0088, dc_fid=0.001, num_stds=4, CR_threshold_check=True):
     """The input dataset represents a collection of frame stacks of the
     (in e- units), where the stacks are for various
     EM gain values and exposure times.  Stacks with fewer frames than other
@@ -418,7 +418,20 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         A dictionary of detector geometry properties.  Keys should be as found
         in detector_areas in detector.py.
         Defaults to None, in which case detector_areas from detector.py is used.
-
+    fpn_fid (float):
+        The fiducial mean of FPN in the image area, in electrons.  Defaults to current best estimate.
+    cic_fid (float):
+        The fiducial value for CIC in electrons.  Defaults to current best estimate.
+    dc_fid (float):
+        The fiducial value for dark current in electrons/s.  Defaults to current best estimate.
+    num_stds (float):
+        The number of standard deviations to use when considering whether to ignore frames based on how low 
+        the cosmic ray threshold was. Defaults to 4.
+    CR_threshold_check (bool):
+        If True, a gain-exposure time combination is skipped over if 
+        (the fiducial mean + num_stds * the fiducial standard deviation) > (threshold used for cosmic ray flagging). 
+        Defaults to True.
+        
     Returns:
     noise_maps : corgidrp.data.DetectorNoiseMaps instance
         Includes a 3-D stack of frames for the data, err, and the dq.
@@ -542,6 +555,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     EMgain_arr = np.array([])
     exptime_arr = np.array([])
     kgain_arr = np.array([])
+    CR_thresholds_e = np.array([])
     mean_frames = []
     total_errs = []
     stat_errs = []
@@ -564,16 +578,32 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         if i > 0:
             if np.shape(datasets[i-1].all_data)[1:] != np.shape(datasets[i].all_data)[1:]:
                 raise CalDarksLSQException('All sub-stacks must have the same frame shape.')
+            
+        exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
+        kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
         try: # if EM gain measured directly from frame
-            EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_M'])
+            emgain = datasets[i].frames[0].ext_hdr['EMGAIN_M']
         except:
             if datasets[i].frames[0].ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
-                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_A'])
+                emgain = datasets[i].frames[0].ext_hdr['EMGAIN_A']
             else: # use commanded gain otherwise
-                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_C'])
-        exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
-        cmdgain = datasets[i].frames[0].ext_hdr['EMGAIN_C']
-        kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
+                emgain = datasets[i].frames[0].ext_hdr['EMGAIN_C']
+
+        # check to see if certain frames should be rejected in calibration: Is the cosmic ray threshold low enough to truncate the distribution variates in the frame stacks?  If so, reject.
+        # We don't just check the mean and variance of each mean frame to save processing time (avoids mean_combine) and also b/c the mean will be skewed by cosmic rays;
+        # and even if we ignore cosmic rays like mean_combine does, if the threshold was chosen poorly, the frame mean and variance are not reliable.
+        nem = detector_params.params['NEMGAIN'] # number of gain stages in gain register
+        poisson_var = cic_fid  + dc_fid * exptime
+        # assumes no variance from FPN
+        expected_std = ENF(emgain, nem) * emgain * np.sqrt(poisson_var) 
+        expected_mean = fpn_fid + cic_fid  + dc_fid * exptime
+        cosmic_thresh_used_e = datasets[i][0].ext_hdr['SAT_DN']*datasets[i][0].ext_hdr['KGAINPAR']
+        CR_thresholds_e = np.append(CR_thresholds_e, cosmic_thresh_used_e)
+        threshold = expected_mean + num_stds * expected_std
+        if CR_thresholds_e[i] <= threshold and CR_threshold_check:
+            continue #skips over this exptime-gain combination
+
+        EMgain_arr = np.append(EMgain_arr, emgain)
         exptime_arr = np.append(exptime_arr, exptime)
         kgain_arr = np.append(kgain_arr, kgain)
 
@@ -648,16 +678,16 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
         stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(unmasked_num.max())/1
         total_err = np.sqrt(mean_err**2 + stat_std**2)
-        reliable_fraction = 0.8 #0.9 #XXX should be input
+        reliable_fraction = 0.75 #0.9 #XXX should be input
         pixel_mask = (unmasked_num <= len(datasets[i].frames)*reliable_fraction).astype(int) #XXX change to user-input fraction instead of 50%
-        print('for EM gain and exptime ', (EMgain_arr[i], exptime_arr[i]))
-        print('histogram of image area of unmasked_num: ', np.histogram(slice_section(unmasked_num,'SCI','image',detector_regions))) #XXX
+        # print('for EM gain and exptime ', (EMgain_arr[i], exptime_arr[i]))
+        # print('histogram of image area of unmasked_num: ', np.histogram(slice_section(unmasked_num,'SCI','image',detector_regions))) #XXX
         mean_num = np.mean(unmasked_num)
         mean_frame[telem_rows] = np.nan
         mean_frames.append(mean_frame)
         total_errs.append(total_err)
         stat_errs.append(stat_std)
-        weights.append((unmasked_num/len(frames))) #normalized 
+        weights.append((unmasked_num/len(datasets[i].frames))) #normalized 
         mean_num_good_fr.append(mean_num)
         unreliable_pix_map += pixel_mask
         unreliable_pix_masks.append(pixel_mask)
@@ -671,7 +701,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
                 dq_temp = Image(datasets[i][j].filepath).dq
                 dq_sum += dq_temp.astype(float)
             dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
-            output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
+            output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) 
             output_dq = output_dq.filled(0).astype(int)
         else:
             output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
@@ -684,6 +714,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     mean_err_stack = np.stack(total_errs)
     mean_stat_err_stack = np.stack(stat_errs)
     weights = np.stack(weights)
+    weights[np.where(weights==0)] = (1/len(datasets[i].frames))/100 #much smaller than the weight due to 1 unmasked frame but not 0, to avoid singular matrix
 
     # uncomment for RAM check
     # import psutil
@@ -747,36 +778,48 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     rows, cols = mean_stack.shape[1], mean_stack.shape[2]
     inds_del = []
     for i in range(len(EMgain_arr)): #regardless of weighting, make the unreliable and unfittable pixels have 0 weight in the fit
-        # for a mean frame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
+        # for a mean fr ame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
         unreliable_im_area = slice_section(unreliable_pix_masks[i], 'SCI', 'image', detector_regions)
         print("Em gain and exptime: ", (EMgain_arr[i], exptime_arr[i]))
         print('fraction of unreliable pixels: ', unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size) #XXX
-        if unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.05: #exptime_arr[i] > 30: #unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.1: #XXX user input fraction here
-            inds_del.append(i)
-    EMgain_arr = np.delete(EMgain_arr, inds_del, axis=0)
-    exptime_arr = np.delete(exptime_arr, inds_del, axis=0)
-    kgain_arr = np.delete(kgain_arr, inds_del, axis=0)
-    output_dqs = np.delete(output_dqs, inds_del, axis=0)
-    unreliable_pix_masks = np.delete(unreliable_pix_masks, inds_del, axis=0)
-    mean_stack = np.delete(mean_stack, inds_del, axis=0)
-    mean_err_stack = np.delete(mean_err_stack, inds_del, axis=0)
-    mean_stat_err_stack = np.delete(mean_stat_err_stack, inds_del, axis=0)
-    weights = np.delete(weights, inds_del, axis=0)
+        # check to see if certain frames should be rejected in calibration: Is the cosmic ray threshold low enough to truncate the distribution variates in the frame stacks?  If so, reject.
+        # We don't just check the mean and variance of each mean frame to save processing time (avoids mean_combine) and also b/c the mean will be skewed by cosmic rays;
+        # and even if we ignore cosmic rays like mean_combine does, if the threshold was chosen poorly, the frame mean and variance are not reliable.
+    #     nem = detector_params.params['NEMGAIN'] # number of gain stages in gain register
+    #     poisson_var = cic_fid  + dc_fid * exptime_arr[i]
+    #     # assumes no variance from FPN
+    #     expected_std = ENF(EMgain_arr[i], nem) * EMgain_arr[i] * np.sqrt(poisson_var) 
+    #     expected_mean = fpn_fid + cic_fid  + dc_fid * exptime_arr[i] 
+    #     threshold = expected_mean + num_stds * expected_std
+    #     if CR_thresholds_e[i] <= threshold:
+    #     if unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.1:#exptime_arr[i] > 60: # XXX user input, and put it near beginning of datasets loop. Then also change CAR plan to be many frames with small exposure times! Some long exposures for comsic ray checkout. #unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.05: #exptime_arr[i] > 30: #unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.1: #XXX user input fraction here
+    #         inds_del.append(i) #XXX could try 0.9 for unreliable fraction?  
+    # EMgain_arr = np.delete(EMgain_arr, inds_del, axis=0)
+    # exptime_arr = np.delete(exptime_arr, inds_del, axis=0)
+    # kgain_arr = np.delete(kgain_arr, inds_del, axis=0)
+    # output_dqs = np.delete(output_dqs, inds_del, axis=0)
+    # unreliable_pix_masks = np.delete(unreliable_pix_masks, inds_del, axis=0)
+    # mean_stack = np.delete(mean_stack, inds_del, axis=0)
+    # mean_err_stack = np.delete(mean_err_stack, inds_del, axis=0)
+    # mean_stat_err_stack = np.delete(mean_stat_err_stack, inds_del, axis=0)
+    # weights = np.delete(weights, inds_del, axis=0)
+
     X = np.array([np.ones([len(EMgain_arr)]).astype(float), EMgain_arr, EMgain_arr*exptime_arr]).T  # (M,3)
     Xx = np.broadcast_to(X[:, :, None, None], (len(EMgain_arr), 3, rows, cols))
     # weighting matrix; sub-stacks with few usable frames get a low weight
     for i in range(len(mean_err_stack)):
         mean_err_stack[i][telem_rows] = 1 # instead of 0 to avoid inf weighting
         mean_stat_err_stack[i][telem_rows] = 1
+        mean_stack[i][telem_rows] = 1
 
     if weighting:
         W = weights #1/mean_stat_err_stack
     else:
         W = np.ones_like(mean_stat_err_stack) # all weighted the same
-    for i in range(len(W)): #regardless of weighting, make the unreliable and unfittable pixels have 0 weight in the fit
+    #for i in range(len(W)): #regardless of weighting, make the unreliable and unfittable pixels have 0 weight in the fit
         #W[i][np.where(unreliable_pix_masks[i] == 1)] = 0
         # make the output noise maps return 0 for these unfittable pixels; also recorded in DQ of output 
-        W[i][np.where(unfittable_pix_map >= len(datasets)-3)] = 0 
+        #W[i][np.where(unfittable_pix_map >= len(datasets)-3)] = 0 
         # # for a mean frame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
         # unreliable_im_area = slice_section(unreliable_pix_masks[i], 'SCI', 'image', detector_regions)
         # if unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.5: #XXX user input fraction here
