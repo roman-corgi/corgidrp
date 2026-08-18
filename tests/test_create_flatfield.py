@@ -14,27 +14,23 @@ import photutils.centroids as centr
 
 old_err_tracking = corgidrp.track_individual_errors
 
-def test_create_flatfield_neptune():
+def test_create_flatfield_neptune(tmp_path):
     """
     Generate mock input data and pass into flat division function
     """
     corgidrp.track_individual_errors = True # this test uses individual error components
 
     ###### create simulated data
-    # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir) 
-    
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+
     # simulated images to be checked in flat division
-    simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
-    
+    simflat_dataset = mocks.create_simflat_dataset(filedir=str(datadir))
+
     ###### create simulated raster scanned data
-    # check that simulated raster scanned data folder exists, and create if not
-    file_dir = os.path.join(os.path.dirname(__file__), "simdata_rasterscan")
-    data_dir = os.path.join(os.path.dirname(__file__),"test_data/")
-    if not os.path.exists(file_dir):
-        os.mkdir(file_dir) 
+    file_dir = tmp_path / "simdata_rasterscan"
+    file_dir.mkdir(parents=True, exist_ok=True)
+    data_dir = os.path.join(os.path.dirname(__file__),"test_data/") 
     filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
     data_set = data.Dataset(filenames)
     # creating flatfield for neptune for band 1
@@ -52,11 +48,9 @@ def test_create_flatfield_neptune():
     pickled_flat = pickle.loads(pickled)
     assert np.all(onskyflat_field.data == pickled_flat.data)
 
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
-    
-    if not os.path.exists(calibdir):
-        os.mkdir(calibdir)
-    onskyflat_field.save(filedir=calibdir)
+    calibdir = tmp_path / "testcalib"
+    calibdir.mkdir(parents=True, exist_ok=True)
+    onskyflat_field.save(filedir=str(calibdir))
     
     ###### perform flat division
     # load in the flatfield
@@ -98,24 +92,20 @@ def test_create_flatfield_neptune():
     
      #creating flatfield using uranus for band4 
     
-def test_create_flatfield_uranus():
+def test_create_flatfield_uranus(tmp_path):
 
     corgidrp.track_individual_errors = True
     ###### create simulated data
-    # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir) 
-    
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+
     # simulated images to be checked in flat division
-    simflat_dataset = mocks.create_simflat_dataset(filedir=datadir)
-    
+    simflat_dataset = mocks.create_simflat_dataset(filedir=str(datadir))
+
     ###### create simulated raster scanned data
-    # check that simulated raster scanned data folder exists, and create if not
-    file_dir = os.path.join(os.path.dirname(__file__), "simdata_rasterscan")
+    file_dir = tmp_path / "simdata_rasterscan"
+    file_dir.mkdir(parents=True, exist_ok=True)
     data_dir = os.path.join(os.path.dirname(__file__),"test_data/")
-    if not os.path.exists(file_dir):
-        os.mkdir(file_dir) 
     filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
     data_set = data.Dataset(filenames)
     planet='uranus'; band='4'
@@ -128,11 +118,9 @@ def test_create_flatfield_uranus():
     assert np.size(np.where(np.isnan(onskyflat_field.data))) == 0 # no bad pixels
     
     
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
-    
-    if not os.path.exists(calibdir):
-        os.mkdir(calibdir)
-    onskyflat_field.save(filedir=calibdir)
+    calibdir = tmp_path / "testcalib"
+    calibdir.mkdir(parents=True, exist_ok=True)
+    onskyflat_field.save(filedir=str(calibdir))
     
     ###### perform flat division
     # load in the flatfield

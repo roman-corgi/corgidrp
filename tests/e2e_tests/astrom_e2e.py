@@ -68,7 +68,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # Create calibrations subfolder for mock calibration products
     calibrations_dir = os.path.join(astrom_cal_outputdir, "calibrations")
     if not os.path.exists(calibrations_dir):
-        os.mkdir(calibrations_dir)
+        os.makedirs(calibrations_dir, exist_ok=True)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -85,7 +85,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # create a directory in the output dir to hold the simulated data files
     input_data_dir = os.path.join(astrom_cal_outputdir, 'input_l1')
     if not os.path.exists(input_data_dir):
-        os.mkdir(input_data_dir)
+        os.makedirs(input_data_dir, exist_ok=True)
     # clean out any files from a previous run
     for f in os.listdir(input_data_dir):
         file_path = os.path.join(input_data_dir, f)

@@ -10,29 +10,29 @@ import corgidrp.caldb as caldb
 import corgidrp.mocks as mocks
 
 
-def _setup_ops_test_data():
+def _setup_ops_test_data(tmp_path):
     """
-    Tests that the ops module produces the expected files. Based on test_autoreducingin test_walker.py
+    Build the L1 dataset + nonlinearity calibration used by the ops tests.
+
+    Returns:
+        tuple: (filelist, main_cal_dir, outputdir, new_nonlinearity)
     """
 
     # create dirs
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    outputdir = os.path.join(os.path.dirname(__file__), "ops_output")
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
-    main_cal_dir = os.path.join(os.path.dirname(__file__), "ops_cal_dir")
-    if not os.path.exists(main_cal_dir):
-        os.mkdir(main_cal_dir)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+    outputdir = tmp_path / "ops_output"
+    outputdir.mkdir(parents=True, exist_ok=True)
+    main_cal_dir = tmp_path / "ops_cal_dir"
+    main_cal_dir.mkdir(parents=True, exist_ok=True)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=str(datadir), arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(filedir=datadir)
+    l1_dataset.save(filedir=str(datadir))
     filelist = [frame.filepath for frame in l1_dataset]
 
 
@@ -46,7 +46,7 @@ def _setup_ops_test_data():
     input_non_linearity_filename = "nonlin_table_TVAC.txt"
     input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
     test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
-    nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), main_cal_dir, test_non_linearity_filename)
+    nonlin_fits_filepath = str(main_cal_dir / test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
     pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
@@ -66,11 +66,11 @@ def _setup_ops_test_data():
     return filelist, main_cal_dir, outputdir, new_nonlinearity
 
 
-def test_ops_produces_expected_file():
+def test_ops_produces_expected_file(tmp_path):
     """
     Tests that the ops module produces the expected files. Based on test_autoreducing in test_walker.py
     """
-    filelist, main_cal_dir, outputdir, new_nonlinearity = _setup_ops_test_data()
+    filelist, main_cal_dir, outputdir, new_nonlinearity = _setup_ops_test_data(tmp_path)
 
     CPGS_XML_filepath = "" # not yet implemented
 
@@ -84,7 +84,7 @@ def test_ops_produces_expected_file():
 
     #Process the data. Ops generally won't have a template, but a template-less 
     # test would require generating more calibrations than are necessary for just testing this functionality.
-    ops.step_3_process_data(filelist, CPGS_XML_filepath, outputdir,template="l1_to_l2a_basic.json")
+    ops.step_3_process_data(filelist, CPGS_XML_filepath, str(outputdir),template="l1_to_l2a_basic.json")
 
     #Check that the output files are as expected. 
     output_filelist = [os.path.join(outputdir,os.path.basename(filename).replace("_l1_", "_l2a")) for filename in filelist]
@@ -96,7 +96,7 @@ def test_ops_produces_expected_file():
     mycaldb.remove_entry(new_nonlinearity)
 
 
-def test_ops_with_user_templates_dir():
+def test_ops_with_user_templates_dir(tmp_path):
     """
     Tests that the ops module works with a custom user_templates_dir argument.
     Same as test_ops_produces_expected_file but with user template override.
@@ -104,7 +104,7 @@ def test_ops_with_user_templates_dir():
     import copy
     import corgidrp.walker as walker
 
-    filelist, main_cal_dir, outputdir, new_nonlinearity = _setup_ops_test_data()
+    filelist, main_cal_dir, outputdir, new_nonlinearity = _setup_ops_test_data(tmp_path)
 
     CPGS_XML_filepath = ""
 
@@ -128,7 +128,7 @@ def test_ops_with_user_templates_dir():
         # Run the full ops chain with custom user_templates_dir
         this_caldb = ops.step_1_initialize(user_templates_dir=user_templates_dir)
         ops.step_2_load_cal(this_caldb, main_cal_dir)
-        ops.step_3_process_data(filelist, CPGS_XML_filepath, outputdir, template="l1_to_l2a_basic.json")
+        ops.step_3_process_data(filelist, CPGS_XML_filepath, str(outputdir), template="l1_to_l2a_basic.json")
 
         # Check output files exist
         output_filelist = [os.path.join(outputdir, os.path.basename(filename).replace("_l1_", "_l2a")) for filename in filelist]

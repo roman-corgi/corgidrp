@@ -1,6 +1,7 @@
 """
 Test the walker infrastructure to read and execute recipes
 """
+import pytest
 import os
 import glob
 import json
@@ -21,26 +22,28 @@ import corgidrp.detector as detector
 import datetime
 np.random.seed(456)
 
-def test_autoreducing():
+# Mark all tests in this file to run serially (not in parallel)
+# This file modifies global corgidrp settings and CalDB state
+pytestmark = pytest.mark.serial
+
+def test_autoreducing(tmp_path):
     """
     Tests both generating and processing a basic L1->L2a SCI recipe
     """
     # create dirs
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+    outputdir = str(tmp_path / "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
 
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=str(datadir), arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(filedir=datadir)
+    l1_dataset.save(filedir=str(datadir))
     filelist = [frame.filepath for frame in l1_dataset]
 
 
@@ -111,18 +114,18 @@ def test_auto_template_identification():
     # create dirs
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
-        os.mkdir(datadir)
+        os.makedirs(datadir, exist_ok=True)
     outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
     if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+        os.makedirs(outputdir, exist_ok=True)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=str(datadir), arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(filedir=datadir)
+    l1_dataset.save(filedir=str(datadir))
     filelist = [frame.filepath for frame in l1_dataset]
 
 
@@ -162,7 +165,7 @@ def test_auto_template_identification():
     kgain_val = 8.7
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=outputdir, filename="mock_kgain.fits")
+    kgain.save(filedir=str(outputdir), filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -177,13 +180,13 @@ def test_auto_template_identification():
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=outputdir, filename="mock_detnoisemaps.fits")
+    noise_map.save(filedir=str(outputdir), filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
     ## Flat field
     flat_dat = np.ones((1024, 1024))
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    flat.save(filedir=outputdir, filename="mock_flat.fits")
+    flat.save(filedir=str(outputdir), filename="mock_flat.fits")
     this_caldb.create_entry(flat)
 
     # bad pixel map
@@ -200,7 +203,7 @@ def test_auto_template_identification():
                         err_hdr=fits.Header())
     bp_map_inputs = data.Dataset([bp_dark, flat])
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=bp_map_inputs)
-    bp_map.save(filedir=outputdir, filename="mock_bpmap.fits")
+    bp_map.save(filedir=str(outputdir), filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
 
@@ -218,17 +221,15 @@ def test_auto_template_identification():
     this_caldb.remove_entry(bp_map)
 
 
-def test_saving():
+def test_saving(tmp_path):
     """
     Tests the special save function including suffix. Tries both calibration image and non-calibration image
     """
     ### create dirs
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+    outputdir = str(tmp_path / "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
 
     ### load test recipe
     testdatadir = os.path.join(os.path.dirname(__file__), "test_data")
@@ -245,7 +246,7 @@ def test_saving():
     fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(filedir=datadir)
+    l1_dataset.save(filedir=str(datadir))
     filelist = [frame.filepath for frame in l1_dataset]
 
     this_recipe = walker.autogen_recipe(filelist, outputdir, template=save_recipe)
@@ -296,7 +297,7 @@ def test_saving():
 
 
 
-def test_skip_missing_calib():
+def test_skip_missing_calib(tmp_path):
     """
     Tests the option of skipping steps with missing calibrations
     """
@@ -305,28 +306,25 @@ def test_skip_missing_calib():
     corgidrp.skip_missing_cal_steps = True
 
     # use an empty test caldb
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
-    if not os.path.exists(calibdir):
-        os.mkdir(calibdir)
-    testcaldb_filepath = os.path.join(calibdir, "empty_caldb.csv")
+    calibdir = tmp_path / "testcalib"
+    calibdir.mkdir(parents=True, exist_ok=True)
+    testcaldb_filepath = str(calibdir / "empty_caldb.csv")
     old_caldb_filepath = corgidrp.caldb_filepath
     corgidrp.caldb_filepath = testcaldb_filepath
 
     # create dirs
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+    outputdir = str(tmp_path / "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=str(datadir), arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(filedir=datadir)
+    l1_dataset.save(filedir=str(datadir))
     filelist = [frame.filepath for frame in l1_dataset]
 
 
@@ -365,7 +363,7 @@ def test_skip_missing_calib():
 
 
 
-def test_skip_missing_optional_calib():
+def test_skip_missing_optional_calib(tmp_path):
     """
     Tests optional calibrtion behavior when skpip_missing_calibs is True
     The behavior is that the step should not be skipped, given the calibration is optional
@@ -375,28 +373,25 @@ def test_skip_missing_optional_calib():
     corgidrp.skip_missing_cal_steps = True
 
     # use an empty test caldb
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
-    if not os.path.exists(calibdir):
-        os.mkdir(calibdir)
-    testcaldb_filepath = os.path.join(calibdir, "empty_caldb.csv")
+    calibdir = tmp_path / "testcalib"
+    calibdir.mkdir(parents=True, exist_ok=True)
+    testcaldb_filepath = str(calibdir / "empty_caldb.csv")
     old_caldb_filepath = corgidrp.caldb_filepath
     corgidrp.caldb_filepath = testcaldb_filepath
 
     # create dirs
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+    outputdir = str(tmp_path / "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=str(datadir), arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(filedir=datadir)
+    l1_dataset.save(filedir=str(datadir))
     filelist = [frame.filepath for frame in l1_dataset]
 
 
@@ -418,7 +413,7 @@ def test_skip_missing_optional_calib():
     corgidrp.skip_missing_cal_steps = old_setting
     corgidrp.caldb_filepath = old_caldb_filepath
 
-def test_jit_calibs():
+def test_jit_calibs(tmp_path):
     """
     Tests defining calibrations just in time
     """
@@ -426,21 +421,19 @@ def test_jit_calibs():
     corgidrp.jit_calib_id = True
 
     # create dirs
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+    outputdir = str(tmp_path / "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
 
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=str(datadir), arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(filedir=datadir)
+    l1_dataset.save(filedir=str(datadir))
     filelist = [frame.filepath for frame in l1_dataset]
 
 
@@ -552,10 +545,10 @@ def test_generate_multiple_recipes():
     # create dirs
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
-        os.mkdir(datadir)
+        os.makedirs(datadir, exist_ok=True)
     outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
     if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+        os.makedirs(outputdir, exist_ok=True)
     # Make a non-linearity correction calibration file
     input_non_linearity_filename = "nonlin_table_TVAC.txt"
     test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
@@ -638,10 +631,10 @@ def test_cpgs_satspots():
     # create dirs
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
-        os.mkdir(datadir)
+        os.makedirs(datadir, exist_ok=True)
     outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
     if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+        os.makedirs(outputdir, exist_ok=True)
 
 
     # create simulated data
@@ -730,11 +723,11 @@ def test_l1_to_l2b_default_calibs():
 
     # Create simulated L1 data. The default headers have DPAMNAME='IMAGING',
     # CFAMNAME='1F', which the default TVAC flat (FPAMNAME='OPEN_12') satisfies.
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=str(datadir), arrtype="SCI", numfiles=2)
     fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(filedir=datadir)
+    l1_dataset.save(filedir=str(datadir))
     filelist = [frame.filepath for frame in l1_dataset]
 
     # Ensure the default calibrations are present and indexed in the caldb.
@@ -765,10 +758,10 @@ def test_pc_science_analog_satspots():
     # create dirs
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
-        os.mkdir(datadir)
+        os.makedirs(datadir, exist_ok=True)
     outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
     if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+        os.makedirs(outputdir, exist_ok=True)
 
     image_shape=(201, 201)
     bg_sigma=1.0

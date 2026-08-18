@@ -28,7 +28,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest flake8-docstrings-complete
+        pip install flake8 pytest pytest-xdist flake8-docstrings-complete
         if [ -f requirements.txt ]; then pip install -r requirements.txt .; fi
         pip install -r requirements_e2etests.txt corgidrp
     - name: Download E2E test data
@@ -37,6 +37,14 @@ jobs:
         # download file
         wget -O E2E_Test_Data.tar.xz https://zenodo.org/records/20634613/files/E2E_Test_Data.tar.xz?download=1
         tar -xvf E2E_Test_Data.tar.xz -C e2e_test_data
-    - name: Test with pytest
+    - name: Test with pytest (parallel producers)
+      env:
+        CORGIDRP_DO_NOT_AUTO_INIT_CALDB: "1"
+        PYTEST_XDIST_WORKER_START_METHOD: fork
+        # e2e are RAM-heavy: cap `-n auto` low on CI; local dev leaves this unset
+        PYTEST_XDIST_AUTO_NUM_WORKERS: "2"
       run: |
-        pytest --which e2e --e2edata_path e2e_test_data/E2E_Test_Data/ --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/
+        pytest --which e2e -n auto -m "not serial" --e2edata_path e2e_test_data/E2E_Test_Data/ --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/
+    - name: Test with pytest (serial consumer - data format docs)
+      run: |
+        pytest --which e2e -m "serial" --e2edata_path e2e_test_data/E2E_Test_Data/ --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/

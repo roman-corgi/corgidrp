@@ -9,34 +9,44 @@ import corgidrp.caldb as caldb
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 
-datadir = os.path.join(os.path.dirname(__file__), "simdata")
-calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
 
-if not os.path.exists(datadir):
-    os.mkdir(datadir)
-if not os.path.exists(calibdir):
-    os.mkdir(calibdir)
+@pytest.fixture(scope="module")
+def test_dirs(tmp_path_factory):
+    """Create module-scoped temporary directories for test data and calibrations."""
+    base_dir = tmp_path_factory.mktemp("caldb_test")
+    datadir = base_dir / "simdata"
+    calibdir = base_dir / "testcalib"
+    datadir.mkdir()
+    calibdir.mkdir()
 
-testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")
+    # make some fake test data to use
+    np.random.seed(456)
+    dark_dataset = mocks.create_dark_calib_files()
+    master_dark = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
+    # save master dark to disk to be loaded later
+    master_dark.save(filedir=str(calibdir), filename="mockdark.fits")
 
-# make some fake test data to use
-np.random.seed(456)
-dark_dataset = mocks.create_dark_calib_files()
-master_dark = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
-# save master dark to disk to be loaded later
-master_dark.save(filedir=calibdir, filename="mockdark.fits")
+    return {
+        'datadir': datadir,
+        'calibdir': calibdir,
+        'testcaldb_filepath': calibdir / "test_caldb.csv",
+        'dark_dataset': dark_dataset,
+        'master_dark': master_dark
+    }
 
-def test_caldb_init():
+def test_caldb_init(caldb_initialized):
     """
     Tests that caldb has been initialized. It has to be if it's being imported.
     """
     assert caldb.initialized
 
 
-def test_caldb_create_default():
+def test_caldb_create_default(test_dirs):
     """
     Test caldb creation when no filepath is passed in (uses default path)
     """
+    testcaldb_filepath = str(test_dirs['testcaldb_filepath'])
+
     # remove any stranded testcaldb if needed
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
@@ -57,10 +67,12 @@ def test_caldb_create_default():
     corgidrp.caldb_filepath = old_path
 
 
-def test_caldb_custom_filepath():
+def test_caldb_custom_filepath(test_dirs):
     """
     Test caldb creation when filepath is passed in (should be an edge case)
     """
+    testcaldb_filepath = str(test_dirs['testcaldb_filepath'])
+
     # remove any stranded testcaldb if needed
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
@@ -76,10 +88,13 @@ def test_caldb_custom_filepath():
     # remove db and restore path
     os.remove(testcaldb_filepath)
 
-def test_caldb_insert_and_remove():
+def test_caldb_insert_and_remove(test_dirs):
     """
     Tests the ability to add and remove an entry successfully
     """
+    testcaldb_filepath = str(test_dirs['testcaldb_filepath'])
+    master_dark = test_dirs['master_dark']
+
     # remove any stranded testcaldb if needed
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
@@ -111,10 +126,15 @@ def test_caldb_insert_and_remove():
     master_dark.ext_hdr['EXPTIME'] = orig_exptime
     os.remove(testcaldb_filepath)
 
-def test_get_calib():
+def test_get_calib(test_dirs):
     """
     Tests ability to load a calibration file from disk
     """
+    testcaldb_filepath = str(test_dirs['testcaldb_filepath'])
+    calibdir = str(test_dirs['calibdir'])
+    master_dark = test_dirs['master_dark']
+    dark_dataset = test_dirs['dark_dataset']
+
     # remove any stranded testcaldb if needed
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
@@ -150,10 +170,14 @@ def test_get_calib():
 
 
 
-def test_create_entry_file_not_on_disk():
+def test_create_entry_file_not_on_disk(test_dirs):
     """
     Tests that create_entry raises FileNotFoundError when the file does not exist on disk.
     """
+    testcaldb_filepath = str(test_dirs['testcaldb_filepath'])
+    calibdir = str(test_dirs['calibdir'])
+    dark_dataset = test_dirs['dark_dataset']
+
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
     testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
@@ -169,11 +193,15 @@ def test_create_entry_file_not_on_disk():
     os.remove(testcaldb_filepath)
 
 
-def test_get_calib_missing_file():
+def test_get_calib_missing_file(test_dirs):
     """
     Tests that get_calib falls back to the next best calibration when the
     best-matching file no longer exists on disk, rather than crashing.
     """
+    testcaldb_filepath = str(test_dirs['testcaldb_filepath'])
+    calibdir = str(test_dirs['calibdir'])
+    dark_dataset = test_dirs['dark_dataset']
+
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
     testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
@@ -215,10 +243,14 @@ def test_get_calib_missing_file():
     os.remove(testcaldb_filepath)
 
 
-def test_caldb_scan():
+def test_caldb_scan(test_dirs):
     """
     Tests ability to scan a folder to look for calibration files
     """
+    testcaldb_filepath = str(test_dirs['testcaldb_filepath'])
+    datadir = str(test_dirs['datadir'])
+    calibdir = str(test_dirs['calibdir'])
+
     # remove any stranded testcaldb if needed
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
@@ -239,18 +271,21 @@ def test_caldb_scan():
     # reset everything
     os.remove(testcaldb_filepath)
 
-def test_default_calibs():
+def test_default_calibs(test_dirs):
     """
     Tests that the default calibration files are created if they don't exist.
     """
+    testcaldb_filepath = str(test_dirs['testcaldb_filepath'])
+
     # Ensure the test caldb starts fresh (a failing earlier test may leave it behind)
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
 
     # Copy all files in corgidrp.default_cal_dir to a temporary directory,
     # then clear out corgidrp.default_cal_dir for this test and restore it at the end
-    current_dir = os.path.dirname(__file__)
-    temp_dir = os.path.join(current_dir, "temp_test_dir")
+    temp_dir = test_dirs['calibdir'] / "temp_test_dir"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir = str(temp_dir)
     shutil.copy2(corgidrp.caldb_filepath, os.path.join(corgidrp.config_folder, "temp_caldb.csv"))
     os.makedirs(temp_dir, exist_ok=True)
     for filename in os.listdir(corgidrp.default_cal_dir):
@@ -296,11 +331,13 @@ def test_default_calibs():
     shutil.copy2(os.path.join(corgidrp.config_folder, "temp_caldb.csv"), corgidrp.caldb_filepath)
     os.remove(os.path.join(corgidrp.config_folder, "temp_caldb.csv"))
 
-def test_caldb_filter():
+def test_caldb_filter(test_dirs):
     '''
     test that the filter function works correctly to select the best
-    calibration file 
+    calibration file
     '''
+    testcaldb_filepath = str(test_dirs['testcaldb_filepath'])
+    calibdir = str(test_dirs['calibdir'])
 
     # create mock calibration files
     ct_cal_nfov = mocks.create_ct_cal(3)

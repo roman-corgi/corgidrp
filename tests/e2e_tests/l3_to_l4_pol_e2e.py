@@ -158,7 +158,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     # Create calibrations subfolder for mock calibration products
     calibrations_dir = os.path.join(output_dir, "calibrations")
     if not os.path.exists(calibrations_dir):
-        os.mkdir(calibrations_dir)
+        os.makedirs(calibrations_dir, exist_ok=True)
 
     ###### Setup necessary calibration files
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')

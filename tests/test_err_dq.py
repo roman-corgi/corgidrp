@@ -10,6 +10,10 @@ from corgidrp.data import Image, Dataset, DetectorParams
 import corgidrp.caldb as caldb
 from corgidrp.darks import build_trad_dark
 
+# Mark all tests in this file to run serially (not in parallel)
+# This file uses shared simdata/testcalib directories without worker isolation
+pytestmark = pytest.mark.serial
+
 np.random.seed(123)
 
 float_data = 2.
@@ -273,7 +277,7 @@ def test_read_many_errors_notrack():
         assert image_test.err_hdr["Layer_3"] == "error_nuts"
 
 
-def test_err_array_sizes():
+def test_err_array_sizes(tmp_path):
     '''
     Check that we're robust to 2D error arrays
 
@@ -283,31 +287,29 @@ def test_err_array_sizes():
     '''
 
     ##### Create a master Dark #####
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    dark_dataset = mocks.create_dark_calib_files(filedir=datadir)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
+    dark_dataset = mocks.create_dark_calib_files(filedir=str(datadir))
     dark_frame = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
 
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    calibdir = tmp_path / "testcalib"
+    calibdir.mkdir(parents=True, exist_ok=True)
     # clean out directory of old cals .fits files
-    for filename in os.listdir(calibdir):
-        if filename.endswith(".fits"):
-            os.remove(os.path.join(calibdir, filename))
-            
+    for filename in calibdir.iterdir():
+        if filename.suffix == ".fits":
+            filename.unlink()
+
     dark_filename = "sim_dark_calib.fits"
-    if not os.path.exists(calibdir):
-            os.mkdir(calibdir)
-    dark_frame.save(filedir=calibdir, filename=dark_filename)
+    dark_frame.save(filedir=str(calibdir), filename=dark_filename)
 
     ##### Scan the caldb ##### - This tests for previous bug that darks weren't in the right format.
-    testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")
+    testcaldb_filepath = str(calibdir / "test_caldb.csv")
     testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
-    testcaldb.scan_dir_for_new_entries(calibdir)
+    testcaldb.scan_dir_for_new_entries(str(calibdir))
 
     ##### Force it to be 2D ##### - This tests to maks sure we're robust to 2D error arrays in general
     dark_frame.err = np.ones(dark_frame.data.shape)
-    dark_frame.save(filedir=calibdir, filename=dark_filename)
+    dark_frame.save(filedir=str(calibdir), filename=dark_filename)
     testcaldb.scan_dir_for_new_entries(calibdir)
 
 

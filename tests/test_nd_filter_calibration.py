@@ -18,6 +18,10 @@ from corgidrp.data import (Image, Dataset, FluxcalFactor,
     NDFilterSweetSpotDataset, NDSpectroscopy)
 import corgidrp.mocks as mocks
 
+# Mark all tests in this file to run serially (not in parallel)
+# This file uses shared testcalib directory without worker isolation
+pytestmark = pytest.mark.serial
+
 here = os.path.abspath(os.path.dirname(__file__))
 
 def print_fail():
@@ -608,7 +612,7 @@ def test_background_effect(tmp_path):
     
     output_directory = str(tmp_path / "output")
     if not os.path.exists(output_directory):
-        os.mkdir(output_directory)
+        os.makedirs(output_directory, exist_ok=True)
     
     results_no = nd_filter_calibration.create_nd_filter_cal(
         ds_no, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 

@@ -81,12 +81,12 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     # Create separate directory for trap pump mock data (for tpump_analysis)
     trap_pump_datadir = os.path.join(trap_pump_outputdir, "input_l1")
     if not os.path.exists(trap_pump_datadir):
-        os.mkdir(trap_pump_datadir)
+        os.makedirs(trap_pump_datadir, exist_ok=True)
         
     # Create calibrations subfolder for mock calibration products
     calibrations_dir = os.path.join(trap_pump_outputdir, "calibrations")
     if not os.path.exists(calibrations_dir):
-        os.mkdir(calibrations_dir)
+        os.makedirs(calibrations_dir, exist_ok=True)
     
     # Remove all files ending with .json and .fits in the mock data directory
     for root, _, files in os.walk(trap_pump_datadir):
@@ -118,7 +118,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     for temp, temp_files in file_info.items():
         temp_dir = os.path.join(trap_pump_datadir, temp)
         if not os.path.exists(temp_dir):
-            os.mkdir(temp_dir)
+            os.makedirs(temp_dir, exist_ok=True)
         
         # Sort files within each temperature to maintain consistent order
         temp_files.sort()
@@ -130,7 +130,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
         for i, sc in enumerate(schemes):
             sch_dir = os.path.join(temp_dir, f'Scheme_{sc}')
             if not os.path.exists(sch_dir):
-                os.mkdir(sch_dir)
+                os.makedirs(sch_dir, exist_ok=True)
             
             # Move files for this scheme
             start_idx = i * files_per_scheme

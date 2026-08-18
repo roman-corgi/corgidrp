@@ -396,7 +396,7 @@ def calibrate_nonlin(dataset_nl,
         import matplotlib.pyplot as plt
         # Output directory
         if os.path.exists(plot_outdir) is False:
-            os.mkdir(plot_outdir)
+            os.makedirs(plot_outdir, exist_ok=True)
             if verbose:
                 print('Output directory for figures created in ', os.getcwd())
     

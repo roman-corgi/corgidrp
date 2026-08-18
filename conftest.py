@@ -84,3 +84,25 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if not "e2e" in item.keywords:
                 item.add_marker(skip_unit)
+
+@pytest.fixture(scope="session", autouse=True)
+def caldb_initialized():
+    """
+    Ensure caldb is initialized once per worker process.
+    This is autouse=True so it runs before any test that might need caldb.
+    """
+    import corgidrp.caldb as caldb
+    import corgidrp
+    import os
+
+    # Ensure the directories exist (should already be created by corgidrp.__init__)
+    os.makedirs(corgidrp.config_folder, exist_ok=True)
+    os.makedirs(corgidrp.default_cal_dir, exist_ok=True)
+
+    # Force initialization if not already done
+    if not caldb.initialized:
+        caldb.initialize()
+
+    yield
+
+    # No cleanup needed - worker temp dirs are cleaned up by pytest-xdist

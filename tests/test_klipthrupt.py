@@ -12,6 +12,10 @@ import pytest
 import numpy as np
 import os
 import itertools
+
+# Mark all tests in this file to run serially (not in parallel)
+# This file has module-level variables and test dependencies that cause issues in parallel
+pytestmark = pytest.mark.serial
 ## Helper functions/quantities
 
 lam = 573.8e-9 #m
@@ -57,8 +61,14 @@ calibrate_flux = False
 # max_thrupt_tolerance = 1 + (noise_amp * (2*fwhm_pix)**2)
 max_thrupt_tolerance = 1.05
 
+# Module-level variables set by test_meas_klip_ADI, test_meas_klip_RDI
+# and used by test_compare_RDI_ADI
+kt_adi = None
+kt_rdi = None
+kt_adirdi = None
+
 if not os.path.exists(outdir):
-    os.mkdir(outdir)
+    os.makedirs(outdir, exist_ok=True)
    
 ## pyKLIP data class tests
 

@@ -15,6 +15,11 @@ from corgidrp.mocks import create_default_L1_headers
 from datetime import timedelta
 from collections import defaultdict
 
+# Mark all tests in this file to run serially (not in parallel)
+# This file has setup_module() creating module-level state
+# Also has inconsistent worker isolation (line 355 has it, line 214 doesn't)
+pytestmark = pytest.mark.serial
+
 np.random.seed(42)  # For reproducibility
 # Functions
 def get_cmdgain_exptime_mean_frame(
@@ -349,9 +354,12 @@ def setup_module():
     
     # DRP Dataset
     # Create directory for temporary data files (not tracked by git)
-    datadir = os.path.join(os.path.dirname(__file__), 'simdata')
+    # Use worker-specific directories for pytest-xdist isolation
+    _worker_id = os.environ.get('PYTEST_XDIST_WORKER', 'master')
+    _worker_suffix = f"_{_worker_id}" if _worker_id != 'master' else ""
+    datadir = os.path.join(os.path.dirname(__file__), f'simdata{_worker_suffix}')
     if not os.path.exists(datadir):
-        os.mkdir(datadir)
+        os.makedirs(datadir, exist_ok=True)
     # clean out any previous files in there; files are not overwritten since their names depend on the present time
     for filename in os.listdir(datadir):
         if not filename.endswith('.fits'):

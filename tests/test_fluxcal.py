@@ -32,6 +32,10 @@ import astropy.units as u
 from termcolor import cprint
 import numpy as np
 
+# Mark all tests in this file to run serially (not in parallel)
+# This file has module-level shared state that causes race conditions in parallel
+pytestmark = pytest.mark.serial
+
 # Suppress all warnings for all tests in this file
 # warnings.filterwarnings("ignore")
 
@@ -49,6 +53,13 @@ image2.filename = "cgi_0000000000000090527_20240101t1201000_l4_.fits"
 dataset=Dataset([image1, image2])
 calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_012.fits")
 
+# Initialize module-level variables used across tests
+# These are set by test_get_filter_name and test_flux_calc, and used by later tests
+filepath = fluxcal.get_filter_name(image1)
+wave, transmission = fluxcal.read_filter_curve(filepath)
+calspec_flux = fluxcal.read_cal_spec(calspec_filepath, wave)
+band_flux = fluxcal.calculate_band_flux(transmission, calspec_flux, wave)
+
 
 def print_fail():
     cprint(' FAIL ', "black", "on_red")
@@ -62,34 +73,31 @@ def test_get_filter_name():
     """
     test that the correct filter curve file is selected
     """
-    global wave
-    global transmission
-    filepath = fluxcal.get_filter_name(image1)
-    assert filepath.split("/")[-1] == 'transmission_ID-21_3C_v0.csv'
-    
-    wave, transmission = fluxcal.read_filter_curve(filepath)
-    
-    assert np.any(wave>=7130)
-    assert np.any(transmission < 1.)
-    
+    test_filepath = fluxcal.get_filter_name(image1)
+    assert test_filepath.split("/")[-1] == 'transmission_ID-21_3C_v0.csv'
+
+    test_wave, test_transmission = fluxcal.read_filter_curve(test_filepath)
+
+    assert np.any(test_wave>=7130)
+    assert np.any(test_transmission < 1.)
+
     #test a wrong filter name
     image3 = image1.copy()
     image3.ext_hdr["CFAMNAME"] = '5C'
     with pytest.raises(ValueError):
         filepath = fluxcal.get_filter_name(image3)
         pass
-    
+
 
 def test_flux_calc():
     """
     test that the calspec data is read correctly
     """
-    global band_flux
-    calspec_flux = fluxcal.read_cal_spec(calspec_filepath, wave)
-    assert calspec_flux[0] == pytest.approx(1.6121e-09, 1e-15) 
-    
-    band_flux = fluxcal.calculate_band_flux(transmission, calspec_flux, wave)
-    eff_lambda = fluxcal.calculate_effective_lambda(transmission, calspec_flux, wave)
+    test_calspec_flux = fluxcal.read_cal_spec(calspec_filepath, wave)
+    assert test_calspec_flux[0] == pytest.approx(1.6121e-09, 1e-15)
+
+    test_band_flux = fluxcal.calculate_band_flux(transmission, test_calspec_flux, wave)
+    eff_lambda = fluxcal.calculate_effective_lambda(transmission, test_calspec_flux, wave)
     assert eff_lambda == pytest.approx((wave[0]+wave[-1])/2., 3)
     
 def test_colorcor():
@@ -182,8 +190,8 @@ def test_app_mag():
     assert 'alpha_lyr_stis' in str(output_dataset[0].ext_hdr['HISTORY'])
     assert '109vir_stis_005.fits' in str(output_dataset[0].ext_hdr['HISTORY'])
     
-def test_fluxcal_file():
-    """ 
+def test_fluxcal_file(tmp_path):
+    """
     Generate a mock fluxcal factor cal object and test the content and functionality.
     """
     fluxcal_factor = 2e-12
@@ -193,14 +201,13 @@ def test_fluxcal_file():
     assert fluxcal_fac.fluxcal_fac == fluxcal_factor
     assert fluxcal_fac.fluxcal_err == fluxcal_factor_error
     assert(fluxcal_fac.filename.endswith("_abf_cal.fits"))
-    
-    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+
+    calibdir = tmp_path / "testcalib"
+    calibdir.mkdir(parents=True, exist_ok=True)
     filename = fluxcal_fac.filename
-    if not os.path.exists(calibdir):
-        os.mkdir(calibdir)
-    fluxcal_fac.save(filedir=calibdir, filename=filename)        
+    fluxcal_fac.save(filedir=str(calibdir), filename=filename)        
         
-    fluxcal_filepath = os.path.join(calibdir, filename)
+    fluxcal_filepath = str(calibdir / filename)
 
     fluxcal_fac_file = FluxcalFactor(fluxcal_filepath)
     assert fluxcal_fac_file.filter == '3C'
@@ -553,23 +560,20 @@ def test_compute_spec_flux_ratio_weighted():
     print_pass() if result else print_fail()
     assert result
 
-def test_abs_fluxcal():
-    """ 
+def test_abs_fluxcal(tmp_path):
+    """
     Generate a simulated image and test the flux calibration computation.
-    
+
     """
     rel_tol_flux = 0.05
 
     # create a simulated image with source guesses and true positions
-    # check that the simulated image folder exists and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "test_data", "sim_fluxcal")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
+    datadir = tmp_path / "sim_fluxcal"
+    datadir.mkdir(parents=True, exist_ok=True)
 
     # check that the results folder exists and create if not
-    resdir = os.path.join(os.path.dirname(__file__), "test_data", "results")
-    if not os.path.exists(resdir):
-        os.mkdir(resdir)
+    resdir = tmp_path / "results"
+    resdir.mkdir(parents=True, exist_ok=True)
 
     fwhm = 3
     flux_ratio = 200
@@ -579,7 +583,7 @@ def test_abs_fluxcal():
     # that results in a total extracted count of 200 photo electrons
     flux_image = create_flux_image(
         band_flux, fwhm, cal_factor, filter='3C', target_name='Vega',
-        fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8,
+        fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=str(datadir), platescale=21.8,
         background=0, add_gauss_noise=True, noise_scale=1., file_save=True)
     # bunit needs to be photoelectron/s for later tests, so set that now
     flux_image.ext_hdr['BUNIT'] = 'photoelectron/s'
@@ -772,24 +776,21 @@ def test_abs_fluxcal():
     
     corgidrp.track_individual_errors = old_ind
 
-def test_pol_abs_fluxcal():
-    """ 
+def test_pol_abs_fluxcal(tmp_path):
+    """
     Generate a simulated polarimetric image and test the flux calibration computation.
     Adapted from test_abs_fluxcal()
-    
+
     """
     rel_tol_flux = 0.05
 
     # create a simulated polarimetric flux image
-    # check that the simulated image folder exists and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "test_data", "sim_fluxcal")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
+    datadir = tmp_path / "sim_fluxcal"
+    datadir.mkdir(parents=True, exist_ok=True)
 
     # check that the results folder exists and create if not
-    resdir = os.path.join(os.path.dirname(__file__), "test_data", "results")
-    if not os.path.exists(resdir):
-        os.mkdir(resdir)
+    resdir = tmp_path / "results"
+    resdir.mkdir(parents=True, exist_ok=True)
     
     fwhm = 3
     flux_ratio = 400
@@ -802,11 +803,11 @@ def test_pol_abs_fluxcal():
     #right PSF should have count of 160 photo electons
     flux_image_WP1 = create_pol_flux_image(
         band_flux_left, band_flux_right, fwhm, cal_factor, filter='3C', dpamname='POL0', target_name='Vega',
-        fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8,
+        fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=str(datadir), platescale=21.8,
         background=0, add_gauss_noise=True, noise_scale=1., file_save=True)
     flux_image_WP2 = create_pol_flux_image(
         band_flux_left, band_flux_right, fwhm, cal_factor, filter='3C', dpamname='POL45', target_name='Vega',
-        fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8,
+        fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=str(datadir), platescale=21.8,
         background=0, add_gauss_noise=True, noise_scale=1., file_save=True)
     # bunit needs to be photoelectron/s for later tests, so set that now
     flux_image_WP1.ext_hdr['BUNIT'] = 'photoelectron/s'

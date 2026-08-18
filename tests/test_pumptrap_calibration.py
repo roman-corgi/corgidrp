@@ -68,7 +68,7 @@ def test_tpump_analysis():
     for temp, temp_files in file_info.items():
         temp_dir = os.path.join(test_data_dir, temp)
         if not os.path.exists(temp_dir):
-            os.mkdir(temp_dir)
+            os.makedirs(temp_dir, exist_ok=True)
         
         # Sort files by filename first to ensure deterministic ordering
         temp_files.sort()
@@ -92,7 +92,7 @@ def test_tpump_analysis():
             if sc_files:  # Only create directory if there are files for this scheme
                 sch_dir = os.path.join(temp_dir, f'Scheme_{sc}')
                 if not os.path.exists(sch_dir):
-                    os.mkdir(sch_dir)
+                    os.makedirs(sch_dir, exist_ok=True)
                 
                 # Sort by phase time, then filename for deterministic ordering,
                 # otherwise tests will sometimes pass, sometimes fail on different systems

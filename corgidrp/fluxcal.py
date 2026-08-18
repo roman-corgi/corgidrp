@@ -58,7 +58,7 @@ def get_calspec_file(star_name):
     names_file = os.path.join(calspec_dir, "calspec_names.json")
     calspec_names_ff = calspec_names
     if not os.path.exists(calspec_dir):
-        os.mkdir(calspec_dir)
+        os.makedirs(calspec_dir, exist_ok=True)
         with open(names_file, 'w') as f:
             json.dump(calspec_names_ff, f)
     else:

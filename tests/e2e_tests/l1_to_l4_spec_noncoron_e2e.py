@@ -752,7 +752,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
-    e2edata_dir = '/home/ababuraj/roman/E2E_Test_Data'
+    e2edata_dir = './E2E_Test_Data'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l4 non-coronographic spectroscopy end-to-end test with recipe chaining")

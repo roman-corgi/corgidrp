@@ -13,6 +13,10 @@ from corgidrp.photon_counting import get_pc_mean, photon_count, PhotonCountExcep
 import io, contextlib
 import warnings
 
+# Mark all tests in this file to run serially (not in parallel)
+# This file uses shared simdata directory without worker isolation, causing file collisions
+pytestmark = pytest.mark.serial
+
 def test_negative():
     """Values at or below the 
     threshold are photon-counted as 0, including negative values."""
@@ -21,7 +25,7 @@ def test_negative():
     assert (pc_fr == np.array([0,0,0])).all()
     
 
-def test_pc():
+def test_pc(tmp_path):
     '''
     Tests that a pixel that is masked heavily (reducing the number of usable frames for that pixel) has a bigger err than the average pixel.
 
@@ -200,17 +204,13 @@ def test_pc_subsets():
     captured = buf.getvalue()
     assert "Number of frames that created the photon-counted master dark should be greater than or equal to the number of illuminated frames in order for the result to be reliable.\n" in captured
 
-def test_no_data():
-    '''Tests that a Dataset with only metadata (and has data read in one 
+def test_no_data(tmp_path):
+    '''Tests that a Dataset with only metadata (and has data read in one
     frame at a time from filepaths) gives same results as a normal Dataset.
     '''
     # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    for name in os.listdir(datadir):
-            path = os.path.join(datadir, name)
-            os.remove(path)
+    datadir = tmp_path / "simdata"
+    datadir.mkdir(parents=True, exist_ok=True)
     test_dataset, _, _, _ = mocks.create_photon_countable_frames(Nbrights=3, Ndarks=1, flux=0.1)
     # instead of running through walker, just do the pre-processing steps simply
     # using EM gain=5000 and kgain=7 and bias=20000 and read noise = 100 and QE=0.9 (quantum efficiency), from mocks.create_photon_countable_frames()

@@ -1,5 +1,7 @@
 from astropy.io import fits
 import os
+import tempfile
+import pytest
 
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -15,6 +17,11 @@ from pytest import approx
 
 from collections import Counter
 
+# Per-process scratch dir for all files this module writes. Using a unique temp
+# dir (instead of a shared path under tests/) keeps pytest-xdist workers from
+# racing on the same files during parallel collection/execution.
+_scratch_dir = tempfile.mkdtemp(prefix="cr_detection_")
+
 ###########################################
 ### Create a dummy non-linearity file ####
 #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
@@ -24,7 +31,7 @@ dummy_dataset = mocks.create_prescan_files()
 input_non_linearity_filename = "nonlin_table_TVAC.txt"
 input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
 test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
-nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
+nonlin_fits_filepath = os.path.join(_scratch_dir, test_non_linearity_filename)
 tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
 pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
@@ -340,7 +347,8 @@ def remove_cosmics_iit(image, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_bo
 ## Run tests ##
 
 ###### create simulated data
-datadir = os.path.join(os.path.dirname(__file__), "simdata")
+datadir = os.path.join(_scratch_dir, "simdata")
+os.makedirs(datadir, exist_ok=True)
 
 detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
 

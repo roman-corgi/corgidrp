@@ -49,9 +49,12 @@ def setup_module():
     np.random.seed(4567)  # make test reproducible
     dataset = create_synthesized_master_dark_calib(dat)
     # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    # Use worker-specific directories for pytest-xdist isolation
+    _worker_id = os.environ.get('PYTEST_XDIST_WORKER', 'master')
+    _worker_suffix = f"_{_worker_id}" if _worker_id != 'master' else ""
+    datadir = os.path.join(os.path.dirname(__file__), f"simdata{_worker_suffix}")
     if not os.path.exists(datadir):
-        os.mkdir(datadir)
+        os.makedirs(datadir, exist_ok=True)
     if os.path.exists(datadir):
         for name in os.listdir(datadir):
             path = os.path.join(datadir, name)
@@ -126,10 +129,13 @@ def test_expected_results_sub():
         assert np.all((noise_maps.data == pickled_noisemap.data) | np.isnan(noise_maps.data))
 
         # save noise map
-        calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+        # Use worker-specific directories for pytest-xdist isolation
+        _worker_id = os.environ.get('PYTEST_XDIST_WORKER', 'master')
+        _worker_suffix = f"_{_worker_id}" if _worker_id != 'master' else ""
+        calibdir = os.path.join(os.path.dirname(__file__), f"testcalib{_worker_suffix}")
         nm_filename = noise_maps.filename
         if not os.path.exists(calibdir):
-            os.mkdir(calibdir)
+            os.makedirs(calibdir, exist_ok=True)
         noise_maps.save(filedir=calibdir, filename=nm_filename)
         nm_filepath = os.path.join(calibdir, nm_filename)
         nm_f = DetectorNoiseMaps(nm_filepath)

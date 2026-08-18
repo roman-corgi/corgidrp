@@ -20,7 +20,7 @@ constant = 10.
 xgradient = np.arange(30)
 
 
-def test_bad_pixels():
+def test_bad_pixels(tmp_path):
     corgidrp.track_individual_errors = False
 
     print("UT for pipeline step correct_bad_pixels")
@@ -46,15 +46,12 @@ def test_bad_pixels():
     assert type(dataset) == corgidrp.data.Dataset
 
     # Generate bad pixel detector mask
-    datadir = os.path.join(os.path.dirname(__file__), "testcalib")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
-    outputdir = os.path.join(os.path.dirname(__file__), "testcalib")
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+    datadir = tmp_path / "testcalib"
+    datadir.mkdir(parents=True, exist_ok=True)
+    outputdir = datadir
     col_bp_test = [12, 120, 234, 450, 678, 990]
     row_bp_test = [546, 89, 123, 243, 447, 675]
-    bp_mask = mocks.create_badpixelmap_files(filedir=datadir,
+    bp_mask = mocks.create_badpixelmap_files(filedir=str(datadir),
                                              col_bp=col_bp_test, row_bp=row_bp_test)
     # BadPixelMap requires a dark(-like) frame
     dark_pri, dark_ext, _, _ = create_default_calibration_product_headers()

@@ -406,17 +406,14 @@ def test_fpm_pos():
 
     print('Tests about FPAM/FSAM to EXCAM passed')
 
-def test_cal_file():
+def test_cal_file(tmp_path):
     """ Test creation of core throughput calibration file. """
 
     # Write core throughput calibration file
     ct_cal_file_in = corethroughput.generate_ct_cal(dataset_ct)
-    test_dir = os.path.join(here, 'simdata')
-    # Start with all clean
-    if os.path.exists(test_dir):
-        shutil.rmtree(test_dir)
-    os.mkdir(test_dir) 
-    ct_cal_file_in.save(filedir=test_dir)
+    test_dir = tmp_path / 'simdata'
+    test_dir.mkdir(parents=True, exist_ok=True)
+    ct_cal_file_in.save(filedir=str(test_dir))
 
     # Check that the filename is based on the latest input frame timestamp.
     sctsrt_values = [frame.ext_hdr.get('SCTSRT') for frame in dataset_ct
@@ -433,7 +430,7 @@ def test_cal_file():
                                item[0]))[1]
     latest_filename = latest_frame.filename or latest_frame.pri_hdr['FILENAME']
     ct_cal_filename = re.sub('_l[0-9].', '_ctp_cal', latest_filename)
-    ct_cal_filepath = os.path.join(test_dir,ct_cal_filename)
+    ct_cal_filepath = os.path.join(str(test_dir), ct_cal_filename)
     if os.path.exists(ct_cal_filepath) is False:
         raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')
     # Load the calibration file to check it has the same data contents
@@ -784,7 +781,7 @@ def test_get_1d_ct():
     for i,arg in enumerate(expected_args):
         assert ct_1d[1,i] == ctcal.ct_excam[2,arg]
 
-def test_ct_map():
+def test_ct_map(tmp_path):
     """ Tests the creation of a core throughput map. The method InterpolateCT()
       has its own unit test and can be considered as tested in the following. """
 
@@ -843,11 +840,9 @@ def test_ct_map():
         assert ct_cal.ct_excam[2] == pytest.approx(ct_map_targ.data[2], abs=1e-14)
 
     # Test it can be saved
-    test_dir = os.path.join(here, 'simdata')
-    if os.path.exists(test_dir):
-        shutil.rmtree(test_dir)
-    os.mkdir(test_dir)
-    ct_map_def.save(filedir=test_dir)
+    test_dir = tmp_path / 'simdata'
+    test_dir.mkdir(parents=True, exist_ok=True)
+    ct_map_def.save(filedir=str(test_dir))
     assert os.path.exists(ct_map_def.filepath), f"File not found: {ct_map_def.filepath}"
 
     # Add open the file and compare content
