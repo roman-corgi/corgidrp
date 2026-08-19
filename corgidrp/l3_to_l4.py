@@ -19,7 +19,7 @@ from astropy.io import fits
 from scipy.ndimage import shift
 from numpy.lib.stride_tricks import sliding_window_view
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation, star_pos_spec
-from corgidrp.spec import get_default_spec_extract_heights
+from corgidrp.spec import DEFAULT_SPEC_EXTRACT_HEIGHTS
 from corgidrp import pol
 from corgidrp import fluxcal
 from astropy.io.fits.verify import VerifyWarning
@@ -1300,41 +1300,6 @@ def find_spec_star(input_dataset, r_lamD=3, phi_deg=0):
     dataset.update_after_processing_step(history_msg)
     return dataset
 
-def _resolve_extract_heights(ext_hdr, halfheight, redheight, blueheight):
-    """
-    Resolve the along-dispersion spectral extraction extents for a single frame.
-
-    Precedence, highest first: explicit redheight/blueheight; explicit halfheight (symmetric box);
-    the DPAMNAME-keyed defaults in corgidrp.spec.DEFAULT_SPEC_EXTRACT_HEIGHTS.
-    Args:
-        ext_hdr (astropy.io.fits.Header): image extension header of the frame, needs DPAMNAME.
-        halfheight (int or None): caller supplied symmetric half height, pixels.
-        redheight (int or None): caller supplied extent toward longer wavelength, pixels.
-        blueheight (int or None): caller supplied extent toward shorter wavelength, pixels.
-
-    Returns:
-        tuple: (redheight, blueheight, halfheight, source). Either the red/blue pair is set and
-        halfheight is None (asymmetric box), or the reverse (symmetric box). source is a short
-        string describing where the extents came from, for the history message.
-    """
-    if halfheight is not None and redheight is None and blueheight is None:
-        return None, None, int(halfheight), "user-specified halfheight"
-
-    dpamname = ext_hdr['DPAMNAME']
-    default_red, default_blue = get_default_spec_extract_heights(dpamname)
-
-    if redheight is None and blueheight is None:
-        return int(default_red), int(default_blue), None, "DPAMNAME {0} default".format(dpamname)
-
-    if redheight is None or blueheight is None:
-        # fill the missing side from the prism default rather than silently falling back to a
-        # symmetric box
-        redheight = default_red if redheight is None else redheight
-        blueheight = default_blue if blueheight is None else blueheight
-        warnings.warn("extract_spec received only one of redheight/blueheight, extracting with "
-                      "redheight {0} and blueheight {1} pixels".format(redheight, blueheight))
-    return int(redheight), int(blueheight), None, "user-specified"
-
 def extract_spec(input_dataset, halfwidth = 2, halfheight = None, apply_weights = False,
                  redheight = None, blueheight = None):
     """
@@ -1360,12 +1325,39 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = None, apply_weights 
         corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
     """
     dataset = input_dataset.copy()
-    resolved = []
     clipped_filenames = []
+    first_frame_history = None
+    heights_seen = set()
 
     for image in dataset:
-        redheight_frame, blueheight_frame, halfheight_frame, height_source = _resolve_extract_heights(
-                image.ext_hdr, halfheight, redheight, blueheight)
+        # Resolve this frame's along-dispersion extents. Precedence, highest first: explicit
+        # redheight/blueheight; explicit halfheight (symmetric box); the DPAMNAME-keyed defaults
+        # in corgidrp.spec.DEFAULT_SPEC_EXTRACT_HEIGHTS.
+        if halfheight is not None and redheight is None and blueheight is None:
+            redheight_frame, blueheight_frame, halfheight_frame = None, None, int(halfheight)
+            height_source = "user-specified halfheight"
+        else:
+            dpamname = image.ext_hdr['DPAMNAME']
+            key = str(dpamname).strip().upper()
+            if key not in DEFAULT_SPEC_EXTRACT_HEIGHTS:
+                raise AttributeError("PRISM2 and PRISM3 are the only valid DPAM settings for prism "
+                                     "spectroscopy, not " + str(dpamname))
+            default_red, default_blue = DEFAULT_SPEC_EXTRACT_HEIGHTS[key]
+            halfheight_frame = None
+            if redheight is None and blueheight is None:
+                redheight_frame, blueheight_frame = int(default_red), int(default_blue)
+                height_source = "DPAMNAME {0} default".format(dpamname)
+            else:
+                # fill the missing side from the prism default rather than silently falling back
+                # to a symmetric box
+                redheight_frame = default_red if redheight is None else redheight
+                blueheight_frame = default_blue if blueheight is None else blueheight
+                if redheight is None or blueheight is None:
+                    warnings.warn("extract_spec received only one of redheight/blueheight, extracting "
+                                  "with redheight {0} and blueheight {1} pixels".format(
+                                      redheight_frame, blueheight_frame))
+                redheight_frame, blueheight_frame = int(redheight_frame), int(blueheight_frame)
+                height_source = "user-specified"
         asymmetric = redheight_frame is not None
 
         xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
@@ -1396,8 +1388,10 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = None, apply_weights 
                               ylo_req, yhi_req, image.filename, nrows, ylo, yhi,
                               yhi - ylo + 1, yhi_req - ylo_req + 1))
             clipped_filenames.append(image.filename)
-        resolved.append((height_source, redheight_frame, blueheight_frame, halfheight_frame,
-                         ylo_req, yhi_req, ylo, yhi))
+        heights_seen.add((redheight_frame, blueheight_frame, halfheight_frame))
+        if first_frame_history is None:
+            first_frame_history = (height_source, redheight_frame, blueheight_frame, halfheight_frame,
+                                   ylo_req, yhi_req, ylo, yhi)
 
         image_cutout = image.data[ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
@@ -1410,14 +1404,8 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = None, apply_weights 
         err_cutout = image.err[:,ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
         if "ALGO_THRU" in image.hdu_list:
-            algo_thru = np.asarray(image.hdu_list["ALGO_THRU"].data)
-            if algo_thru.shape == (nrows,):
-                algo_thru_cutout = algo_thru[ylo:yhi + 1]
-            else:
-                warnings.warn("the ALGO_THRU extension of {0} has shape {1}, which does not match the "
-                              "{2} rows of the frame, ignoring the algorithm throughput".format(
-                                  image.filename, algo_thru.shape, nrows))
-                algo_thru_cutout = np.ones(image_cutout.shape[0])
+            # ALGO_THRU is always one value per frame row (l3_to_l4.py:2164), so it aligns with ylo:yhi
+            algo_thru_cutout = np.asarray(image.hdu_list["ALGO_THRU"].data)[ylo:yhi + 1]
         else:
             algo_thru_cutout = np.ones(image_cutout.shape[0])
         bad_ind = np.where(dq_cutout > 0)
@@ -1454,12 +1442,12 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = None, apply_weights 
         # update algo_thru extension to match the extracted spectrum, if it exists
         if "ALGO_THRU" in image.hdu_list:
             image.hdu_list["ALGO_THRU"].data = algo_thru_spec
-    if len({entry[1:4] for entry in resolved}) > 1:
+    if len(heights_seen) > 1:
         warnings.warn("the frames of this dataset were extracted with different box heights, most "
                       "likely because of mixed DPAMNAME values, so the SPEC extensions have "
                       "different lengths")
     # the boxes are homogeneous apart from the warning above, so report the first frame
-    height_source, redheight_frame, blueheight_frame, halfheight_frame, ylo_req, yhi_req, ylo, yhi = resolved[0]
+    height_source, redheight_frame, blueheight_frame, halfheight_frame, ylo_req, yhi_req, ylo, yhi = first_frame_history
     if redheight_frame is not None:
         history_msg = ("spectral extraction within a box of half width of {0}, redheight {1}, blueheight {2} "
                        "({3}), rows {4}:{5}, and with ".format(
