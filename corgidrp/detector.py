@@ -3,7 +3,7 @@
 import numpy as np
 from scipy import interpolate
 from scipy.ndimage import gaussian_filter as gauss
-from scipy.ndimage import median_filter
+from scipy.ndimage import median_filter, vectorized_filter
 
 from scipy import ndimage
 from scipy.signal import convolve2d
@@ -11,6 +11,7 @@ import astropy.io.fits as fits
 from astropy.convolution import convolve_fft
 import photutils.centroids as centr
 from photutils.aperture import CircularAperture
+import warnings
 
 import corgidrp.data as data
 
@@ -457,7 +458,9 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
     im_ending_col = mask.shape[2] - 1 # - 1 to get the index, not size
 
     # Do a cheap prefilter for rows that don't have anything bright
-    max_rows = np.max(cube, axis=-1,keepdims=True)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        max_rows = np.nanmax(cube, axis=-1,keepdims=True)
     ji_streak_rows = np.transpose(np.array((max_rows >= sat_thresh*fwc).nonzero()[:-1]))
 
     for j,i in ji_streak_rows:
@@ -525,7 +528,10 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     # Lowpass filter row to differentiate plateaus from standalone pixels
     # The way median_filter works, it will find cosmics that are cosm_filter-1
     # wide. Add 1 to cosm_filter to correct for this
-    filtered = median_filter(streak_row, cosm_filter+1, mode='nearest')
+    #filtered = median_filter(streak_row, cosm_filter+1, mode='nearest')
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        filtered = vectorized_filter(streak_row, function=np.nanmedian, size=cosm_filter+1, mode='nearest')
     saturated = (filtered >= sat_thresh*fwc).nonzero()[0]
 
     if len(saturated) > 0:
