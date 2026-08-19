@@ -7,7 +7,7 @@ import corgidrp.check as check
 from scipy.ndimage import median_filter
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
-                    detector_regions=None, use_imaging_area = False, dataset_copy=True, num_medians=1):
+                    detector_regions=None, use_imaging_area = False, dataset_copy=True, num_stds=5):
     """
     Measure and subtract the median bias in each row of the pre-scan detector region.
     This step also crops the images to just the science area, or
@@ -24,9 +24,9 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         use_imaging_area (bool): flag indicating whether to use the imaging area (like in the trap pump code) or use the defualt (equivalent to EMCCDFrame)
         dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
-        num_medians (float): If the median of a pre-scan row is off from the median value of all the rows by more than num_medians times, the 
+        num_stds (float): If the median of a pre-scan row is off from the median value of all the rows by more than num_stds standard deviations, the 
             row is assumed to have an unreliable pre-scan (due to a very long cosmic ray tail, for example), and the value for that row is assigned 
-            the overall median of all the rows. Defaults to 1.
+            the overall median of all the rows. Defaults to 5.
 
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
@@ -117,7 +117,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
         # rare cosmic rays can spill over all the way into the "good columns" region of the next row, ruining the bias subtraction for that row
         # Fix that by replacing such rows (which deviate by at least the median bias amount) with the median bias
-        unreliable_bias_rows = np.where(np.abs(medbyrow - np.median(medbyrow)) > num_medians * np.median(medbyrow)) 
+        unreliable_bias_rows = np.where(np.abs(medbyrow - np.median(medbyrow)) > num_stds * np.median(medbyrow)) 
         medbyrow[unreliable_bias_rows] = np.median(medbyrow)
         sterrbyrow = np.std(al_prescan[:,st:end], axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan[:,st:end].shape[1])
         if noise_maps is not None:
