@@ -216,9 +216,9 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
         nx = np.arange(0,resi_images_dataset[i].data.shape[1])
         ny = np.arange(0,resi_images_dataset[i].data.shape[0])
         nxx,nyy = np.meshgrid(nx,ny)
-        # center the extraction mask on the crop center (where the source sits),
-        # not the fixed pixel (planet_rad+5); the latter only works when the
-        # source fills the crop (up_radius ~= planet_rad+5).
+        # center the mask on the crop center (where the source is), not a 
+        # fixed pixel (was previously planet_rad+5); fixed pixel only works when 
+        # the source fills the crop (up_radius ~= planet_rad+5).
         cen_x = resi_images_dataset[i].data.shape[1] // 2
         cen_y = resi_images_dataset[i].data.shape[0] // 2
         nrr = np.sqrt((nxx-cen_x)**2 + (nyy-cen_y)**2)
@@ -268,8 +268,7 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
         cent_n=centr.centroid_com(p_flat)
     nrr = np.sqrt((nxx-cent_n[0])**2 + (nyy-cent_n[1])**2)
     if n_pix is None:
-        # largest centered radius with no uncovered holes: keep all real data,
-        # force only true gaps/background (beyond it) to 1.
+        # keep all real data, force only true gaps/background (beyond it) to 1
         holes = np.isnan(p_flat)
         n_pix = int(2*(np.floor(np.nanmin(nrr[holes]))-1)) if holes.any() else int(2*np.ceil(np.nanmax(nrr)))
         n_pix = max(n_pix, 2)
@@ -328,9 +327,9 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         elif planet.lower() == 'uranus':
              planet_rad = 65
         else:
-            # rastered point source: fill radius = gap-closing radius of the
-            # dither grid (spacing/sqrt(2)), capped at the crop so it can't
-            # reach past the source into sky.
+            # for a dithered point source, auto set the fill radius to 
+            # (spacing/sqrt(2)). large enough to close the diagonal gaps
+            # between the dither spots, but not larger than the crop
             src_cents = []
             for j in range(len(dataset)):
                 sm = median_filter(np.nan_to_num(dataset[j].data), 3)
@@ -356,9 +355,10 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
         image_size=np.shape(planet_image)
-        # center on a hot-pixel-cleaned, thresholded source mask; a bare
-        # full-frame centroid_com is pulled off the source and mis-centers
-        # the crop, washing out the median matched filter.
+        # build the crop center from a de-noised, thresholded mask of the source rather 
+        # than a raw full-frame center, because the raw version gets dragged off the 
+        # source by hot pixels/background, mis-cuts the stamps, and messes up the 
+        # co-registration the median matched filter depends on.
         source_smooth = median_filter(np.nan_to_num(planet_image), 3)
         source_mask = (source_smooth >= 0.3 * np.nanmax(source_smooth)).astype(float)
         centroid = np.array(centr.centroid_com(source_mask))
