@@ -216,7 +216,12 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
         nx = np.arange(0,resi_images_dataset[i].data.shape[1])
         ny = np.arange(0,resi_images_dataset[i].data.shape[0])
         nxx,nyy = np.meshgrid(nx,ny)
-        nrr = np.sqrt((nxx-rad-5)**2 + (nyy-rad-5)**2)
+        # center the extraction mask on the crop center (where the source sits),
+        # not the fixed pixel (planet_rad+5); the latter only works when the
+        # source fills the crop (up_radius ~= planet_rad+5).
+        cen_x = resi_images_dataset[i].data.shape[1] // 2
+        cen_y = resi_images_dataset[i].data.shape[0] // 2
+        nrr = np.sqrt((nxx-cen_x)**2 + (nyy-cen_y)**2)
        
         nrr_copy = nrr.copy();  
         nrr_err_copy=nrr.copy()
@@ -262,6 +267,12 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
         warnings.filterwarnings("ignore", category=AstropyUserWarning) 
         cent_n=centr.centroid_com(p_flat)
     nrr = np.sqrt((nxx-cent_n[0])**2 + (nyy-cent_n[1])**2)
+    if n_pix is None:
+        # largest centered radius with no uncovered holes: keep all real data,
+        # force only true gaps/background (beyond it) to 1.
+        holes = np.isnan(p_flat)
+        n_pix = int(2*(np.floor(np.nanmin(nrr[holes]))-1)) if holes.any() else int(2*np.ceil(np.nanmax(nrr)))
+        n_pix = max(n_pix, 2)
     p_flat[nrr>n_pix//2]= 1
     p_flat_err[nrr>n_pix//2]=0
     
@@ -271,7 +282,7 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
     return (full_residuals,err_residuals,cent_n)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=44, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=None, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
 
@@ -316,7 +327,22 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
              planet_rad = 50
         elif planet.lower() == 'uranus':
              planet_rad = 65
-    
+        else:
+            # rastered point source: fill radius = gap-closing radius of the
+            # dither grid (spacing/sqrt(2)), capped at the crop so it can't
+            # reach past the source into sky.
+            src_cents = []
+            for j in range(len(dataset)):
+                sm = median_filter(np.nan_to_num(dataset[j].data), 3)
+                m = (sm >= 0.3 * np.nanmax(sm)).astype(float)
+                c = np.array(centr.centroid_com(m)); c[np.isnan(c)] = 0
+                src_cents.append(c)
+            src_cents = np.array(src_cents)
+            d2 = ((src_cents[:, None, :] - src_cents[None, :, :])**2).sum(-1)
+            np.fill_diagonal(d2, np.inf)
+            spacing = np.median(np.sqrt(d2.min(axis=1)))
+            planet_rad = min(int(np.ceil(spacing / np.sqrt(2))) + 1, up_radius - 1)
+
     if rad_mask is None:
          if band[0] == "1":
             rad_mask = 1.25
@@ -325,12 +351,17 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
 
     raster_frames=[]; cent=[]; act_cents=[]; frames=[];
     for j in range(len(dataset)):
-        planet_image=dataset[j].data
+        planet_image=dataset[j].data.copy()  # copy: the sky subtraction below is in-place
         planet_image_err=dataset[j].err[0]
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
         image_size=np.shape(planet_image)
-        centroid = centr.centroid_com(planet_image)
+        # center on a hot-pixel-cleaned, thresholded source mask; a bare
+        # full-frame centroid_com is pulled off the source and mis-centers
+        # the crop, washing out the median matched filter.
+        source_smooth = median_filter(np.nan_to_num(planet_image), 3)
+        source_mask = (source_smooth >= 0.3 * np.nanmax(source_smooth)).astype(float)
+        centroid = np.array(centr.centroid_com(source_mask))
         centroid[np.isnan(centroid)]=0
         act_cents.append((centroid[1],centroid[0]))
         xc =int( centroid[0])
