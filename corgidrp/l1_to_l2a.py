@@ -4,7 +4,7 @@ import re
 import numpy as np
 import corgidrp.data as data
 import corgidrp.check as check
-from scipy.ndimage import median_filter
+from scipy.ndimage import median_filter, label, find_objects
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
                     detector_regions=None, use_imaging_area = False, dataset_copy=True, num_stds=5):
@@ -92,9 +92,9 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
                 image_err = np.array(image_err)
 
                 # Get the part of the prescan that lines up with the image
-                i_r0 = detector_areas[arrtype]['image']['r0c0'][0]
-                p_r0 = detector_areas[arrtype]['prescan']['r0c0'][0]
-                i_nrow = detector_areas[arrtype]['image']['rows']
+                i_r0 = detector_regions[arrtype]['image']['r0c0'][0]
+                p_r0 = detector_regions[arrtype]['prescan']['r0c0'][0]
+                i_nrow = detector_regions[arrtype]['image']['rows']
                 al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
 
         else:
@@ -167,7 +167,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     return output_dataset
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
-                       plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10,
+                       plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10, cosm_tail_auto_factor=40/1000,
                        mode='image', detector_regions=None, pct_oversat_lim=20,
                        dataset_copy=True, discard_oversat=False, median_filter_mode=0, cosm_thresh=0.95):
     """
@@ -194,13 +194,17 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             the plateau) to mask out.
             For example, if cosm_box is 3, a 7x7 box is masked,
             with the cosmic head as the center pixel of the box. Defaults to 3.
-        cosm_tail (int):
+        cosm_tail (int or 'auto'):
             Number of pixels in the row downstream of the end of a cosmic plateau
             to mask.  If cosm_tail is greater than the number of
             columns left to the end of the row from the cosmic
-            plateau, the cosmic masking ends at the end of the row. Defaults to 10. 
+            plateau, the cosmic masking ends at the end of the row. If 'auto', the 
+            tail length is determined automatically in proportion to the EM gain: tail length = EM gain * cosm_tail_auto_factor (see below).
+            Defaults to 10. 
             For EM gain = 1, no serial streaking occurs, so this is internally set to 0 
             in that case regardless of the input value here.
+        cosm_tail_auto_factor (float): 
+            Factor of proportionality to EM gain for cosm_tail.  Defaults to the empirical 40/1000 (i.e., about 40 pixels for EM gain of 1000).  
         mode (string):
             If 'image', an image-area input is assumed, and if the input
             tail length is longer than the length to the end of the image-area row,
@@ -308,21 +312,29 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     # and can't handle different 'FWC_EM's for different frames.
     m2 = np.zeros_like(crmasked_cube)
 
-    # warn user of potential overriding of cosm_tail choice in EM gain = 1 case
-    for g in emgain_list:
-        if g == 1 and cosm_tail != 0:
-            print("cosm_tail set to 0 since cosmic tails only occur for EM gain > 1.")
-            break
-
+    print_once_done = False #for printing message about cosm_tail for EM gain = 1 only one time
     for i in range(len(crmasked_cube)):
         if i in oversat_frames:
             continue
-
-        arrtype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
-        if emgain_list[i] == 1:
+        try: # use measured gain if available
+            emgain = frame.ext_hdr['EMGAIN_M']
+        except:
+            if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
+                emgain = frame.ext_hdr['EMGAIN_A']
+            else: # otherwise use commanded EM gain
+                emgain = frame.ext_hdr['EMGAIN_C']
+        if cosm_tail == 'auto':
+            cosm_tail = int(np.round(emgain * cosm_tail_auto_factor)) 
+        if emgain == 1:
             cosm_tail_i = 0
+            # warn user of potential overriding of cosm_tail choice in EM gain = 1 case
+            if cosm_tail != 0 and not print_once_done:
+                print("cosm_tail set to 0 for at least frame since cosmic tails only occur for EM gain > 1.")
+                print_once_done = True
         else:
             cosm_tail_i = cosm_tail
+        
+        arrtype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
         if median_filter_mode > 0:
             # use the image area for the median filter so that the background is not biased by the prescan or overscan areas
             if crmasked_cube[i].shape[0] == detector_regions[arrtype]['frame_rows'] and crmasked_cube[i].shape[1] == detector_regions[arrtype]['frame_cols']:
@@ -364,6 +376,26 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             if np.size(binVal) > 0:
                 thresh = binVal[0]
                 m2[i,:,:] = (crmasked_cube[i,:,:] > thresh).astype(int) * cr_dqval
+                # now mask tails after end points of saturating cosmic rays that were found:
+                # First, make a labeled array, where each cosmic ray is numbered and that number is assigned 
+                # as the value for every pixel in that cosmic ray
+                labeled_ar, num_cr = label((m2[i] >= cr_dqval))
+                for j in range(1, np.nanmax(labeled_ar)+1):
+                    CR_j_inds = np.where(labeled_ar == j)
+                    # Then add a tail at the bottom-right pixel of the CR:
+                    br_row, br_col = CR_j_inds[0][-1], CR_j_inds[1][-1] + 1
+                    if mode == 'full':
+                        # compute flattened index for (br_row, br_col)
+                        mask_rav = m2[i].ravel()
+                        ncols = m2.shape[2]
+                        start_idx = int(br_row) * int(ncols) + int(br_col)
+                        end_idx = min(start_idx + int(cosm_tail_i), mask_rav.size)
+                        mask_rav[start_idx:end_idx] += cr_dqval
+                        # write back to the 2D array in case ravel returned a copy
+                        m2[i] = mask_rav.reshape(m2[i].shape)
+                    else:
+                        m2[i][br_row, br_col: min(int(br_col+cosm_tail_i), m2[i].shape[1])] += cr_dqval
+                m2[i][m2[i] > cr_dqval] = cr_dqval #just in case there was any overlap between flagged cosmic rays
             # If binVal is empty, the histogram has no minima except at an endpoint. 
             else:
                 m2[i,:,:] = np.zeros_like(crmasked_cube[i,:,:])
@@ -380,13 +412,14 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                                 plat_thresh=plat_thresh, 
                                 cosm_filter=cosm_filter, 
                                 cosm_box=cosm_box,
-                                cosm_tail=cosm_tail, 
+                                cosm_tail=0, #these are non-saturating cosmic rays being caught here, so no tails 
                                 mode=mode,
                                 detector_regions=detector_regions,
                                 arrtype=arrtype
-                                ) * 256 #XXX cr_dqval
+                                ) * cr_dqval
             non_nan_inds = np.where(~np.isnan(imm[0]))
             m2[i][non_nan_inds] = m2[i][non_nan_inds] + imm[0][non_nan_inds]
+            m2[i][m2[i] > cr_dqval] = cr_dqval #just in case there was any overlap between flagged cosmic rays
         if median_filter_mode == 0:
             m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
                             fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 

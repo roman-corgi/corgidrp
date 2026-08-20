@@ -114,7 +114,7 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
     else:
         raise TypeError('image_list must be a list, array-like, or a Dataset')
 
-    for i in range(len(dataset_or_image_list)):
+    for i in range(min(50, len(dataset_or_image_list))): #XXX len(dataset_or_image_list)):
         if isinstance(dataset_or_image_list, Dataset):
             if dataset_or_image_list[0].data is None:
                 temp_fits = Image(dataset_or_image_list[i].filepath)
@@ -600,7 +600,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         cosmic_thresh_used_e = datasets[i][0].ext_hdr['SAT_DN']*datasets[i][0].ext_hdr['KGAINPAR']
         CR_thresholds_e = np.append(CR_thresholds_e, cosmic_thresh_used_e)
         threshold = expected_mean + num_stds * expected_std
-        if CR_thresholds_e[i] <= threshold and CR_threshold_check:
+        if CR_thresholds_e[i] <= threshold and CR_threshold_check or emgain == 300:#XXX
             continue #skips over this exptime-gain combination
 
         EMgain_arr = np.append(EMgain_arr, emgain)
