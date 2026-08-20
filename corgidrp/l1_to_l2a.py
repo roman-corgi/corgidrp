@@ -5,6 +5,7 @@ import numpy as np
 import corgidrp.data as data
 import corgidrp.check as check
 from corgidrp.spec import read_cent_wave
+import warnings
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
                     detector_regions=None, use_imaging_area = False, dataset_copy=True):
@@ -164,7 +165,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                        mode='image', detector_regions=None, pct_oversat_lim=20,
                        dataset_copy=True, discard_oversat=False, skip_coronagraph_iwa=True,
                        platescale=0.0218, pol_beams_sep_diam=7.5, 
-                       pol_beams_alignment_angle_wp1=0, pol_beams_alignment_angle_wp2=45):
+                       pol_beams_alignment_angle_wp1=0, pol_beams_alignment_angle_wp2=45, coronagraph_iwa_radius=None):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -224,6 +225,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         pol_beams_alignment_angle_wp2 (float):
             The angle in which the polarimetric ordinary and extraordinary beams created by WP2 are aligned with respect to the detector x-axis,
             for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 45. 
+        coronagraph_iwa_radius (float): The radius of the coronagraph IWA in units of lambda/d, for use in excluding the coronagraph
+            IWA from cosmic ray flagging. Defaults to None.
 
 
     Returns:
@@ -333,7 +336,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         # check the coronagraph configuration used to determine IWA
         cor_mode = curr_frame.ext_hdr['LSAMNAME']
         # ensures this computation only happens if the coronagraph is in and we explicitly want to skip masking
-        if cor_mode != 'OPEN' and skip_coronagraph_iwa:
+        if cor_mode != 'OPEN' and skip_coronagraph_iwa and (coronagraph_iwa_radius is not None):
             # determine where the coronagraph center is
             if eacq_row is not None and eacq_col is not None and eacq_row != 0 and eacq_col != 0:
                 # use EACQ_ROW and EACQ_COL as the coronagraph center if these headers are set properly
@@ -341,15 +344,10 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             else:
                 # defaults to (512, 512) if the headers are not initialized properly
                 centerxy = [512, 512]
-            # initialize the iwa
-            iwa = 0 # units of lambda/d
-            if cor_mode == 'NFOV':
-                iwa = 3
-            elif cor_mode == 'WFOV':
-                iwa = 5.9
+
             # convert the iwa from lambda/d to pixel units
             filter_band = curr_frame.ext_hdr['CFAMNAME']
-            iwa_arcsec = iwa * ((read_cent_wave(filter_band)[0] * 1e-9) / mirror_diam) * 206265
+            iwa_arcsec = coronagraph_iwa_radius * ((read_cent_wave(filter_band)[0] * 1e-9) / mirror_diam) * 206265
             iwa_pix = int(round(iwa_arcsec / platescale)) # round to a discrete value
             # next check the imaging mode to determine where the coronagraph beam(s) are centered
             prism = curr_frame.ext_hdr['DPAMNAME']
@@ -381,6 +379,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 # mask out the defined regions
                 iwa_mask[iwa_region_ord] = 0
                 iwa_mask[iwa_region_ext] = 0
+        if (not skip_coronagraph_iwa) and (coronagraph_iwa_radius is not None):
+            # raise warning if the coronagraph IWA is not excluded from flagging but the radius is set
+            warnings.warn("The coronagraph IWA is defined but not excluded from cosmic ray flagging")
             
         # apply mask to the data used for cosmic ray flagging
         flag_cr_input = crmasked_cube[i:i+1,:,:] * iwa_mask

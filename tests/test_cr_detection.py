@@ -962,7 +962,7 @@ def test_iwa_masking():
     frame_baseline.ext_hdr['CFAMNAME'] = '1F'
     frame_baseline.ext_hdr['DPAMNAME'] = 'IMAGING'
     frame_baseline.ext_hdr['LSAMNAME'] = 'NFOV'
-    output_dataset_baseline = detect_cosmic_rays(dataset_baseline, detector_params, k_gain)
+    output_dataset_baseline = detect_cosmic_rays(dataset_baseline, detector_params, k_gain, coronagraph_iwa_radius=3)
     # check the output DQ to ensure the cosmic ray placed outside the IWA is flagged
     dq_baseline = output_dataset_baseline.all_dq[0]
     assert (dq_baseline[700, 300] & cr_dq) != 0
@@ -976,7 +976,7 @@ def test_iwa_masking():
     frame_cor.ext_hdr['CFAMNAME'] = '1F'
     frame_cor.ext_hdr['DPAMNAME'] = 'IMAGING'
     frame_cor.ext_hdr['LSAMNAME'] = 'NFOV'
-    output_dataset_cor = detect_cosmic_rays(dataset_cor, detector_params, k_gain)
+    output_dataset_cor = detect_cosmic_rays(dataset_cor, detector_params, k_gain, coronagraph_iwa_radius=3)
     dq_cor = output_dataset_cor.all_dq[0]
 
     # inject cr at pol spots for WP1, assert it is not flagged
@@ -990,7 +990,7 @@ def test_iwa_masking():
     frame_wp1.ext_hdr['CFAMNAME'] = '1F'
     frame_wp1.ext_hdr['DPAMNAME'] = 'POL0'
     frame_wp1.ext_hdr['LSAMNAME'] = 'NFOV'
-    output_dataset_wp1 = detect_cosmic_rays(dataset_wp1, detector_params, k_gain)
+    output_dataset_wp1 = detect_cosmic_rays(dataset_wp1, detector_params, k_gain, coronagraph_iwa_radius=3)
     dq_wp1 = output_dataset_wp1.all_dq[0]
 
     # inject cr at pol spots for WP2, assert it is not flagged
@@ -1004,7 +1004,7 @@ def test_iwa_masking():
     frame_wp2.ext_hdr['CFAMNAME'] = '1F'
     frame_wp2.ext_hdr['DPAMNAME'] = 'POL45'
     frame_wp2.ext_hdr['LSAMNAME'] = 'NFOV'
-    output_dataset_wp2 = detect_cosmic_rays(dataset_wp2, detector_params, k_gain)
+    output_dataset_wp2 = detect_cosmic_rays(dataset_wp2, detector_params, k_gain, coronagraph_iwa_radius=3)
     dq_wp2 = output_dataset_wp2.all_dq[0]
 
     # check the appropriate IWAs for all three test datasets are not flagged for cosmic rays
