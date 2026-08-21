@@ -316,34 +316,41 @@ def get_template_dataset(dataset):
         Dataset: template dataset
         boolean: filtersweep true or false
     """
+    # Template filenames encode the prism (DPAM) and the FSAM slit settings. The baseline
+    # spectroscopy slit is R1C2 for SPAM=SPEC/DPAM=PRISM3 and R2C2 for SPAM=SPECROT/DPAM=PRISM2.
+    slit_token = {"R1C2": "r1c2slit", "R2C2": "r2c2slit", "OPEN": "noslit"}
     template_dir = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "templates")
     filtersweep = False
     cfamname = []
     slits = []
+    dpamnames = []
     for frames in dataset.frames:
         dpamname = frames.ext_hdr['DPAMNAME']
         fsamname = frames.ext_hdr['FSAMNAME']
-        if dpamname != "PRISM3":
-            raise AttributeError("currently we only have template files for PRISM3, not for "+ dpamname)
+        if dpamname not in ("PRISM2", "PRISM3"):
+            raise AttributeError("PRISM2 and PRISM3 are the only valid DPAM settings for prism spectroscopy, not "+ dpamname)
 
+        dpamnames.append(dpamname)
         cfamname.append (frames.ext_hdr['CFAMNAME'])
         slits.append (fsamname)
+    if len(np.unique(dpamnames)) != 1:
+        raise AttributeError("all frames must share the same DPAMNAME, not "+ str(np.unique(dpamnames)))
+    prism = dpamnames[0].lower()   # filename prism token, e.g. "prism2"
     if len(np.unique(slits)) != 1:
-        raise AttributeError("currently we only have template files for no slit or R1C2, not for "+ slits)
+        raise AttributeError("all frames must share the same slit setting, not "+ str(slits))
     if len(np.unique(cfamname)) == 1:
         band = cfamname[0]
         if not band.startswith ("3"):
             raise AttributeError("currently we only have template files for the filter band 3, not for "+ band)
         slit = slits[0]
-        if slit == "R1C2":
-            filenames = sorted(glob.glob(os.path.join(template_dir,"spec_unocc_r1c2slit_offset_prism3_3d_*.fits")))
-        elif slit == "OPEN":
-            filenames = sorted(glob.glob(os.path.join(template_dir,"spec_unocc_noslit_offset_prism3_3d_*.fits")))
-        else:
+        if slit not in slit_token:
             raise AttributeError("we do not (yet) have template files for slit " + slit)
+        filenames = sorted(glob.glob(os.path.join(template_dir,
+            "spec_unocc_{0}_offset_{1}_3d_*.fits".format(slit_token[slit], prism))))
     else:
         #filtersweep
-        filenames = sorted(glob.glob(os.path.join(template_dir, "spec_unocc_noslit_prism3_filtersweep_*.fits")))
+        filenames = sorted(glob.glob(os.path.join(template_dir,
+            "spec_unocc_noslit_{0}_filtersweep_*.fits".format(prism))))
         filtersweep = True
     return Dataset(filenames), filtersweep
 
@@ -523,6 +530,12 @@ def read_cent_wave(band, filter_file = None):
         ret_list.append(data.columns[i][filter_names == band][0])
     return ret_list
 
+# Default along-dispersion spectral extraction extents (EXCAM pixels) measured from the
+# wavelength zero point, keyed on the DPAM (prism) name. "red" is the direction of increasing
+# wavelength, "blue" of decreasing wavelength; extract_spec maps those onto +/-Y using the
+# WAVE map.
+DEFAULT_SPEC_EXTRACT_HEIGHTS = {'PRISM2': (10, 28), 'PRISM3': (13, 37)}
+
 def estimate_dispersion_clocking_angle(xpts, ypts, weights):
     """ 
     Estimate the clocking angle of the dispersion axis based on the centroids of
@@ -634,7 +647,6 @@ def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_fil
     if prism not in ['PRISM2', 'PRISM3']:
         raise ValueError("prism must be PRISM2 or PRISM3")
 
-    #PRISM2 not yet available
     if prism == 'PRISM2':
         subband_list = ['2A', '2B', '2C']
         ref_cfam = '2'
