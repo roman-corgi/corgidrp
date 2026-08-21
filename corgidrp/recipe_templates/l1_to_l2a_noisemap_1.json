@@ -35,7 +35,7 @@
                 "plat_thresh" : 0.066,
                 "cosm_filter" : 3,
                 "cosm_box" : 4,
-                "cosm_tail" : 0
+                "cosm_tail" : "auto"
             }
         },
         {

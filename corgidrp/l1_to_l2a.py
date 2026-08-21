@@ -200,8 +200,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             columns left to the end of the row from the cosmic
             plateau, the cosmic masking ends at the end of the row. If 'auto', the 
             tail length is determined automatically in proportion to the EM gain: tail length = EM gain * cosm_tail_auto_factor (see below).
-            Defaults to 10. 
-            For EM gain = 1, no serial streaking occurs, so this is internally set to 0 
+            In median_filter_mode (1 or 2; see below for that parameter), the tail length is applied at the end of each streak, not at the cosmic head as is done in 
+            the "usual" method (threshold based on cosm_box, cosm_tail, etc).
+            Defaults to 10. For EM gain = 1, no serial streaking occurs, so this is internally set to 0 
             in that case regardless of the input value here.
         cosm_tail_auto_factor (float): 
             Factor of proportionality to EM gain for cosm_tail.  Defaults to the empirical 40/1000 (i.e., about 40 pixels for EM gain of 1000).  
