@@ -281,6 +281,58 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
     return (full_residuals,err_residuals,cent_n)
     
     
+def find_disk_center(image, radius_pix, threshold_frac=0.3, smooth_size=5):
+    """
+    Find the (x, y) center of a disk of known radius by disk-overlap correlation.
+
+    Unlike an intensity-weighted center of mass, this keys off the illuminated
+    region's *extent* rather than its brightness, so a non-uniform or asymmetric
+    disk (an occulter shadow, partial raster slices, or repeated dither positions
+    that make the coadd non-uniform) does not bias the estimate. The known radius
+    is used to build a solid-disk kernel; the position where that disk best
+    encloses the lit region is the center. No background subtraction is done - the
+    image is assumed to be sky-subtracted upstream.
+
+    Args:
+        image (np.array): 2-D image containing the disk.
+        radius_pix (float): known radius of the disk, in pixels.
+        threshold_frac (float): binarization threshold as a fraction of the peak
+            of the smoothed image (default 0.3).
+        smooth_size (int): median-filter size applied before thresholding.
+            Size 5 (rather than 3) so that multi-pixel hot-pixel/cosmic-ray
+            clusters do not survive to inflate the peak and bias the threshold.
+
+    Returns:
+        (cx, cy): sub-pixel center in (x=column, y=row) pixel coordinates, or
+        None if no positive signal is found above threshold.
+    """
+    smoothed = median_filter(np.nan_to_num(image), smooth_size)
+    peak = np.nanmax(smoothed)
+    if not np.isfinite(peak) or peak <= 0:
+        return None
+    mask = (smoothed >= threshold_frac * peak).astype(float)
+
+    # solid disk kernel of the known radius
+    r = int(np.ceil(radius_pix))
+    yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
+    kernel = ((xx**2 + yy**2) <= radius_pix**2).astype(float)
+
+    # overlap score: how many lit pixels lie within one radius of each pixel
+    score = ndimage.correlate(mask, kernel, mode="constant", cval=0.0)
+
+    peak_y, peak_x = np.unravel_index(int(np.argmax(score)), score.shape)
+    # sub-pixel refinement: center of mass on the top of the score peak only,
+    # so the flat plateau of the score does not bias the result
+    win = max(2, int(round(radius_pix / 4)))
+    y0, y1 = max(0, peak_y - win), min(score.shape[0], peak_y + win + 1)
+    x0, x1 = max(0, peak_x - win), min(score.shape[1], peak_x + win + 1)
+    window = score[y0:y1, x0:x1]
+    w = np.clip(window - window.min(), 0, None)
+    if w.sum() > 0:
+        cy_local, cx_local = ndimage.center_of_mass(w)
+        return float(x0 + cx_local), float(y0 + cy_local)
+    return float(peak_x), float(peak_y)
+
 def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=None, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
@@ -327,20 +379,9 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         elif planet.lower() == 'uranus':
              planet_rad = 65
         else:
-            # for a dithered point source, auto set the fill radius to 
-            # (spacing/sqrt(2)). large enough to close the diagonal gaps
-            # between the dither spots, but not larger than the crop
-            src_cents = []
-            for j in range(len(dataset)):
-                sm = median_filter(np.nan_to_num(dataset[j].data), 3)
-                m = (sm >= 0.3 * np.nanmax(sm)).astype(float)
-                c = np.array(centr.centroid_com(m)); c[np.isnan(c)] = 0
-                src_cents.append(c)
-            src_cents = np.array(src_cents)
-            d2 = ((src_cents[:, None, :] - src_cents[None, :, :])**2).sum(-1)
-            np.fill_diagonal(d2, np.inf)
-            spacing = np.median(np.sqrt(d2.min(axis=1)))
-            planet_rad = min(int(np.ceil(spacing / np.sqrt(2))) + 1, up_radius - 1)
+            # a rastered star fills a disk of the raster radius
+            # (900 mas / 21.8 mas/pix ~= 41 pixels)
+            planet_rad = 41
 
     if rad_mask is None:
          if band[0] == "1":
@@ -355,13 +396,23 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
         image_size=np.shape(planet_image)
-        # build the crop center from a de-noised, thresholded mask of the source rather 
-        # than a raw full-frame center, because the raw version gets dragged off the 
-        # source by hot pixels/background, mis-cuts the stamps, and messes up the 
+        # build the crop center from a de-noised, thresholded mask of the source rather
+        # than a raw full-frame center, because the raw version gets dragged off the
+        # source by hot pixels/background, mis-cuts the stamps, and messes up the
         # co-registration the median matched filter depends on.
+        # When the disk radius is known (planet_rad), locate the center by
+        # disk-overlap correlation, which is unbiased by an asymmetric/non-uniform
+        # disk (occulter shadow, partial raster slices, repeated dither positions).
+        # Fall back to a center-of-mass of the thresholded mask if that fails.
         source_smooth = median_filter(np.nan_to_num(planet_image), 3)
-        source_mask = (source_smooth >= 0.3 * np.nanmax(source_smooth)).astype(float)
-        centroid = np.array(centr.centroid_com(source_mask))
+        disk_center = None
+        if planet_rad is not None:
+            disk_center = find_disk_center(planet_image, planet_rad, threshold_frac=0.3)
+        if disk_center is not None:
+            centroid = np.array([disk_center[0], disk_center[1]])
+        else:
+            source_mask = (source_smooth >= 0.3 * np.nanmax(source_smooth)).astype(float)
+            centroid = np.array(centr.centroid_com(source_mask))
         centroid[np.isnan(centroid)]=0
         act_cents.append((centroid[1],centroid[0]))
         xc =int( centroid[0])
