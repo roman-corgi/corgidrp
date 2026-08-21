@@ -336,7 +336,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         # check the coronagraph configuration used to determine IWA
         cor_mode = curr_frame.ext_hdr['LSAMNAME']
         # ensures this computation only happens if the coronagraph is in and we explicitly want to skip masking
-        if cor_mode != 'OPEN' and skip_coronagraph_iwa and (coronagraph_iwa_radius is not None):
+        if cor_mode != 'OPEN' and skip_coronagraph_iwa:
             # determine where the coronagraph center is
             if eacq_row is not None and eacq_col is not None and eacq_row != 0 and eacq_col != 0:
                 # use EACQ_ROW and EACQ_COL as the coronagraph center if these headers are set properly
@@ -347,6 +347,12 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
             # convert the iwa from lambda/d to pixel units
             filter_band = curr_frame.ext_hdr['CFAMNAME']
+            # set default values for the iwa if this is not set
+            if coronagraph_iwa_radius is None:
+                if cor_mode == 'NFOV':
+                    coronagraph_iwa_radius = 3
+                elif cor_mode == 'WFOV':
+                    coronagraph_iwa_radius = 5.9
             iwa_arcsec = coronagraph_iwa_radius * ((read_cent_wave(filter_band)[0] * 1e-9) / mirror_diam) * 206265
             iwa_pix = int(round(iwa_arcsec / platescale)) # round to a discrete value
             # next check the imaging mode to determine where the coronagraph beam(s) are centered
