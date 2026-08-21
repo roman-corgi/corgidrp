@@ -466,25 +466,58 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         planet_image_err=dataset[j].err[0]
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
-        planet_image_downsampled = zoom(planet_image, 1/8)
-        threshold_value = np.max(planet_image)
+        # Median-filter before detection so a multi-pixel hot-pixel/cosmic-ray
+        # cluster brighter than the (prism-split, so individually fainter) spots
+        # cannot set the detection threshold and cause DAOStarFinder to miss the
+        # real spots. Threshold off a robust statistic of the smoothed
+        # downsampled image rather than the raw full-frame max.
+        planet_image_downsampled = zoom(median_filter(np.nan_to_num(planet_image), 5), 1/8)
+        med = np.nanmedian(planet_image_downsampled)
+        std = np.nanstd(planet_image_downsampled)
+        threshold_value = med + 5.0 * std
         daofind = DAOStarFinder(fwhm=fwhm_guess, threshold=threshold_value, min_separation=10.0)
         sources = daofind(planet_image_downsampled)
 
-        if sources is not None:
+        if sources is None or len(sources) < 2:
+            raise ValueError("create_onsky_pol_flatfield: expected two polarization "
+                             "spots but DAOStarFinder found "
+                             f"{0 if sources is None else len(sources)} source(s) "
+                             f"in frame {j}.")
 
-            x_centroids = sources['x_centroid']*8
-            y_centroids = sources['y_centroid']*8
+        x_centroids = np.array(sources['xcentroid']) * 8
+        y_centroids = np.array(sources['ycentroid']) * 8
+        fluxes = np.array(sources['flux'])
+        x_centroids[np.isnan(x_centroids)] = 0
+        y_centroids[np.isnan(y_centroids)] = 0
 
-            pol1_x = int(x_centroids[0])
-            pol1_y = int(y_centroids[0])
-            pol2_x = int(x_centroids[1])
-            pol2_y = int(y_centroids[1])
-
-            x_centroids[np.isnan(x_centroids)]=0
-            y_centroids[np.isnan(y_centroids)]=0
-            act_cents_1.append((pol1_x,pol1_y))
-            act_cents_2.append((pol2_x,pol2_y))
+        # The two orthogonal pol spots are separated by a known distance
+        # (separation_diameter_arcsec / plate_scale). Of all detected sources,
+        # pick the pair whose separation best matches that, so a spurious
+        # detection (e.g. a residual hot pixel) cannot be mistaken for a spot.
+        expected_sep = separation_diameter_arcsec / plate_scale
+        n_src = len(x_centroids)
+        best = None
+        for a in range(n_src):
+            for b in range(a + 1, n_src):
+                sep = np.hypot(x_centroids[a] - x_centroids[b],
+                               y_centroids[a] - y_centroids[b])
+                cost = abs(sep - expected_sep)
+                # tie-break toward the brighter pair
+                score = (cost, -(fluxes[a] + fluxes[b]))
+                if best is None or score < best[0]:
+                    best = (score, a, b)
+        a, b = best[1], best[2]
+        # order deterministically: pol1 = left (smaller x), pol2 = right
+        if x_centroids[a] <= x_centroids[b]:
+            i1, i2 = a, b
+        else:
+            i1, i2 = b, a
+        pol1_x = int(x_centroids[i1])
+        pol1_y = int(y_centroids[i1])
+        pol2_x = int(x_centroids[i2])
+        pol2_y = int(y_centroids[i2])
+        act_cents_1.append((pol1_x,pol1_y))
+        act_cents_2.append((pol2_x,pol2_y))
 
 
         # sky subtraction if needed
