@@ -285,13 +285,10 @@ def find_disk_center(image, radius_pix, threshold_frac=0.3, smooth_size=5):
     """
     Find the (x, y) center of a disk of known radius by disk-overlap correlation.
 
-    Unlike an intensity-weighted center of mass, this keys off the illuminated
-    region's *extent* rather than its brightness, so a non-uniform or asymmetric
-    disk (an occulter shadow, partial raster slices, or repeated dither positions
-    that make the coadd non-uniform) does not bias the estimate. The known radius
-    is used to build a solid-disk kernel; the position where that disk best
-    encloses the lit region is the center. No background subtraction is done - the
-    image is assumed to be sky-subtracted upstream.
+    This keys off the illuminated region's extent rather than its brightness, so a non-uniform or asymmetric
+    disk (FPM shadow, partial raster slices, or repeated dither positions that make the coadd non-uniform) does not bias
+    the estimate. The known raster radius is used to build a solid-disk kernel; the position where that disk best
+    encloses the lit region is the center. The image is assumed to be sky-subtracted upstream.
 
     Args:
         image (np.array): 2-D image containing the disk.
@@ -299,8 +296,8 @@ def find_disk_center(image, radius_pix, threshold_frac=0.3, smooth_size=5):
         threshold_frac (float): binarization threshold as a fraction of the peak
             of the smoothed image (default 0.3).
         smooth_size (int): median-filter size applied before thresholding.
-            Size 5 (rather than 3) so that multi-pixel hot-pixel/cosmic-ray
-            clusters do not survive to inflate the peak and bias the threshold.
+            Size 5 so that multi-pixel hot-pixel/cosmic-ray clusters do not survive to inflate the peak and bias the
+            threshold.
 
     Returns:
         (cx, cy): sub-pixel center in (x=column, y=row) pixel coordinates, or
@@ -379,7 +376,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         elif planet.lower() == 'uranus':
              planet_rad = 65
         else:
-            # a rastered star fills a disk of the raster radius
+            # Rastering a star creates a disk of size:
             # (900 mas / 21.8 mas/pix ~= 41 pixels)
             planet_rad = 41
 
@@ -396,13 +393,10 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
         image_size=np.shape(planet_image)
-        # build the crop center from a de-noised, thresholded mask of the source rather
-        # than a raw full-frame center, because the raw version gets dragged off the
-        # source by hot pixels/background, mis-cuts the stamps, and messes up the
-        # co-registration the median matched filter depends on.
+        # Build the crop center from a de-noised, thresholded mask of the source.
         # When the disk radius is known (planet_rad), locate the center by
         # disk-overlap correlation, which is unbiased by an asymmetric/non-uniform
-        # disk (occulter shadow, partial raster slices, repeated dither positions).
+        # disk (FPM shadow, partial raster slices, repeated dither positions).
         # Fall back to a center-of-mass of the thresholded mask if that fails.
         source_smooth = median_filter(np.nan_to_num(planet_image), 3)
         disk_center = None
