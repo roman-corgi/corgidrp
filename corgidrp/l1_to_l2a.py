@@ -353,6 +353,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                     coronagraph_iwa_radius = 3
                 elif cor_mode == 'WFOV':
                     coronagraph_iwa_radius = 5.9
+                else:
+                    coronagraph_iwa_radius = 0
             iwa_arcsec = coronagraph_iwa_radius * ((read_cent_wave(filter_band)[0] * 1e-9) / mirror_diam) * 206265
             iwa_pix = int(round(iwa_arcsec / platescale)) # round to a discrete value
             # next check the imaging mode to determine where the coronagraph beam(s) are centered
