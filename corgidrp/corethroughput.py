@@ -353,7 +353,7 @@ def generate_psf_cube(
         try:
             exthd = frame.ext_hdr
             if (exthd['DPAMNAME']=='PUPIL' and exthd['LSAMNAME']=='OPEN' and
-                exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
+                exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME'] in ['OPEN_12','OPEN_34']):
                 continue
         except:
             pass
@@ -422,7 +422,7 @@ def generate_psf_cube(
     for frame in dataset:
         exthd = frame.ext_hdr
         if not (exthd['DPAMNAME'] == 'PUPIL' and exthd['LSAMNAME'] == 'OPEN' and
-                exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] == 'OPEN_12'):
+                exthd['FSAMNAME'] == 'OPEN' and exthd['FPAMNAME'] in ['OPEN_12', 'OPEN_34']):
             first_offaxis_frame = frame
             break
     if first_offaxis_frame is None:
