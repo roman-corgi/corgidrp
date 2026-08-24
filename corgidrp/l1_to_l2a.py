@@ -4,6 +4,8 @@ import re
 import numpy as np
 import corgidrp.data as data
 import corgidrp.check as check
+from corgidrp.spec import read_cent_wave
+import warnings
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
                     detector_regions=None, use_imaging_area = False, dataset_copy=True):
@@ -161,7 +163,9 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
                        plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10,
                        mode='image', detector_regions=None, pct_oversat_lim=20,
-                       dataset_copy=True, discard_oversat=False):
+                       dataset_copy=True, discard_oversat=False, skip_coronagraph_iwa=True,
+                       platescale=0.0218, pol_beams_sep_diam=7.5, 
+                       pol_beams_alignment_angle_wp1=0, pol_beams_alignment_angle_wp2=45, coronagraph_iwa_radius=None):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -210,6 +214,20 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
         discard_oversat (bool): if True, discard frames that exceed pct_oversat_lim, preserving the previous behavior.
             If False, keep them, mark IS_BAD, and skip cosmic ray identification for those frames. Defaults to False.
+        skip_coronagraph_iwa (bool): If True, bypasses the coronagraph inner working angle from being flagged for cosmic rays for imaging and pol modes. Defaults to True. 
+        platescale (float): The detector platescale in arcseconds/pixel. Defaults to 0.0218.
+        pol_beams_sep_diam (float):
+            The separation between the polarimetric ordinary and extraordinary beams on detector in arcseconds,
+            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 7.5.
+        pol_beams_alignment_angle_wp1 (float):
+            The angle in which the polarimetric ordinary and extraordinary beams created by WP1 are aligned with respect to the detector x-axis,
+            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 0.
+        pol_beams_alignment_angle_wp2 (float):
+            The angle in which the polarimetric ordinary and extraordinary beams created by WP2 are aligned with respect to the detector x-axis,
+            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 45. 
+        coronagraph_iwa_radius (float): The radius of the coronagraph IWA in units of lambda/d, for use in excluding the coronagraph
+            IWA from cosmic ray flagging. Defaults to None.
+
 
     Returns:
         corgidrp.data.Dataset:
@@ -217,6 +235,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     """
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
+
+    mirror_diam = 2.36 # telescope mirror effective diameter in meters
 
     if detector_regions is None:
         detector_regions = detector_areas
@@ -300,14 +320,83 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     for i in range(len(crmasked_cube)):
         if i in oversat_frames:
             continue
-
-        arrtype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
+        
+        curr_frame = crmasked_dataset.frames[i]
+        arrtype = curr_frame.ext_hdr['ARRTYPE']
+        eacq_row = curr_frame.ext_hdr['EACQ_ROW']
+        eacq_col = curr_frame.ext_hdr['EACQ_COL']
         if emgain_list[i] == 1:
             cosm_tail_i = 0
         else:
             cosm_tail_i = cosm_tail
-        m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
-                        fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well
+
+        # first determine coronagraph iwa to exclude from cosmic ray finding (if applicable)
+        # by default iwa_mask transmits everything, only in applicable conditions will the iwa be zeroed out
+        iwa_mask = np.ones_like(curr_frame.data)
+        # check the coronagraph configuration used to determine IWA
+        cor_mode = curr_frame.ext_hdr['LSAMNAME']
+        # ensures this computation only happens if the coronagraph is in and we explicitly want to skip masking
+        if cor_mode != 'OPEN' and skip_coronagraph_iwa:
+            # determine where the coronagraph center is
+            if eacq_row is not None and eacq_col is not None and eacq_row != 0 and eacq_col != 0:
+                # use EACQ_ROW and EACQ_COL as the coronagraph center if these headers are set properly
+                centerxy = [eacq_col, eacq_row]
+            else:
+                # defaults to (512, 512) if the headers are not initialized properly
+                centerxy = [512, 512]
+
+            # convert the iwa from lambda/d to pixel units
+            filter_band = curr_frame.ext_hdr['CFAMNAME']
+            # set default values for the iwa if this is not set
+            if coronagraph_iwa_radius is None:
+                if cor_mode == 'NFOV':
+                    coronagraph_iwa_radius = 3
+                elif cor_mode == 'WFOV':
+                    coronagraph_iwa_radius = 5.9
+                else:
+                    coronagraph_iwa_radius = 0
+            iwa_arcsec = coronagraph_iwa_radius * ((read_cent_wave(filter_band)[0] * 1e-9) / mirror_diam) * 206265
+            iwa_pix = int(round(iwa_arcsec / platescale)) # round to a discrete value
+            # next check the imaging mode to determine where the coronagraph beam(s) are centered
+            prism = curr_frame.ext_hdr['DPAMNAME']
+            frame_shape = curr_frame.data.shape
+            y, x = np.ogrid[:frame_shape[0], :frame_shape[1]]
+            if prism == 'IMAGING':
+                # one beam, iwa centered on the image center keyword
+                r = np.sqrt((y - centerxy[1])**2 + (x - centerxy[0])**2)
+                iwa_region = r < iwa_pix
+                # zero out the defined iwa region
+                iwa_mask[iwa_region] = 0
+            if prism == 'POL0' or prism == 'POL45':
+                # pol mode, two beams created by the wollaston prism
+                # instead of using the image center directly, need to find where the beams are relative to the image center
+                if prism == 'POL0':
+                    angle_rad = (pol_beams_alignment_angle_wp1 * np.pi) / 180
+                else:
+                    angle_rad = (pol_beams_alignment_angle_wp2 * np.pi) / 180
+                dx = int(round((pol_beams_sep_diam * np.cos(angle_rad)) / (2 * platescale)))
+                dy = int(round((pol_beams_sep_diam * np.sin(angle_rad)) / (2 * platescale)))
+                # get beam centers using computed displacement
+                centerxy_ord = [centerxy[0] - dx, centerxy[1] + dy]
+                centerxy_ext = [centerxy[0] + dx, centerxy[1] - dy]
+                # define iwa regions
+                r_ord = np.sqrt((y - centerxy_ord[1])**2 + (x - centerxy_ord[0])**2)
+                iwa_region_ord = r_ord < iwa_pix
+                r_ext = np.sqrt((y - centerxy_ext[1])**2 + (x - centerxy_ext[0])**2)
+                iwa_region_ext = r_ext < iwa_pix
+                # mask out the defined regions
+                iwa_mask[iwa_region_ord] = 0
+                iwa_mask[iwa_region_ext] = 0
+        if (not skip_coronagraph_iwa) and (coronagraph_iwa_radius is not None):
+            # raise warning if the coronagraph IWA is not excluded from flagging but the radius is set
+            warnings.warn("The coronagraph IWA is defined but not excluded from cosmic ray flagging")
+            
+        # apply mask to the data used for cosmic ray flagging
+        flag_cr_input = crmasked_cube[i:i+1,:,:] * iwa_mask
+
+        # find cosmic rays
+        m2[i,:,:] = flag_cosmics(cube=flag_cr_input,
+                        fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
                         sat_thresh=sat_thresh,
                         plat_thresh=plat_thresh,
                         cosm_filter=cosm_filter,
