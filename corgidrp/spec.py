@@ -558,13 +558,12 @@ def read_template_zeropoint(template_image):
         float: template wavelength zero point y
     """
     name = os.path.basename(str(getattr(template_image, "filepath", "model template")))
-    def _read(keys):
-        for key in keys:
-            for header in (template_image.ext_hdr, template_image.pri_hdr):
-                if header is not None and key in header:
-                    return float(header[key])
-        raise KeyError("none of the keywords {0} found in the headers of {1}".format(keys, name))
-    return (_read(("XCENT",)), _read(("YCENT",)), _read(("WV0_X",)), _read(("WV0_Y",)))
+    def _read(key):
+        for header in (template_image.ext_hdr, template_image.pri_hdr):
+            if header is not None and key in header:
+                return float(header[key])
+        raise KeyError("keyword {0} not found in the headers of {1}".format(key, name))
+    return (_read("XCENT"), _read("YCENT"), _read("WV0_X"), _read("WV0_Y"))
 
 
 def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, filtersweep = False, halfwidth=10, halfheight=10, verbose = False, host_sptype = None):
