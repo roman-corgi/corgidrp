@@ -7,6 +7,6 @@ scipy
 photutils >= 3.0.0
 statsmodels
 pyklip
-emccd-detect >= 2.5.0
+emccd-detect >= 2.6.1
 tqdm
 termcolor

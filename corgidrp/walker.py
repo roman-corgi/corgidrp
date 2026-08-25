@@ -373,10 +373,10 @@ def autogen_recipe(filelist, outputdir, template=None):
                         for partial_dataset, isPc in zip(split_datasets, unique_vals):
                             if "pc" in recipe["name"] and isPc == 1:
                                 for frame in partial_dataset:
-                                    recipe["inputs"].append(frame.filename)
+                                    recipe["inputs"].append(frame.filepath)
                             elif "pc" not in recipe["name"] and isPc == 0:
                                 for frame in partial_dataset:
-                                    recipe["inputs"].append(frame.filename)
+                                    recipe["inputs"].append(frame.filepath)
 
                     else:
                         for filename in filelist:
@@ -503,10 +503,12 @@ def guess_template(dataset):
         dataset (corgidrp.data.Dataset): a Dataset to process
 
     Returns:
-        str or list: the best template filename, a list of multiple template filenames, or a list of template chains
-        bool: whether multiple recipes are chained together. If True, the output of the first recipe
-              should be used as the input to the second recipe. If False, the same input should be used
-              for all recipes. This keyworkd is irrelevant if only a single recipe is returned.
+        tuple:
+            str or list: the best template filename, a list of multiple template filenames, or a list of template chains
+
+            bool: whether multiple recipes are chained together. If True, the output of the first recipe
+            should be used as the input to the second recipe. If False, the same input should be used
+            for all recipes. This keyworkd is irrelevant if only a single recipe is returned.
     """
     image = dataset[0] # first image for convenience
 
@@ -573,12 +575,6 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_LINESPREAD':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", 'l2b_to_spec_linespread.json']
             chained = True
-        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_SPEC_TGTREF':
-            recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b_spec.json","l2b_to_l3.json","l3_to_l4_noncoron_spec.json"]
-            chained = True
-        elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TGTREF_PHOT' and image.ext_hdr['DPAMNAME'] not in ['POL0','POL45']:
-            recipe_filename = ["l1_to_l2a_basic.json","l2a_to_l2b.json","l2b_to_l3.json","l3_to_l4_nopsfsub.json"]
-            chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_TPUMP':
             recipe_filename = ['trap_pump_cal_1.json', 'trap_pump_cal_2.json']
             chained = True
@@ -601,8 +597,8 @@ def guess_template(dataset):
                 recipe_filename = ["l2a_build_trad_dark_image_1.json", "l2a_build_trad_dark_image_2.json"] #"l2a_build_trad_dark_image.json"
                 chained = True
         else:
-            # Check if this is spectroscopy data (DPAMNAME == PRISM3, not sure of VISTYPE yet)
-            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') == 'PRISM3'
+            # Check if this is spectroscopy data (DPAMNAME in [PRISM3, PRISM2], not sure of VISTYPE yet)
+            is_spectroscopy = image.ext_hdr.get('DPAMNAME', '') in ['PRISM3', 'PRISM2']
 
             is_polarimetry = image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']
 
@@ -664,7 +660,7 @@ def guess_template(dataset):
             recipe_filename = "l2b_to_polcal.json"
         elif image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l2b_to_l3_pol.json"
-        elif 'TDD' not in image.pri_hdr['VISTYPE']:
+        elif 'TDD' not in image.pri_hdr['VISTYPE'] and image.pri_hdr['VISTYPE'] != "CGIVST_CAL_SPEC_TGTREF":
             warnings.warn("Only VISTYPE TDD and certain cal frames should be processed beyond L2b. Double-check which frames are being processed from L2b -> L3.")
             recipe_filename = "l2b_to_l3.json"
         else:
@@ -673,7 +669,7 @@ def guess_template(dataset):
     elif image.ext_hdr['DATALVL'] == "L3":
         if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l3_to_l4_pol.json"
-        elif image.ext_hdr['DPAMNAME'] == 'PRISM3':
+        elif image.ext_hdr['DPAMNAME'] in ['PRISM3', 'PRISM2']:
             if image.pri_hdr['VISTYPE'] != 'CGIVST_CAL_SPEC_TGTREF':
                 # coronagraphic spec obs - PSF subtraction
                 recipe_filename = "l3_to_l4_psfsub_spec.json"
@@ -947,9 +943,10 @@ def _get_satellite_spot_info_from_xml(xml_tree):
         sat_spot_output['num_spots'] += 1
         for i, field in enumerate(fields):
             value = field.split("=")[1]
+            spot_key = f"spot{sat_spot_output['num_spots']}_{key[i]}"
             if i <=2:
-                sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = float(value)
+                sat_spot_output[spot_key] = float(value)
             else:
-                sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = str(value)
+                sat_spot_output[spot_key] = str(value)
 
     return sat_spot_output

@@ -4,6 +4,7 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d, LinearNDInterpolator
+from scipy.signal import fftconvolve
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread, SpecFluxCal, SpecFilterOffset, SlitTransmission
 import os
 from astropy.io import ascii, fits
@@ -122,9 +123,9 @@ def psf_registration_costfunc(p, template, data):
     Cost function for a least-squares fit to register a PSF with a fitting template.
 
     Args:
-        p (tuple): shift and scale parameters: 
-                    (x-axis shift in pixels, y-axis shift in pixels, 
-                     amplitude scale factor)
+        p (tuple): shift and scale parameters:
+            (x-axis shift in pixels, y-axis shift in pixels,
+            amplitude scale factor)
         template (numpy.ndarray): PSF tempate array, 2d
         data (numpy.ndarray): PSF data array, 2d
 
@@ -204,19 +205,26 @@ def fit_psf_centroid(psf_data, psf_template,
                 this must be an odd number.
 
     Returns:
-        xfit (float): Data PSF x centroid obtained from the template fit, 
-                array pixels
-        yfit (float): Data PSF y centroid obtained from the template fit, 
-                array pixels
-        gauss2d_xfit (float): Data PSF x centroid estimated by a 2-D Gaussian fit to 
-                the main lobe of the PSF
-        gauss2d_yfit (float): Data PSF y centroid estimated by a 2-D Gaussian fit to 
-                the main lobe of the PSF
-        peakpix_snr (float): Peak-pixel signal-to-noise ratio
-        x_precis (float): Statistical precision of the x centroid fit, estimated from
-                peak-pixel S/N ratio
-        y_precis (float): Statistical precision of the y centroid fit, estimated from
-                peak-pixel S/N ratio
+        tuple:
+            xfit (float): Data PSF x centroid obtained from the template fit,
+            array pixels
+
+            yfit (float): Data PSF y centroid obtained from the template fit,
+            array pixels
+
+            gauss2d_xfit (float): Data PSF x centroid estimated by a 2-D Gaussian fit to
+            the main lobe of the PSF
+
+            gauss2d_yfit (float): Data PSF y centroid estimated by a 2-D Gaussian fit to
+            the main lobe of the PSF
+
+            peakpix_snr (float): Peak-pixel signal-to-noise ratio
+
+            x_precis (float): Statistical precision of the x centroid fit, estimated from
+            peak-pixel S/N ratio
+
+            y_precis (float): Statistical precision of the y centroid fit, estimated from
+            peak-pixel S/N ratio
     """
     if not isinstance(halfheight, int):
         raise ValueError("halfheight must be an integer")
@@ -227,8 +235,11 @@ def fit_psf_centroid(psf_data, psf_template,
     else:
         xcom_template, ycom_template = (np.rint(xcent_template), np.rint(ycent_template))
 
+    #filter NaNs
+    psf_data_nonan = psf_data.copy()
+    psf_data_nonan[np.isnan(psf_data_nonan)] = 0
     if xcent_guess is None or ycent_guess is None:
-        median_filt_psf = ndi.median_filter(psf_data, size=2)
+        median_filt_psf = ndi.median_filter(psf_data_nonan, size=2)
         xcom_data, ycom_data = np.rint(get_center_of_mass(median_filt_psf))
     else:
         xcom_data, ycom_data = (np.rint(xcent_guess), np.rint(ycent_guess))
@@ -240,14 +251,34 @@ def fit_psf_centroid(psf_data, psf_template,
     ymin_data_cut, ymax_data_cut = (int(ycom_data) - halfheight, int(ycom_data) + halfheight)
 
     template_stamp = psf_template[ymin_template_cut:ymax_template_cut+1, xmin_template_cut:xmax_template_cut+1]
-    data_stamp = psf_data[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1]
+    data_stamp = psf_data_nonan[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1]
 
-    xoffset_guess, yoffset_guess = (0.0, 0.0)
-    amp_guess = np.sum(psf_data) / np.sum(psf_template)
-    guess_params = (xoffset_guess, yoffset_guess, amp_guess)
-    registration_result = optimize.minimize(psf_registration_costfunc, guess_params,
-                                         args=(template_stamp, data_stamp),
-                                         method='Powell')
+    # Stage 1: normalized cross-correlation for a robust integer-pixel shift.
+    def _norm_stamp(a):
+        a = a - a.mean()
+        s = a.std()
+        return a / s if s > 0 else a
+
+    xcorr = fftconvolve(_norm_stamp(data_stamp.astype(float)),
+                        _norm_stamp(template_stamp.astype(float))[::-1, ::-1],
+                        mode="full")
+    peak = np.unravel_index(np.argmax(xcorr), xcorr.shape)
+    xshift_int = int(peak[1] - (template_stamp.shape[1] - 1))
+    yshift_int = int(peak[0] - (template_stamp.shape[0] - 1))
+
+    # Stage 2: bounded Powell least-squares refinement (xshift, yshift, amplitude).
+    amp_guess = (data_stamp.sum() / template_stamp.sum()
+                 if template_stamp.sum() != 0 else 1.0)
+
+    # Bounds: shifts within ±1 pixel of the xcorr integer result;
+    registration_result = optimize.minimize(
+        psf_registration_costfunc,
+        x0=[float(xshift_int), float(yshift_int), amp_guess],
+        args=(template_stamp, data_stamp),
+        method="Powell",
+        bounds=[(xshift_int - 1.0, xshift_int + 1.0),
+                (yshift_int - 1.0, yshift_int + 1.0),
+                (0.1 * amp_guess, 10.0 * amp_guess)])
 
     if not registration_result.success:
         print(f"Warning: Registration optimization did not converge: {registration_result.message}")
@@ -255,18 +286,18 @@ def fit_psf_centroid(psf_data, psf_template,
     xfit = xcent_template + (xcom_data - xcom_template) + registration_result.x[0]
     yfit = ycent_template + (ycom_data - ycom_template) + registration_result.x[1]
 
-    psf_data_bkg = psf_data.copy()
+    psf_data_bkg = psf_data_nonan.copy()
     psf_data_bkg[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1] = np.nan
-    psf_peakpix_snr = np.max(psf_data) / np.nanstd(psf_data_bkg)
+    psf_peakpix_snr = np.max(psf_data_nonan) / np.nanstd(psf_data_bkg)
 
     (gauss2d_xfit, gauss2d_yfit, xfwhm, yfwhm, gauss2d_peakfit,
-     fitted_data_stamp, model, residual) = gaussfit2d_pix(psf_data,
+     fitted_data_stamp, model, residual) = gaussfit2d_pix(psf_data_nonan,
                                                 xguess = xfit,
                                                 yguess = yfit,
                                                 xfwhm_guess = fwhm_minor_guess,
                                                 yfwhm_guess = fwhm_major_guess,
                                                 halfwidth = 1, halfheight = halfheight,
-                                                guesspeak = np.max(psf_data), oversample = gauss2d_oversample,
+                                                guesspeak = np.max(psf_data_nonan), oversample = gauss2d_oversample,
                                                 refinefit = True)
 
     (x_precis, y_precis) = (np.abs(xfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr,
@@ -285,34 +316,41 @@ def get_template_dataset(dataset):
         Dataset: template dataset
         boolean: filtersweep true or false
     """
+    # Template filenames encode the prism (DPAM) and the FSAM slit settings. The baseline
+    # spectroscopy slit is R1C2 for SPAM=SPEC/DPAM=PRISM3 and R2C2 for SPAM=SPECROT/DPAM=PRISM2.
+    slit_token = {"R1C2": "r1c2slit", "R2C2": "r2c2slit", "OPEN": "noslit"}
     template_dir = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "templates")
     filtersweep = False
     cfamname = []
     slits = []
+    dpamnames = []
     for frames in dataset.frames:
         dpamname = frames.ext_hdr['DPAMNAME']
         fsamname = frames.ext_hdr['FSAMNAME']
-        if dpamname != "PRISM3":
-            raise AttributeError("currently we only have template files for PRISM3, not for "+ dpamname)
+        if dpamname not in ("PRISM2", "PRISM3"):
+            raise AttributeError("PRISM2 and PRISM3 are the only valid DPAM settings for prism spectroscopy, not "+ dpamname)
 
+        dpamnames.append(dpamname)
         cfamname.append (frames.ext_hdr['CFAMNAME'])
         slits.append (fsamname)
+    if len(np.unique(dpamnames)) != 1:
+        raise AttributeError("all frames must share the same DPAMNAME, not "+ str(np.unique(dpamnames)))
+    prism = dpamnames[0].lower()   # filename prism token, e.g. "prism2"
     if len(np.unique(slits)) != 1:
-        raise AttributeError("currently we only have template files for no slit or R1C2, not for "+ slits)
+        raise AttributeError("all frames must share the same slit setting, not "+ str(slits))
     if len(np.unique(cfamname)) == 1:
         band = cfamname[0]
         if not band.startswith ("3"):
             raise AttributeError("currently we only have template files for the filter band 3, not for "+ band)
         slit = slits[0]
-        if slit == "R1C2":
-            filenames = sorted(glob.glob(os.path.join(template_dir,"spec_unocc_r1c2slit_offset_prism3_3d_*.fits")))
-        elif slit == "OPEN":
-            filenames = sorted(glob.glob(os.path.join(template_dir,"spec_unocc_noslit_offset_prism3_3d_*.fits")))
-        else:
+        if slit not in slit_token:
             raise AttributeError("we do not (yet) have template files for slit " + slit)
+        filenames = sorted(glob.glob(os.path.join(template_dir,
+            "spec_unocc_{0}_offset_{1}_3d_*.fits".format(slit_token[slit], prism))))
     else:
         #filtersweep
-        filenames = sorted(glob.glob(os.path.join(template_dir, "spec_unocc_noslit_prism3_filtersweep_*.fits")))
+        filenames = sorted(glob.glob(os.path.join(template_dir,
+            "spec_unocc_noslit_{0}_filtersweep_*.fits".format(prism))))
         filtersweep = True
     return Dataset(filenames), filtersweep
 
@@ -492,6 +530,12 @@ def read_cent_wave(band, filter_file = None):
         ret_list.append(data.columns[i][filter_names == band][0])
     return ret_list
 
+# Default along-dispersion spectral extraction extents (EXCAM pixels) measured from the
+# wavelength zero point, keyed on the DPAM (prism) name. "red" is the direction of increasing
+# wavelength, "blue" of decreasing wavelength; extract_spec maps those onto +/-Y using the
+# WAVE map.
+DEFAULT_SPEC_EXTRACT_HEIGHTS = {'PRISM2': (10, 28), 'PRISM3': (13, 37)}
+
 def estimate_dispersion_clocking_angle(xpts, ypts, weights):
     """ 
     Estimate the clocking angle of the dispersion axis based on the centroids of
@@ -519,14 +563,15 @@ def estimate_dispersion_clocking_angle(xpts, ypts, weights):
 
 def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wavlen, pixel_pitch_um=13.0):
     """ 
-    Given arrays of wavelengths and positions, fit two polynomials:  
-    1. Displacement from a reference wavelength along the dispersion axis, 
-       in millimeters as a function of wavelength  
+    Given arrays of wavelengths and positions, fit two polynomials:
+
+    1. Displacement from a reference wavelength along the dispersion axis,
+       in millimeters as a function of wavelength
     2. Wavelength as a function of displacement along the dispersion axis
 
     Args:
         wavlens (numpy.ndarray): Array of wavelengths corresponding to the
-        centroid data points
+            centroid data points
         xpts (numpy.ndarray): Array of x coordinates in EXCAM pixels
         ypts (numpy.ndarray): Array of y coordinates in EXCAM pixels
         cent_errs (numpy.ndarray): Array of centroid uncertainties in EXCAM pixels
@@ -535,14 +580,18 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
         pixel_pitch_um (float): EXCAM pixel pitch in microns
 
     Returns:
-        pfit_pos_vs_wavlen (numpy.ndarray): polynomial coefficients for the
-        position vs wavelength fit
-        cov_pos_vs_wavlen (numpy.ndarray): covariance matrix of the polynomial
-        coefficients for the position vs wavelength fit
-        pfit_wavlen_vs_pos (numpy.ndarray): polynomial coefficients for the
-        wavelength vs position fit
-        cov_wavlen_vs_pos (numpy.ndarray): covariance matrix of the polynomial
-        coefficients for the wavelength vs position fit
+        tuple:
+            pfit_pos_vs_wavlen (numpy.ndarray): polynomial coefficients for the
+            position vs wavelength fit
+
+            cov_pos_vs_wavlen (numpy.ndarray): covariance matrix of the polynomial
+            coefficients for the position vs wavelength fit
+
+            pfit_wavlen_vs_pos (numpy.ndarray): polynomial coefficients for the
+            wavelength vs position fit
+
+            cov_wavlen_vs_pos (numpy.ndarray): covariance matrix of the polynomial
+            coefficients for the wavelength vs position fit
     """
     pixel_pitch_mm = pixel_pitch_um * 1E-3
 
@@ -598,7 +647,6 @@ def calibrate_dispersion_model(centroid_psf, spec_filter_offset, band_center_fil
     if prism not in ['PRISM2', 'PRISM3']:
         raise ValueError("prism must be PRISM2 or PRISM3")
 
-    #PRISM2 not yet available
     if prism == 'PRISM2':
         subband_list = ['2A', '2B', '2C']
         ref_cfam = '2'
@@ -780,14 +828,14 @@ def get_shift_correlation(
       images.
 
     Args:
-      img_data (array): first two dimensional array.
-      img_template (array): second two dimensional array. Its size must be the same or
-      less than img1, because img2 is the noiseless template used to find the
-      spectrum on the L2b data and it is a cropped frame.
+        img_data (array): first two dimensional array.
+        img_template (array): second two dimensional array. Its size must be the same or
+        less than img1, because img2 is the noiseless template used to find the
+        spectrum on the L2b data and it is a cropped frame.
 
     Returns:
-      Image shift in image pixels that maximizes the phase correlation of the
-      first image with the second one.
+        np.array: Image shift in image pixels that maximizes the phase correlation of the
+        first image with the second one.
     """
     if np.any(img_data.shape < img_template.shape):
         raise Exception('The template image cannot have a larger size then the data one')  
@@ -818,38 +866,38 @@ def star_spec_registration(
     halfheight=40):
     """ This function addresses:
 
-      CGI-REQT-5465 – Given (1) a series of cleaned images of a prism-dispersed
-      unocculted star observed through the FSAM slit mask, observed with the
-      same CFAM filter, and acquired over a grid of FSM offsets and (2) an
-      estimate of the spectroscopic target source position on EXCAM and its
-      alignment error from the FSAM slit, the CTC GSW should identify the
-      dispersed star image whose PSF-to-FSAM slit alignment most closely matches
-      that of the target source.
+    CGI-REQT-5465 – Given (1) a series of cleaned images of a prism-dispersed
+    unocculted star observed through the FSAM slit mask, observed with the
+    same CFAM filter, and acquired over a grid of FSM offsets and (2) an
+    estimate of the spectroscopic target source position on EXCAM and its
+    alignment error from the FSAM slit, the CTC GSW should identify the
+    dispersed star image whose PSF-to-FSAM slit alignment most closely matches
+    that of the target source.
 
-      NOTE: This calibration is repeated for each roll angle in the observation
-      campaign
+    NOTE: This calibration is repeated for each roll angle in the observation
+    campaign
   
     Args:
-      dataset_fsm (Dataset): Dataset containing a series of L2b cleaned images of a
-        prism-dispersed unocculted star observed through the FSAM slit mask,
-        observed with the same CFAM filter, and acquired over a grid of FSM
-        offsets. By default, the grid of FSM offsets spans a 3×3 FSM offset grid. 
-        Each of the L2b images must have the following header keywords:
-          – FSMX, FSMY (float64)
-          – CFAMNAME (same for all images)
-          – FSAMNAME = OPEN, R1C2, R6C5, R3C1
-      pathfiles_template (array): array of path and filenames containing the 
-        simulated star spectrum that are used as a template to find the image
-        in dataset_fsm that best matches it.
-      slit_align_err (float64): Distance between the source and the center of
-        the slit aperture, measured along the narrow axis of the slit aperture,
-        in units of mas. It is determined after each observation by
-        looking at the data.
-      halfheight: 1/2 the height of the box used for the fit.
+        dataset_fsm (Dataset): Dataset containing a series of L2b cleaned images of a
+            prism-dispersed unocculted star observed through the FSAM slit mask,
+            observed with the same CFAM filter, and acquired over a grid of FSM
+            offsets. By default, the grid of FSM offsets spans a 3×3 FSM offset grid. 
+            Each of the L2b images must have the following header keywords:
+            - FSMX, FSMY (float64)
+            - CFAMNAME (same for all images)
+            - FSAMNAME = OPEN, R1C2, R6C5, R3C1
+        pathfiles_template (array): array of path and filenames containing the
+            simulated star spectrum that are used as a template to find the image
+            in dataset_fsm that best matches it.
+        slit_align_err (float64): Distance between the source and the center of
+            the slit aperture, measured along the narrow axis of the slit aperture,
+            in units of mas. It is determined after each observation by
+            looking at the data.
+        halfheight: 1/2 the height of the box used for the fit.
 
-    Returns:
-      Filenames with the star image whose PSF-to-FSAM slit alignment most
-      closely matches that of the target source.
+        Returns:
+            list: Filenames with the star image whose PSF-to-FSAM slit alignment most
+            closely matches that of the target source.
       
     """
     # Confirm spectroscopy configuration for different PAMs
@@ -1102,13 +1150,14 @@ def slit_transmission(
 
     Returns:
       SlitTransmission calibration product containing:
-        1/ Slit transmission map derived at different locations by interpolation.
-        2/ Corresponding locations along EXCAM +X direction with respect to the
-          zero-point in (fractional) EXCAM pixels where the slit transmission has
-          been derived.
-        3/ Corresponding locations along EXCAM +Y direction with respect to the
-          zero-point in (fractional) EXCAM pixels where the slit transmission has
-          been derived.
+
+      1. Slit transmission map derived at different locations by interpolation.
+      2. Corresponding locations along EXCAM +X direction with respect to the
+         zero-point in (fractional) EXCAM pixels where the slit transmission has
+         been derived.
+      3. Corresponding locations along EXCAM +Y direction with respect to the
+         zero-point in (fractional) EXCAM pixels where the slit transmission has
+         been derived.
     """
     # Confirm spectroscopy configuration for different PAMs
     # CFAM

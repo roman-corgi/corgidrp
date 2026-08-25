@@ -159,6 +159,7 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
 
     # Create the input data in the right format
     images = []
+    fsm_idx = 0
     for file in datafiles:
         image = fits.open(file)
         new_image = data.Image(image[0].data, pri_hdr=image[0].header, ext_hdr=image[1].header)
@@ -166,6 +167,9 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
         new_image.ext_hdr['DATALVL'] = "L2b"
         new_image.ext_hdr['BUNIT'] = "photoelectron"
         new_image.ext_hdr['EXPTIME'] = 1.0
+        # since simulations doesn't set FSMX/FSMY, set it to some unique value here so the pipeline can tell different dithers apart
+        new_image.ext_hdr['FSMX'] = fsm_idx
+        fsm_idx += 1
         ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])
         new_image.filename = f'cgi_{new_image.pri_hdr["VISITID"]}_{ftimeutc}_l2b.fits'
         images.append(new_image)
