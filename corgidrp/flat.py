@@ -6,6 +6,7 @@ from scipy.ndimage import median_filter
 from scipy.ndimage import gaussian_filter as gauss
 from scipy import ndimage
 from scipy.signal import convolve2d
+from scipy.signal import fftconvolve
 from scipy.ndimage import zoom
 import astropy.io.fits as fits
 from astropy.convolution import convolve_fft
@@ -281,6 +282,115 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
     return (full_residuals,err_residuals,cent_n)
     
     
+def source_centroid(image, threshold_frac=0.3, smooth_size=3):
+    """Flux-weighted centroid of the illuminated region.
+
+    The threshold picks out which pixels belong to the source, the centroid is then
+    flux-weighted inside that region. 
+
+    Args:
+        image (np.array): 2-D image containing the source.
+        threshold_frac (float): cut as a fraction of the peak of the smoothed image.
+        smooth_size (int): median-filter size applied before thresholding.
+
+    Returns:
+        np.array: (x, y) centroid in pixels, or None if nothing lies above threshold.
+    """
+    smoothed = median_filter(np.nan_to_num(image), smooth_size)
+    peak = np.nanmax(smoothed)
+    if not np.isfinite(peak) or peak <= 0:
+        return None
+    mask = smoothed >= threshold_frac * peak
+    if not mask.any():
+        return None
+    centroid = np.array(centr.centroid_com(np.where(mask, smoothed, 0.0)))
+    if not np.all(np.isfinite(centroid)):
+        return None
+    return centroid
+
+
+def measure_disk_radius(image, threshold_frac=0.3, smooth_size=5):
+    """Radius of the illuminated region, from the area of the lit pixels.
+
+    Rastering a star fills a disk, its radius is measured from the data. Only the 
+    largest connected lit region is counted, so specks elsewhere in the frame do not 
+    add to the area.
+
+    Args:
+        image (np.array): 2-D image containing the disk.
+        threshold_frac (float): cut as a fraction of the peak of the smoothed image.
+        smooth_size (int): median-filter size applied before thresholding. Size 5 so
+            that clusters of bad pixels do not survive to inflate the peak.
+
+    Returns:
+        float: disk radius in pixels, or None if nothing lies above threshold.
+    """
+    smoothed = median_filter(np.nan_to_num(image), smooth_size)
+    peak = np.nanmax(smoothed)
+    if not np.isfinite(peak) or peak <= 0:
+        return None
+    mask = smoothed >= threshold_frac * peak
+
+    labels, n_features = ndimage.label(mask)
+    if n_features == 0:
+        return None
+    sizes = ndimage.sum(mask, labels, range(1, n_features + 1))
+    largest = ndimage.binary_fill_holes(labels == (np.argmax(sizes) + 1))
+
+    return float(np.sqrt(largest.sum() / np.pi))
+
+
+def find_disk_center(image, radius_pix, threshold_frac=0.3, smooth_size=5):
+    """Find the (x, y) center of a disk of known radius by disk-overlap correlation.
+
+    This keys off where the light is rather than how bright it is, so a non-uniform or
+    asymmetric disk (FPM shadow, partial raster slices, or repeated dither positions
+    that make the coadd non-uniform) does not bias the estimate. The known raster
+    radius is used to build a solid-disk kernel; the position where that disk best
+    encloses the lit region is the center. The image is assumed sky-subtracted
+    upstream.
+
+    Args:
+        image (np.array): 2-D image containing the disk.
+        radius_pix (float): known radius of the disk, in pixels.
+        threshold_frac (float): cut as a fraction of the peak of the smoothed image.
+        smooth_size (int): median-filter size applied before thresholding. Size 5 so
+            that clusters of bad pixels do not survive to inflate the peak.
+
+    Returns:
+        tuple: (x, y) sub-pixel center in pixels, or None if nothing lies above
+        threshold.
+    """
+    smoothed = median_filter(np.nan_to_num(image), smooth_size)
+    peak = np.nanmax(smoothed)
+    if not np.isfinite(peak) or peak <= 0:
+        return None
+    mask = (smoothed >= threshold_frac * peak).astype(float)
+
+    # solid disk kernel of the known radius
+    r = int(np.ceil(radius_pix))
+    yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
+    kernel = ((xx**2 + yy**2) <= radius_pix**2).astype(float)
+
+    # overlap score: how many lit pixels lie within one radius of each pixel. Done by
+    # FFT; correlating a full frame with a kernel this large is time consuming on a 
+    # full frame. 
+    score = fftconvolve(mask, kernel, mode="same")
+
+    peak_y, peak_x = np.unravel_index(int(np.argmax(score)), score.shape)
+    # sub-pixel refinement: center of mass over the top of the score peak only, so the
+    # flat plateau of the score does not bias the result
+    win = max(2, int(round(radius_pix / 4)))
+    y0, y1 = max(0, peak_y - win), min(score.shape[0], peak_y + win + 1)
+    x0, x1 = max(0, peak_x - win), min(score.shape[1], peak_x + win + 1)
+    window = score[y0:y1, x0:x1]
+    w = np.clip(window - window.min(), 0, None)
+    if w.sum() > 0:
+        cy_local, cx_local = ndimage.center_of_mass(w)
+        return float(x0 + cx_local), float(y0 + cy_local)
+    return float(peak_x), float(peak_y)
+
+
 def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=None, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
@@ -294,7 +404,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
             im_size (int): x-dimension of the input image (in pixels; default is size of input dataset; = 420 for the HST images)
             N (int): Number of images to be combined for creating a matched filter (defaults to 1, may not work for N>1 right now)
             rad_mask (float): radius in pixels used for creating a mask for band (band1=1.25, band4=1.75)
-            planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
+            planet_rad (int): radius of the illuminated region in pixels (50 for neptune, 65 for uranus; measured from the data for a rastered star)
             n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV (defaults to 44 pix for Band1 HLC; 165 pixels for full shaped pupil FOV).
             n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to None; rest of the FOV to reach 1024)
             sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad. 
@@ -327,20 +437,15 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         elif planet.lower() == 'uranus':
              planet_rad = 65
         else:
-            # for a dithered point source, auto set the fill radius to 
-            # (spacing/sqrt(2)). large enough to close the diagonal gaps
-            # between the dither spots, but not larger than the crop
-            src_cents = []
-            for j in range(len(dataset)):
-                sm = median_filter(np.nan_to_num(dataset[j].data), 3)
-                m = (sm >= 0.3 * np.nanmax(sm)).astype(float)
-                c = np.array(centr.centroid_com(m)); c[np.isnan(c)] = 0
-                src_cents.append(c)
-            src_cents = np.array(src_cents)
-            d2 = ((src_cents[:, None, :] - src_cents[None, :, :])**2).sum(-1)
-            np.fill_diagonal(d2, np.inf)
-            spacing = np.median(np.sqrt(d2.min(axis=1)))
-            planet_rad = min(int(np.ceil(spacing / np.sqrt(2))) + 1, up_radius - 1)
+            # Rastering a star fills a disk, measure it from the data rather than assuming 
+            # a size or a raster pattern.
+            radii = [measure_disk_radius(frame.data) for frame in dataset]
+            radii = [r for r in radii if r is not None]
+            if not radii:
+                raise ValueError("Could not measure the radius of the illuminated "
+                                 "disk in any frame. Pass planet_rad explicitly.")
+            # median over frames
+            planet_rad = min(int(np.ceil(np.median(radii))), up_radius - 1)
 
     if rad_mask is None:
          if band[0] == "1":
@@ -348,24 +453,28 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
          elif band[0] == "4":
             rad_mask = 1.75
 
-    raster_frames=[]; cent=[]; act_cents=[]; frames=[];
+    raster_frames = []
+    cent = []
+    act_cents = []
+    frames = []
     for j in range(len(dataset)):
         planet_image=dataset[j].data.copy()  # copy: the sky subtraction below is in-place
         planet_image_err=dataset[j].err[0]
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
         image_size=np.shape(planet_image)
-        # build the crop center from a de-noised, thresholded mask of the source rather 
-        # than a raw full-frame center, because the raw version gets dragged off the 
-        # source by hot pixels/background, mis-cuts the stamps, and messes up the 
-        # co-registration the median matched filter depends on.
-        source_smooth = median_filter(np.nan_to_num(planet_image), 3)
-        source_mask = (source_smooth >= 0.3 * np.nanmax(source_smooth)).astype(float)
-        centroid = np.array(centr.centroid_com(source_mask))
-        centroid[np.isnan(centroid)]=0
+        # Locate the source by sliding a disk of the measured radius over the lit
+        # pixels. Fall back to a flux-weighted centroid.
+        centroid = find_disk_center(planet_image, planet_rad)
+        if centroid is None:
+            centroid = source_centroid(planet_image)
+        if centroid is None:
+            raise ValueError("Could not locate the source in frame {0} of the "
+                             "dataset.".format(j))
+        centroid = np.asarray(centroid, dtype=float)
         act_cents.append((centroid[1],centroid[0]))
-        xc =int( centroid[0])
-        yc = int(centroid[1])
+        xc = int(round(centroid[0]))
+        yc = int(round(centroid[1]))
 
         # sky subtraction if needed
         if sky_annulus_rin is not None and sky_annulus_rout is not None:
