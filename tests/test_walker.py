@@ -99,7 +99,7 @@ def test_autoreducing():
         # do a string comparison, easiest way to check
         hdr_recipe = json.loads(frame.ext_hdr["RECIPE"])
         assert json.dumps(hdr_recipe) == json.dumps(recipe)
-
+        
     # clean up
     mycaldb.remove_entry(new_nonlinearity)
     mycaldb.remove_entry(new_kgain)
@@ -813,7 +813,7 @@ def test_pc_science_analog_satspots():
 
         all_frames = [sci_frame, satspot_frame]
         dataset = data.Dataset(all_frames)
-        dataset.save()
+        dataset.save(filedir=datadir)
         filelist = [frame.filepath for frame in dataset]
 
         templates, chained = walker.guess_template(dataset)
@@ -824,8 +824,8 @@ def test_pc_science_analog_satspots():
 
         recipes = walker.autogen_recipe(filelist, outputdir)
         assert len(recipes) == 2
-        assert recipes[0][0]["inputs"][0] == sci_frame.filename
-        assert recipes[1][0]["inputs"][0] == satspot_frame.filename
+        assert recipes[0][0]["inputs"][0] == sci_frame.filepath
+        assert recipes[1][0]["inputs"][0] == satspot_frame.filepath
 
         for file in filelist:
             os.remove(file)

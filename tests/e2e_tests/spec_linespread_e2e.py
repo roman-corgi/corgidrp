@@ -67,8 +67,11 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         psf_array_spot = fits.getdata(file_path_spot, ext=0)
         # Create dataset with mock headers and noise
         pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+        ext_hdr["LSAMNAME"] = "SPEC"
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
+        ext_hdr["EACQ_COL"] = np.shape(psf_array_spot)[2]/2
+        ext_hdr["EACQ_ROW"] = np.shape(psf_array_spot)[1]/2
         # Add random noise for reproducibility
         np.random.seed(5)
         read_noise = 200
