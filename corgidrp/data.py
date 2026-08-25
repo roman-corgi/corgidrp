@@ -550,6 +550,20 @@ class Image():
         self.pri_hdr = adjusted_pri_hdr
         self.ext_hdr = adjusted_img_hdr
 
+        # insert/update header keywords that might not be there in outdated data
+        # this should only apply to outdated simulated data
+        
+        if not 'RA_BORE' in self.pri_hdr:
+            self.pri_hdr.set('RA_BORE', self.pri_hdr.get('RA', 0), 'Boresight RA')
+        if not 'DEC_BORE' in self.pri_hdr:
+            self.pri_hdr.set('DEC_BORE', self.pri_hdr.get('DEC', 0), 'Boresight Dec')
+        if not 'RA_APER' in self.pri_hdr:
+            self.pri_hdr.set('RA_APER', self.pri_hdr.get('RA', 0), 'CGI Aperture RA')
+        if not 'DEC_APER' in self.pri_hdr:
+            self.pri_hdr.set('DEC_APER', self.pri_hdr.get('DEC', 0), 'CGI Aperture Dec')
+        if ('SATSPOTS' in self.ext_hdr) and (not isinstance(self.ext_hdr['SATSPOTS'], bool)):
+            self.ext_hdr['SATSPOTS'] = bool(self.ext_hdr['SATSPOTS'])
+
     # create this field dynamically
     @property
     def filepath(self):
