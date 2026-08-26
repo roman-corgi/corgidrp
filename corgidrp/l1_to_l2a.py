@@ -117,7 +117,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
         # rare cosmic rays can spill over all the way into the "good columns" region of the next row, ruining the bias subtraction for that row
         # Fix that by replacing such rows (which deviate by at least the median bias amount) with the median bias
-        unreliable_bias_rows = np.where(np.abs(medbyrow - np.median(medbyrow)) > num_stds * np.median(medbyrow)) 
+        unreliable_bias_rows = np.where(np.abs(medbyrow - np.median(medbyrow)) > num_stds * np.std(medbyrow)) 
         medbyrow[unreliable_bias_rows] = np.median(medbyrow)
         sterrbyrow = np.std(al_prescan[:,st:end], axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan[:,st:end].shape[1])
         if noise_maps is not None:
@@ -169,11 +169,13 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
                        plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10, cosm_tail_auto_factor=40/1000,
                        mode='image', detector_regions=None, pct_oversat_lim=20,
-                       dataset_copy=True, discard_oversat=False, median_filter_mode=0, cosm_thresh=0.95):
+                       dataset_copy=True, discard_oversat=False, median_filter_mode=0, cosm_thresh=0.95, 
+                       median_filter_size=(10,10), median_filter_histogram_nbins=21):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
+
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
-    and tail rather than just flagging the whole row.)
+    and tail rather than just flagging cosm_tail pixels along the row after the cosmic head.)
     TODO: Decode incoming DQ mask to avoid double counting saturation/CR flags in case a similar custom step has been run beforehand.
 
     Args:
@@ -224,12 +226,18 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         discard_oversat (bool): if True, discard frames that exceed pct_oversat_lim, preserving the previous behavior.
             If False, keep them, mark IS_BAD, and skip cosmic ray identification for those frames. Defaults to False.
         median_filter_mode (int): If 0, the "usual" method (threshold based on cosm_box, cosm_tail, etc) is employed.  If 1, a median filter is utilized to make a histogram and select an 
-            appropriate threshold for each frame.  If 2, the median filter method is used (which catches virtually all high-flux cosmic rays), and then the usual method is 
+            appropriate threshold for each frame, and cosmic "tail trails" (pixels overspilling from the saturated cosmic ray) are masked according to the input cosm_tail.  
+            If 2, the median filter method is used (which catches virtually all high-flux cosmic rays), and then the usual method is 
             used on the frame's pixels which were not masked by the median filter method (which catches low-flux cosmic rays if the threshold is low enough).  For science frames, the flux 
             levels of relevant images may be similar to that of low-flux cosmic rays, and 1 is recommended for the input in that case.  Defaults to 0.
         cosm_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines cosmic ray
             pixels. Interval 0 to 1, defaults to 0.95. Lower numbers are more aggressive in flagging saturation.
+        median_filter_size (tuple):
+            Two-element tuple of integers specifying the size and shape of the filter structure element used in the median filter method (median_filter_mode > 0).
+        median_filter_histogram_nbins (int):
+            Number of bins to use when making a histogram of the input frame minus the median-filtered frame to determine where the first local minimum above the background peak is. That local minimum 
+            is then used as a threshold above which to flag cosmic rays when median_filter_mode > 0.
             
     Returns:
         corgidrp.data.Dataset:
@@ -277,7 +285,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     for i,frame in enumerate(initial_dataset):
         frame.ext_hdr['FWC_PP_E'] = fwcpp_e_arr[i]
         frame.ext_hdr['FWC_EM_E'] = fwcem_e_arr[i]
-        frame.ext_hdr['SAT_DN'] = min(initial_sat_fwcs[i], initial_cosm_sat_fwcs[i]) #XXX should make new header value instead?? Or record in history and use it in darks cal function if available from the history
+        frame.ext_hdr['SAT_DN'] = min(initial_sat_fwcs[i], initial_cosm_sat_fwcs[i]) 
 
     oversat_frames = set()
     if discard_oversat:
@@ -342,9 +350,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 image_data = slice_section(crmasked_cube[i,:,:], arrtype, 'image', detector_regions)
             else:
                 image_data = crmasked_cube[i,:,:]
-            med_mask = median_filter(image_data, size=(10,10))#XXX
+            med_mask = median_filter(image_data, size=median_filter_size)
             diff = image_data - med_mask
-            Icount, IbinEdges = np.histogram(diff, bins=21)#XXX
+            Icount, IbinEdges = np.histogram(diff, bins=int(median_filter_histogram_nbins))
 
             # find the minima in the histogram
             bV = np.logical_and(Icount[1:-1] <= Icount[:-2],
@@ -400,6 +408,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             # If binVal is empty, the histogram has no minima except at an endpoint. 
             else:
                 m2[i,:,:] = np.zeros_like(crmasked_cube[i,:,:])
+                thresh = np.inf #i.e., no threshold cut
             if median_filter_mode == 1:
                 if crmasked_dataset[i].ext_hdr['SAT_DN'] > thresh:
                     crmasked_dataset[i].ext_hdr['SAT_DN'] = thresh # overwrite 

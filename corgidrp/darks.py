@@ -636,7 +636,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             if np.isnan(i0).any():
                 raise ValueError('telem_rows cannot be in image area.')
             test_frame[telem_rows] = 0
-        mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps) #XXX see what median is for big gain 0 exptime; try cutting out big exptimes; what percent for unreliable pixel corresponds to that cut? 
+        mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps) 
         mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
         if dataset[0].data is None:
             # equivalent to what is done in if statement above for datasets with data
@@ -678,10 +678,10 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
         stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(unmasked_num.max())/1
         total_err = np.sqrt(mean_err**2 + stat_std**2)
-        reliable_fraction = 0.75 #0.9 #XXX should be input
-        pixel_mask = (unmasked_num <= len(datasets[i].frames)*reliable_fraction).astype(int) #XXX change to user-input fraction instead of 50%
+        reliable_fraction = 0.75 # not used in output product, so hard-coded number okay (for debugging)
+        pixel_mask = (unmasked_num <= len(datasets[i].frames)*reliable_fraction).astype(int) 
         # print('for EM gain and exptime ', (EMgain_arr[i], exptime_arr[i]))
-        # print('histogram of image area of unmasked_num: ', np.histogram(slice_section(unmasked_num,'SCI','image',detector_regions))) #XXX
+        # print('histogram of image area of unmasked_num: ', np.histogram(slice_section(unmasked_num,'SCI','image',detector_regions))) 
         mean_num = np.mean(unmasked_num)
         mean_frame[telem_rows] = np.nan
         mean_frames.append(mean_frame)
@@ -776,33 +776,6 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     # matrix to be used for least squares and covariance matrix
     # Create Xx with shape (M, 3, rows, cols), where M = len(EMgain_arr)
     rows, cols = mean_stack.shape[1], mean_stack.shape[2]
-    inds_del = []
-    for i in range(len(EMgain_arr)): #regardless of weighting, make the unreliable and unfittable pixels have 0 weight in the fit
-        # for a mean fr ame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
-        unreliable_im_area = slice_section(unreliable_pix_masks[i], 'SCI', 'image', detector_regions)
-        print("Em gain and exptime: ", (EMgain_arr[i], exptime_arr[i]))
-        print('fraction of unreliable pixels: ', unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size) #XXX
-        # check to see if certain frames should be rejected in calibration: Is the cosmic ray threshold low enough to truncate the distribution variates in the frame stacks?  If so, reject.
-        # We don't just check the mean and variance of each mean frame to save processing time (avoids mean_combine) and also b/c the mean will be skewed by cosmic rays;
-        # and even if we ignore cosmic rays like mean_combine does, if the threshold was chosen poorly, the frame mean and variance are not reliable.
-    #     nem = detector_params.params['NEMGAIN'] # number of gain stages in gain register
-    #     poisson_var = cic_fid  + dc_fid * exptime_arr[i]
-    #     # assumes no variance from FPN
-    #     expected_std = ENF(EMgain_arr[i], nem) * EMgain_arr[i] * np.sqrt(poisson_var) 
-    #     expected_mean = fpn_fid + cic_fid  + dc_fid * exptime_arr[i] 
-    #     threshold = expected_mean + num_stds * expected_std
-    #     if CR_thresholds_e[i] <= threshold:
-    #     if unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.1:#exptime_arr[i] > 60: # XXX user input, and put it near beginning of datasets loop. Then also change CAR plan to be many frames with small exposure times! Some long exposures for comsic ray checkout. #unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.05: #exptime_arr[i] > 30: #unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.1: #XXX user input fraction here
-    #         inds_del.append(i) #XXX could try 0.9 for unreliable fraction?  
-    # EMgain_arr = np.delete(EMgain_arr, inds_del, axis=0)
-    # exptime_arr = np.delete(exptime_arr, inds_del, axis=0)
-    # kgain_arr = np.delete(kgain_arr, inds_del, axis=0)
-    # output_dqs = np.delete(output_dqs, inds_del, axis=0)
-    # unreliable_pix_masks = np.delete(unreliable_pix_masks, inds_del, axis=0)
-    # mean_stack = np.delete(mean_stack, inds_del, axis=0)
-    # mean_err_stack = np.delete(mean_err_stack, inds_del, axis=0)
-    # mean_stat_err_stack = np.delete(mean_stat_err_stack, inds_del, axis=0)
-    # weights = np.delete(weights, inds_del, axis=0)
 
     X = np.array([np.ones([len(EMgain_arr)]).astype(float), EMgain_arr, EMgain_arr*exptime_arr]).T  # (M,3)
     Xx = np.broadcast_to(X[:, :, None, None], (len(EMgain_arr), 3, rows, cols))
@@ -816,15 +789,6 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         W = weights #1/mean_stat_err_stack
     else:
         W = np.ones_like(mean_stat_err_stack) # all weighted the same
-    #for i in range(len(W)): #regardless of weighting, make the unreliable and unfittable pixels have 0 weight in the fit
-        #W[i][np.where(unreliable_pix_masks[i] == 1)] = 0
-        # make the output noise maps return 0 for these unfittable pixels; also recorded in DQ of output 
-        #W[i][np.where(unfittable_pix_map >= len(datasets)-3)] = 0 
-        # # for a mean frame with a high-enough percentage of variates masked, the variates are biased downward, so 0-weight the image area of these mean frames as well.
-        # unreliable_im_area = slice_section(unreliable_pix_masks[i], 'SCI', 'image', detector_regions)
-        # if unreliable_im_area[unreliable_im_area == 1].size/unreliable_im_area.size >= 0.5: #XXX user input fraction here
-        #     # W_im_area = slice_section(W[i], 'SCI', 'image', detector_regions)  
-        #     # W_im_area[:,:] = 0 
             
     wY = W*mean_stack
     wX = np.transpose(W*np.transpose(Xx, (1,0,2,3)), (1,0,2,3))
