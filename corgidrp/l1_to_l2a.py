@@ -2,9 +2,11 @@
 from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc, imaging_slice, imaging_area_geom
 import re
 import numpy as np
+from scipy.ndimage import median_filter, label
 import corgidrp.data as data
 import corgidrp.check as check
-from scipy.ndimage import median_filter, label, find_objects
+from corgidrp.spec import read_cent_wave
+import warnings
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
                     detector_regions=None, use_imaging_area = False, dataset_copy=True, num_stds=5):
@@ -22,7 +24,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         detector_regions: (dict):  A dictionary of detector geometry properties.
             Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         use_imaging_area (bool): flag indicating whether to use the imaging area (like in the trap pump code) or use the defualt (equivalent to EMCCDFrame)
-        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
         num_stds (float): If the median of a pre-scan row is off from the median value of all the rows by more than num_stds standard deviations, the 
             row is assumed to have an unreliable pre-scan (due to a very long cosmic ray tail, for example), and the value for that row is assigned 
@@ -36,7 +38,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         output_dataset = input_dataset.copy(copy_data=False)
     else:
         output_dataset = input_dataset
-    
+
     if detector_regions is None:
         detector_regions = detector_areas
 
@@ -67,7 +69,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
         if not return_full_frame:
             # Get the image area
-            if use_imaging_area: 
+            if use_imaging_area:
                 image_data = imaging_slice(arrtype, frame_data, detector_regions=detector_regions)
                 image_dq = imaging_slice(arrtype, frame_dq, detector_regions=detector_regions)
 
@@ -81,7 +83,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
                 p_r0 = detector_regions[arrtype]['prescan']['r0c0'][0]
                 al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
 
-            else: 
+            else:
                 image_data = slice_section(frame_data, arrtype, 'image', detector_regions)
                 image_dq = slice_section(frame_dq, arrtype, 'image', detector_regions)
 
@@ -169,7 +171,10 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
                        plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10, cosm_tail_auto_factor=40/1000,
                        mode='image', detector_regions=None, pct_oversat_lim=20,
-                       dataset_copy=True, discard_oversat=False, median_filter_mode=0, cosm_thresh=0.95, 
+                       dataset_copy=True, discard_oversat=False, skip_coronagraph_iwa=True,
+                       platescale=0.0218, pol_beams_sep_diam=7.5, 
+                       pol_beams_alignment_angle_wp1=0, pol_beams_alignment_angle_wp2=45, coronagraph_iwa_radius=None,
+                       median_filter_mode=0, cosm_thresh=0.95, 
                        median_filter_size=(10,10), median_filter_histogram_nbins=21):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
@@ -215,16 +220,29 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             If 'full', a full-frame input is assumed, and if the input tail length
             is longer than the length to the end of the full-frame row, the masking
             continues onto the next row.  Defaults to 'image'.
-        detector_regions: (dict):  
-            A dictionary of detector geometry properties.  Keys should be as 
+        detector_regions: (dict):
+            A dictionary of detector geometry properties.  Keys should be as
             found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
             and will be marked bad or discarded. Frame saturations equal to this argument are not flagged.
-        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
         discard_oversat (bool): if True, discard frames that exceed pct_oversat_lim, preserving the previous behavior.
             If False, keep them, mark IS_BAD, and skip cosmic ray identification for those frames. Defaults to False.
+        skip_coronagraph_iwa (bool): If True, bypasses the coronagraph inner working angle from being flagged for cosmic rays for imaging and pol modes. Defaults to True. 
+        platescale (float): The detector platescale in arcseconds/pixel. Defaults to 0.0218.
+        pol_beams_sep_diam (float):
+            The separation between the polarimetric ordinary and extraordinary beams on detector in arcseconds,
+            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 7.5.
+        pol_beams_alignment_angle_wp1 (float):
+            The angle in which the polarimetric ordinary and extraordinary beams created by WP1 are aligned with respect to the detector x-axis,
+            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 0.
+        pol_beams_alignment_angle_wp2 (float):
+            The angle in which the polarimetric ordinary and extraordinary beams created by WP2 are aligned with respect to the detector x-axis,
+            for use in bypassing the coronagraph IWA from cosmic ray masking when observing in pol mode. Defaults to 45. 
+        coronagraph_iwa_radius (float): The radius of the coronagraph IWA in units of lambda/d, for use in excluding the coronagraph
+            IWA from cosmic ray flagging. Defaults to None.
         median_filter_mode (int): If 0, the "usual" method (threshold based on cosm_box, cosm_tail, etc) is employed.  If 1, a median filter is utilized to make a histogram and select an 
             appropriate threshold for each frame, and cosmic "tail trails" (pixels overspilling from the saturated cosmic ray) are masked according to the input cosm_tail.  
             If 2, the median filter method is used (which catches virtually all high-flux cosmic rays), and then the usual method is 
@@ -239,6 +257,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             Number of bins to use when making a histogram of the input frame minus the median-filtered frame to determine where the first local minimum above the background peak is. That local minimum 
             is then used as a threshold above which to flag cosmic rays when median_filter_mode > 0.
             
+
+
     Returns:
         corgidrp.data.Dataset:
             A version of the input dataset of the input dataset where the cosmic rays have been identified.
@@ -247,6 +267,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     cr_dqval = 128 # DQ value corresponding to CR hit
     if type(median_filter_mode) != int:
         raise Exception('median_filter_mode must be an integer (0, 1, or 2).')
+
+    mirror_diam = 2.36 # telescope mirror effective diameter in meters
 
     if detector_regions is None:
         detector_regions = detector_areas
@@ -271,7 +293,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 emgain = frame.ext_hdr['EMGAIN_A']
             else: # otherwise use commanded EM gain
                 emgain = frame.ext_hdr['EMGAIN_C']
-            emgain_list.append(emgain)
+        emgain_list.append(emgain)
     emgain_arr = np.array(emgain_list)
     fwcpp_e_arr = np.array([detector_params.params['FWC_PP_E'] for frame in initial_dataset])
     fwcem_e_arr = np.array([detector_params.params['FWC_EM_E'] for frame in initial_dataset])
@@ -315,8 +337,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
     m1 = (crmasked_cube >= sat_fwcs_array) * sat_dqval
-    # Mask 2:  captures cosmic rays.  If EM gain is 1, no cosmic tails made since 
-    # those are only made in gain register.  
+    # Mask 2:  captures cosmic rays.  If EM gain is 1, no cosmic tails made since
+    # those are only made in gain register.
     # Do a for loop since it's calling a for loop in the sub-routine anyway
     # and can't handle different 'FWC_EM's for different frames.
     m2 = np.zeros_like(crmasked_cube)
@@ -342,14 +364,83 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 print_once_done = True
         else:
             cosm_tail_i = cosm_tail
+
+        curr_frame = crmasked_dataset.frames[i]
+        arrtype = curr_frame.ext_hdr['ARRTYPE']
+        eacq_row = curr_frame.ext_hdr['EACQ_ROW']
+        eacq_col = curr_frame.ext_hdr['EACQ_COL']
         
-        arrtype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
+        # first determine coronagraph iwa to exclude from cosmic ray finding (if applicable)
+        # by default iwa_mask transmits everything, only in applicable conditions will the iwa be zeroed out
+        iwa_mask = np.ones_like(curr_frame.data)
+        # check the coronagraph configuration used to determine IWA
+        cor_mode = curr_frame.ext_hdr['LSAMNAME']
+        # ensures this computation only happens if the coronagraph is in and we explicitly want to skip masking
+        if cor_mode != 'OPEN' and skip_coronagraph_iwa:
+            # determine where the coronagraph center is
+            if eacq_row is not None and eacq_col is not None and eacq_row != 0 and eacq_col != 0:
+                # use EACQ_ROW and EACQ_COL as the coronagraph center if these headers are set properly
+                centerxy = [eacq_col, eacq_row]
+            else:
+                # defaults to (512, 512) if the headers are not initialized properly
+                centerxy = [512, 512]
+
+            # convert the iwa from lambda/d to pixel units
+            filter_band = curr_frame.ext_hdr['CFAMNAME']
+            # set default values for the iwa if this is not set
+            if coronagraph_iwa_radius is None:
+                if cor_mode == 'NFOV':
+                    coronagraph_iwa_radius = 3
+                elif cor_mode == 'WFOV':
+                    coronagraph_iwa_radius = 5.9
+                else:
+                    coronagraph_iwa_radius = 0
+            iwa_arcsec = coronagraph_iwa_radius * ((read_cent_wave(filter_band)[0] * 1e-9) / mirror_diam) * 206265
+            iwa_pix = int(round(iwa_arcsec / platescale)) # round to a discrete value
+            # next check the imaging mode to determine where the coronagraph beam(s) are centered
+            prism = curr_frame.ext_hdr['DPAMNAME']
+            frame_shape = curr_frame.data.shape
+            y, x = np.ogrid[:frame_shape[0], :frame_shape[1]]
+            if prism == 'IMAGING':
+                # one beam, iwa centered on the image center keyword
+                r = np.sqrt((y - centerxy[1])**2 + (x - centerxy[0])**2)
+                iwa_region = r < iwa_pix
+                # zero out the defined iwa region
+                iwa_mask[iwa_region] = 0
+            if prism == 'POL0' or prism == 'POL45':
+                # pol mode, two beams created by the wollaston prism
+                # instead of using the image center directly, need to find where the beams are relative to the image center
+                if prism == 'POL0':
+                    angle_rad = (pol_beams_alignment_angle_wp1 * np.pi) / 180
+                else:
+                    angle_rad = (pol_beams_alignment_angle_wp2 * np.pi) / 180
+                dx = int(round((pol_beams_sep_diam * np.cos(angle_rad)) / (2 * platescale)))
+                dy = int(round((pol_beams_sep_diam * np.sin(angle_rad)) / (2 * platescale)))
+                # get beam centers using computed displacement
+                centerxy_ord = [centerxy[0] - dx, centerxy[1] + dy]
+                centerxy_ext = [centerxy[0] + dx, centerxy[1] - dy]
+                # define iwa regions
+                r_ord = np.sqrt((y - centerxy_ord[1])**2 + (x - centerxy_ord[0])**2)
+                iwa_region_ord = r_ord < iwa_pix
+                r_ext = np.sqrt((y - centerxy_ext[1])**2 + (x - centerxy_ext[0])**2)
+                iwa_region_ext = r_ext < iwa_pix
+                # mask out the defined regions
+                iwa_mask[iwa_region_ord] = 0
+                iwa_mask[iwa_region_ext] = 0
+        if (not skip_coronagraph_iwa) and (coronagraph_iwa_radius is not None):
+            # raise warning if the coronagraph IWA is not excluded from flagging but the radius is set
+            warnings.warn("The coronagraph IWA is defined but not excluded from cosmic ray flagging")
+            
+        # apply mask to the data used for cosmic ray flagging
+        flag_cr_input = crmasked_cube[i:i+1,:,:] * iwa_mask
+
+
         if median_filter_mode > 0:
             # use the image area for the median filter so that the background is not biased by the prescan or overscan areas
-            if crmasked_cube[i].shape[0] == detector_regions[arrtype]['frame_rows'] and crmasked_cube[i].shape[1] == detector_regions[arrtype]['frame_cols']:
-                image_data = slice_section(crmasked_cube[i,:,:], arrtype, 'image', detector_regions)
+            if flag_cr_input.shape[0] == detector_regions[arrtype]['frame_rows'] and flag_cr_input.shape[1] == detector_regions[arrtype]['frame_cols']:
+                image_data = slice_section(flag_cr_input, arrtype, 'image', detector_regions)
             else:
-                image_data = crmasked_cube[i,:,:]
+                image_data = flag_cr_input
             med_mask = median_filter(image_data, size=median_filter_size)
             diff = image_data - med_mask
             Icount, IbinEdges = np.histogram(diff, bins=int(median_filter_histogram_nbins))
@@ -384,7 +475,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             # with greater intensity must be "signal". 
             if np.size(binVal) > 0:
                 thresh = binVal[0]
-                m2[i,:,:] = (crmasked_cube[i,:,:] > thresh).astype(int) * cr_dqval
+                m2[i,:,:] = (flag_cr_input > thresh).astype(int) * cr_dqval
                 # now mask tails after end points of saturating cosmic rays that were found:
                 # First, make a labeled array, where each cosmic ray is numbered and that number is assigned 
                 # as the value for every pixel in that cosmic ray
@@ -407,14 +498,14 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 m2[i][m2[i] > cr_dqval] = cr_dqval #just in case there was any overlap between flagged cosmic rays
             # If binVal is empty, the histogram has no minima except at an endpoint. 
             else:
-                m2[i,:,:] = np.zeros_like(crmasked_cube[i,:,:])
+                m2[i,:,:] = np.zeros_like(flag_cr_input)
                 thresh = np.inf #i.e., no threshold cut
             if median_filter_mode == 1:
                 if crmasked_dataset[i].ext_hdr['SAT_DN'] > thresh:
                     crmasked_dataset[i].ext_hdr['SAT_DN'] = thresh # overwrite 
         # in addition to what was just done, this will catch the cosmic rays that blend in with the background and aren't caught with median filter method.
         if median_filter_mode > 1:
-            im = crmasked_cube[i,:,:].copy()
+            im = flag_cr_input.copy()
             im[m2[i,:,:] > 0] = np.nan
             imm = flag_cosmics(cube=np.stack([im]),
                                 fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
@@ -431,7 +522,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             m2[i][non_nan_inds] = m2[i][non_nan_inds] + imm[0][non_nan_inds]
             m2[i][m2[i] > cr_dqval] = cr_dqval #just in case there was any overlap between flagged cosmic rays
         if median_filter_mode == 0:
-            m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
+            m2[i,:,:] = flag_cosmics(cube=flag_cr_input,
                             fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
                             sat_thresh=cosm_thresh,
                             plat_thresh=plat_thresh,
@@ -458,13 +549,13 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
 def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
     """
-    Perform non-linearity correction of a dataset using the corresponding non-linearity correction. We check for non-linear pixel and flag them in the DQ. 
+    Perform non-linearity correction of a dataset using the corresponding non-linearity correction. We check for non-linear pixel and flag them in the DQ.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level).
         non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity.
         threshold (float): threshold for flagging pixels in the DQ array, value above this threshold will be flagged in the DQ map as too nonlinear. By default it is set to infinity, user can change it to a different value.
-    
+
     Returns:
         (corgidrp.data.Dataset): A non-linearity corrected version of the input dataset
     """
@@ -493,7 +584,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
         current_value = linearized_dataset[i].dq[linearized_cube[i] > threshold]
         linearized_dataset[i].dq[linearized_cube[i] > threshold] = np.bitwise_or(current_value, non_linear_flag)
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
-    
+
     if non_lin_correction is not None:
         history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)
 
@@ -515,9 +606,9 @@ def remove_sat_images(input_dataset, sat_fwcs, pct_oversat_lim=20, dataset_copy=
         pct_oversat_lim: (float):
             Percent of total frame over sat_fwc over which we determine the frame is oversaturated
             and will be discarded, Frame saturations equal to this argument are not discarded.
-        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and
             the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
-    
+
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
         pruned_sat_fwcs (list): input sat_fwcs with corresponding saturated frame fwcs removed

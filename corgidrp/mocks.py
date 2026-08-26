@@ -2035,7 +2035,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #190K: gain of 10-20
     emccd[190] = EMCCDDetect(
@@ -2052,7 +2060,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #195K: gain of 10-20
     # emccd[195] = EMCCDDetect(
@@ -2086,7 +2102,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #210K: gain of 10-20
     emccd[210] = EMCCDDetect(
@@ -2103,7 +2127,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #220K: gain of 10-20
     emccd[220] = EMCCDDetect(
@@ -2120,7 +2152,16 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
+            
         )
 
     #when tauc is 3e-3, that gives a mean e- field of 2090 e-
@@ -2681,7 +2722,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 nbits=nbits,
                 numel_gain_register=604,
                 meta_path=meta_path,
-                nonlin_path=nonlin_path
+                nonlin_path=nonlin_path,
+                upstream_spill_prob=None,
+                fpn_path=None,
+                bias_sigma_row=0,
+                bias_sigma_col=0,
+                fast_gain_mode=True,
+                row_read_time=0,
+                gain_CIC_Q=0,
+                tail_length=40
                 )
         # save to FITS files
         for sc in [1,2,3,4]:
@@ -2693,7 +2742,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     gain_counts = np.reshape(readout_emccd._gain_register_elements(temps[temp][sc][i].ravel()),temps[temp][sc][i].shape)
                     if gain_counts.any() >= full_well_serial:
                         raise Exception('Saturated after EM gain applied.')
-                    output_dn = readout_emccd.readout(gain_counts)
+                    output_dn = readout_emccd.readout(gain_counts,frametime)
                 else:
                     output_dn = temps[temp][sc][i]
                 prihdr, exthdr = create_default_L1_TrapPump_headers(arrtype)
@@ -2782,6 +2831,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7
         eperdn=kgain,
         nbits=64, # number of ADU bits
         numel_gain_register=604, #number of gain register elements
+        upstream_spill_prob=None,
         fpn_path=None,
         bias_sigma_row=0,
         bias_sigma_col=0,
@@ -3391,6 +3441,10 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
         y_image, x_image = rng.integers(100), rng.integers(100)
         image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
             512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
+        # update the FMSX/FSMY headers so the pipeline can tell frames with different dithers apart
+        platescale = 21.8
+        exthd["FSMX"] = platescale * x_image # convert pixel to mas
+        exthd["FSMY"] = platescale * y_image
         # List of known positions and list of known PSF volume
         psf_loc += [[512+x_image+model.x_mean.value-imshape[0]//2,
             512+y_image+model.y_mean.value-imshape[0]//2]]

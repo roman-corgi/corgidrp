@@ -289,124 +289,116 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     logger.info('Running L1 -> L2a -> L2b -> L3 -> L4 spectroscopy data processing pipeline')
     logger.info('='*80)
     
-    if input_dataset[0].pri_hdr['VISTYPE'] in ['CGIVST_CAL_SPEC_TGTREF']:
-        # Recipe chaining allows us to go L1 -> L2a -> L2b -> L3 -> L4
-        logger.info('Running L1 to L4 recipe using recipe chaining...')
-        with warnings.catch_warnings():  
-            warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-            full_recipe = walker.walk_corgidrp(input_data_filelist, "", l4_outputdir)
+    # Step 1: L1 -> L2a (generic processing)
+    logger.info('Step 1: Running L1 to L2a recipe...')
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        full_recipe = walker.walk_corgidrp(input_data_filelist, "", l4_outputdir)
+
+    # Find the L2a output files
+    l2a_files = [f for f in os.listdir(l4_outputdir) if f.endswith('_l2a.fits')]
+    l2a_filelist = [os.path.join(l4_outputdir, f) for f in l2a_files]
+    logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
     
-    else:
-        # Step 1: L1 -> L2a (generic processing)
-        logger.info('Step 1: Running L1 to L2a recipe...')
-        with warnings.catch_warnings():  
-            warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-            full_recipe = walker.walk_corgidrp(input_data_filelist, "", l4_outputdir)
-    
-        # Find the L2a output files
-        l2a_files = [f for f in os.listdir(l4_outputdir) if f.endswith('_l2a.fits')]
-        l2a_filelist = [os.path.join(l4_outputdir, f) for f in l2a_files]
-        logger.info(f'L1 to L2a complete. Generated {len(l2a_filelist)} L2a files.')
+    '''
+    if l2a_filelist:
         
-        '''
-        if l2a_filelist:
-            
-            # Dark calibration: Create PC master dark from L2a frames (for PC data only)
-            # This completes the calibration setup that began in the calibration products section above
-            if is_pc_data:
-                logger.info('Creating photon-counted master dark from mocked L1 dark frames...')
-                try:
-                    # 1) Generate photon-countable L1 dark frames using mocks
-                    num_illum_frames = len(l2a_filelist)
-                    num_dark_frames = max(num_illum_frames, 10)
-                    _, dark_l1_dataset, _, _ = mocks.create_photon_countable_frames(
-                        Nbrights=1, Ndarks=num_dark_frames)
-
-                    # 2) Save L1 darks to disk
-                    dark_l1_dir = os.path.join(l4_outputdir, 'pc_dark_l1')
-                    if not os.path.exists(dark_l1_dir):
-                        os.makedirs(dark_l1_dir)
-                    dark_l1_dataset.save(filedir=dark_l1_dir)
-
-                    # 3) Convert L1 darks -> L2a using the walker
-                    dark_l1_files = [os.path.join(dark_l1_dir, f) for f in os.listdir(dark_l1_dir) if f.endswith('_l1_.fits')]
-                    dark_l2a_outdir = os.path.join(l4_outputdir, 'pc_dark_l2a')
-                    if not os.path.exists(dark_l2a_outdir):
-                        os.makedirs(dark_l2a_outdir)
-                    with warnings.catch_warnings():  
-                        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-                        walker.walk_corgidrp(dark_l1_files, "", dark_l2a_outdir, template="l1_to_l2a_basic.json")
-
-                    # 4) Collect resulting L2a dark frames
-                    dark_l2a_filelist = [os.path.join(dark_l2a_outdir, f) for f in os.listdir(dark_l2a_outdir) if f.endswith('_l2a.fits')]
-                    if len(dark_l2a_filelist) == 0:
-                        raise Exception('No L2a darks produced from mocked L1 dark frames')
-
-                    # 5) Build PC master dark from L2a darks
-                    from corgidrp.photon_counting import get_pc_mean
-                    dark_l2a_dataset = Dataset(dark_l2a_filelist)
-                    pc_dark = get_pc_mean(dark_l2a_dataset, inputmode='darks')
-                    if pc_dark.ext_hdr.get('PC_STAT') != 'photon-counted master dark':
-                        raise Exception('Failed to create valid photon-counted master dark')
-                    calibrations_dir = os.path.join(l4_outputdir, 'calibrations')
-                    if not os.path.exists(calibrations_dir):
-                        os.makedirs(calibrations_dir)
-                    mocks.rename_files_to_cgi_format(list_of_fits=[pc_dark], output_dir=calibrations_dir, level_suffix="drk_cal")
-                    this_caldb.create_entry(pc_dark)
-                    logger.info(f'Photon-counted master dark created from {len(dark_l2a_filelist)} L2a dark frames.')
-                except Exception as e:
-                    logger.warning(f'Could not create photon-counted master dark: {e}.')
-                    import traceback
-                    logger.warning(traceback.format_exc())
-            '''
-
-        # Step 2: L2a -> L2b (auto-detect spectroscopy recipe)
-
-        logger.info('Step 2: Running L2a to L2b recipe...')
-        '''
+        # Dark calibration: Create PC master dark from L2a frames (for PC data only)
+        # This completes the calibration setup that began in the calibration products section above
         if is_pc_data:
-            recipe = walker.autogen_recipe(l2a_filelist, l4_outputdir)
-            ### Modify keyword to so that the PC master dark is used
-            for step in recipe[0]['steps']:
-                if step['name'] == "dark_subtraction":
-                    step['calibs']['Dark'] = pc_dark.filepath
-            with warnings.catch_warnings():  
-                warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-                output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
-            recipe[1]['inputs'] = output_filepaths
-            for step in recipe[1]['steps']:
-                if step['name'] == "get_pc_mean":
-                    step['calibs']['Dark'] = pc_dark.filepath
-            with warnings.catch_warnings():  
-                warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-                output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
-                # files are overwritten with same filenames
-                recipe[2]['inputs'] = output_filepaths1
-                walker.run_recipe(recipe[2], save_recipe_file=True)
+            logger.info('Creating photon-counted master dark from mocked L1 dark frames...')
+            try:
+                # 1) Generate photon-countable L1 dark frames using mocks
+                num_illum_frames = len(l2a_filelist)
+                num_dark_frames = max(num_illum_frames, 10)
+                _, dark_l1_dataset, _, _ = mocks.create_photon_countable_frames(
+                    Nbrights=1, Ndarks=num_dark_frames)
+
+                # 2) Save L1 darks to disk
+                dark_l1_dir = os.path.join(l4_outputdir, 'pc_dark_l1')
+                if not os.path.exists(dark_l1_dir):
+                    os.makedirs(dark_l1_dir)
+                dark_l1_dataset.save(filedir=dark_l1_dir)
+
+                # 3) Convert L1 darks -> L2a using the walker
+                dark_l1_files = [os.path.join(dark_l1_dir, f) for f in os.listdir(dark_l1_dir) if f.endswith('_l1_.fits')]
+                dark_l2a_outdir = os.path.join(l4_outputdir, 'pc_dark_l2a')
+                if not os.path.exists(dark_l2a_outdir):
+                    os.makedirs(dark_l2a_outdir)
+                with warnings.catch_warnings():  
+                    warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+                    walker.walk_corgidrp(dark_l1_files, "", dark_l2a_outdir, template="l1_to_l2a_basic.json")
+
+                # 4) Collect resulting L2a dark frames
+                dark_l2a_filelist = [os.path.join(dark_l2a_outdir, f) for f in os.listdir(dark_l2a_outdir) if f.endswith('_l2a.fits')]
+                if len(dark_l2a_filelist) == 0:
+                    raise Exception('No L2a darks produced from mocked L1 dark frames')
+
+                # 5) Build PC master dark from L2a darks
+                from corgidrp.photon_counting import get_pc_mean
+                dark_l2a_dataset = Dataset(dark_l2a_filelist)
+                pc_dark = get_pc_mean(dark_l2a_dataset, inputmode='darks')
+                if pc_dark.ext_hdr.get('PC_STAT') != 'photon-counted master dark':
+                    raise Exception('Failed to create valid photon-counted master dark')
+                calibrations_dir = os.path.join(l4_outputdir, 'calibrations')
+                if not os.path.exists(calibrations_dir):
+                    os.makedirs(calibrations_dir)
+                mocks.rename_files_to_cgi_format(list_of_fits=[pc_dark], output_dir=calibrations_dir, level_suffix="drk_cal")
+                this_caldb.create_entry(pc_dark)
+                logger.info(f'Photon-counted master dark created from {len(dark_l2a_filelist)} L2a dark frames.')
+            except Exception as e:
+                logger.warning(f'Could not create photon-counted master dark: {e}.')
+                import traceback
+                logger.warning(traceback.format_exc())
         '''
+
+    # Step 2: L2a -> L2b (auto-detect spectroscopy recipe)
+
+    logger.info('Step 2: Running L2a to L2b recipe...')
+    '''
+    if is_pc_data:
+        recipe = walker.autogen_recipe(l2a_filelist, l4_outputdir)
+        ### Modify keyword to so that the PC master dark is used
+        for step in recipe[0]['steps']:
+            if step['name'] == "dark_subtraction":
+                step['calibs']['Dark'] = pc_dark.filepath
         with warnings.catch_warnings():  
             warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-            walker.walk_corgidrp(l2a_filelist, "", l4_outputdir)
-        
-        # Find the L2b output files
-        l2b_files = [f for f in os.listdir(l4_outputdir) if f.endswith('_l2b.fits')]
-        l2b_filelist = [os.path.join(l4_outputdir, f) for f in l2b_files]
-        logger.info(f'L2a to L2b complete. Generated {len(l2b_filelist)} L2b files.')
+            output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+        recipe[1]['inputs'] = output_filepaths
+        for step in recipe[1]['steps']:
+            if step['name'] == "get_pc_mean":
+                step['calibs']['Dark'] = pc_dark.filepath
+        with warnings.catch_warnings():  
+            warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+            output_filepaths1 = walker.run_recipe(recipe[1], save_recipe_file=True)
+            # files are overwritten with same filenames
+            recipe[2]['inputs'] = output_filepaths1
+            walker.run_recipe(recipe[2], save_recipe_file=True)
+    '''
+    with warnings.catch_warnings():  
+        warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
+        walker.walk_corgidrp(l2a_filelist, "", l4_outputdir)
+    
+    # Find the L2b output files
+    l2b_files = [f for f in os.listdir(l4_outputdir) if f.endswith('_l2b.fits')]
+    l2b_filelist = [os.path.join(l4_outputdir, f) for f in l2b_files]
+    logger.info(f'L2a to L2b complete. Generated {len(l2b_filelist)} L2b files.')
 
-        # Step 3: L2b -> L3 (using output from step 2)
-        logger.info('Step 3: Running L2b to L3 spectroscopy recipe...')
-        walker.walk_corgidrp(l2b_filelist, "", l4_outputdir)
-        l3_filelist = [os.path.join(l4_outputdir, f) for f in os.listdir(l4_outputdir) if f.endswith('_l3_.fits')]
-        logger.info('L2b to L3 complete.')
-        logger.info('')
-        logger.info(f"Generated and saved {len(l3_filelist)} L3 input files")
+    # Step 3: L2b -> L3 (using output from step 2)
+    logger.info('Step 3: Running L2b to L3 spectroscopy recipe...')
+    walker.walk_corgidrp(l2b_filelist, "", l4_outputdir)
+    l3_filelist = [os.path.join(l4_outputdir, f) for f in os.listdir(l4_outputdir) if f.endswith('_l3_.fits')]
+    logger.info('L2b to L3 complete.')
+    logger.info('')
+    logger.info(f"Generated and saved {len(l3_filelist)} L3 input files")
 
-        # Step 3: L3 -> L4 (with policy)
-        logger.info('Step 3: Running L3 to L4 non-coronographic spectroscopy recipe...')
-        walker.walk_corgidrp(l3_filelist, "", os.path.join(l4_outputdir,'../'))
-        logger.info('L3 to L4 complete.')
-        logger.info('')
-        
+    # Step 3: L3 -> L4 (with policy)
+    logger.info('Step 3: Running L3 to L4 non-coronographic spectroscopy recipe...')
+    walker.walk_corgidrp(l3_filelist, "", l4_outputdir)
+    logger.info('L3 to L4 complete.')
+    logger.info('')
+    
     # ================================================================================
     # (5) Validate Output L3 Images
     # ================================================================================
@@ -593,7 +585,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         check_dimensions(data, (81, 81), "HDU5 Data Array: 2D array containing the 2D wavelength uncertainty distribution", logger)
         #verify HDU6
         hdu6 = hdul[6]
-        check_dimensions(hdu6.data, (19,), "HDU6 Data Array: containing the 1D spectral distribution", logger)
+        check_dimensions(hdu6.data, (51,), "HDU6 Data Array: containing the 1D spectral distribution", logger)
         if np.isnan(hdu6.data).any() is True:
             logger.info(f"HDU6 Data Array: Contains NANs in the data. Expected: no NANs. FAIL.")
         else:
@@ -605,21 +597,21 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         # Verify HDU7 (error)
         hdu7 = hdul[7]
         err = hdu7.data
-        check_dimensions(err, (1, 19), "HDU7 Data Array: 1D array with the corresponding spectral uncertainty", logger)
+        check_dimensions(err, (1, 51), "HDU7 Data Array: 1D array with the corresponding spectral uncertainty", logger)
         # Verify HDU8 (dq)
         hdu8 = hdul[8]
         dq = hdu8.data
-        check_dimensions(dq, (19,), "HDU8 Data Array: 1D array with the corresponding spectral data quality", logger)
+        check_dimensions(dq, (51,), "HDU8 Data Array: 1D array with the corresponding spectral data quality", logger)
         
         # Verify HDU9 (wavelength)
         hdu9 = hdul[9]
         wave = hdu9.data
-        check_dimensions(wave, (19,), "HDU9 Data Array: 1D array with the corresponding wavelength", logger)
+        check_dimensions(wave, (51,), "HDU9 Data Array: 1D array with the corresponding wavelength", logger)
         
         # Verify HDU10 (wavelength uncertainties)
         hdu10 = hdul[10]
         wave_err = hdu10.data
-        check_dimensions(wave_err, (19,), "HDU10 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
+        check_dimensions(wave_err, (51,), "HDU10 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
         
         # Verify header keywords
         verify_header_keywords(hdul[1].header, {'DATALVL': 'L4', 'CFAMNAME' : '3', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3', 'BUNIT' : 'photoelectron/s'},

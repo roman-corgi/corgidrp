@@ -13,6 +13,8 @@ import pyklip.fakes as fakes
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.optimize import OptimizeWarning
+from scipy.ndimage import median_filter
+from astropy.convolution import convolve, Gaussian2DKernel
 
 def centroid(frame):
     """
@@ -22,9 +24,7 @@ def centroid(frame):
         frame (np.ndarray): 2D array to compute centering
 
     Returns:
-        tuple:
-            xcen (float): X centroid coordinate
-            ycen (float): Y centroid coordinate
+        tuple: (xcen, ycen) X and Y centroid coordinates.
 
     """
     y, x = np.indices(frame.shape)
@@ -35,7 +35,7 @@ def centroid(frame):
     return xcen, ycen
 
 
-def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None):
+def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None, gaussian_kernel_size=None):
     """
     Finds the centroid in a sub-region around a given initial guess (or the brightest pixel if no guess is provided).
 
@@ -44,17 +44,23 @@ def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None):
         roi_radius (int or float): Half-size of the box around the initial guess or brightest pixel.
         centering_initial_guess (tuple or None, optional): (x_init, y_init) as initial guess for centroiding.
                                                            If None, defaults to the brightest pixel.
+        gaussian_kernel_size (int or None, optional): Size of the gaussian kernel convolved with the frame through before guessing the center.
+                                                    If None, no filtering is done. 
 
     Returns:
-        tuple:
-            xcen (float): X centroid coordinate.
-            ycen (float): Y centroid coordinate.
+        tuple: (xcen, ycen) X and Y centroid coordinates.
     """
 
     # 1) Unpack initial guess or fall back to brightest pixel
     if centering_initial_guess is not None and None not in centering_initial_guess:
         peak_x, peak_y = int(round(centering_initial_guess[0])), int(round(centering_initial_guess[1]))
+    elif gaussian_kernel_size is not None:
+        # smooth out the frame before taking brightest pixel
+        kernel = Gaussian2DKernel(gaussian_kernel_size)
+        filtered_frame = convolve(frame, kernel, nan_treatment='interpolate', preserve_nan=False)
+        peak_y, peak_x = np.unravel_index(np.nanargmax(filtered_frame), frame.shape)
     else:
+        # take the brightest pixel directly with no filtering
         peak_y, peak_x = np.unravel_index(np.nanargmax(frame), frame.shape)
 
     # 2) Define the subarray (region of interest) around the peak
@@ -973,7 +979,8 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
   
 def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
-                          frames_to_combine=None, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None):
+                          frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
+                          pa_tolerance=0.1, keywords_to_split_dataset_by=None):
     """
     Perform the boresight calibration of a dataset.
     
@@ -989,11 +996,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
         platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
         center_radius (float): Percent of the image to compute plate scale and north angle from, centered around the image center (default: 0.9 -- ie: 90% of the image is used)
-        frames_to_combine (int): The number of frames to combine in a dataset (default: None)
+        frames_to_combine (boolean or int): If True or 1, median combine all frames of the same target and instrument configuration into a singular frame.
+            If it is an integer value N > 1, the dataset is split into sequences of N frames to be median combined regardless of header keywords. (default: False)
         find_distortion (boolean): Used to determine if distortion map coeffs will be computed (default: False)
         fitorder (int): The order of legendre polynomials used to fit the distortion map (default: 3)
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
         initial_dist_guess (np.array): An initial guess of legendre coefficients used for fitting distortion, if None will use coeffs associated with no distortion (default: None)
+        pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) to group frames together when frames_to_combine is True (Default: 0.1)
+        keywords_to_split_dataset_by (list, optional): List of additional header keywords to split the input dataset by for frame combining in addition default keywords the function uses for target, roll, and dither (default: None)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -1029,28 +1039,91 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         field_path = full_field_path
 
     # combine data frames if requested
-    if frames_to_combine is not None:
+    grouped_datasets = []
+    if int(frames_to_combine) > 1:
+        # group N number of frames together as specified by frames_to_combine
         num_frames = len(input_dataset)
-        data_array = []
-        for frame in range(num_frames):
-            data_array.append(input_dataset[frame].data)
-
-        image_objects = []
-        count = 0
-        while count < num_frames:
-            count += frames_to_combine
-            if count >= num_frames:
-                sub_array = data_array[count - frames_to_combine:]
-                file_name = input_dataset[-1].filename
+        frame_counter = 0
+        group = []
+        for i in range(num_frames):
+            frame = dataset.frames[i]
+            frame_counter += 1
+            group.append(frame)
+            # construct grouping once enough frames are accumulated or end of dataset is reached
+            if frame_counter == frames_to_combine or i == num_frames - 1:
+                grouped_datasets.append(corgidrp.data.Dataset(group))
+                # reset counter and grouping
+                frame_counter = 0
+                group = []
+    elif int(frames_to_combine) == 1: # note that we treat 1 as true here, to disable frame combining 0/False must be passed in
+        # group frames based on header keywords
+        # first split by PA since it requires handling of slight numerical mismatches and circular behavior
+        clusters = []
+        for frame in dataset.frames:
+            pa = frame.pri_hdr["PA_APER"] % 360.0 # in case PA_APER can be negative..
+            pa_rad = np.deg2rad(pa)
+            pa_sin = np.sin(pa_rad)
+            pa_cos = np.cos(pa_rad)
+            best_idx = None
+            best_diff = None
+            for idx, cluster in enumerate(clusters):
+                pa_diff = abs(((pa - cluster["pa_center"] + 180.0) % 360.0) - 180.0)
+                if pa_diff <= pa_tolerance and (best_diff is None or pa_diff < best_diff):
+                    best_idx = idx
+                    best_diff = pa_diff
+            if best_idx is None:
+                clusters.append({
+                    "pa_center": pa,
+                    "sum_sin": pa_sin,
+                    "sum_cos": pa_cos,
+                    "frames": [frame],
+                })
             else:
-                sub_array = data_array[count - frames_to_combine: count]
-                file_name = input_dataset[count].filename
+                cluster = clusters[best_idx]
+                cluster["frames"].append(frame)
+                cluster["sum_sin"] += pa_sin
+                cluster["sum_cos"] += pa_cos
+                cluster["pa_center"] = np.degrees(
+                    np.arctan2(cluster["sum_sin"], cluster["sum_cos"])
+                ) % 360.0
 
-            comb = np.median(sub_array, axis=0)
-            im = corgidrp.data.Image(comb, pri_hdr=input_dataset[count - frames_to_combine].pri_hdr, ext_hdr=input_dataset[0].ext_hdr)
-            im.filename = file_name
+        # create master list of all the primary and external header keywords to split by
+        split_keywords = ['TARGET', 'RA_APER', 'DEC_APER', 'FSMX', 'FSMY'] # keywords for target and dither splitting
+        if keywords_to_split_dataset_by is not None:
+            split_keywords.extend(keywords_to_split_dataset_by)
+        # separate out primary and external header keywords, ones not found in either will be skipped
+        # this assumes the header formats are consistent across all input frames
+        prihdr = dataset.frames[0].pri_hdr
+        exthdr = dataset.frames[0].ext_hdr
+        prihdr_keyword_list = []
+        exthdr_keyword_list = []
+        for keyword in split_keywords:
+            if keyword in prihdr:
+                prihdr_keyword_list.append(keyword)
+            elif keyword in exthdr:
+                exthdr_keyword_list.append(keyword)
+
+        # split pa_dataset one more time by the constructed keyword list
+        for cluster in clusters:
+            pa_dataset = corgidrp.data.Dataset(cluster["frames"])
+            dither_datasets, _ = pa_dataset.split_dataset(prihdr_keywords=prihdr_keyword_list, exthdr_keywords=exthdr_keyword_list)
+            # add to the final grouping
+            grouped_datasets.extend(dither_datasets)
+
+    # median combine each grouped dataset into one frame for calibration processing
+    if len(grouped_datasets) > 0:
+        image_objects = []
+        for grouped_dataset in grouped_datasets:
+            # grab all frames in the dataset
+            data_array = [frame.data for frame in grouped_dataset]
+            # median combine
+            comb = np.nanmedian(data_array, axis=0)
+            # create image object
+            im = corgidrp.data.Image(comb, pri_hdr=grouped_dataset[0].pri_hdr, ext_hdr=grouped_dataset[0].ext_hdr)
+            im.filename = grouped_dataset[-1].filename
             image_objects.append(im)
         
+        # rebuild the input dataset from the grouped and median combined frames
         dataset = corgidrp.data.Dataset(image_objects)
 
     # create a place to store all the calibration measurements
@@ -1059,7 +1132,10 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     corrected_positions_boresight = []      # place to hold the corrected target position based on boresight offsets for each frame
 
     for i in range(len(dataset)):
-        in_dataset = corgidrp.data.Dataset([dataset[i]])
+        if int(frames_to_combine) != 0:
+            in_dataset = grouped_datasets[i]
+        else:
+            in_dataset = corgidrp.data.Dataset([dataset[i]])
         image = dataset[i].data
 
         # call the target coordinates from the image header

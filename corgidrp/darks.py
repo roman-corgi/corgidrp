@@ -29,31 +29,30 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
 
     Args:
         dataset_or_image_list (data.Dataset, list, or array_like): Dataset or list (or stack) of L2b data frames
-    (with no bad pixels applied to them).
+            (with no bad pixels applied to them).
         bpmap_list (list or array_like): List (or stack) of bad-pixel maps
-    associated with L2b data frames. Each must be 0 (good) or 1 (bad)
-    at every pixel. If first input is a Dataset, this input is ignored.
-        err (bool):  If True, calculates the standard error over all
-    the frames.  Intended for the corgidrp.Data.Dataset.all_err
-    arrays. Defaults to False.   
-
+            associated with L2b data frames. Each must be 0 (good) or 1 (bad)
+            at every pixel. If first input is a Dataset, this input is ignored.
+        err (bool): If True, calculates the standard error over all
+            the frames.  Intended for the corgidrp.Data.Dataset.all_err
+            arrays. Defaults to False.
 
     Returns:
-        comb_image (array_like): Mean-combined frame from input list data.
+        tuple:
+            comb_image (array_like): Mean-combined frame from input list data.
 
-        comb_bpmap (array_like): Mean-combined bad-pixel map.
+            comb_bpmap (array_like): Mean-combined bad-pixel map.
 
-        map_im (array-like): Array showing how many frames per pixel were
-        unmasked. Used for getting read noise in the calibration of the
-        master dark.
+            map_im (array-like): Array showing how many frames per pixel were
+            unmasked. Used for getting read noise in the calibration of the
+            master dark.
 
-        enough_for_rn (bool): Useful only for the calibration of the master dark.
-        False:  Fewer than half the frames available for at least one pixel in
-        the averaging due to masking, so noise maps cannot be effectively
-        determined for all pixels.
-        True:  Half or more of the frames available for all pixels, so noise
-        mpas can be effectively determined for all pixels.
-
+            enough_for_rn (bool): Useful only for the calibration of the master dark.
+            False:  Fewer than half the frames available for at least one pixel in
+            the averaging due to masking, so noise maps cannot be effectively
+            determined for all pixels.
+            True:  Half or more of the frames available for all pixels, so noise
+            mpas can be effectively determined for all pixels.
     """
     # uncomment for RAM check
     # import psutil
@@ -196,32 +195,28 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     master dark for those rows.  They are set to NaN.
 
     Args:
-    dataset (corgidrp.data.Dataset):
-        This is an instance of corgidrp.data.Dataset.
-        Each frame should accord with the SCI full frame geometry.
-        If Dataset has metadata only (as in RAM-heavy case),
-        each frame is read in from its filepath one at a time.  If Dataset has
-        its data, then all the frames are processed at once.
-    detector_params (corgidrp.data.DetectorParams):
-        a calibration file storing detector calibration values
-    detector_regions (dict):
-        a dictionary of detector geometry properties.  Keys should be as found
-        in detector_areas in detector.py.
-        Defaults to None, in which case detector_areas from detector.py is used.
-    full_frame (bool):
-        If True, a full-frame master dark is generated (which
-        may be useful for the module that statistically fits a frame to find
-        the empirically applied EM gain, for example). If False, an image-area
-        master dark is generated.  Defaults to False.
+        dataset (corgidrp.data.Dataset): This is an instance of corgidrp.data.Dataset.
+            Each frame should accord with the SCI full frame geometry.
+            If Dataset has metadata only (as in RAM-heavy case),
+            each frame is read in from its filepath one at a time.  If Dataset has
+            its data, then all the frames are processed at once.
+        detector_params (corgidrp.data.DetectorParams): a calibration file storing
+            detector calibration values
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found
+            in detector_areas in detector.py.
+            Defaults to None, in which case detector_areas from detector.py is used.
+        full_frame (bool): If True, a full-frame master dark is generated (which
+            may be useful for the module that statistically fits a frame to find
+            the empirically applied EM gain, for example). If False, an image-area
+            master dark is generated.  Defaults to False.
 
     Returns:
-    master_dark : corgidrp.data.DetectorNoiseMaps instance
-        The mean-combined master dark, in detected electrons.
-        master_dark.err includes the statistical error across all the frames as
-        well as any individual err from each frame (and accounts for masked
-        pixels in the calculations).
-        master_dark.dq: pixels that are masked for all frames have non-zero
-        values.
+        corgidrp.data.DetectorNoiseMaps: master_dark, the mean-combined master dark, in detected electrons.
+            master_dark.err includes the statistical error across all the frames as
+            well as any individual err from each frame (and accounts for masked
+            pixels in the calculations).
+            master_dark.dq: pixels that are masked for all frames have non-zero
+            values.
     """
     if detector_regions is None:
             detector_regions = detector_areas
@@ -433,65 +428,65 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         Defaults to True.
         
     Returns:
-    noise_maps : corgidrp.data.DetectorNoiseMaps instance
-        Includes a 3-D stack of frames for the data, err, and the dq.
-        input data: np.stack([FPN_map, CIC_map, DC_map])
-        input err:  np.stack([FPN_std_map, C_std_map, DC_std_map])
-        FPN_std_map, C_std_map, and DC_std_map contain the fitting error.
-        In all the err, masked pixels are accounted for in
-        the calculations, and the err from the input frames, along with statistical
-        error due to having fewer frames available per sub-stack due to any masking,
-        is used for weighting the data in the least squares fit.
-        input dq:   np.stack([output_dq, output_dq, output_dq])
-        The pixels that are masked for EVERY frame in all sub-stacks
-        but 3 (or less) are assigned a flag value from the combination of the frames.
-        These pixels would have no reliability for dark subtraction.
+        corgidrp.data.DetectorNoiseMaps: noise_maps, includes a 3-D stack of frames for the data, err, and the dq.
 
-        The header info is taken from that of
-        one of the frames from the input datasets and can be changed via a call
-        to the DetectorNoiseMaps class if necessary.  The bias offset info is
-        found in the exthdr under these keys:
-        'B_O': bias offset
-        'B_O_ERR': bias offset error
-        'B_O_UNIT': DN
+            input data: np.stack([FPN_map, CIC_map, DC_map])
 
+            input err:  np.stack([FPN_std_map, C_std_map, DC_std_map])
+            FPN_std_map, C_std_map, and DC_std_map contain the fitting error.
+            In all the err, masked pixels are accounted for in
+            the calculations, and the err from the input frames, along with statistical
+            error due to having fewer frames available per sub-stack due to any masking,
+            is used for weighting the data in the least squares fit.
+
+            input dq:   np.stack([output_dq, output_dq, output_dq])
+            The pixels that are masked for EVERY frame in all sub-stacks
+            but 3 (or less) are assigned a flag value from the combination of the frames.
+            These pixels would have no reliability for dark subtraction.
+
+            The header info is taken from that of
+            one of the frames from the input datasets and can be changed via a call
+            to the DetectorNoiseMaps class if necessary.  The bias offset info is
+            found in the exthdr under these keys:
+            'B_O': bias offset
+            'B_O_ERR': bias offset error
+            'B_O_UNIT': DN
 
     Info on intermediate products in this function:
-    FPN_map : array-like (full frame)
-        A per-pixel map of fixed-pattern noise (in detected electrons).  Any negative values
-        from the fit are made positive in the end.
-    CIC_map : array-like (full frame)
-        A per-pixel map of EXCAM clock-induced charge (in detected electrons). Any negative
-        values from the fit are made positive in the end.
-    DC_map : array-like (full frame)
-        A per-pixel map of dark current (in detected electrons/s). Any negative values
-        from the fit are made positive in the end.
-    bias_offset : float
-        The median for the residual FPN+CIC in the region where bias was
+        FPN_map (array-like (full frame)): A per-pixel map of fixed-pattern noise (in detected electrons).
+        Any negative values from the fit are made positive in the end.
+
+        CIC_map (array-like (full frame)): A per-pixel map of EXCAM clock-induced charge (in detected electrons).
+        Any negative values from the fit are made positive in the end.
+
+        DC_map (array-like (full frame)): A per-pixel map of dark current (in detected electrons/s).
+        Any negative values from the fit are made positive in the end.
+
+        bias_offset (float): The median for the residual FPN+CIC in the region where bias was
         calculated (i.e., prescan). In DN.
-    bias_offset_up : float
-        The upper bound of bias offset, accounting for error in input datasets
+
+        bias_offset_up (float): The upper bound of bias offset, accounting for error in input datasets
         and the fit.
-    bias_offset_low : float
-        The lower bound of bias offset, accounting for error in input datasets
+
+        bias_offset_low (float): The lower bound of bias offset, accounting for error in input datasets
         and the fit.
-    FPN_image_map : array-like (image area)
-        A per-pixel map of fixed-pattern noise in the image area (in detected electrons).
+
+        FPN_image_map (array-like (image area)): A per-pixel map of fixed-pattern noise in the image area (in detected electrons).
         Any negative values from the fit are made positive in the end.
-    CIC_image_map : array-like (image area)
-        A per-pixel map of EXCAM clock-induced charge in the image area
+
+        CIC_image_map (array-like (image area)): A per-pixel map of EXCAM clock-induced charge in the image area
         (in deteceted electrons). Any negative values from the fit are made positive in the end.
-    DC_image_map : array-like (image area)
-        A per-pixel map of dark current in the image area (in detected electrons/s).
+
+        DC_image_map (array-like (image area)): A per-pixel map of dark current in the image area (in detected electrons/s).
         Any negative values from the fit are made positive in the end.
-    FPNvar : float
-        Variance of fixed-pattern noise map (in detected electrons).
-    CICvar : float
-        Variance of clock-induced charge map (in detected electrons).
-    DCvar : float
-        Variance of dark current map (in detected electrons).
-    read_noise : float
-        Read noise estimate from the noise profile of a mean frame (in detected electrons).
+
+        FPNvar (float): Variance of fixed-pattern noise map (in detected electrons).
+
+        CICvar (float): Variance of clock-induced charge map (in detected electrons).
+
+        DCvar (float): Variance of dark current map (in detected electrons).
+
+        read_noise (float): Read noise estimate from the noise profile of a mean frame (in detected electrons).
         It's read off from the sub-stack with the lowest product of EM gain and
         frame time so that the gained variance of C and D is comparable to or
         lower than read noise variance, thus making reading it off doable.
@@ -502,23 +497,23 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         comes from the k gain calibration, and this is just a rough estimate
         that can be used as a sanity check, for checking agreement with the
         official calibrated value.
-    R_map : array-like
-        A per-pixel map of the adjusted coefficient of determination
+
+        R_map (array-like): A per-pixel map of the adjusted coefficient of determination
         (adjusted R^2) value for the fit.
-    FPN_image_mean : float
-        F averaged over all pixels,
+
+        FPN_image_mean (float): F averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of F_image_map.  This is just for comparison.
-    CIC_image_mean : float
-        C averaged over all pixels,
+
+        CIC_image_mean (float): C averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of C_image_map.  This is just for comparison.
-    DC_image_mean : float
-        D averaged over all pixels,
+
+        DC_image_mean (float): D averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of D_image_map.  This is just for comparison.
-    unreliable_pix_map : array-like (full frame)
-        A pixel value in this array indicates how many sub-stacks are usable
+
+        unreliable_pix_map (array-like (full frame)): A pixel value in this array indicates how many sub-stacks are usable
         for a fit for that pixel.  For each sub-stack for which
         a pixel is masked for more than half of
         the frames in the sub-stack, 1 is added to that pixel's value
@@ -529,12 +524,12 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         The pixels that are masked for EVERY frame in all sub-stacks
         but 3 (or less) are assigned a flag value from the combination of the frames.
         These pixels would have no reliability for dark subtraction.
-    FPN_std_map : array-like (full frame)
-        The standard deviation per pixel for the calibrated FPN.
-    CIC_std_map : array-like (full frame)
-        The standard deviation per pixel for the calibrated CIC.
-    DC_std_map : array-like (full frame)
-        The standard deviation per pixel for the calibrated dark current.
+
+        FPN_std_map (array-like (full frame)): The standard deviation per pixel for the calibrated FPN.
+
+        CIC_std_map (array-like (full frame)): The standard deviation per pixel for the calibrated CIC.
+
+        DC_std_map (array-like (full frame)): The standard deviation per pixel for the calibrated dark current.
     """
     if type(weighting) != bool:
         raise ValueError('The input weighting should be either True or False.')
@@ -1005,22 +1000,21 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         C = CIC (clock-induced charge) map
 
         Arguments:
-        dataset: corgidrp.data.Dataset instance.  The dataset should consist of
-            frames all with the same EM gain and exposure time, which are read
-            off from the dataset headers.
-        noisemaps: corgidrp.data.DetectorNoiseMaps instance.  The noise maps used
-            to build the master dark.
-        detector_regions: dict.  A dictionary of detector geometry properties.
-            Keys should be as found in detector_areas in detector.py. Defaults to
-            detector_areas in detector.py.
-        full_frame: bool.  If True, a full-frame master dark is generated (which
-            may be useful for the module that statistically fits a frame to find
-            the empirically applied EM gain, for example). If False, an image-area
-            master dark is generated.  Defaults to False.
+            dataset (corgidrp.data.Dataset): The dataset should consist of
+                frames all with the same EM gain and exposure time, which are read
+                off from the dataset headers.
+            noisemaps (corgidrp.data.DetectorNoiseMaps): The noise maps used
+                to build the master dark.
+            detector_regions (dict): A dictionary of detector geometry properties.
+                Keys should be as found in detector_areas in detector.py. Defaults to
+                detector_areas in detector.py.
+            full_frame (bool): If True, a full-frame master dark is generated (which
+                may be useful for the module that statistically fits a frame to find
+                the empirically applied EM gain, for example). If False, an image-area
+                master dark is generated.  Defaults to False.
 
         Returns:
-        master_dark:  corgidrp.data.Dark instance.
-            This contains the master dark in detected electrons.
+            corgidrp.data.Dark: master_dark, which contains the master dark in detected electrons.
 
         """
         if detector_regions is None:

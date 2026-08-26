@@ -19,6 +19,7 @@ from astropy.io import fits
 from scipy.ndimage import shift
 from numpy.lib.stride_tricks import sliding_window_view
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation, star_pos_spec
+from corgidrp.spec import DEFAULT_SPEC_EXTRACT_HEIGHTS
 from corgidrp import pol
 from corgidrp import fluxcal
 from astropy.io.fits.verify import VerifyWarning
@@ -1055,7 +1056,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
+        input_dataset (corgidrp.data.Dataset): Dataset containing 2-D PSF or satellite spot images taken through the narrowband filter and slit.
         spec_filter_offset (corgidrp.data.SpecFilterOffset): instance of SpecFilterOffset calibration class
         template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
                                                   path is taken
@@ -1082,8 +1083,9 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     if not dpamname.startswith("PRISM"):
         raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
     if dataset.frames[0].ext_hdr["FPAMNAME"] == 'OPEN_34':
-        warnings.warn("The dataset has FPAMNAME = OPEN_34, identicating that this is a non-coronagraphic spectroscopy observation, setting subtract_no_offset_frames = False")
-        subtract_no_offset_frames = False
+        if subtract_no_offset_frames:
+            warnings.warn("The dataset has FPAMNAME = OPEN_34, identicating that this is a non-coronagraphic spectroscopy observation, setting subtract_no_offset_frames = False")
+            subtract_no_offset_frames = False
 
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
@@ -1100,7 +1102,21 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     if "3D" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
         if with_science:
-            sci_dataset = narrow_dataset[int(np.nonzero(band != "3D")[0].item())]
+            science_bands = band[band != "3D"]
+            if len(science_bands) == 1:
+                # single science group: use it directly
+                sci_index = int(np.nonzero(band != "3D")[0].item())
+            else:
+                # Multiple non-narrowband groups present (e.g. filter-sweep sub-bands
+                # 3A/3B/3C/3E alongside the broadband): select the band-3 broadband science
+                # filter (3F or 3). Sub-band frames are dispersion-calibration frames, not
+                # science, so they are excluded from the wavelength-zeropoint-stamped output.
+                broadband = [b for b in ("3F", "3") if b in band]
+                if len(broadband) != 1:
+                    raise AttributeError("Expected a single science band or one band-3 broadband "
+                        "filter (3F/3), but found CFAMNAME groups {0}".format(list(band)))
+                sci_index = int(np.nonzero(band == broadband[0])[0].item())
+            sci_dataset = narrow_dataset[sci_index]
     elif "2C" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
         if with_science:
@@ -1284,36 +1300,112 @@ def find_spec_star(input_dataset, r_lamD=3, phi_deg=0):
     dataset.update_after_processing_step(history_msg)
     return dataset
 
-def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
+def extract_spec(input_dataset, halfwidth = 2, halfheight = None, apply_weights = False,
+                 redheight = None, blueheight = None):
     """
-    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
+    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around
     the wavelength zero point with units photoelectron/s/bin.
-    
+
     Args:
-        input_dataset (corgidrp.data.Dataset): 
+        input_dataset (corgidrp.data.Dataset):
         halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
-        halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
+        halfheight (int or None): The height of the fitting region is 2 * halfheight + 1 pixels along
+            dispersion. Default None: with no height keywords at all the extents are taken from the
+            DPAMNAME-keyed table corgidrp.spec.DEFAULT_SPEC_EXTRACT_HEIGHTS (PRISM2: redheight 10,
+            blueheight 28; PRISM3: redheight 13, blueheight 37), which span the band 3 bandpass about
+            the wavelength zero point. Passing halfheight forces a symmetric box and suppresses those
+            defaults.
         apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
-        
+        redheight (int or None): the box extends this many pixels from the zeropoint toward longer
+            wavelength (red), overriding the DPAMNAME default. If only one of
+            redheight/blueheight is given, the other is filled from the DPAMNAME default.
+        blueheight (int or None): extent from the zeropoint toward shorter wavelength (blue), px.
+
     Returns:
         corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
     """
     dataset = input_dataset.copy()
-    
+    clipped_filenames = []
+    first_frame_history = None
+    heights_seen = set()
+
     for image in dataset:
+        # Resolve this frame's along-dispersion extents. Precedence, highest first: explicit
+        # redheight/blueheight; explicit halfheight (symmetric box); the DPAMNAME-keyed defaults
+        # in corgidrp.spec.DEFAULT_SPEC_EXTRACT_HEIGHTS.
+        if halfheight is not None and redheight is None and blueheight is None:
+            redheight_frame, blueheight_frame, halfheight_frame = None, None, int(halfheight)
+            height_source = "user-specified halfheight"
+        else:
+            dpamname = image.ext_hdr['DPAMNAME']
+            key = str(dpamname).strip().upper()
+            if key not in DEFAULT_SPEC_EXTRACT_HEIGHTS:
+                raise AttributeError("PRISM2 and PRISM3 are the only valid DPAM settings for prism "
+                                     "spectroscopy, not " + str(dpamname))
+            default_red, default_blue = DEFAULT_SPEC_EXTRACT_HEIGHTS[key]
+            halfheight_frame = None
+            if redheight is None and blueheight is None:
+                redheight_frame, blueheight_frame = int(default_red), int(default_blue)
+                height_source = "DPAMNAME {0} default".format(dpamname)
+            else:
+                # fill the missing side from the prism default rather than silently falling back
+                # to a symmetric box
+                redheight_frame = default_red if redheight is None else redheight
+                blueheight_frame = default_blue if blueheight is None else blueheight
+                if redheight is None or blueheight is None:
+                    warnings.warn("extract_spec received only one of redheight/blueheight, extracting "
+                                  "with redheight {0} and blueheight {1} pixels".format(
+                                      redheight_frame, blueheight_frame))
+                redheight_frame, blueheight_frame = int(redheight_frame), int(blueheight_frame)
+                height_source = "user-specified"
+        asymmetric = redheight_frame is not None
+
         xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
-        image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
+        wave_map = image.hdu_list["WAVE"].data
+        if asymmetric:
+            # Read which along-dispersion (+/-Y) direction is red (longer wavelength) from the
+            # WAVE map, then set an asymmetric box: redheight toward red, blueheight toward blue.
+            wave_above = wave_map[min(ycent_round + 1, wave_map.shape[0] - 1), xcent_round]
+            wave_below = wave_map[max(ycent_round - 1, 0), xcent_round]
+            if wave_above > wave_below:
+                ylo, yhi = ycent_round - blueheight_frame, ycent_round + redheight_frame
+            else:
+                ylo, yhi = ycent_round - redheight_frame, ycent_round + blueheight_frame
+        else:
+            ylo, yhi = ycent_round - halfheight_frame, ycent_round + halfheight_frame
+
+        # clip to the array: an unclipped negative ylo silently yields an empty cutout
+        nrows = image.data.shape[-2]
+        ylo_req, yhi_req = ylo, yhi
+        ylo, yhi = int(np.clip(ylo_req, 0, nrows - 1)), int(np.clip(yhi_req, 0, nrows - 1))
+        if yhi <= ylo:
+            raise ValueError("the extraction box of {0} does not overlap the frame: WV0_Y {1}, "
+                             "requested rows {2}:{3}, frame has {4} rows".format(
+                                 image.filename, ycent_round, ylo_req, yhi_req, nrows))
+        if (ylo, yhi) != (ylo_req, yhi_req):
+            warnings.warn("the requested extraction rows {0}:{1} of {2} do not fit the {3} row frame, "
+                          "clipping to rows {4}:{5} ({6} of {7} requested bins)".format(
+                              ylo_req, yhi_req, image.filename, nrows, ylo, yhi,
+                              yhi - ylo + 1, yhi_req - ylo_req + 1))
+            clipped_filenames.append(image.filename)
+        heights_seen.add((redheight_frame, blueheight_frame, halfheight_frame))
+        if first_frame_history is None:
+            first_frame_history = (height_source, redheight_frame, blueheight_frame, halfheight_frame,
+                                   ylo_req, yhi_req, ylo, yhi)
+
+        image_cutout = image.data[ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
+        dq_cutout = image.dq[ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+        wave_cal_map_cutout = wave_map[ylo:yhi + 1,
                                                           xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ylo:yhi + 1,
                                                           xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        err_cutout = image.err[:,ycent_round - halfheight:ycent_round + halfheight + 1,
+        err_cutout = image.err[:,ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
         if "ALGO_THRU" in image.hdu_list:
-            algo_thru_cutout = image.hdu_list["ALGO_THRU"].data[ycent_round - halfheight:ycent_round + halfheight + 1]
+            # ALGO_THRU is always one value per frame row (l3_to_l4.py:2164), so it aligns with ylo:yhi
+            algo_thru_cutout = np.asarray(image.hdu_list["ALGO_THRU"].data)[ylo:yhi + 1]
         else:
             algo_thru_cutout = np.ones(image_cutout.shape[0])
         bad_ind = np.where(dq_cutout > 0)
@@ -1350,7 +1442,23 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
         # update algo_thru extension to match the extracted spectrum, if it exists
         if "ALGO_THRU" in image.hdu_list:
             image.hdu_list["ALGO_THRU"].data = algo_thru_spec
-    history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
+    if len(heights_seen) > 1:
+        warnings.warn("the frames of this dataset were extracted with different box heights, most "
+                      "likely because of mixed DPAMNAME values, so the SPEC extensions have "
+                      "different lengths")
+    # the boxes are homogeneous apart from the warning above, so report the first frame
+    height_source, redheight_frame, blueheight_frame, halfheight_frame, ylo_req, yhi_req, ylo, yhi = first_frame_history
+    if redheight_frame is not None:
+        history_msg = ("spectral extraction within a box of half width of {0}, redheight {1}, blueheight {2} "
+                       "({3}), rows {4}:{5}, and with ".format(
+                           halfwidth, redheight_frame, blueheight_frame, height_source, ylo, yhi) + weight_str)
+    else:
+        history_msg = ("spectral extraction within a box of half width of {0}, half height of {1} "
+                       "({2}), rows {3}:{4}, and with ".format(
+                           halfwidth, halfheight_frame, height_source, ylo, yhi) + weight_str)
+    if clipped_filenames:
+        history_msg += (", the box was clipped from the requested rows {0}:{1} to the array bounds "
+                        "for {2} frame(s)".format(ylo_req, yhi_req, len(clipped_filenames)))
     dataset.update_after_processing_step(history_msg)
     return dataset
 
@@ -1455,9 +1563,7 @@ def align_polarimetry_frames(input_dataset):
 def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_mueller_matrix_cal):
     """
     Takes in polarimetric L3 images and their unocculted polarimetric observations,
-    computes and subtracts off the stellar polarization component from each image
-    TODO: make issue about error propagation, need to check that it is done correctly
-          and make changes if necessary to ensure the errors are accurate
+    computes and subtracts off the stellar polarization component from each image.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
@@ -1562,9 +1668,15 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
                          [0, 0, U_nd_var, 0],
                          [0, 0, 0, v_nd_var]])
         # solve for covariance matrix of input stokes vector
-        # C_in = pinv(M) * C_nd * pinv(M)^T
-        #TODO: incoporate the error terms of the nd mueller matrix into this calculation if necessary 
+        # C_in = pinv(M) * C_nd * pinv(M)^T, plus first-order contribution from ND MM uncertainty
+        # For S_in = M^{-1} @ S_nd, the MM error contribution per output component i is:
+        # sum_{j,k} (M^{-1}_{ij})^2 * sigma^2_{M_{jk}} * S_in[k]^2
+        # NOTE: same unrotated-S_in caveat as the forward-propagation step below (ND transform is M_nd @ R).
         C_in = system_nd_inv @ C_nd @ system_nd_inv.T
+        nd_mm_var = np.nan_to_num(nd_mueller_matrix_cal.err[0]**2, nan=0.0)
+        S_in_sq_for_nd = S_in**2
+        for i in range(4):
+            C_in[i, i] += np.sum((system_nd_inv[i, :]**2)[:, np.newaxis] * nd_mm_var * S_in_sq_for_nd[np.newaxis, :])
         # contract back to just the variance
         S_in_var = np.array([
             C_in[0,0],
@@ -1587,9 +1699,13 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             I_135_star = (S_out[0] - S_out[2]) / 2
 
             # propagate errors back to the new intensity terms for the unocculted star, assuming independence
-            # σS_out^2 = (σM^2)(I_in^2) + (M^2)(σI_in^2)
-            #TODO: double check if this is valid/invalid, change if necessary
-            system_mm_var = (system_mueller_matrix_cal.err[0])**2
+            # First-order propagation for S_out = M @ S_in:
+            # Var(S_out[i]) = sum_j [ Var(M[i,j]) * S_in[j]^2 + M[i,j]^2 * Var(S_in[j]) ]
+            # nan_to_num handles fixed MM elements (NaN errors -> zero contribution, correct by definition)
+            # NOTE: variance uses the unrotated S_in, but the true transform is M_sys @ R(PA_APER) @ S_in,
+            # so Q/U variance is slightly misattributed for strongly-polarized targets (MC: <1% error in
+            # this function's <1%-polarization regime, ~14-17% at 50%). Refinement: propagate against R @ S_in.
+            system_mm_var = np.nan_to_num(system_mueller_matrix_cal.err[0]**2, nan=0.0)
             system_mm_sq = (system_mueller_matrix_cal.data)**2
             S_in_sq = S_in**2
             S_out_var = (system_mm_var @ S_in_sq) + (system_mm_sq @ S_in_var)

@@ -619,8 +619,8 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     logger.info('Test Case 3: CGI-REQT-5478 - ND Filter Calibration at new location')
     logger.info('='*80)
 
-    # Make a mock 'clean_spec_image' with the wavelength zeropoint at (509,514)
-    # Shift it by (3,3) => final location (512,517).
+    # Make a mock 'clean_spec_image' with the wavelength zeropoint at (60,65) -> cropped 125x125 image
+    # Shift it by (3,3) => final location (63,68).
     spec_wave = np.linspace(728, 784, num=nd_spec_cal.wavelengths.shape[1], dtype=float)
     spec_values = np.ones_like(spec_wave, dtype=float)
     spec_err = 0.1*np.ones_like(spec_wave, dtype=float)
@@ -631,8 +631,8 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     # These values ensure that the shift in EXCAM pixels is (3,3)
     clean_spec_image.ext_hdr["FPAM_H"] = -24.42 + nd_spec_cal.ext_hdr["FPAM_H"]
     clean_spec_image.ext_hdr["FPAM_V"] = 24.42 + nd_spec_cal.ext_hdr["FPAM_V"]
-    clean_spec_image.ext_hdr["WV0_X"] = 509.
-    clean_spec_image.ext_hdr["WV0_Y"] = 514.
+    clean_spec_image.ext_hdr["WV0_X"] = 60.
+    clean_spec_image.ext_hdr["WV0_Y"] = 65.
 
     # Default FPAM/FSAM transformations (use mock instead of loading from file which
     # seems to be inconsistent)
@@ -644,7 +644,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
         fpamfsamcal=fpamfsamcal,
         ndspectroscopy_dataset=nd_spec_cal)
 
-    # Expect the final location = (509+3, 514+3) = (512,517).
+    # Expect the final location = (60+3, 65+3) = (63,68).
     fpam2excam_matrix = fits.getdata(os.path.join(os.path.dirname(__file__), '../test_data',
         'fpam_to_excam_modelbased.fits'))
     # Check final position is (5,5)
@@ -656,15 +656,15 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     # Log FPAM and EXCAM offsets
     fpam_offset_h = -24.42
     fpam_offset_v = 24.42
-    excam_offset = final_excam_pos - np.array([509., 514.])
+    excam_offset = final_excam_pos - np.array([60., 65.])
     logger.info(f"FPAM offset: (ΔFPAM_H, ΔFPAM_V) = ({fpam_offset_h:.2f}, {fpam_offset_v:.2f})")
     logger.info(f"EXCAM offset (after transformation): (Δx, Δy) = ({excam_offset[0]:.2f}, {excam_offset[1]:.2f}) pixels")
 
-    if np.all(np.abs(final_excam_pos - np.array([512,517])) < 1e-7):
-        logger.info(f"Final EXCAM position is (512., 517.) as expected. PASS")
+    if np.all(np.abs(final_excam_pos - np.array([63,68])) < 1e-7):
+        logger.info(f"Final EXCAM position is (63., 65.) as expected. PASS")
     else:
-        logger.info(f"Final EXCAM position ({final_excam_pos[0]:.1f}, {final_excam_pos[1]:.1f}) differs from expected (512., 517.). FAIL")
-        assert False, f"Final EXCAM position should be (512.,517.), but is ({final_excam_pos[0]:.1f},{final_excam_pos[1]:.1f})."
+        logger.info(f"Final EXCAM position ({final_excam_pos[0]:.1f}, {final_excam_pos[1]:.1f}) differs from expected (63., 68.). FAIL")
+        assert False, f"Final EXCAM position should be (63.,68.), but is ({final_excam_pos[0]:.1f},{final_excam_pos[1]:.1f})."
     logger.info("")
 
     expected_value = 2.17
