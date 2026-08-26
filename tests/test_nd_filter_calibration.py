@@ -286,7 +286,7 @@ def test_nd_filter_calibration_object_with_calspec(bright_files_cached):
     ds_copy[1].ext_hdr["FPAMNAME"] = 'OPEN_12'
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
-        fluxcal_factor = None, calspec_files = [calspec_filepath])
+        fluxcal_factor = None, calspec_files = [calspec_filepath])[0]
     
     test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
     os.makedirs(test_output_dir, exist_ok=True)
@@ -310,7 +310,7 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
     ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
-        fluxcal_factor = None)
+        fluxcal_factor = None)[0]
     
     test_output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
     os.makedirs(test_output_dir, exist_ok=True)
@@ -347,7 +347,7 @@ def test_output_filename_convention(stars_dataset_cached):
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
         fluxcal_factor=None
-    )
+    )[0]
     results.save(filedir=test_output_dir)
     
     assert os.path.exists(full_expected_path), (
@@ -361,7 +361,7 @@ def test_average_od_within_tolerance(stars_dataset_cached_bright_count):
     ds_copy, n_bright = copy.deepcopy(stars_dataset_cached_bright_count)
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
-        fluxcal_factor = None)
+        fluxcal_factor = None)[0]
     ods = results.data
     avg_od = np.mean(ods[:, 0])
     std_od = np.std(ods[:,0])
@@ -438,7 +438,7 @@ def test_nd_filter_calibration_phot_methods(stars_dataset_cached, phot_method):
     ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, phot_method, FLUX_OR_IRR, phot_args, 
-        fluxcal_factor = None)
+        fluxcal_factor = None)[0]
     ods = results.data
     avg_od = np.mean(ods[:, 0])
     assert abs(avg_od - INPUT_OD) < OD_TEST_TOLERANCE, (
@@ -465,7 +465,7 @@ def test_multiple_nd_levels(dim_dir, output_dir, test_od):
 
     results = nd_filter_calibration.create_nd_filter_cal(
         combined_dataset, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
-        fluxcal_factor = None)
+        fluxcal_factor = None)[0]
     ods = results.data
     avg_od = np.mean(ods[:, 0])
     assert abs(avg_od - test_od) < 0.2, (
@@ -535,7 +535,7 @@ def test_nd_filter_calibration_with_fluxcal(dim_dir, stars_dataset_cached, phot_
         FLUX_OR_IRR,
         PHOT_ARGS,
         fluxcal_factor=fluxcal_obj
-    )
+    )[0]
 
     # 3) Check that the calibration worked
     ods = results.data
@@ -567,7 +567,7 @@ def test_aperture_radius_sensitivity(stars_dataset_cached, aper_radius):
     ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, "Aperture", "irr", phot_args, 
-        fluxcal_factor = None)
+        fluxcal_factor = None)[0]
     ods = results.data
     avg_od = np.mean(ods[:, 0])
     assert abs(avg_od - INPUT_OD) < 0.3, (
@@ -612,11 +612,11 @@ def test_background_effect(tmp_path):
     
     results_no = nd_filter_calibration.create_nd_filter_cal(
         ds_no, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
-        fluxcal_factor = None)
+        fluxcal_factor = None)[0]
     results_bg = nd_filter_calibration.create_nd_filter_cal(
         ds_bg, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
         fluxcal_factor = None
-    )
+    )[0]
 
     ods_no = results_no.data
     avg_od_no = np.mean(ods_no[:, 0])
@@ -829,6 +829,38 @@ def test_calculate_od_spec_at_new_location(output_dir):
         print('')
         print(f"estimated flux = {output_spec[i]}, expected flux = {expected_value}")
     print(f"test_calculate_od_spec_at_new_location PASSED")
+
+def test_fluxcal_file_generation(dim_dir, output_dir):
+    """
+    Test that the ND filter calibration also returns an abs flux calibration file.
+    """
+
+    # create a dataset consisting of bright and dim stars
+    bright_mocks_dir = os.path.join(output_dir, f"mock_OD{2.25}")
+    bright_images = mock_bright_dataset_files(
+        BRIGHT_EXPTIME, FILTER_USED, 2.25, CAL_FACTOR, save_mocks=True, output_path=bright_mocks_dir
+    )
+    
+    dim_filepaths = glob.glob(os.path.join(dim_dir, "*")) # use cached dim images
+    dim_images = [Image(path) for path in dim_filepaths]
+    # Update BUNIT for ND filter calibration requirements
+    for img in dim_images:
+        img.ext_hdr['BUNIT'] = 'photoelectron/s'
+        img.ext_hdr['DATALVL'] = 'L3'
+    combined_files = bright_images + dim_images
+    combined_dataset = Dataset(combined_files)
+    
+    results = nd_filter_calibration.create_nd_filter_cal(
+        combined_dataset, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
+        fluxcal_factor = None)
+
+    # separate out the ND filter calibration and the associated abs flux calibration 
+    nd_cal_file = results[0]
+    abs_flux_cal_file = results[1]
+
+    # check that the returned files are of the expected datatype
+    assert isinstance(nd_cal_file, NDFilterSweetSpotDataset)
+    assert isinstance(abs_flux_cal_file, FluxcalFactor)
 
 '''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
