@@ -463,14 +463,19 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
         image_size=np.shape(planet_image)
-        # Locate the source by sliding a disk of the measured radius over the lit
-        # pixels. Fall back to a flux-weighted centroid.
-        centroid = find_disk_center(planet_image, planet_rad)
-        if centroid is None:
-            centroid = source_centroid(planet_image)
-        if centroid is None:
-            raise ValueError("Could not locate the source in frame {0} of the "
-                             "dataset.".format(j))
+        if planet.lower() in ('neptune', 'uranus'):
+            # Neptune/Uranus: use the original flux-weighted centroid
+            centroid = centr.centroid_com(planet_image)
+            centroid = np.nan_to_num(centroid)
+        else:
+            # Stars: locate the source by sliding a disk of the measured radius over
+            # the lit pixels. Fall back to a flux-weighted centroid.
+            centroid = find_disk_center(planet_image, planet_rad)
+            if centroid is None:
+                centroid = source_centroid(planet_image)
+            if centroid is None:
+                raise ValueError("Could not locate the source in frame {0} of the "
+                                 "dataset.".format(j))
         centroid = np.asarray(centroid, dtype=float)
         act_cents.append((centroid[1],centroid[0]))
         xc = int(round(centroid[0]))
