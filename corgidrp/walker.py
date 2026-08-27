@@ -559,17 +559,17 @@ def guess_template(dataset):
                     chained = True
             else:
                 _, vistype_unique = dataset.split_dataset(prihdr_keywords=['VISTYPE'])
+                # pol fluxcal
+                if image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
+                    chained = True
                 # ND filter calibration if bright targets in dataset
-                if len(vistype_unique) > 1 or vistype_unique[0][0].pri_hdr['VISTYPE'] == 'CGIVST_CAL_ABSFLUX_BRIGHT':
+                elif len(vistype_unique) > 1 or vistype_unique[0] == 'CGIVST_CAL_ABSFLUX_BRIGHT':
                     recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
                     chained = True
                 # abs flux if dataset contains dim targets only
                 else:
-                    # Check for polarimetry mode to use appropriate flux calibration recipe
-                    if image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']:
-                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
-                    else:
-                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
                     chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
