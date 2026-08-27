@@ -695,7 +695,7 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
     Records calibration frames into the caldb during the process
 
     Args:
-        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): data to save
+        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image or list of Dataset/Image): data to save
         outputdir (str): path to directory where files should be saved
         suffix (str): optional suffix to tack onto the filename.
                       E.g.: `test.fits` with `suffix="dark"` becomes `test_dark.fits`
@@ -706,6 +706,11 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
     # convert everything to dataset to make life easier
     if isinstance(dataset_or_image, data.Image):
         dataset = data.Dataset([dataset_or_image])
+    elif isinstance (dataset_or_image, list):
+        # if a list of datasets or images is passed in, call save on each individual item in the list
+        for item in dataset_or_image:
+            save_data(item, outputdir, suffix=suffix, ram_heavy_save=ram_heavy_save)
+        return
     else:
         dataset = dataset_or_image
 
@@ -835,6 +840,12 @@ def run_recipe(recipe, save_recipe_file=True):
                     save_data(curr_dataset, recipe["outputdir"], suffix=suffix, ram_heavy_save=ram_heavy_save)
                     if isinstance(curr_dataset, data.Dataset):
                         output_filepaths += [frame.filepath for frame in curr_dataset]
+                    elif isinstance(curr_dataset, list):
+                        for item in curr_dataset:
+                            if isinstance(item, data.Dataset):
+                                output_filepaths += [frame.filepath for frame in item]
+                            else:
+                                output_filepaths += [item.filepath]
                     else:
                         output_filepaths += [curr_dataset.filepath]
                     save_step = True
