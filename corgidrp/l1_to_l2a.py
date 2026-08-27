@@ -250,7 +250,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             levels of relevant images may be similar to that of low-flux cosmic rays, and 1 is recommended for the input in that case.  Defaults to 0.
         cosm_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines cosmic ray
-            pixels. Interval 0 to 1, defaults to 0.95. Lower numbers are more aggressive in flagging saturation.
+            pixels. Interval 0 to 1, defaults to 0.95. Lower numbers are more aggressive in flagging.
         median_filter_size (tuple):
             Two-element tuple of integers specifying the size and shape of the filter structure element used in the median filter method (median_filter_mode > 0).
         median_filter_histogram_nbins (int):
@@ -432,7 +432,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             warnings.warn("The coronagraph IWA is defined but not excluded from cosmic ray flagging")
             
         # apply mask to the data used for cosmic ray flagging
-        flag_cr_input = crmasked_cube[i:i+1,:,:] * iwa_mask
+        flag_cr_input = crmasked_cube[i,:,:] * iwa_mask
 
 
         if median_filter_mode > 0:
@@ -522,7 +522,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             m2[i][non_nan_inds] = m2[i][non_nan_inds] + imm[0][non_nan_inds]
             m2[i][m2[i] > cr_dqval] = cr_dqval #just in case there was any overlap between flagged cosmic rays
         if median_filter_mode == 0:
-            m2[i,:,:] = flag_cosmics(cube=flag_cr_input,
+            m2[i,:,:] = flag_cosmics(cube=np.stack([flag_cr_input]),
                             fwc=sat_fwcs[i]/sat_thresh, #sat_fwcs are already multiplied by sat_thresh, so undo that since this function multiplies sat_thresh as well 
                             sat_thresh=cosm_thresh,
                             plat_thresh=plat_thresh,

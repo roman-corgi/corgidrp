@@ -1027,8 +1027,176 @@ def test_iwa_masking():
     cr_flags_wp2 = (dq_wp2 & cr_dq).astype(bool)
     assert not cr_flags_wp2[iwa_region_wp2].any() # pol WP2
     
+def test_median_filter_mode():
+    '''
+    Test median_filter_mode > 0 and cosm_thresh vs sat_thresh.
+    '''
+    cosmic_mask = np.zeros((10,12), dtype=int)
+    sat_mask = cosmic_mask.copy()
+    image = np.zeros((10,12), dtype=float)
+    # head 
+    image[8,0:3] = 0.8*fwcem/8.7 
+    cosmic_mask[8,0:3] = 128
+    # tail trail
+    image[8,3:5] = fwcem/8.7/10 
+    cosmic_mask[8,3:5] = 128
+    # saturation and CR masks will catch
+    image[7,0] = fwcem/8.7 
+    sat_mask[7,0] = 32
+    cosmic_mask[7,0] = 128
+
+    # another cosmic ray, non-saturating (to be detected when median_filter_mode = 2
+    image[3:5, 5:7] = fwcem/8.7/13
+    # add 1 for cosm_box=1 
+    cosmic_mask[3-1:5+1, 5:7+1+1] = 128
+    # and 1 for usual precursor to tail
+    cosmic_mask[3:5, 7+1+1] = 128
+
+    check_mask = sat_mask + cosmic_mask
+
+    prihdr, exthdr = mocks.create_default_L1_headers()
+    frame = data.Image(image, pri_hdr=prihdr,
+                    ext_hdr=exthdr)
+    dataset = data.Dataset([frame])
+    dataset[0].ext_hdr['EMGAIN_C'] = 1000 # something other than 1 so that cosm_tail is not overidden and set to 0
+    # cosm_tail is tail trail length (e.g., 2) when median_filter_mode > 0
+    dataset_masked1 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                        plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=1,
+                        cosm_tail=2, median_filter_size=(3,3))
+
+    # non-saturating CR not caught
+    assert not (np.array_equal(dataset_masked1[0].dq, check_mask))
+    # all others caught
+    assert (np.array_equal(dataset_masked1[0].dq[6:, :6], check_mask[6:, :6]))
+
+    # tail trail will not get flagged in this case (nor the non-saturating CR)
+    dataset_masked1 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                            plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=1,
+                            cosm_tail=0, median_filter_size=(3,3))
+
+    # non-saturating CR not caught
+    assert not (np.array_equal(dataset_masked1[0].dq[:, 5:], check_mask[:, 5:]))
+    # everything else caught except for tail trail
+    assert (np.array_equal(dataset_masked1[0].dq[6:, :3], check_mask[6:, :3]))
+    assert not (np.array_equal(dataset_masked1[0].dq[-2, 3:5], check_mask[-2, 3:5]))
+
+    # all will get caught this time
+    dataset_masked2 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                            plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=2,
+                            cosm_tail=2, cosm_thresh=1/13, median_filter_size=(3,3))
+
+    # these will match despite cosm_tail=2 since that doesn't apply to median_filter_mode=2 when it is catching non-saturating CRs which have no tail
+    assert np.array_equal(dataset_masked2[0].dq, check_mask)
+
+def test_cosm_tail_auto():
+    '''
+    Test cosm_tail = \'auto\' and median_filter_histogram_nbins.
+    '''
+
+    cosmic_mask = np.zeros((100,100), dtype=int)
+    sat_mask = cosmic_mask.copy()
+    image = np.zeros((100,100), dtype=float)
+    # head 
+    image[8,0:3] = 0.8*fwcem/8.7 
+    cosmic_mask[8,0:3] = 128
+    # tail trail: physically, from 3 to 5
+    image[8,3:5] = fwcem/8.7/10 
+    cosmic_mask[8,3:5] = 128
+    # saturation and CR masks will catch
+    image[7,0] = fwcem/8.7 
+    sat_mask[7,0] = 32
+    cosmic_mask[7,0] = 128
+
+    check_mask = sat_mask + cosmic_mask
+
+    prihdr, exthdr = mocks.create_default_L1_headers()
+    frame = data.Image(image, pri_hdr=prihdr,
+                    ext_hdr=exthdr)
+    dataset = data.Dataset([frame])
+    dataset[0].ext_hdr['EMGAIN_C'] = 1000 
+    # cosm_tail will be 1000*33/1000 = 33 given auto factor below and gain
+    # median_filter_mode=2, but cosm_thresh still 0.95 by default, so same result whether 1 or 2
+    dataset_masked1 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                        plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=1, 
+                        cosm_tail='auto', median_filter_size=(3,3), cosm_tail_auto_factor=33/1000)
+    dataset_masked2 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                            plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=2, 
+                            cosm_tail='auto', median_filter_size=(3,3), cosm_tail_auto_factor=33/1000)
+    assert np.array_equal(dataset_masked1[0].dq, dataset_masked2[0].dq)
+
+    # equal arrays up to the tail trail part
+    assert (np.array_equal(dataset_masked1[0].dq[:, :3], check_mask[:, :3]))
+    # now the dq should be masked according to auto-selected tail length
+    # Tail trail would begin at end of CR which was above threshold, so the 33-long tail begins at 3, not at 5 (where our physical tail ends) 
+
+    assert (dataset_masked1[0].dq[8, 5:3+33] == 128).all()
+
+    # now tail trail mask of 40 pixels since we use 40/1000
+    dataset_masked1 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                            plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=2, 
+                            cosm_tail='auto', median_filter_size=(3,3), cosm_tail_auto_factor=40/1000)
+    assert (dataset_masked1[0].dq[8, 5:3+40] == 128).all()
+
+    # now let median_filter_histogram_nbins be so small that no local min can be found, which results in no masking
+    dataset_masked1 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                                plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=1, 
+                                cosm_tail='auto', median_filter_size=(3,3), median_filter_histogram_nbins=2)
+    # just one saturated pixel gets flagged; no cosmic flagging 
+    assert dataset_masked1[0].dq.max() == 32
+
+def test_cosm_thresh():
+    '''
+    Test cosm_thresh parameter.
+    '''
+    cosmic_mask = np.zeros((10,12), dtype=int)
+    sat_mask = cosmic_mask.copy()
+    image = np.zeros((10,12), dtype=float)
+    # head 
+    image[8,0:3] = 0.8*fwcem/8.7 
+    cosmic_mask[8,0:3] = 128
+    # tail trail
+    image[8,3:5] = fwcem/8.7/10 
+    cosmic_mask[8,3:5] = 128
+    # saturation and CR masks will catch
+    image[7,0] = fwcem/8.7 
+    sat_mask[7,0] = 32
+    cosmic_mask[7,0] = 128
+
+    # another cosmic ray, non-saturating (to be detected when median_filter_mode = 2
+    image[3:5, 5:7] = fwcem/8.7/13
+    # add 1 for cosm_box=1 
+    cosmic_mask[3-1:5+1, 5:7+1+1] = 128
+    # and 1 for usual precursor to tail
+    cosmic_mask[3:5, 7+1+1] = 128
+
+    check_mask = sat_mask + cosmic_mask
+
+    prihdr, exthdr = mocks.create_default_L1_headers()
+    frame = data.Image(image, pri_hdr=prihdr,
+                    ext_hdr=exthdr)
+    dataset = data.Dataset([frame])
+    dataset[0].ext_hdr['EMGAIN_C'] = 1000 # something other than 1 so that cosm_tail is not overidden and set to 0
+    # traditional mode (median_filter_mode=0), cosm_thresh not its default value but instead 1.01, t0o high for these CRs to be caught
+    dataset_masked1 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                        plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=0,
+                        cosm_tail=2, median_filter_size=(3,3), cosm_thresh=1.01)
+
+    assert (dataset_masked1[0].dq != 128).all()
+
+    # median_filter_mode = 2; cosm_thresh not its default value but instead 1.01, too high for the non-saturating CR to be caught
+    dataset_masked1 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
+                        plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=2,
+                        cosm_tail=2, median_filter_size=(3,3), cosm_thresh=1.01)
+
+    # non-saturating CR not caught
+    assert not (np.array_equal(dataset_masked1[0].dq, check_mask))
+    # all others caught
+    assert (np.array_equal(dataset_masked1[0].dq[6:, :6], check_mask[6:, :6]))
 
 if __name__ == "__main__":
+    test_median_filter_mode()
+    test_cosm_tail_auto()
+    test_cosm_thresh()
     test_cosm_tail_bleed_over()
     test_EM_gain_1()
     test_iit_vs_corgidrp()

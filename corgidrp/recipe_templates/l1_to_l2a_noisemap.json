@@ -30,11 +30,11 @@
                 "mode" : "full",
                 "dataset_copy" : false,
                 "median_filter_mode" : 2,
-                "sat_thresh" : 0.022,
-                "plat_thresh" : 0.022,
-                "cosm_filter" : 5,
-                "cosm_box" : 2,
-                "cosm_tail" : 0
+                "cosm_thresh" : 0.066,
+                "plat_thresh" : 0.066,
+                "cosm_filter" : 3,
+                "cosm_box" : 4,
+                "cosm_tail" : "auto"
             }
         },
         {
