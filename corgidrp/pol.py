@@ -595,7 +595,7 @@ def generate_mueller_matrix_cal(input_dataset,
     for i, target in enumerate(targets):
         pol_row = pol_rows_by_measurement[i]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
-        PA = pol_row["PA"].values[0] - rotation_angles[i] # in degrees
+        PA = pol_row["PA"].values[0] + rotation_angles[i] # in degrees
         P_err = pol_row["P_err"].values[0] / 100.0 # convert from percent to fraction
         PA_err_rad = pol_row["PA_err"].values[0] * np.pi / 180.0 # convert deg to rad
         PA_rad = np.radians(PA)
