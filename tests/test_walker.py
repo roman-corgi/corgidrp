@@ -498,6 +498,12 @@ def test_jit_calibs():
     new_recipe = json.loads(output_dataset[0].ext_hdr['RECIPE'])
     assert recipe['steps'][3]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC'
 
+    # this recipe has multiple steps with "calibs" (prescan_biassub, detect_cosmic_rays,
+    # correct_nonlinearity), each of which triggers a recipe-header refresh under
+    # jit_calib_id; that must not duplicate the recipe into RECIPE2/RECIPE3/...
+    assert 'RECIPE2' not in output_dataset[0].ext_hdr, "A single standalone recipe should not be duplicated across RECIPE2+"
+    assert 'NRECIPES' not in output_dataset[0].ext_hdr
+
 
     #### Test cases where JIT should be enabled or not
     # already tested pipeline setting True, nothing set in recipe. Resulted in keeping automatic keyword
@@ -1231,13 +1237,27 @@ def test_user_template_wrong_name_rejected_with_validation():
 def test_set_recipe_header():
     """
     Tests that _set_recipe_header correctly writes RECIPE, RECIPE2, NRECIPES
-    for chained recipes and clears stale RECIPEn headers from a previous chain.
+    for chained recipes, based solely on its recipe/prev_recipes arguments.
+
+    _set_recipe_header is intentionally stateless: it never reads recipe
+    history back out of frame.ext_hdr. It can be called more than once for
+    the same recipe/prev_recipes within a single run_recipe execution (e.g.
+    once up front, and again for each "calibs" step once calibrations are
+    resolved -- see test_jit_calibs), including on different frame/Image
+    objects derived from one another as steps run; each call must be a
+    deterministic function of its arguments alone so repeated calls don't
+    duplicate entries. Preserving cross-call history (from an earlier,
+    separate run_recipe invocation) is run_recipe's job, done once up front
+    via _read_prior_recipe_history -- see test_run_recipe_preserves_prior_chain_headers.
     """
     recipe0 = {"name": "recipe_zero", "inputs": ["a.fits"], "steps": []}
     recipe1 = {"name": "recipe_one", "inputs": [], "steps": []}
     stale = {"name": "stale", "inputs": ["z.fits"], "steps": []}
 
-    # Create a mock frame with stale chain headers from a hypothetical previous 3-recipe chain
+    # Frame carries stale RECIPE2/RECIPE3 from some earlier, unrelated write
+    # (simulating what a fresh object inherited from a prior step might look
+    # like); _set_recipe_header must not read that as history to preserve --
+    # only prev_recipes is authoritative.
     pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr['RECIPE'] = json.dumps(stale)
     ext_hdr['RECIPE2'] = json.dumps(stale)
@@ -1245,25 +1265,65 @@ def test_set_recipe_header():
     ext_hdr['NRECIPES'] = 3
     frame = data.Image(np.zeros((4, 4)), pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
-    # Simulate recipe1 being the second recipe in a 2-recipe chain
     walker._set_recipe_header(frame, recipe1, prev_recipes=[recipe0])
-
     assert json.loads(frame.ext_hdr['RECIPE']) == recipe0, "RECIPE should hold first recipe in chain"
     assert json.loads(frame.ext_hdr['RECIPE2']) == recipe1, "RECIPE2 should hold second recipe in chain"
     assert frame.ext_hdr['NRECIPES'] == 2, "NRECIPES should reflect the chain length"
-    assert 'RECIPE3' not in frame.ext_hdr, "Stale RECIPE3 from previous chain should be removed"
+    assert 'RECIPE3' not in frame.ext_hdr, "Stale RECIPE3 not covered by prev_recipes should be cleared"
 
-    # Standalone recipe: just RECIPE, no RECIPE2/NRECIPES
+    # Calling it again for the same recipe/prev_recipes -- as happens once
+    # per "calibs" step under jit_calib_id, potentially on a freshly derived
+    # object that already inherited RECIPE/RECIPE2 from the call above --
+    # must be idempotent, not append/duplicate.
+    walker._set_recipe_header(frame, recipe1, prev_recipes=[recipe0])
+    assert json.loads(frame.ext_hdr['RECIPE']) == recipe0
+    assert json.loads(frame.ext_hdr['RECIPE2']) == recipe1
+    assert frame.ext_hdr['NRECIPES'] == 2, "Repeated call for the same recipe should not duplicate entries"
+    assert 'RECIPE3' not in frame.ext_hdr
+
+    # Standalone recipe: just RECIPE, no RECIPE2/NRECIPES, regardless of what
+    # was already in the header.
     walker._set_recipe_header(frame, recipe0)
     assert json.loads(frame.ext_hdr['RECIPE']) == recipe0
     assert 'RECIPE2' not in frame.ext_hdr
     assert 'NRECIPES' not in frame.ext_hdr
 
 
-def test_run_recipe_clears_stale_chain_headers():
+def test_read_prior_recipe_history():
     """
-    Tests that run_recipe removes RECIPE2 / NRECIPES inherited from a prior
-    processing chain when a new recipe starts from those files.
+    Tests that _read_prior_recipe_history correctly reads back a recipe chain
+    recorded in a saved FITS file's header, and returns an empty list when
+    there's no (valid) recipe history to read.
+    """
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    os.makedirs(datadir, exist_ok=True)
+
+    old0 = {"name": "old_zero", "inputs": ["z.fits"], "steps": []}
+    old1 = {"name": "old_one", "inputs": [], "steps": []}
+
+    # File with a real 2-recipe chain recorded
+    dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=1)
+    image = dataset[0]
+    image.filename = "cgi_priorhistory_l2a.fits"
+    image.ext_hdr['RECIPE'] = json.dumps(old0)
+    image.ext_hdr['RECIPE2'] = json.dumps(old1)
+    image.ext_hdr['NRECIPES'] = 2
+    dataset.save(filedir=datadir)
+    history = walker._read_prior_recipe_history(image.filepath)
+    assert history == [old0, old1]
+
+    # Freshly mocked file: RECIPE is just the 'Mock' placeholder, not real JSON
+    dataset2 = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=1)
+    dataset2[0].filename = "cgi_nohistory_l2a.fits"
+    dataset2.save(filedir=datadir)
+    assert walker._read_prior_recipe_history(dataset2[0].filepath) == []
+
+
+def test_run_recipe_preserves_prior_chain_headers():
+    """
+    Tests that run_recipe preserves RECIPE / RECIPE2 / NRECIPES inherited from
+    a prior, separate processing chain when a new recipe starts from those
+    files, appending the new recipe rather than deleting the old history.
     """
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     os.makedirs(datadir, exist_ok=True)
@@ -1273,19 +1333,19 @@ def test_run_recipe_clears_stale_chain_headers():
     # Create L2a files whose headers simulate the output of a previous 2-recipe chain
     l2a_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     fname_template = "cgi_stalehdr_{:03d}_l2a.fits"
-    stale_recipe = {"name": "old_recipe", "inputs": [], "steps": []}
+    prior_recipe = {"name": "old_recipe", "inputs": [], "steps": []}
     for i, image in enumerate(l2a_dataset):
         image.filename = fname_template.format(i)
         image.ext_hdr['DATALVL'] = "L2a"
-        image.ext_hdr['RECIPE'] = json.dumps(stale_recipe)
-        image.ext_hdr['RECIPE2'] = json.dumps(stale_recipe)
+        image.ext_hdr['RECIPE'] = json.dumps(prior_recipe)
+        image.ext_hdr['RECIPE2'] = json.dumps(prior_recipe)
         image.ext_hdr['NRECIPES'] = 2
     l2a_dataset.save(filedir=datadir)
     filelist = [frame.filepath for frame in l2a_dataset]
 
     # Minimal recipe with only a save step (no calibration required)
     recipe = {
-        "name": "test_stale_cleanup",
+        "name": "test_history_preserved",
         "template": False,
         "inputs": filelist,
         "outputdir": outputdir,
@@ -1298,11 +1358,12 @@ def test_run_recipe_clears_stale_chain_headers():
 
     output_dataset = data.Dataset(output_filelist)
     for frame in output_dataset:
-        assert 'RECIPE2' not in frame.ext_hdr, "Stale RECIPE2 should be cleared by run_recipe"
-        assert 'NRECIPES' not in frame.ext_hdr, "Stale NRECIPES should be cleared by run_recipe"
-        assert 'RECIPE' in frame.ext_hdr, "RECIPE should be set to the current recipe"
-        current = json.loads(frame.ext_hdr['RECIPE'])
-        assert current['name'] == 'test_stale_cleanup'
+        assert json.loads(frame.ext_hdr['RECIPE']) == prior_recipe, "Prior RECIPE history should be preserved"
+        assert json.loads(frame.ext_hdr['RECIPE2']) == prior_recipe, "Prior RECIPE2 history should be preserved"
+        assert 'RECIPE3' in frame.ext_hdr, "New recipe should be appended as RECIPE3"
+        current = json.loads(frame.ext_hdr['RECIPE3'])
+        assert current['name'] == 'test_history_preserved'
+        assert frame.ext_hdr['NRECIPES'] == 3
 
 
 if __name__ == "__main__":#
@@ -1331,5 +1392,6 @@ if __name__ == "__main__":#
     test_user_template_wrong_name_loads_without_validation()
     test_user_template_wrong_name_rejected_with_validation()
     test_set_recipe_header()
-    test_run_recipe_clears_stale_chain_headers()
+    test_read_prior_recipe_history()
+    test_run_recipe_preserves_prior_chain_headers()
 

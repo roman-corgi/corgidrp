@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import astropy.io.fits as fits
 import astropy.time as time
 import warnings
 import xml.etree.ElementTree as ET
@@ -173,12 +174,50 @@ def _validate_template_structure(user_template, default_template_path, recipe_fi
             )
             raise ValueError(error_msg)
 
+def _read_prior_recipe_history(filepath):
+    """Read whatever recipe chain is already recorded in a FITS file's header.
+
+    Used once, up front, by run_recipe to fold in recipe history left by an
+    earlier, separate call on this same file (e.g. re-processing files that
+    were already through a prior chain), so that history is prepended to
+    prev_recipes rather than lost.
+
+    Args:
+        filepath (str): path to a FITS file previously written by corgidrp.
+
+    Returns:
+        list: recipe dicts recorded in the file's header, oldest first. Empty
+            if the file has no (valid) recipe history recorded.
+    """
+    history = []
+    with fits.open(filepath) as hdulist:
+        hdr = hdulist[1].header
+        if 'RECIPE' in hdr:
+            n_existing = hdr.get('NRECIPES', 1)
+            for idx in range(1, n_existing + 1):
+                key = 'RECIPE' if idx == 1 else 'RECIPE{0}'.format(idx)
+                if key not in hdr:
+                    continue
+                try:
+                    history.append(json.loads(hdr[key]))
+                except (json.JSONDecodeError, TypeError):
+                    # Not an actual recipe record (e.g. mock/placeholder
+                    # header value) -- nothing real to preserve.
+                    return []
+    return history
+
+
 def _set_recipe_header(frame, recipe, prev_recipes=None, is_last_frame=True):
     """Write recipe chain headers into frame.ext_hdr.
 
     Standalone recipe: RECIPE = recipe.
     Chained recipe: RECIPE = prev_recipes[0], RECIPE2 = prev_recipes[1], ...,
     RECIPE{N} = recipe, NRECIPES = N.
+
+    Stateless: never reads history from frame.ext_hdr, only
+    from prev_recipes, so repeat calls (even on different derived objects)
+    can't duplicate entries. Callers fold in any pre-existing header history
+    themselves (see run_recipe).
 
     On non-last frames, RAM-heavy recipes replace the full input list with a
     compact pointer ("See RECIPE header value in <anchor>") to avoid repeating
@@ -194,13 +233,14 @@ def _set_recipe_header(frame, recipe, prev_recipes=None, is_last_frame=True):
         is_last_frame (bool): True stores full input lists; False uses compact
             pointers for RAM-heavy recipes. Defaults to True.
     """
-    # Clear stale RECIPE2+/NRECIPES headers left by a previous chain
+    all_recipes = list(prev_recipes or []) + [recipe]
+
+    # Clear existing RECIPE2+/NRECIPES headers before rewriting the full chain
     if 'NRECIPES' in frame.ext_hdr:
         for idx in range(2, frame.ext_hdr['NRECIPES'] + 1):
             del frame.ext_hdr['RECIPE{0}'.format(idx)]
         del frame.ext_hdr['NRECIPES']
 
-    all_recipes = list(prev_recipes or []) + [recipe]
     for idx, r in enumerate(all_recipes):
         key = 'RECIPE' if idx == 0 else 'RECIPE{0}'.format(idx + 1)
         r_to_store = {k: v for k, v in r.items() if not k.startswith('_')} # drops tmp keys starting with _
@@ -208,7 +248,7 @@ def _set_recipe_header(frame, recipe, prev_recipes=None, is_last_frame=True):
             target = r.get("_recipe_anchor") or r["inputs"][-1]
             r_to_store["inputs"] = "See RECIPE header value in {0}".format(target)
         frame.ext_hdr[key] = json.dumps(r_to_store)
-    if prev_recipes:
+    if len(all_recipes) > 1:
         frame.ext_hdr['NRECIPES'] = len(all_recipes)
 
 
@@ -790,6 +830,17 @@ def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
         # need to load in
         recipe = json.load(open(recipe, "r"))
 
+    # Prepend any recipe history already on the input files (e.g. from an
+    # earlier, separate call) that isn't already covered by prev_recipes, so
+    # it's preserved instead of overwritten. Read once, up front, since
+    # _set_recipe_header itself must stay stateless (see its docstring).
+    if recipe.get("inputs"):
+        prior_history = _read_prior_recipe_history(recipe["inputs"][0])
+        n_prev = len(prev_recipes or [])
+        n_new_old = max(0, len(prior_history) - n_prev)
+        if n_new_old:
+            prev_recipes = prior_history[:n_new_old] + list(prev_recipes or [])
+
     # configure pipeline as needed
     # these settings should only apply to this recipe, so we will restore old settings later
     old_settings = {}
@@ -847,7 +898,7 @@ def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
                     curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
                 else:
                     curr_dataset = data.Dataset(filelist)
-                # Write recipe chain headers to all frames, clearing any stale ones
+                # Write recipe chain headers to all frames, preserving any existing history
                 frames = list(curr_dataset)
                 for j, frame in enumerate(frames):
                     _set_recipe_header(frame, recipe, prev_recipes, is_last_frame=(j == len(frames) - 1))
