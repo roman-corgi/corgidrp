@@ -436,7 +436,7 @@ def create_nd_filter_cal(stars_dataset,
         gaussian_kernel_size (int): Size of gaussian kernel used to make the PSF centroid algorithm more robust against noise.
 
     Returns:
-        sweet_spot_and_fluxcal_dataset (list): Length 2 list containing a ND Filter calibration product (corgidrp.Data.NDFilterSweetSpotDataset) 
+        sweet_spot_and_fluxcal_dataset (Dataset): Length 2 dataset containing a ND Filter calibration product (corgidrp.Data.NDFilterSweetSpotDataset) 
             for the dataset given and an absolute flux calibration product (corgidrp.Data.FluxcalFactor) used to create the ND filter calibration.
     """
     if phot_kwargs is None:
@@ -537,8 +537,8 @@ def create_nd_filter_cal(stars_dataset,
     else:
         fluxcal_data = FluxcalFactor(cal_factor, input_dataset=dim_stars_dataset)
 
-    #7. Return a length 2 list consisting of the ND filter calibration and the abs flux calibration
-    return [sweet_spot_dataset, fluxcal_data]
+    #7. Return dataset consisting of the ND filter calibration and the abs flux calibration
+    return Dataset([sweet_spot_dataset, fluxcal_data], allow_inhomogeneous_frames=True)
 
 
 # =============================================================================
