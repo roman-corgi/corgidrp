@@ -535,7 +535,7 @@ def test_nd_filter_calibration_with_fluxcal(dim_dir, stars_dataset_cached, phot_
         FLUX_OR_IRR,
         PHOT_ARGS,
         fluxcal_factor=fluxcal_obj
-    )[0]
+    )
 
     # 3) Check that the calibration worked
     ods = results.data

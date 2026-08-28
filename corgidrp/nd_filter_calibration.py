@@ -436,8 +436,9 @@ def create_nd_filter_cal(stars_dataset,
         gaussian_kernel_size (int): Size of gaussian kernel used to make the PSF centroid algorithm more robust against noise.
 
     Returns:
-        sweet_spot_and_fluxcal_dataset (Dataset): Length 2 dataset containing a ND Filter calibration product (corgidrp.Data.NDFilterSweetSpotDataset) 
-            for the dataset given and an absolute flux calibration product (corgidrp.Data.FluxcalFactor) used to create the ND filter calibration.
+        sweet_spot_dataset (corgidrp.Data.NDFilterSweetSpotDataset or Dataset): If an abs flux calibration is created with a dim dataset, returns a 
+        length 2 dataset containing a ND Filter calibration product (corgidrp.Data.NDFilterSweetSpotDataset) and the created absolute flux calibration 
+        product (corgidrp.Data.FluxcalFactor). Otherwise, returns just the ND Filter calibration product. 
     """
     if phot_kwargs is None:
         phot_kwargs = {}
@@ -531,14 +532,14 @@ def create_nd_filter_cal(stars_dataset,
         common_metadata=common_metadata, od_var_flag = od_var_flag, input_dataset = stars_dataset
     )
 
-    # 6. Create abs flux calibration used
+    # 6. Return the relevant data
     if fluxcal_factor is not None:
-        fluxcal_data = fluxcal_factor.copy()
+        # if a fluxcal file is passed in, return just the ND filter calibration
+        return sweet_spot_dataset
     else:
+        # if a new abs flux calibration is created, return that along wtih the ND filter calibration
         fluxcal_data = FluxcalFactor(cal_factor, input_dataset=dim_stars_dataset)
-
-    #7. Return dataset consisting of the ND filter calibration and the abs flux calibration
-    return Dataset([sweet_spot_dataset, fluxcal_data], allow_inhomogeneous_frames=True)
+        return Dataset([sweet_spot_dataset, fluxcal_data], allow_inhomogeneous_frames=True)
 
 
 # =============================================================================
