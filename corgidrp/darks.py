@@ -405,8 +405,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         a calibration file storing detector calibration values
     weighting (bool):
         If True, weighting is used for the least squares fit, and the weighting
-        takes into account the err coming from the input frames, the statistical
-        variation among the supposedly identical frames in each sub-stack, and
+        takes into account the number of input frames in each sub-stack and
         the effect of any DQ masking.  If False, all data is evenly weighted in
         the least squares fit.  Defaults to True.
     detector_regions (dict):
@@ -592,7 +591,20 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # assumes no variance from FPN
         expected_std = ENF(emgain, nem) * emgain * np.sqrt(poisson_var) 
         expected_mean = fpn_fid + cic_fid  + dc_fid * exptime
-        cosmic_thresh_used_e = datasets[i][0].ext_hdr['SAT_DN']*datasets[i][0].ext_hdr['KGAINPAR']
+        cosm_thresh_used_dn = None 
+        if 'HISTORY' in datasets[i][0].ext_hdr.keys():
+            hist_str = str(datasets[i][0].ext_hdr['HISTORY'])
+            split_hist_str = hist_str.split('\n')
+            clean_hist_str = ''
+            for piece in split_hist_str:
+                clean_hist_str += piece
+            ind = clean_hist_str.find('Cosmic ray threshold of ')
+            end_ind = clean_hist_str[ind:].find('used.') #finds next instance of this, which immediately follows the number
+            if ind != -1 and end_ind != -1:
+                cosm_thresh_used_dn = float(clean_hist_str[ind+24 : ind+end_ind])
+        if cosm_thresh_used_dn is None: #if not available from HISTORY, use SAT_DN 
+            cosm_thresh_used_dn = datasets[i][0].ext_hdr['SAT_DN']
+        cosmic_thresh_used_e = cosm_thresh_used_dn * datasets[i][0].ext_hdr['KGAINPAR']
         CR_thresholds_e = np.append(CR_thresholds_e, cosmic_thresh_used_e)
         threshold = expected_mean + num_stds * expected_std
         if CR_thresholds_e[i] <= threshold and CR_threshold_check:
@@ -682,7 +694,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         mean_frames.append(mean_frame)
         total_errs.append(total_err)
         stat_errs.append(stat_std)
-        weights.append((unmasked_num/len(datasets[i].frames))) #normalized 
+        weights.append((unmasked_num)) # /len(datasets[i].frames))) #not normalized per sub-stack since different sub-stacks can have different number of frames
         mean_num_good_fr.append(mean_num)
         unreliable_pix_map += pixel_mask
         unreliable_pix_masks.append(pixel_mask)
@@ -708,8 +720,9 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
     mean_stat_err_stack = np.stack(stat_errs)
-    weights = np.stack(weights)
-    weights[np.where(weights==0)] = (1/len(datasets[i].frames))/100 #much smaller than the weight due to 1 unmasked frame but not 0, to avoid singular matrix
+    weights = np.stack(weights).astype(float)
+    #much smaller than the weight due to 1 unmasked frame but not 0, to avoid singular matrix
+    weights[np.where(weights==0)] = (1/len(dataset.frames))/100 #if normalized per sub-stack: (1/len(datasets[i].frames))/100 
 
     # uncomment for RAM check
     # import psutil

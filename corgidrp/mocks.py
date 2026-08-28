@@ -853,6 +853,7 @@ def create_synthesized_master_dark_calib(detector_areas):
             frame.ext_hdr['EMGAIN_C'] = EMgain_arr[i]
             frame.ext_hdr['EXPTIME'] = exptime_arr[i]
             frame.ext_hdr['KGAINPAR'] = eperdn
+            frame.ext_hdr['SAT_DN'] = 105000/eperdn
             frame_list.append(frame)
     dataset = data.Dataset(frame_list)
 

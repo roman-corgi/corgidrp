@@ -303,11 +303,11 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
     # pick the FWC that will get saturated first, depending on gain
     initial_sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_dn_arr,fwcem_dn_arr,sat_thresh)
-    initial_cosm_sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_dn_arr,fwcem_dn_arr,cosm_thresh)
+    initial_cosm_fwcs = calc_sat_fwc(emgain_arr,fwcpp_dn_arr,fwcem_dn_arr,cosm_thresh)
     for i,frame in enumerate(initial_dataset):
         frame.ext_hdr['FWC_PP_E'] = fwcpp_e_arr[i]
         frame.ext_hdr['FWC_EM_E'] = fwcem_e_arr[i]
-        frame.ext_hdr['SAT_DN'] = min(initial_sat_fwcs[i], initial_cosm_sat_fwcs[i]) 
+        frame.ext_hdr['SAT_DN'] = initial_sat_fwcs[i]
 
     oversat_frames = set()
     if discard_oversat:
@@ -375,8 +375,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         iwa_mask = np.ones_like(curr_frame.data)
         # check the coronagraph configuration used to determine IWA
         cor_mode = curr_frame.ext_hdr['LSAMNAME']
+        cfam = curr_frame.ext_hdr['CFAMNAME']
         # ensures this computation only happens if the coronagraph is in and we explicitly want to skip masking
-        if cor_mode != 'OPEN' and skip_coronagraph_iwa:
+        if cor_mode != 'OPEN' and skip_coronagraph_iwa and cfam != 'DARK':
             # determine where the coronagraph center is
             if eacq_row is not None and eacq_col is not None and eacq_row != 0 and eacq_col != 0:
                 # use EACQ_ROW and EACQ_COL as the coronagraph center if these headers are set properly
@@ -434,6 +435,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         # apply mask to the data used for cosmic ray flagging
         flag_cr_input = crmasked_cube[i,:,:] * iwa_mask
 
+        # establish cosmic ray threshold (which may be different from saturation threshold)
+        cosm_sat_fwc = calc_sat_fwc(np.array([emgain]),np.array([fwcpp_dn_arr[0]]),np.array([fwcem_dn_arr[0]]),cosm_thresh)[0]
 
         if median_filter_mode > 0:
             # use the image area for the median filter so that the background is not biased by the prescan or overscan areas
@@ -501,8 +504,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 m2[i,:,:] = np.zeros_like(flag_cr_input)
                 thresh = np.inf #i.e., no threshold cut
             if median_filter_mode == 1:
-                if crmasked_dataset[i].ext_hdr['SAT_DN'] > thresh:
-                    crmasked_dataset[i].ext_hdr['SAT_DN'] = thresh # overwrite 
+                if cosm_sat_fwc > thresh:
+                    cosm_sat_fwc = thresh # overwrite 
         # in addition to what was just done, this will catch the cosmic rays that blend in with the background and aren't caught with median filter method.
         if median_filter_mode > 1:
             im = flag_cr_input.copy()
@@ -533,7 +536,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                             detector_regions=detector_regions,
                             arrtype=arrtype
                             ) * cr_dqval
-
+        # add in record of cosmic ray threshold; used in calibrate_darks_lsq() if available
+        crmasked_dataset[i].ext_hdr['HISTORY'] = 'Cosmic ray threshold of {0} used.'.format(cosm_sat_fwc)
     # add the two masks to the all_dq mask
     new_all_dq = np.bitwise_or(crmasked_dataset.all_dq, m1)
     new_all_dq =  np.bitwise_or(new_all_dq, m2.astype(int))
