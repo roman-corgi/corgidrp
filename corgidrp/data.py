@@ -66,7 +66,7 @@ class Dataset():
                 each frame will have the default loaded in (arrays of zeros).  Defaults to False.
             no_err (bool): If True, no err arrays are loaded in.  This overrides the condition concerning err in the no_data description above.  Defaults to False.
             no_dq (bool): If True, no dq arrays are loaded in.  This overrides the condition concerning dq in the no_data description above.  Defaults to False.
-            allow_inhomogeneous_data (bool): If True, disables the creation of all_data/all_err/all_dq datacubes so the dataset can contain frames of differing dimensions. Defaults to False.
+            allow_inhomogeneous_frames (bool): If True, disables the creation of all_data/all_err/all_dq datacubes so the dataset can contain frames of differing dimensions. Defaults to False.
         """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
