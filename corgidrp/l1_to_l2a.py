@@ -212,7 +212,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             Defaults to 10. For EM gain = 1, no serial streaking occurs, so this is internally set to 0 
             in that case regardless of the input value here.
         cosm_tail_auto_factor (float): 
-            Factor of proportionality to EM gain for cosm_tail.  Defaults to the empirical 40/1000 (i.e., about 40 pixels for EM gain of 1000).  
+            Factor of proportionality to EM gain for cosm_tail.  Only relevant when cosm_tail is 'auto'.  
+            Defaults to the empirical 40/1000 (i.e., about 40 pixels for EM gain of 1000).  
         mode (string):
             If 'image', an image-area input is assumed, and if the input
             tail length is longer than the length to the end of the image-area row,
@@ -303,7 +304,6 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
     # pick the FWC that will get saturated first, depending on gain
     initial_sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_dn_arr,fwcem_dn_arr,sat_thresh)
-    initial_cosm_fwcs = calc_sat_fwc(emgain_arr,fwcpp_dn_arr,fwcem_dn_arr,cosm_thresh)
     for i,frame in enumerate(initial_dataset):
         frame.ext_hdr['FWC_PP_E'] = fwcpp_e_arr[i]
         frame.ext_hdr['FWC_EM_E'] = fwcem_e_arr[i]
@@ -437,7 +437,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
         # establish cosmic ray threshold (which may be different from saturation threshold)
         cosm_sat_fwc = calc_sat_fwc(np.array([emgain]),np.array([fwcpp_dn_arr[0]]),np.array([fwcem_dn_arr[0]]),cosm_thresh)[0]
-
+        
         if median_filter_mode > 0:
             # use the image area for the median filter so that the background is not biased by the prescan or overscan areas
             if flag_cr_input.shape[0] == detector_regions[arrtype]['frame_rows'] and flag_cr_input.shape[1] == detector_regions[arrtype]['frame_cols']:

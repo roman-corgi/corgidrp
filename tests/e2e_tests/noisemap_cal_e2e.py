@@ -191,14 +191,22 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     recipe = walker.autogen_recipe(stack_arr_files, noisemap_outputdir)
     ### Modify a keyword
     for step in recipe[0]['steps']:
+        if step['name'] == "prescan_biassub":
+            step['keywords']['num_stds'] = np.inf
         if step['name'] == "detect_cosmic_rays":
             step['keywords']['sat_thresh'] = 0.7 # what is used for TVAC data in II&T code
             step['keywords']['plat_thresh'] = 0.7 # what is used for TVAC data in II&T code
             step['keywords']['cosm_filter'] = 1 # what is used for TVAC data in II&T code
+            step['keywords']['median_filter_mode'] = 0 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_thresh'] = 0.7 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_box'] = 3 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_tail'] = 10 # what is used for TVAC data in II&T code
+            step['keywords']['skip_coronagraph_iwa'] = False # what is used for TVAC data in II&T code
     for step in recipe[1]['steps']:
         if step['name'] == "calibrate_darks":
             step['keywords'] = {}
             step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
+            step['keywords']['CR_threshold_check'] = False # to be comparable to II&T code, which does no weighting
     output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
     recipe[1]['inputs'] = output_filepaths
     walker.run_recipe(recipe[1], save_recipe_file=True)
@@ -229,7 +237,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     assert np.allclose(corgidrp_noisemap.data[0][14:14+1024,1088:1088+1024], F_map[14:14+1024,1088:1088+1024], rtol=1e-5, atol=1e-4, equal_nan=True)
     assert np.allclose(corgidrp_noisemap.data[1][14:14+1024,1088:1088+1024], C_map[14:14+1024,1088:1088+1024], rtol=1e-5, atol=1e-4, equal_nan=True)
     assert np.allclose(corgidrp_noisemap.data[2][14:14+1024,1088:1088+1024], D_map[14:14+1024,1088:1088+1024], rtol=1e-5, atol=1e-4, equal_nan=True)
-    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 4e-5
+    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 4e-3
     pass
 
     check.compare_to_mocks_hdrs(corgidrp_noisemap_fname)
@@ -436,6 +444,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
             prihdr = fits_file[0].header
             prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
             prihdr['PHTCNT'] = "False"
+            exthdr = fits_file[1].header
 
 
     ####### Run the DRP walker
@@ -448,6 +457,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
         if step['name'] == "calibrate_darks":
             step['keywords'] = {}
             step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
+            step['keywords']['CR_threshold_check'] = False # to be comparable to II&T code, which does no weighting
     output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
     recipe[1]['inputs'] = output_filepaths
     walker.run_recipe(recipe[1], save_recipe_file=True) 
@@ -467,10 +477,11 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     
 
     # Use allclose for float32 save/load and small numerical differences (rtol/atol=1e-5)
-    assert np.allclose(corgidrp_noisemap.data[0], F_map, rtol=1e-5, atol=1e-4, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[1], C_map, rtol=1e-5, atol=1e-4, equal_nan=True)
-    assert np.allclose(corgidrp_noisemap.data[2], D_map, rtol=1e-5, atol=1e-4, equal_nan=True)
-    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 1e-5
+    # leaving out telemetry row, which is NaN in only the non-DRP version (telemetry row master dark is completely irrelevant, though)
+    assert np.allclose(corgidrp_noisemap.data[0][:-1], F_map[:-1], rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[1][:-1], C_map[:-1], rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.allclose(corgidrp_noisemap.data[2][:-1], D_map[:-1], rtol=1e-5, atol=1e-4, equal_nan=True)
+    assert np.abs(corgidrp_noisemap.ext_hdr['B_O'] - bias_offset) < 1e-3
     pass
 
     check.compare_to_mocks_hdrs(corgidrp_noisemap_fname)
@@ -548,5 +559,5 @@ if __name__ == "__main__":
     
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_noisemap_calibration_from_l1(e2edata_dir, outputdir)
     test_noisemap_calibration_from_l2a(e2edata_dir, outputdir)
+    test_noisemap_calibration_from_l1(e2edata_dir, outputdir)

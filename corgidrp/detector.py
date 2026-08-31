@@ -516,7 +516,13 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     #filtered = median_filter(streak_row, cosm_filter+1, mode='nearest')
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
-        filtered = vectorized_filter(streak_row, function=np.nanmedian, size=cosm_filter+1, mode='nearest')
+        # relevant for median_filter_mode = 2 when flagging non-saturating 
+        # cosmic rays (marks pixels already flagged as NaN); behaves slightly differently 
+        # from median_filter in that it averages the two middle elements instead of taking median value
+        if np.isnan(streak_row).any(): 
+            filtered = vectorized_filter(streak_row, function=np.nanmedian, size=cosm_filter+1, mode='nearest')
+        else: # maintain same previous behavior for cases when median_filter_mode != 2 by using median_filter
+            filtered = median_filter(streak_row, cosm_filter+1, mode='nearest')
     saturated = (filtered >= sat_thresh*fwc).nonzero()[0]
 
     if len(saturated) > 0:
