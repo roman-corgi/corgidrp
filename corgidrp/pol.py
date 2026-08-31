@@ -229,245 +229,6 @@ def calc_stokes_unocculted(input_dataset,
 
     return stokes_dataset
 
-def calc_stokes_unocculted_dithered(input_dataset,
-                                    phot_kwargs=None,
-                                    image_center_x=None, 
-                                    image_center_y=None,
-                                    split_pa_states=True,
-                                    pa_tolerance=0.1):
-
-    """
-    Compute uncalibrated Stokes parameters (I, Q/I, U/I) from unocculted L3 polarimetric datacubes.
-
-    This is a dithered unocculted polarization-calibration variant of
-    `calc_stokes_unocculted`. It is intended for calibrators with acquisition
-    residuals that place their PSFs at slightly different detector positions.
-    The dither pattern should keep every PSF within one fixed detector aperture
-    and make the unaligned, dither-summed PSF illumination footprints overlap
-    sufficiently between calibrators. This reduces calibrator-dependent
-    weighting of spatial detector response; a shared aperture alone does not.
-
-    Unlike `calc_stokes_unocculted`, which centers aperture photometry
-    independently for each input frame, this function derives one aperture
-    center from all input frames and keeps it fixed in detector coordinates.
-    It assumes the required dither pattern and overlap are present but does not
-    create or verify them.
-
-    Each TARGET and PA_APER group must contain both POL0 and POL45 frames. The
-    function sums the dithered left and right beam fluxes before forming Q/I or
-    U/I; for example, POL0 uses Q/I = sum(F_left - F_right) /
-    sum(F_left + F_right). With the fixed aperture, this is equivalent to
-    combining the images in detector coordinates before photometry. A single
-    absolute I is not defined across dither positions, so I is output as NaN
-    while the POL0 and POL45 summed intensities are retained.
-
-    Each element in `dataset` represents a single observation taken with a specific Wollaston prism
-    (e.g., POL0 or POL45), which splits the incoming light into two orthogonally polarized beams.
-    This function performs aperture photometry on each beam and computes the corresponding Stokes
-    parameters in the instrument frame.
-
-    Args:
-        input_dataset (corgidrp.data.Dataset):
-            A corgidrp dataset of L3 polarimetric images
-        phot_kwargs (dict, optional):
-            Keyword arguments passed to `aper_phot`. If not provided, a default aperture setup is used.
-        image_center_x (float, optional):
-            X-coordinate of the aperture center in pixels. Default is None. 
-            If None, assume the center of the array is a good guess. 
-        image_center_y (float, optional):
-            Y-coordinate of the aperture center in pixels. Default is None.
-            If None, assume the center of the array is a good guess. 
-        split_pa_states (bool, optional):
-            If True, split the input dataset by both target and PA_APER. If False, split only by target.
-            Default is True.
-        pa_tolerance (float, optional):
-            Maximum allowed difference in PA_APER (deg) to group frames together when split_pa_states is True.
-            Default is 0.1.
-
-    Returns:
-        Image:
-            A `corgidrp.data.Image` instance containing:
-            - `data` (ndarray, shape=(6,)): [I, Q/I, U/I, V, I_POL0, I_POL45]
-              where I is NaN because no common total intensity is defined for
-              unregistered dithered frames.
-            - `err`  (ndarray, shape=(6,)): propagated uncertainties
-            - `dq`   (ndarray, shape=(6,)): data quality flags (zeros)
-            - FITS headers (pri_hdr, ext_hdr, err_hdr, dq_hdr) propagated from the first input image.
-
-    Raises:
-        ValueError:
-            If an input image contains an unrecognized prism name in 'DPAMNAME'.
-    """
-    if image_center_x is None or image_center_y is None:
-        peak_positions = []
-        for frame in input_dataset:
-            for beam in frame.data:
-                if not np.any(np.isfinite(beam)):
-                    continue
-                peak_y, peak_x = np.unravel_index(
-                    np.nanargmax(beam), beam.shape)
-                peak_positions.append((peak_x, peak_y))
-        if not peak_positions:
-            raise ValueError("Cannot determine a fixed aperture center from empty frames")
-
-        mean_peak_x, mean_peak_y = np.mean(peak_positions, axis=0)
-        if image_center_x is None:
-            image_center_x = float(mean_peak_x)
-        if image_center_y is None:
-            image_center_y = float(mean_peak_y)
-
-    # Ensure xy centering method is used with estimated centers for aperture photometry
-    if phot_kwargs is None:
-        phot_kwargs = {
-            'encircled_radius': 5,
-            'frac_enc_energy': 1.0,
-            'method': 'subpixel',
-            'subpixels': 5,
-            'background_sub': False,
-            'centroid_roi_radius': 0,
-            'centering_initial_guess': [image_center_x, image_center_y]
-        }
-
-    prism_map = {'POL0': [0., 90.], 'POL45': [45., 135.]}
-
-    # split datasets by target if there are multiple targets
-    if split_pa_states:
-        datasets = []
-        target_datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
-        for target_dataset in target_datasets:
-            # Assign frames to a cluster based on the nearest PA_APER
-            clusters = []
-            for frame in target_dataset.frames:
-                pa = frame.pri_hdr["PA_APER"] % 360.0 # in case PA_APER can be negative..
-                pa_rad = np.deg2rad(pa)
-                pa_sin = np.sin(pa_rad)
-                pa_cos = np.cos(pa_rad)
-                best_idx = None
-                best_diff = None
-                for idx, cluster in enumerate(clusters):
-                    pa_diff = abs(((pa - cluster["pa_center"] + 180.0) % 360.0) - 180.0)
-                    if pa_diff <= pa_tolerance and (best_diff is None or pa_diff < best_diff):
-                        best_idx = idx
-                        best_diff = pa_diff
-                if best_idx is None:
-                    clusters.append({
-                        "pa_center": pa,
-                        "sum_sin": pa_sin,
-                        "sum_cos": pa_cos,
-                        "frames": [frame],
-                    })
-                else:
-                    cluster = clusters[best_idx]
-                    cluster["frames"].append(frame)
-                    cluster["sum_sin"] += pa_sin
-                    cluster["sum_cos"] += pa_cos
-                    cluster["pa_center"] = np.degrees(
-                        np.arctan2(cluster["sum_sin"], cluster["sum_cos"])
-                    ) % 360.0
-            for cluster in clusters:
-                datasets.append(Dataset(cluster["frames"]))
-    else:
-        datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
-
-    stokes_vectors = []
-
-    for dataset in datasets:
-        fluxes, flux_errs, thetas = [], [], []
-        # --- Photometry loop ---
-        for ds in dataset:
-            prism = ds.ext_hdr.get('DPAMNAME')
-            if prism not in prism_map:
-                raise ValueError(f"Unknown prism: {prism}")
-            
-            flux, flux_err = aper_phot_pol(ds, phot_kwargs)
-            fluxes.append(flux)
-            flux_errs.append(flux_err)
-            
-            for phi in prism_map[prism]:
-                thetas.append(np.radians(phi))
-
-        fluxes = np.array(fluxes)
-        flux_errs = np.array(flux_errs)
-        thetas = np.array(thetas)
-
-        # Prevent division by zero
-        if np.any(flux_errs == 0):
-            flux_errs[flux_errs == 0] = np.min(flux_errs[flux_errs > 0])
-
-        # --- Instrument coordinates: left - right ---
-        n_images = len(dataset)
-        fluxes = fluxes.reshape([n_images, 2])
-        flux_errs = flux_errs.reshape([n_images, 2])
-        thetas = thetas.reshape([n_images, 2])
-  
-        I_vals = np.sum(fluxes, axis=1)
-        I_errs = np.sqrt(np.sum(flux_errs**2, axis=1))
-        QU_vals = fluxes[:, 0] - fluxes[:, 1]
-        QU_errs = I_errs
-        if np.any(I_vals == 0):
-            raise ValueError("Cannot normalize Stokes parameters with zero intensity")
-
-        idx_0 = np.where(np.degrees(thetas[:, 0]) == 0)[0]
-        idx_45 = np.where(np.degrees(thetas[:, 0]) == 45)[0]
-        if idx_0.size == 0 or idx_45.size == 0:
-            raise ValueError("Both POL0 and POL45 frames are required")
-
-        # Preserve total intensity separately for each Wollaston setting.
-        i_pol0_sum = np.sum(I_vals[idx_0])
-        i_pol0_err = np.sqrt(np.sum(I_errs[idx_0]**2))
-        i_pol45_sum = np.sum(I_vals[idx_45])
-        i_pol45_err = np.sqrt(np.sum(I_errs[idx_45]**2))
-
-        # Combine dithered fluxes in detector coordinates before forming Q/I and U/I.
-        q_sum = np.sum(QU_vals[idx_0])
-        q_sum_err = np.sqrt(np.sum(QU_errs[idx_0]**2))
-        u_sum = np.sum(QU_vals[idx_45])
-        u_sum_err = np.sqrt(np.sum(QU_errs[idx_45]**2))
-        Q_frac = q_sum / i_pol0_sum
-        U_frac = u_sum / i_pol45_sum
-        Q_frac_err = np.sqrt(
-            (q_sum_err / i_pol0_sum)**2
-            + (q_sum * i_pol0_err / i_pol0_sum**2)**2
-        )
-        U_frac_err = np.sqrt(
-            (u_sum_err / i_pol45_sum)**2
-            + (u_sum * i_pol45_err / i_pol45_sum**2)**2
-        )
-
-        # Keep the first four entries compatible with calc_stokes_unocculted.
-        # A common I is undefined without registering the dithered frames.
-        data_out = np.array([np.nan, Q_frac, U_frac, 0., i_pol0_sum, i_pol45_sum])
-        err_out = np.array([np.inf, Q_frac_err, U_frac_err, np.inf,
-                            i_pol0_err, i_pol45_err])
-        dq_out = np.zeros_like(data_out, dtype=int)
-
-        # --- Headers ---
-        pri_hdr = dataset[0].pri_hdr
-        ext_hdr = dataset[0].ext_hdr
-        ext_hdr.add_history(
-            "Computed uncalibrated Stokes parameters: "
-            "data=[I, Q/I, U/I, V, I_POL0, I_POL45]; I is undefined"
-        )
-        err_hdr = dataset[0].err_hdr
-        dq_hdr = dataset[0].dq_hdr
-
-        stokes_vector = Image(
-            data_out,
-            pri_hdr=pri_hdr,
-            ext_hdr=ext_hdr,
-            err=err_out,
-            dq=dq_out,
-            err_hdr=err_hdr,
-            dq_hdr=dq_hdr
-        )
-        stokes_vector.filename = os.path.basename(dataset[0].filename).replace("l3", "stokes")
-
-        stokes_vectors.append(stokes_vector)
-
-    stokes_dataset = Dataset(stokes_vectors)
-
-    return stokes_dataset
-
 def generate_mueller_matrix_cal(input_dataset, 
                                 path_to_pol_ref_file=None,
                                 svd_threshold=1e-5):
@@ -476,17 +237,13 @@ def generate_mueller_matrix_cal(input_dataset,
     The expected input is a dataset of stokes vectors measured from known polarized standard stars, separated by 
     target and PA_APER angle. The function reads in a polarization reference file containing the known polarization 
     properties of the targets, and uses these to calculate the Mueller Matrix elements via SVD inversion.
-    When present, the trailing `I_POL0` and `I_POL45` entries are additionally used to
-    measure the relative Q/U-to-I terms, M01/M00 and M02/M00, from their variation with
-    roll angle.
     
     The pol reference file should contain the known polarization properties of the targets in the dataset.
     It should be a csv file with the following columns:
-    TARGET, [CFAM,] P, P_err, PA, PA_err
-    where TARGET is the name of the target, CFAM is the optional color-filter name, P is the degree of
-    polarization in percent, P_err is the error in the degree of polarization in percent, PA is the
-    polarization angle in degrees, and PA_err is the error in the polarization angle in degrees. When
-    present, CFAM is matched to CFAMNAME in each input frame header; otherwise TARGET must be unique.
+    TARGET, P, P_err, PA, PA_err
+    where TARGET is the name of the target, P is the degree of polarization in percent, P_err is the error
+    in the degree of polarization in percent, PA is the polarization angle in degrees, and PA_err is the
+    error in the polarization angle in degrees.
 
     The error calculation propagates both the photometric measurement noise on the observed Stokes vectors
     and the uncertainties in the reference star polarization fraction and angle (P_err, PA_err from the
@@ -506,11 +263,7 @@ def generate_mueller_matrix_cal(input_dataset,
     dataset = input_dataset.copy()
 
     if path_to_pol_ref_file is None:
-        path_to_pol_ref_file = os.path.join(
-            os.path.dirname(__file__),
-            "data",
-            "stellar_polarization_database.csv",
-        )
+        path_to_pol_ref_file = os.path.join(os.path.dirname(__file__), "data", "stellar_polarization_database.csv")
 
     # check that all the data in the dataset is either ND or non-ND, by looking for ND in the FPAMNAME keyword
     nd_flags = [("ND" in data.ext_hdr["FPAMNAME"]) for data in dataset]
@@ -523,77 +276,37 @@ def generate_mueller_matrix_cal(input_dataset,
 
     # Read in the polarization reference file
     pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
-    pol_ref.columns = pol_ref.columns.str.strip()
-    pol_ref["TARGET"] = pol_ref["TARGET"].str.strip()
-    has_cfam = "CFAM" in pol_ref.columns
-    if has_cfam:
-        pol_ref["CFAM"] = pol_ref["CFAM"].str.strip()
+    # extract the target names
+    pol_ref_targets = pol_ref["TARGET"].tolist()
 
-    # split the datasets into different targets
-    # Original behavior: this returns one target name per unique TARGET and drops roll states.
-    # _, targets = dataset.split_dataset(prihdr_keywords=["TARGET"])
-    # Keep one reference target per Stokes measurement, including each roll state.
-    targets = [image.pri_hdr["TARGET"] for image in dataset]
-    cfam_names = (
-        [image.ext_hdr["CFAMNAME"] for image in dataset]
-        if has_cfam else [None] * len(dataset)
-    )
+    frame_targets = [image.pri_hdr["TARGET"] for image in dataset]
 
-    n_targets = np.unique(targets).shape[0]
-    # Select one polarization reference for every Stokes measurement.
-    pol_rows_by_measurement = []
-    for target, cfam_name in zip(targets, cfam_names):
-        if has_cfam:
-            pol_rows = pol_ref[
-                (pol_ref["TARGET"] == target)
-                & (pol_ref["CFAM"] == cfam_name)
-            ]
-            ref_label = f"TARGET={target}, CFAM={cfam_name}"
-        else:
-            pol_rows = pol_ref[pol_ref["TARGET"] == target]
-            ref_label = f"TARGET={target}"
-        if len(pol_rows) != 1:
-            raise ValueError(
-                f"Expected one polarization reference for {ref_label}; "
-                f"found {len(pol_rows)}."
-            )
-        pol_rows_by_measurement.append(pol_rows)
-    
-    has_intensity_vectors = all(
-        image.data.size >= 6 and image.err[0].size >= 6
-        for image in dataset
-    )
-    # Measure normalized Q and U from the original Stokes-vector positions.
+    # check that all the targets from the dataset are in the pol reference file
+    for target in frame_targets:
+        if target not in pol_ref_targets:
+            raise ValueError(f"Target {target} not found in polarization reference file.")
+
+    # measure the normalized difference for each dataset
     stokes_vectors = []
     stokes_vector_errs = []
-    if has_intensity_vectors:
-        I_vectors = []
-        I_vector_errs = []
     rotation_angles = []
     for image in dataset:
-        stokes_vectors.append(image.data[1:3]) # Grab just Q and U
-        stokes_vector_errs.append(image.err[0][1:3]) # Grab just Q and U errors
-        if has_intensity_vectors:
-            I_vectors.append(image.data[4:6]) # Grab trailing I_POL0 and I_POL45
-            I_vector_errs.append(image.err[0][4:6])
+        stokes_vectors.append(image.data[1:3]) #Grab just Q and U
+        stokes_vector_errs.append(image.err[0][1:3]) #Grab just Q and U errors
         # PA_APER is the on-sky position angle east of north for the CGI aperture
         rotation_angles.append(image.pri_hdr["PA_APER"])
     stokes_vectors = np.append(stokes_vectors[0], stokes_vectors[1:])
     stokes_vector_errs = np.append(stokes_vector_errs[0], stokes_vector_errs[1:])
-    if has_intensity_vectors:
-        I_vectors = np.asarray(I_vectors)
-        I_vector_errs = np.asarray(I_vector_errs)
 
     # generate the matrix of meausurements six columns [1 q_star, u_star, 0,0,0] for q_measured
-    # and [0,0,0, 1, q_star, u_star] for u_measured. Transform Q/U from sky to detector frame using PA_APER.
-    Q_ref_err_sq = np.zeros(len(targets))
-    U_ref_err_sq = np.zeros(len(targets))
-    cov_QU_ref = np.zeros(len(targets))
-    Q_refs = np.zeros(len(targets))
-    U_refs = np.zeros(len(targets))
+    # and [0,0,0, 1, q_star, u_star] for u_measured #Where Q and U have been rotated by the PA_APER angle: 
+    Q_ref_err_sq = np.zeros(len(dataset))
+    U_ref_err_sq = np.zeros(len(dataset))
+    cov_QU_ref = np.zeros(len(dataset))
     stokes_matrix = np.zeros((2*len(dataset), 6))
-    for i, target in enumerate(targets):
-        pol_row = pol_rows_by_measurement[i]
+    for i, image in enumerate(dataset):
+        target = image.pri_hdr["TARGET"]
+        pol_row = pol_ref[pol_ref["TARGET"] == target]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
         PA = pol_row["PA"].values[0] + rotation_angles[i] # in degrees
         P_err = pol_row["P_err"].values[0] / 100.0 # convert from percent to fraction
@@ -602,8 +315,6 @@ def generate_mueller_matrix_cal(input_dataset,
 
         # calculate the Stokes parameters Q and U from P and PA
         Q, U = get_qu_from_p_theta(P, PA)
-        Q_refs[i] = Q
-        U_refs[i] = U
 
         stokes_matrix[2*i,:] = [1, Q, U, 0, 0, 0]
         stokes_matrix[2*i+1,:] = [0, 0, 0, 1, Q, U]
@@ -645,7 +356,7 @@ def generate_mueller_matrix_cal(input_dataset,
     #   Var(m_k) += c_Q^2 * Var(Q_ref) + 2*c_Q*c_U * Cov(Q_ref,U_ref) + c_U^2 * Var(U_ref)
     # where c_Q = A^+[k,2i]*m[1] + A^+[k,2i+1]*m[4], c_U = A^+[k,2i]*m[2] + A^+[k,2i+1]*m[5].
     ref_var = np.zeros(6)
-    for i in range(len(targets)):
+    for i in range(len(dataset)):
         c_Q = (stokes_matrix_inv[:, 2*i]   * mueller_elements[1] +
                stokes_matrix_inv[:, 2*i+1] * mueller_elements[4])
         c_U = (stokes_matrix_inv[:, 2*i]   * mueller_elements[2] +
@@ -658,93 +369,33 @@ def generate_mueller_matrix_cal(input_dataset,
     meas_var = np.diag(stokes_matrix_inv @ np.diag(stokes_vector_errs**2) @ stokes_matrix_inv.T)
     mueller_elements_err = np.sqrt(meas_var + ref_var)
 
-    # Fit M01/M00 and M02/M00 from intensity changes between roll states. Each
-    # target and Wollaston setting has its own unknown source brightness, which
-    # cancels when two rolls of that target/setting are compared.
-    if has_intensity_vectors:
-        I_rows = []
-        I_obs = []
-        I_obs_errs = []
-        target_arr = np.asarray(targets)
-        for wol_index in range(2):
-            for target in np.unique(target_arr):
-                target_idx = np.flatnonzero(target_arr == target)
-                if len(target_idx) < 2:
-                    continue
+    #Fill in the mueller matrix
+    mueller_matrix = np.zeros((4,4))
+    mueller_matrix[0,0] = 1
+    mueller_matrix[1,0] = mueller_elements[0]
+    mueller_matrix[1,1] = mueller_elements[1]
+    mueller_matrix[1,2] = mueller_elements[2]
+    mueller_matrix[2,0] = mueller_elements[3]
+    mueller_matrix[2,1] = mueller_elements[4]
+    mueller_matrix[2,2] = mueller_elements[5]
+    mueller_matrix[3,3] = 1
 
-                ref_idx = target_idx[0]
-                I_ref = I_vectors[ref_idx, wol_index]
-                I_ref_err = I_vector_errs[ref_idx, wol_index]
-                for curr_idx in target_idx[1:]:
-                    I_curr = I_vectors[curr_idx, wol_index]
-                    I_curr_err = I_vector_errs[curr_idx, wol_index]
-                    I_sum = I_ref + I_curr
-                    if I_sum == 0:
-                        raise ValueError("Cannot fit Q/U-to-I terms with zero total intensity")
-
-                    # I = source_flux * (M00 + M01*Q + M02*U). Dividing this
-                    # two-roll difference by their intensity sum removes source_flux and M00.
-                    I_rows.append([
-                        (I_ref * Q_refs[curr_idx] - I_curr * Q_refs[ref_idx]) / I_sum,
-                        (I_ref * U_refs[curr_idx] - I_curr * U_refs[ref_idx]) / I_sum,
-                    ])
-                    I_obs.append(
-                        (I_curr - I_ref) / I_sum
-                    )
-                    I_obs_errs.append(np.sqrt(
-                        (-2 * I_curr / I_sum**2 * I_ref_err)**2
-                        + (2 * I_ref / I_sum**2 * I_curr_err)**2
-                    ))
-
-        if len(I_rows) < 2:
-            raise ValueError(
-                "At least two independent roll differences are required to fit Q/U-to-I terms"
-            )
-
-        I_matrix = np.asarray(I_rows)
-        I_obs = np.asarray(I_obs)
-        I_obs_errs = np.asarray(I_obs_errs)
-        I_u, I_s, I_v = np.linalg.svd(I_matrix, full_matrices=False)
-        if I_s[-1] < svd_threshold:
-            raise ValueError("Insufficient roll and polarization diversity to fit Q/U-to-I terms")
-        I_matrix_inv = np.dot(
-            I_v.transpose(),
-            np.dot(np.diag(I_s**-1), I_u.transpose()),
-        )
-        I_elements = np.dot(I_matrix_inv, I_obs)
-        I_meas_var = np.diag(
-            I_matrix_inv
-            @ np.diag(I_obs_errs**2)
-            @ I_matrix_inv.T
-        )
-        I_elements_err = np.sqrt(I_meas_var)
-
-    # Fill in the Mueller matrix.
-    mueller_matrix = np.eye(4)
-    mueller_matrix[1:3, :3] = mueller_elements.reshape(2, 3)
-
-    mueller_matrix_err = np.full((4, 4), np.nan)
-    mueller_matrix_err[1:3, :3] = mueller_elements_err.reshape(2, 3)
-    if has_intensity_vectors:
-        mueller_matrix[0, 1:3] = I_elements
-        mueller_matrix_err[0, 1:3] = I_elements_err
+    mueller_matrix_err = np.zeros((4,4))*np.nan
+    mueller_matrix_err[1,0] = mueller_elements_err[0]
+    mueller_matrix_err[1,1] = mueller_elements_err[1]
+    mueller_matrix_err[1,2] = mueller_elements_err[2]
+    mueller_matrix_err[2,0] = mueller_elements_err[3]
+    mueller_matrix_err[2,1] = mueller_elements_err[4]
+    mueller_matrix_err[2,2] = mueller_elements_err[5]
 
     if is_nd:
         mueller_matrix_obj = NDMuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
                          ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset,
                          err=mueller_matrix_err)
-        cal_suffix = "_ndm_cal.fits"
     else:
         mueller_matrix_obj = MuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
                          ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset,
                          err=mueller_matrix_err)
-        cal_suffix = "_mmx_cal.fits"
-
-    # Convert the in-memory Stokes product name to the calibration product name.
-    mueller_matrix_obj.filename = mueller_matrix_obj.filename.replace(
-        "_stokes.fits", cal_suffix
-    )
-    mueller_matrix_obj.pri_hdr["FILENAME"] = mueller_matrix_obj.filename
 
     return mueller_matrix_obj
 
