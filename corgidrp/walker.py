@@ -495,7 +495,7 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
 
     return step
 
-def _fsm_positions_differ(dataset, tolerance=1.0):
+def _fsm_positions_differ(dataset, tolerance=4.0):
     """
     Return True if FSMX or FSMY values differ across the dataset by more than tolerance.
     This is an indirect way of checking if the images were dithered.
