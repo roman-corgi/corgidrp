@@ -561,9 +561,7 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         elif planet.lower() == 'uranus':
              planet_rad = 65
         else:
-            # A rastered star fills a disk; measure it from the data rather than
-            # assuming a size or a raster pattern. Each pol component is a separate
-            # lit region, so the largest connected disk gives the per-component radius.
+            # a rastered star fills a disk of unknown size; measure it per frame
             radii = [measure_disk_radius(frame.data) for frame in dataset]
             radii = [r for r in radii if r is not None]
             if not radii:
@@ -578,11 +576,8 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
          elif band[0] == "4":
             rad_mask = 1.75
     if n_pix is None:
-        # Size the final flat to the full illuminated disk (radius planet_rad) that the
-        # rastered source actually covers, the same region regular imaging keeps via its
-        # n_pix=None auto-sizing. The fixed NFOV/WFOV values clipped the flat to a disk
-        # (radius n_pix//2 = 22 for NFOV) far smaller than what the star illuminates,
-        # throwing away most of the good flat data.
+        # size the flat to the full illuminated disk (radius planet_rad); the flat
+        # keeps radius n_pix//2, so use the disk diameter
         n_pix = 2 * planet_rad
     
     # wollaston prism angle, used below to place the combined rasters
@@ -591,18 +586,15 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
     else:
         angle_rad = (alignment_angle_WP2 * np.pi) / 180
 
-    # the planet images with two pol components are downsampled by a factor of 8 for finding the centroids using daostarfinder
+    # find the two pol spots in each frame, then flatten each one
     raster_frames_pol1=[];raster_frames_pol2=[]; cent_pol1=[]; cent_pol2=[]; act_cents_1=[]; act_cents_2=[];
     for j in range(len(dataset)):
         planet_image=dataset[j].data.copy()  # copy: the sky subtraction below is in-place
         planet_image_err=dataset[j].err[0]
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
-        # Median-filter before detection so a multi-pixel hot-pixel/cosmic-ray
-        # cluster brighter than the (prism-split, so individually fainter) spots
-        # cannot set the detection threshold and cause DAOStarFinder to miss the
-        # real spots. Threshold off a robust statistic of the smoothed
-        # downsampled image rather than the raw full-frame max.
+        # detect on a median-filtered, 8x-downsampled image with a median+5*std
+        # threshold, so hot pixels/cosmic rays don't hide the (fainter) split spots
         planet_image_downsampled = zoom(median_filter(np.nan_to_num(planet_image), 5), 1/8)
         med = np.nanmedian(planet_image_downsampled)
         std = np.nanstd(planet_image_downsampled)
@@ -622,10 +614,8 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         x_centroids[np.isnan(x_centroids)] = 0
         y_centroids[np.isnan(y_centroids)] = 0
 
-        # The two orthogonal pol spots are separated by a known distance
-        # (separation_diameter_arcsec / plate_scale). Of all detected sources,
-        # pick the pair whose separation best matches that, so a spurious
-        # detection (e.g. a residual hot pixel) cannot be mistaken for a spot.
+        # the two spots sit a known distance apart, so pick the detected pair whose
+        # separation best matches it 
         expected_sep = separation_diameter_arcsec / plate_scale
         n_src = len(x_centroids)
         best = None
@@ -645,13 +635,9 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         else:
             i1, i2 = b, a
 
-        # DAOStarFinder ran on an 8x-downsampled image, so these centers are only
-        # accurate to ~8 detector pixels. That is good enough to identify which two
-        # sources are the pol spots, but not to register the crops: the flat math
-        # median-combines source-centered crops and divides each frame by that median,
-        # so a compact stellar PSF misregistered by several pixels between frames leaves
-        # PSF-shaped residuals instead of a flat. Refine each spot at full resolution
-        # with the same disk-overlap centroid the regular imaging flat uses.
+        # the downsampled centers are only accurate to ~8 px, too coarse to register
+        # the crops (mis-registered PSFs leave PSF-shaped residuals, not a flat).
+        # refine each spot at full resolution, as the regular imaging flat does.
         coarse_centers = [(int(x_centroids[i1]), int(y_centroids[i1])),
                           (int(x_centroids[i2]), int(y_centroids[i2]))]
         refined_centers = []
@@ -675,10 +661,8 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         act_cents_1.append((pol1_x,pol1_y))
         act_cents_2.append((pol2_x,pol2_y))
 
-        # sky subtraction if needed: estimate the sky per pol component from an annulus
-        # centered on that component's own disk (create_onsky_flatfield does this for its
-        # single source; centering on the midpoint between the two disks would sample the
-        # disks themselves rather than blank sky).
+        # estimate sky per spot from an annulus around that spot; a shared annulus on
+        # the midpoint between them would fall on the disks, not blank sky
         sky_pol1 = 0.0
         sky_pol2 = 0.0
         if sky_annulus_rin is not None and sky_annulus_rout is not None:
