@@ -2,6 +2,7 @@
 Test the walker infrastructure to read and execute recipes
 """
 import os
+import copy
 import glob
 import json
 import tempfile
@@ -1366,6 +1367,160 @@ def test_run_recipe_preserves_prior_chain_headers():
         assert frame.ext_hdr['NRECIPES'] == 3
 
 
+def test_run_recipe_ram_heavy_preserves_inputs():
+    """
+    End-to-end test (via run_recipe) that RAM-heavy mode preserves the actual
+    recipe -- including the real input filenames -- across the frames it
+    processes: the last frame (by input order) stores the full input
+    filename list inline, and every other frame stores a compact pointer to
+    that file instead of repeating the list, matching what _set_recipe_header
+    does when called directly (see test_set_recipe_header_ram_heavy).
+    """
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    os.makedirs(datadir, exist_ok=True)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
+
+    # Three L1 files with distinct, strictly ascending SCTSRT so which frame
+    # is "last" (and becomes the anchor) is unambiguous.
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=3)
+    fname_template = "cgi_ramheavy_{:03d}_l1.fits"
+    base_time = datetime.datetime(2026, 1, 1)
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+        image.ext_hdr['SCTSRT'] = (base_time + datetime.timedelta(seconds=i)).isoformat()
+    l1_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l1_dataset]
+
+    recipe = {
+        "name": "test_ram_heavy_inputs",
+        "template": False,
+        "ram_heavy": True,
+        "inputs": filelist,
+        "outputdir": outputdir,
+        "drpconfig": {},
+        "steps": [{"name": "save", "keywords": {"ram_heavy_save": True}}]
+    }
+
+    output_filelist = walker.run_recipe(recipe, save_recipe_file=False)
+    assert output_filelist is not None
+    assert len(output_filelist) == 3
+
+    output_dataset = data.Dataset(output_filelist)
+    # Frames come back out in the same order they went in (no sorting step ran).
+    last_filepath = filelist[-1]
+    n_full, n_pointer = 0, 0
+    for frame, orig_filepath in zip(output_dataset, filelist):
+        stored = json.loads(frame.ext_hdr['RECIPE'])
+        assert stored['name'] == 'test_ram_heavy_inputs'
+        if orig_filepath == last_filepath:
+            assert stored['inputs'] == filelist, "Last input frame should retain the full input filename list"
+            n_full += 1
+        else:
+            assert stored['inputs'] == "See RECIPE header value in {0}".format(last_filepath), \
+                "Non-last frames should point at the file holding the full input list, not repeat it"
+            n_pointer += 1
+    assert n_full == 1, "Exactly one frame (the anchor) should hold the full recipe"
+    assert n_pointer == 2
+
+    # Make sure that the walker's own helper function also correcgtly finds the input data
+    anchor_output = [f for f, orig in zip(output_dataset, filelist) if orig == last_filepath][0]
+    history = walker._read_prior_recipe_history(anchor_output.filepath)
+    assert len(history) == 1
+    assert history[0]['inputs'] == filelist
+
+
+def test_run_recipe_chain_ram_heavy_first():
+    """
+    End-to-end test (via run_recipe, chained the way walk_corgidrp chains
+    recipes -- calling run_recipe once per recipe, threading the same recipe
+    dicts through as prev_recipes) where the *first* recipe in the chain is
+    RAM-heavy. Checks that recipe0's real input filenames, and its compact
+    pointer, both survive being folded into RECIPE/RECIPE2 by the second
+    (non-RAM-heavy) recipe's run -- and that the pointer resolves to
+    recipe0's actual anchor output file, which itself really does hold the
+    full recipe0 (unlike a standalone RAM-heavy run with no downstream step
+    to resolve "_recipe_anchor" -- see test_run_recipe_ram_heavy_preserves_inputs).
+    """
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    os.makedirs(datadir, exist_ok=True)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    os.makedirs(outputdir, exist_ok=True)
+
+    # Three L1 files with distinct, strictly ascending SCTSRT so which frame
+    # is "last" (and becomes the anchor) is unambiguous.
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=3)
+    fname_template = "cgi_ramheavychain_{:03d}_l1.fits"
+    base_time = datetime.datetime(2026, 1, 2)
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+        image.ext_hdr['SCTSRT'] = (base_time + datetime.timedelta(seconds=i)).isoformat()
+    l1_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l1_dataset]
+
+    recipe0 = {
+        "name": "ram_heavy_chain_recipe0",
+        "template": False,
+        "ram_heavy": True,
+        "inputs": filelist,
+        "outputdir": outputdir,
+        "drpconfig": {},
+        "steps": [{"name": "save", "keywords": {"ram_heavy_save": True}}]
+    }
+    recipe0_pristine = copy.deepcopy(recipe0)  # baseline before run_recipe mutates in "_recipe_anchor"
+
+    # Recipe 0: standalone, RAM-heavy -- same as test_run_recipe_ram_heavy_preserves_inputs.
+    output_filelist0 = walker.run_recipe(recipe0, save_recipe_file=False)
+    assert output_filelist0 is not None and len(output_filelist0) == 3
+
+    # Recipe 1: a second, ordinary (non-RAM-heavy) recipe chained onto recipe0's
+    # outputs, the way walk_corgidrp calls run_recipe(recipe, prev_recipes=recipes[:i]).
+    recipe1 = {
+        "name": "chain_recipe1",
+        "template": False,
+        "inputs": output_filelist0,
+        "outputdir": outputdir,
+        "drpconfig": {},
+        "steps": [{"name": "save", "keywords": {"suffix": "s2"}}]
+    }
+    output_filelist1 = walker.run_recipe(recipe1, save_recipe_file=False, prev_recipes=[recipe0])
+    assert output_filelist1 is not None and len(output_filelist1) == 3
+
+    output_dataset1 = data.Dataset(output_filelist1)
+    last_input_filepath = filelist[-1]
+    n_full, n_pointer = 0, 0
+    for frame, orig_input_filepath in zip(output_dataset1, filelist):
+        assert frame.ext_hdr['NRECIPES'] == 2
+
+        stored_recipe1 = json.loads(frame.ext_hdr['RECIPE2'])
+        assert stored_recipe1 == recipe1, "The second, non-RAM-heavy recipe is always stored in full"
+
+        stored_recipe0 = json.loads(frame.ext_hdr['RECIPE'])
+        assert stored_recipe0['name'] == 'ram_heavy_chain_recipe0'
+        if orig_input_filepath == last_input_filepath:
+            assert stored_recipe0['inputs'] == filelist, \
+                "recipe0's real input filenames should survive chaining into RECIPE on the anchor frame"
+            n_full += 1
+        else:
+            # By the time recipe1 runs, recipe0's "_recipe_anchor" has already
+            # been resolved to its real output file (set inside recipe0's own
+            # "save" step) -- so the pointer here should name that actual,
+            # readable output file rather than falling back to the raw input.
+            anchor_output_filepath = recipe0.get("_recipe_anchor")
+            assert anchor_output_filepath is not None
+            assert stored_recipe0['inputs'] == "See RECIPE header value in {0}".format(anchor_output_filepath), \
+                "Non-anchor frames should point at recipe0's resolved output anchor, not repeat its input list"
+            n_pointer += 1
+    assert n_full == 1, "Exactly one frame (the anchor) should hold recipe0's full input list"
+    assert n_pointer == 2
+
+    # Make sure that the walker's own helper function also correcgtly finds the input data
+    history = walker._read_prior_recipe_history(recipe0["_recipe_anchor"])
+    assert len(history) == 1
+    assert history[0]['name'] == recipe0_pristine['name']
+    assert history[0]['inputs'] == filelist
+
+
 if __name__ == "__main__":#
     test_l1_to_l2b_default_calibs()
     test_autoreducing()
@@ -1394,4 +1549,6 @@ if __name__ == "__main__":#
     test_set_recipe_header()
     test_read_prior_recipe_history()
     test_run_recipe_preserves_prior_chain_headers()
+    test_run_recipe_ram_heavy_preserves_inputs()
+    test_run_recipe_chain_ram_heavy_first()
 
