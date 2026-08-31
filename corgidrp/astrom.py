@@ -304,7 +304,7 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     
     Args:
         image_data (numpy.ndarray): 2D array of image data
-        threshold (int): Number of stars to find (default: 100)
+        threshold (int): Number of stars to find (default: 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
     
@@ -411,9 +411,16 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     for i, (gx, gy) in enumerate(zip(xs[~np.isnan(xs)], ys[~np.isnan(ys)])):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning)
-            pf, fw, x, y = fakes.gaussfit2d(frame= fit_gauss_image, xguess= gx+pad, yguess=gy+pad)
-        fit_xs[i] = x - pad
-        fit_ys[i] = y - pad
+            pf, fw, x, y = fakes.gaussfit2d(frame=fit_gauss_image, xguess=gx+pad, yguess=gy+pad, guesspeak=fit_gauss_image[int(gy+pad), int(gx+pad)], refinefit=True)
+        # make sure the fit location is not outside the image
+        if ((x-pad) > 1024) or ((x-pad) < 0) or ((y-pad) > 1024) or ((y-pad) < 0):
+            # if x or y is outside image, save the original guess location (still valid, just not at sub-pixel precision)
+            fit_xs[i] = gx
+            fit_ys[i] = gy
+        else:
+            # if the fit is *inside the image, record the new fit position
+            fit_xs[i] = x-pad
+            fit_ys[i] = y-pad
 
     found_sources = astropy.table.Table()
     found_sources['x'] = fit_xs
@@ -494,9 +501,9 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
         # make sure plate scale is within tolerance of the guess or else discard this possibility
         if ((len1 / l1) > platescale_guess* (1 + platescale_tol)) or ((len2 / l2) > platescale_guess* (1 + platescale_tol)) or ((len3 / l3) > platescale_guess* (1 + platescale_tol)):
-            ap, bp, cp = 0, 0, 0
+            ap, bp, cp = -np.inf, -np.inf, -np.inf
         if ((len1 / l1) < platescale_guess* (1 - platescale_tol)) or ((len2 / l2) < platescale_guess* (1 - platescale_tol)) or ((len3 / l3) < platescale_guess* (1 - platescale_tol)):
-            ap, bp, cp = 0, 0, 0
+            ap, bp, cp = -np.inf, -np.inf, -np.inf
 
         # find the best fit to the brightest image triangle
         lstsq = (a - ap)**2 + (b - bp)**2 + (c - cp)**2
