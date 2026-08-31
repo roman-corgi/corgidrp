@@ -413,28 +413,14 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
             warnings.filterwarnings("ignore", category=RuntimeWarning)
             pf, fw, x, y = fakes.gaussfit2d(frame=fit_gauss_image, xguess=gx+pad, yguess=gy+pad, guesspeak=fit_gauss_image[int(gy+pad), int(gx+pad)], refinefit=True)
         # make sure the fit location is not outside the image
-        if (x-pad) > 1024:
-            # if x is outside image, save the original guess location (still valid, just not at sub-pixel precision)
-            fit_xs[i] = gx
-            fit_ys[i] = gy
-        elif (x-pad) < 0:
-            # if x is outside image, save the original guess
+        if ((x-pad) > 1024) or ((x-pad) < 0) or ((y-pad) > 1024) or ((y-pad) < 0):
+            # if x or y is outside image, save the original guess location (still valid, just not at sub-pixel precision)
             fit_xs[i] = gx
             fit_ys[i] = gy
         else:
-            # if the x inside image, check the y location
-            if (y-pad) > 1024:
-                # same checks, but for the y position
-                fit_xs[i] = gx
-                fit_ys[i] = gy
-
-            elif (y-pad) < 0:
-                fit_xs[i] = gx
-                fit_ys[i] = gy
-            # if the fit is inside the image, record the new fit position
-            else:
-                fit_xs[i] = x-pad
-                fit_ys[i] = y-pad
+            # if the fit is *inside the image, record the new fit position
+            fit_xs[i] = x-pad
+            fit_ys[i] = y-pad
 
     found_sources = astropy.table.Table()
     found_sources['x'] = fit_xs
