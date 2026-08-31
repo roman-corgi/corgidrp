@@ -590,10 +590,13 @@ class Image():
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
 
-        # Cast data in additional HDUs to the configured dtype before appending
+        # Cast data in additional HDUs to the configured dtype before appending, excluding binary tables etc.
         for hdu in self.hdu_list:
-            if hdu.data is not None:
-                hdu.data = hdu.data.astype(corgidrp.image_dtype, copy=False)
+            if hdu.data is not None and type(hdu.data) == np.ndarray:
+                if hdu.name == "SPEC_DQ":
+                    hdu.data = hdu.data.astype(corgidrp.dq_dtype, copy=False)
+                else:
+                    hdu.data = hdu.data.astype(corgidrp.image_dtype, copy=False)
             hdulist.append(hdu)
 
         with warnings.catch_warnings():
@@ -4602,7 +4605,7 @@ def get_flag_to_bit_map():
         "full_well_saturated_pixel": 5,
         "non_linear_pixel": 6,
         "pixel_affected_by_cosmic_ray": 7,
-        "TBD": 8,
+        "too_bright_for_pc": 8,
     }
 
 def get_flag_to_value_map():
