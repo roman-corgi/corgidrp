@@ -780,12 +780,12 @@ def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Astrometry Calibration ===")
-    astrom_data_files = glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits"))
+    astrom_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_astrom_e2e", "l2b_results", "*_ast_cal.fits"))
     astrom_data_file = max(astrom_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(astrom_data_file, 'ast_cal')
     
-    generate_fits_excel_documentation(astrom_data_file, os.path.join(e2eoutput_path, "astrom_cal_e2e", "ast_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(astrom_data_file, os.path.join(e2eoutput_path, "l1_to_astrom_e2e", "l2b_results", "ast_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -932,12 +932,12 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Core Throughput Map ===")
-    ctmap_data_files = glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits"))
+    ctmap_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "ctmap_output", "*_ctm_cal.fits"))
     ctmap_data_file = max(ctmap_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(ctmap_data_file, 'ctm_cal')
     
-    generate_fits_excel_documentation(ctmap_data_file, os.path.join(e2eoutput_path, "ctmap_cal_e2e", "ctm_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(ctmap_data_file, os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "ctmap_output", "ctm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1453,12 +1453,12 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'L4_Pol': glob.glob(os.path.join(e2eoutput_path, "l1_to_l4_pol_e2e", "analog", "*_l4_.fits")),
         'L4_Spec_Coron': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_spec_psfsub_e2e", "*_l4_.fits")),
         'L4_Spec_Noncoron': glob.glob(os.path.join(e2eoutput_path, "l1_to_l4_spec_noncoron_e2e", "analog", "*_l4_.fits")),
-        'Astrom': glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits")),
+        'Astrom': glob.glob(os.path.join(e2eoutput_path, "l1_to_astrom_e2e", "l2b_results", "*_ast_cal.fits")),
         'BPMap': glob.glob(os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits")),
         'Flat': glob.glob(os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits")),
         'PolFlat': glob.glob(os.path.join(e2eoutput_path, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "*_flt_cal.fits")),
         'CoreThroughput': glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "l2b_results", "*_ctp_cal.fits")),
-        'CoreThroughputMap': glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits")),
+        'CoreThroughputMap': glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "ctmap_output", "*_ctm_cal.fits")),
         'FluxCal': glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits")),
         'FluxCalPol': glob.glob(os.path.join(e2eoutput_path, "l1_to_fluxcal_pol_e2e", "l2b_results","*_abf_cal.fits")),
         'KGain': glob.glob(os.path.join(e2eoutput_path, "kgain_cal_e2e", "*_krn_cal.fits")),

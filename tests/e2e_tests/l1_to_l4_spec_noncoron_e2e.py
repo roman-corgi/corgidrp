@@ -585,7 +585,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         check_dimensions(data, (81, 81), "HDU5 Data Array: 2D array containing the 2D wavelength uncertainty distribution", logger)
         #verify HDU6
         hdu6 = hdul[6]
-        check_dimensions(hdu6.data, (19,), "HDU6 Data Array: containing the 1D spectral distribution", logger)
+        check_dimensions(hdu6.data, (51,), "HDU6 Data Array: containing the 1D spectral distribution", logger)
         if np.isnan(hdu6.data).any() is True:
             logger.info(f"HDU6 Data Array: Contains NANs in the data. Expected: no NANs. FAIL.")
         else:
@@ -597,21 +597,21 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
         # Verify HDU7 (error)
         hdu7 = hdul[7]
         err = hdu7.data
-        check_dimensions(err, (1, 19), "HDU7 Data Array: 1D array with the corresponding spectral uncertainty", logger)
+        check_dimensions(err, (1, 51), "HDU7 Data Array: 1D array with the corresponding spectral uncertainty", logger)
         # Verify HDU8 (dq)
         hdu8 = hdul[8]
         dq = hdu8.data
-        check_dimensions(dq, (19,), "HDU8 Data Array: 1D array with the corresponding spectral data quality", logger)
+        check_dimensions(dq, (51,), "HDU8 Data Array: 1D array with the corresponding spectral data quality", logger)
         
         # Verify HDU9 (wavelength)
         hdu9 = hdul[9]
         wave = hdu9.data
-        check_dimensions(wave, (19,), "HDU9 Data Array: 1D array with the corresponding wavelength", logger)
+        check_dimensions(wave, (51,), "HDU9 Data Array: 1D array with the corresponding wavelength", logger)
         
         # Verify HDU10 (wavelength uncertainties)
         hdu10 = hdul[10]
         wave_err = hdu10.data
-        check_dimensions(wave_err, (19,), "HDU10 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
+        check_dimensions(wave_err, (51,), "HDU10 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
         
         # Verify header keywords
         verify_header_keywords(hdul[1].header, {'DATALVL': 'L4', 'CFAMNAME' : '3', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3', 'BUNIT' : 'photoelectron/s'},

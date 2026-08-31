@@ -88,6 +88,8 @@ from corgidrp.photon_counting import get_pc_mean
 from corgidrp.darks import build_synthesized_dark
 import corgidrp.detector as detector
 import corgidrp.fluxcal as fluxcal
+import corgidrp.l2b_to_l3 as l2b_to_l3
+import corgidrp.spec as spec
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -356,9 +358,16 @@ def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
     exptime = l2b_image.ext_hdr["EXPTIME"]
     calspec_filepath, _ = fluxcal.get_calspec_file(target)
     flux_ref = fluxcal.read_cal_spec(calspec_filepath,spec_wave * 10.)
-    center = 512
-    spec = np.sum(np.mean(l2b_image.data[center - 9:center +9, center -2:center +2],0))/exptime
-    est_fluxfac = np.mean(flux_ref)/spec
+    # Sum the same box extract_spec used, by hand: the recipe crops before extraction, so the
+    # zero point is at (WV0_X, WV0_Y) of the cropped frame, the box is 2 * halfwidth + 1 = 5
+    # columns wide, and it spans redheight rows toward -Y (red for PRISM3) and blueheight toward +Y.
+    l2b_cropped = l2b_to_l3.crop(data.Dataset([l2b_image]))[0]
+    xcent = int(round(spec_flux_cal.ext_hdr["WV0_X"]))
+    ycent = int(round(spec_flux_cal.ext_hdr["WV0_Y"]))
+    redheight, blueheight = spec.DEFAULT_SPEC_EXTRACT_HEIGHTS[l2b_image.ext_hdr["DPAMNAME"]]
+    box = l2b_cropped.data[ycent - redheight:ycent + blueheight + 1, xcent - 2:xcent + 3]
+    spec_counts = np.sum(np.mean(box, 0))/exptime
+    est_fluxfac = np.mean(flux_ref)/spec_counts
     dev = (est_fluxfac - np.mean(specflux))/est_fluxfac
 
     assert dev < 0.1, f"deviation of the estimated spec flux cal factor is bigger than 10 %: {dev * 100:.3f}"

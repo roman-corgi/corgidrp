@@ -238,7 +238,42 @@ def test_psf_centroid():
     assert np.all(calibration_2.yfit - calibration_4.yfit < errortol_pix)
     assert np.all(calibration_4.xfit_err < errortol_pix)
     assert np.all(calibration_4.yfit_err < errortol_pix)
-        
+
+
+def test_get_template_dataset_prism2():
+    """
+    get_template_dataset should return templates with appropriate PAM configurations.
+    """
+    def make_frame(dpam, fsam, cfam):
+        prihdr, exthdr = create_default_L2b_headers()[:2]
+        exthdr['DPAMNAME'] = dpam
+        exthdr['FSAMNAME'] = fsam
+        exthdr['CFAMNAME'] = cfam
+        return Image(np.zeros((50, 50)), pri_hdr=prihdr, ext_hdr=exthdr)
+
+    # DPAM=PRISM2, FSAM=OPEN, CFAM=narrowband -> noslit prism2 template
+    tds, filtersweep = get_template_dataset(Dataset([make_frame('PRISM2', 'OPEN', '3D')]))
+    assert filtersweep is False
+    assert len(tds) == 1
+    assert 'noslit_offset_prism2_3d' in os.path.basename(tds[0].filename)
+
+    # DPAM=PRISM2, FSAM=R2C2, CFAM=narrowband -> r2c2slit prism2 template
+    tds, filtersweep = get_template_dataset(Dataset([make_frame('PRISM2', 'R2C2', '3D')]))
+    assert filtersweep is False
+    assert 'r2c2slit_offset_prism2_3d' in os.path.basename(tds[0].filename)
+
+    # DPAM=PRISM2 multi-CFAM (filter sweep) -> prism2 filtersweep templates
+    sweep = Dataset([make_frame('PRISM2', 'OPEN', c) for c in ['3A', '3B', '3C', '3E']])
+    tds, filtersweep = get_template_dataset(sweep)
+    assert filtersweep is True
+    assert len(tds) > 1
+    assert all('prism2_filtersweep' in os.path.basename(f.filename) for f in tds)
+
+    # PRISM3 unchanged
+    tds, filtersweep = get_template_dataset(Dataset([make_frame('PRISM3', 'R1C2', '3D')]))
+    assert 'r1c2slit_offset_prism3_3d' in os.path.basename(tds[0].filename)
+
+
 def test_dispersion_model():
     global disp_dict
 
@@ -610,6 +645,54 @@ def test_determine_zeropoint():
         assert y0 == pytest.approx(y0_noi, abs = errortol_pix)
         assert x0err_noi < errortol_pix
         assert y0err_noi < errortol_pix
+
+
+def test_determine_zeropoint_subbands():
+    """
+    issue #995 / CAR-158: determine_wave_zeropoint must not crash when the input also
+    contains filter-sweep sub-band frames (e.g. 3A/3B) alongside the 3D narrowband and the
+    broadband science group. It should select the broadband science group ('3'/'3F') and
+    stamp WV0 only on those frames, excluding the sub-bands. The old code assumed a single
+    non-narrowband group and raised ValueError on the .item() call.
+    """
+    filepath = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
+    pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
+    with fits.open(filepath) as hdul:
+        psf_array = hdul[0].data
+
+    ext_hdr['DPAMNAME'] = 'PRISM3'
+    ext_hdr['FSAMNAME'] = 'R1C2'
+    ext_hdr['FPAMNAME'] = 'OPEN_34'  # non-coron: auto-sets subtract_no_offset_frames=False
+
+    def make_image(data_2d, cfam, tstamp):
+        eh = ext_hdr.copy()
+        eh['CFAMNAME'] = cfam
+        eh['SATSPOTS'] = False
+        eh['NAXIS1'], eh['NAXIS2'] = np.shape(data_2d)
+        eh['SCTSRT'] = tstamp.isoformat()
+        return Image(np.copy(data_2d), pri_hdr=pri_hdr.copy(), ext_hdr=eh,
+                     err=np.zeros_like(data_2d), dq=np.zeros_like(data_2d, dtype=int))
+
+    frame_time = datetime(2024, 1, 1, 0, 0, 0)
+    psf_images = []
+    # 3D narrowband zeropoint frames
+    for i in range(psf_array.shape[0]):
+        frame_time += timedelta(seconds=3)
+        psf_images.append(make_image(psf_array[i], '3D', frame_time))
+    # broadband science ('3') plus filter-sweep sub-bands that must be ignored
+    for cfam in ['3', '3A', '3B']:
+        frame_time += timedelta(seconds=3)
+        psf_images.append(make_image(psf_array[0], cfam, frame_time))
+
+    result = l3_to_l4.determine_wave_zeropoint(Dataset(psf_images), SpecFilterOffset({}),
+                                               subtract_no_offset_frames=False,
+                                               xcent_guess=40., ycent_guess=32.)
+    # only the broadband science group is stamped; sub-bands excluded
+    assert set(f.ext_hdr['CFAMNAME'] for f in result) == {'3'}
+    for frame in result:
+        assert 'WV0_X' in frame.ext_hdr and 'WV0_Y' in frame.ext_hdr
+        assert frame.ext_hdr['WAVLEN0'] == pytest.approx(753.83, abs=0.5)
+
 
 def test_star_spec_registration():
     """ Test the star spectrum registration """
@@ -1026,13 +1109,16 @@ def test_extract_spec():
     input_ds = output_dataset.copy()
     spec_dataset = l3_to_l4.extract_spec(input_ds)
     image = spec_dataset[0]
-    #halfwidth = 9, size: 2 * 9 + 1
-    assert np.shape(image.hdu_list["SPEC"].data) == (19,)
-    assert np.shape(image.hdu_list["SPEC_DQ"].data) == (19,)
-    assert np.shape(image.hdu_list["SPEC_ERR"].data) == (1,19)
-    assert np.shape(image.hdu_list["SPEC_WAVE"].data) == (19,)
-    assert np.shape(image.hdu_list["SPEC_WAVE_ERR"].data) == (19,)
-    
+    #the template frames are PRISM3, so the DPAMNAME default applies: 13 + 37 + 1 rows
+    assert np.shape(image.hdu_list["SPEC"].data) == (51,)
+    assert np.shape(image.hdu_list["SPEC_DQ"].data) == (51,)
+    assert np.shape(image.hdu_list["SPEC_ERR"].data) == (1,51)
+    assert np.shape(image.hdu_list["SPEC_WAVE"].data) == (51,)
+    assert np.shape(image.hdu_list["SPEC_WAVE_ERR"].data) == (51,)
+    #an explicit halfheight suppresses the DPAMNAME default: 2 * 9 + 1 rows
+    sym_image = l3_to_l4.extract_spec(output_dataset.copy(), halfheight = 9)[0]
+    assert np.shape(sym_image.hdu_list["SPEC"].data) == (19,)
+
     assert np.array_equal(input_ds[0].data, image.data)
     
     err_im = input_ds[0].copy()
@@ -1064,6 +1150,85 @@ def test_extract_spec():
     err_expect = 1./np.sqrt(np.nansum(whts[:, 38:43], axis = 1))
     assert np.max(err_expect) == np.max(out_im.hdu_list["SPEC_ERR"].data)
     assert "extraction" and "half width" and "weights" in str(out_im.ext_hdr["HISTORY"])
+
+
+def test_extract_spec_asymmetric():
+    """
+    extract_spec with redheight/blueheight should extract an asymmetric along-dispersion
+    box (redheight+blueheight+1 rows) about the zeropoint, with the red/blue direction read
+    from the WAVE map. Needed because the zeropoint is not centered in band 3. 
+    """
+    redheight, blueheight = 4, 12
+
+    input_ds = output_dataset.copy()
+    asym = l3_to_l4.extract_spec(input_ds, redheight=redheight, blueheight=blueheight)
+    image = asym[0]
+    # box spans redheight + blueheight + 1 rows along dispersion
+    assert np.shape(image.hdu_list["SPEC"].data) == (redheight + blueheight + 1,)
+    assert np.shape(image.hdu_list["SPEC_WAVE"].data) == (redheight + blueheight + 1,)
+    assert "redheight" in str(image.ext_hdr["HISTORY"])
+
+    # an explicit halfheight gives the symmetric behavior: 2*halfheight+1 = 19 rows
+    sym = l3_to_l4.extract_spec(output_dataset.copy(), halfheight = 9)
+    assert np.shape(sym[0].hdu_list["SPEC"].data) == (19,)
+
+
+def test_extract_spec_dpam_defaults():
+    """
+    extract_spec with no height keywords should take its along-dispersion extents from the
+    DPAMNAME of the frame: PRISM3 -> redheight 13, blueheight 37 -> 51 rows, PRISM2 -> redheight 10,
+    blueheight 28 -> 39 rows. A DPAM element other than those two prisms is an error unless the
+    caller specifies the box explicitly.
+    """
+    # the template header carries DPAMNAME = PRISM3
+    prism3 = l3_to_l4.extract_spec(output_dataset.copy())[0]
+    assert np.shape(prism3.hdu_list["SPEC"].data) == (51,)
+    # red is toward -Y here, so the zeropoint row sits at index redheight of the extracted array
+    assert np.argmax(prism3.hdu_list["SPEC"].data) == 13
+    assert "PRISM3" in str(prism3.ext_hdr["HISTORY"])
+
+    # Override DPAMNAME on the same frame. The WAVE map still comes from the PRISM3 dispersion
+    # model, but only the selection of the (redheight, blueheight) pair is under test
+    prism2_ds = output_dataset.copy()
+    prism2_ds[0].ext_hdr['DPAMNAME'] = 'PRISM2'
+    prism2 = l3_to_l4.extract_spec(prism2_ds)[0]
+    assert np.shape(prism2.hdu_list["SPEC"].data) == (39,)
+    assert np.argmax(prism2.hdu_list["SPEC"].data) == 10
+    assert "PRISM2" in str(prism2.ext_hdr["HISTORY"])
+
+    # explicit heights override the DPAMNAME default
+    explicit = l3_to_l4.extract_spec(prism2_ds, redheight = 4, blueheight = 12)[0]
+    assert np.shape(explicit.hdu_list["SPEC"].data) == (17,)
+
+    # only one of the pair given: the other side comes from the DPAMNAME default
+    with pytest.warns(UserWarning):
+        one_sided = l3_to_l4.extract_spec(output_dataset.copy(), redheight = 4)[0]
+    assert np.shape(one_sided.hdu_list["SPEC"].data) == (42,)
+
+    # a DPAM element that is not one of the two prisms is not valid for prism spectroscopy
+    imaging_ds = output_dataset.copy()
+    imaging_ds[0].ext_hdr['DPAMNAME'] = 'IMAGING'
+    with pytest.raises(AttributeError):
+        l3_to_l4.extract_spec(imaging_ds)
+
+    # unless the caller specifies the box explicitly, in which case DPAMNAME is not consulted
+    imaging_symmetric = l3_to_l4.extract_spec(imaging_ds, halfheight = 9)[0]
+    assert np.shape(imaging_symmetric.hdu_list["SPEC"].data) == (19,)
+
+
+def test_extract_spec_clipping():
+    """
+    An extraction box that runs off the array should be clipped to the array bounds with a
+    warning, instead of silently returning an empty or truncated cutout.
+    """
+    edge_ds = output_dataset.copy()
+    # the PRISM3 default box would span rows -8:42 about this zeropoint
+    edge_ds[0].ext_hdr['WV0_Y'] = 5
+    with pytest.warns(UserWarning):
+        clipped = l3_to_l4.extract_spec(edge_ds)[0]
+    assert np.shape(clipped.hdu_list["SPEC"].data) == (43,)
+    assert "clipped" in str(clipped.ext_hdr["HISTORY"])
+
 
 def test_slit_trans():
     """ Test the step function that derives the slit transmission. """
@@ -1618,6 +1783,9 @@ if __name__ == "__main__":
     test_star_spec_registration()
     test_linespread_function()
     test_extract_spec()
+    test_extract_spec_asymmetric()
+    test_extract_spec_dpam_defaults()
+    test_extract_spec_clipping()
     test_slit_trans()
     test_star_pos()
     test_filter_offset()

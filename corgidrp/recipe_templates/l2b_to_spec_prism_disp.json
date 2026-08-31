@@ -11,6 +11,9 @@
             "name": "divide_by_exptime"
         },
         {
+            "name": "crop"
+        },
+        {
             "name" : "compute_psf_centroid"
         },
         {

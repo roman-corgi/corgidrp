@@ -373,10 +373,10 @@ def autogen_recipe(filelist, outputdir, template=None):
                         for partial_dataset, isPc in zip(split_datasets, unique_vals):
                             if "pc" in recipe["name"] and isPc == 1:
                                 for frame in partial_dataset:
-                                    recipe["inputs"].append(frame.filename)
+                                    recipe["inputs"].append(frame.filepath)
                             elif "pc" not in recipe["name"] and isPc == 0:
                                 for frame in partial_dataset:
-                                    recipe["inputs"].append(frame.filename)
+                                    recipe["inputs"].append(frame.filepath)
 
                     else:
                         for filename in filelist:
@@ -539,10 +539,12 @@ def guess_template(dataset):
         dataset (corgidrp.data.Dataset): a Dataset to process
 
     Returns:
-        str or list: the best template filename, a list of multiple template filenames, or a list of template chains
-        bool: whether multiple recipes are chained together. If True, the output of the first recipe
-              should be used as the input to the second recipe. If False, the same input should be used
-              for all recipes. This keyworkd is irrelevant if only a single recipe is returned.
+        tuple:
+            str or list: the best template filename, a list of multiple template filenames, or a list of template chains
+
+            bool: whether multiple recipes are chained together. If True, the output of the first recipe
+            should be used as the input to the second recipe. If False, the same input should be used
+            for all recipes. This keyworkd is irrelevant if only a single recipe is returned.
     """
     image = dataset[0] # first image for convenience
 
@@ -592,15 +594,18 @@ def guess_template(dataset):
                     recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", "l2b_to_spec_flux.json"]
                     chained = True
             else:
-                if _fsm_positions_differ(dataset):
+                _, vistype_unique = dataset.split_dataset(prihdr_keywords=['VISTYPE'])
+                # pol fluxcal
+                if image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
+                    chained = True
+                # ND filter calibration if bright targets in dataset
+                elif len(vistype_unique) > 1 or vistype_unique[0] == 'CGIVST_CAL_ABSFLUX_BRIGHT':
                     recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
                     chained = True
+                # abs flux if dataset contains dim targets only
                 else:
-                    # Check for polarimetry mode to use appropriate flux calibration recipe
-                    if image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']:
-                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
-                    else:
-                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
                     chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
@@ -989,9 +994,10 @@ def _get_satellite_spot_info_from_xml(xml_tree):
         sat_spot_output['num_spots'] += 1
         for i, field in enumerate(fields):
             value = field.split("=")[1]
+            spot_key = f"spot{sat_spot_output['num_spots']}_{key[i]}"
             if i <=2:
-                sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = float(value)
+                sat_spot_output[spot_key] = float(value)
             else:
-                sat_spot_output[f'spot{sat_spot_output['num_spots']}_{key[i]}'] = str(value)
+                sat_spot_output[spot_key] = str(value)
 
     return sat_spot_output
