@@ -519,10 +519,11 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         N (int): Number of images to be combined for creating a matched filter (defaults to 1, may not work for N>1 right now)
         rad_mask (float): radius in pixels used for creating a mask for band (band1=1.25, band4=1.75)
         planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
-        n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV (defaults to 44 pix for Band1 HLC; 165 pixels for full shaped pupil FOV).
-        observing_mode (string): observing mode of the coronagraph
+        n_pix (int): Diameter in pixels of the final flat's characterized region; beyond this radius (n_pix//2) the flat is set to 1. Defaults to 2*planet_rad so the flat covers the full illuminated disk the rastered source produces.
+        observing_mode (string): observing mode of the coronagraph (retained for backward compatibility; no longer used to set n_pix)
         n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to None; rest of the FOV to reach 1024)
-        fwhm_guess (int):FWHM guess for the planet image which is downsampled by a factor of 8
+        fwhm_guess (int): FWHM (in downsampled pixels) passed to DAOStarFinder when
+            locating the two polarized spots
         sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad.
             If both sky_annulus_rin and sky_annulus_rout = None, skips sky subtraciton.
         sky_annulus_rout (float): Outer radius of annulus to use for sky subtraction. In units of planet_rad.
@@ -559,60 +560,140 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
              planet_rad = 50
         elif planet.lower() == 'uranus':
              planet_rad = 65
-    
+        else:
+            # A rastered star fills a disk; measure it from the data rather than
+            # assuming a size or a raster pattern. Each pol component is a separate
+            # lit region, so the largest connected disk gives the per-component radius.
+            radii = [measure_disk_radius(frame.data) for frame in dataset]
+            radii = [r for r in radii if r is not None]
+            if not radii:
+                raise ValueError("Could not measure the radius of the illuminated "
+                                 "disk in any frame. Pass planet_rad explicitly.")
+            # median over frames
+            planet_rad = min(int(np.ceil(np.median(radii))), up_radius - 1)
+
     if rad_mask is None:
          if band[0] == "1":
             rad_mask = 1.25
          elif band[0] == "4":
             rad_mask = 1.75
     if n_pix is None:
-        if observing_mode=='NFOV':
-            n_pix=44
-        elif observing_mode=='WFOV':
-            n_pix=174
+        # Size the final flat to the full illuminated disk (radius planet_rad) that the
+        # rastered source actually covers, the same region regular imaging keeps via its
+        # n_pix=None auto-sizing. The fixed NFOV/WFOV values clipped the flat to a disk
+        # (radius n_pix//2 = 22 for NFOV) far smaller than what the star illuminates,
+        # throwing away most of the good flat data.
+        n_pix = 2 * planet_rad
     
+    # wollaston prism angle, used below to place the combined rasters
+    if dpamname == 'POL0':
+        angle_rad = (alignment_angle_WP1 * np.pi) / 180
+    else:
+        angle_rad = (alignment_angle_WP2 * np.pi) / 180
+
     # the planet images with two pol components are downsampled by a factor of 8 for finding the centroids using daostarfinder
     raster_frames_pol1=[];raster_frames_pol2=[]; cent_pol1=[]; cent_pol2=[]; act_cents_1=[]; act_cents_2=[];
     for j in range(len(dataset)):
-        planet_image=dataset[j].data
+        planet_image=dataset[j].data.copy()  # copy: the sky subtraction below is in-place
         planet_image_err=dataset[j].err[0]
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
-        planet_image_downsampled = zoom(planet_image, 1/8)
-        threshold_value = np.max(planet_image)
+        # Median-filter before detection so a multi-pixel hot-pixel/cosmic-ray
+        # cluster brighter than the (prism-split, so individually fainter) spots
+        # cannot set the detection threshold and cause DAOStarFinder to miss the
+        # real spots. Threshold off a robust statistic of the smoothed
+        # downsampled image rather than the raw full-frame max.
+        planet_image_downsampled = zoom(median_filter(np.nan_to_num(planet_image), 5), 1/8)
+        med = np.nanmedian(planet_image_downsampled)
+        std = np.nanstd(planet_image_downsampled)
+        threshold_value = med + 5.0 * std
         daofind = DAOStarFinder(fwhm=fwhm_guess, threshold=threshold_value, min_separation=10.0)
         sources = daofind(planet_image_downsampled)
 
-        if sources is not None:
+        if sources is None or len(sources) < 2:
+            raise ValueError("create_onsky_pol_flatfield: expected two polarization "
+                             "spots but DAOStarFinder found "
+                             f"{0 if sources is None else len(sources)} source(s) "
+                             f"in frame {j}.")
 
-            x_centroids = sources['x_centroid']*8
-            y_centroids = sources['y_centroid']*8
+        x_centroids = np.array(sources['xcentroid']) * 8
+        y_centroids = np.array(sources['ycentroid']) * 8
+        fluxes = np.array(sources['flux'])
+        x_centroids[np.isnan(x_centroids)] = 0
+        y_centroids[np.isnan(y_centroids)] = 0
 
-            pol1_x = int(x_centroids[0])
-            pol1_y = int(y_centroids[0])
-            pol2_x = int(x_centroids[1])
-            pol2_y = int(y_centroids[1])
+        # The two orthogonal pol spots are separated by a known distance
+        # (separation_diameter_arcsec / plate_scale). Of all detected sources,
+        # pick the pair whose separation best matches that, so a spurious
+        # detection (e.g. a residual hot pixel) cannot be mistaken for a spot.
+        expected_sep = separation_diameter_arcsec / plate_scale
+        n_src = len(x_centroids)
+        best = None
+        for a in range(n_src):
+            for b in range(a + 1, n_src):
+                sep = np.hypot(x_centroids[a] - x_centroids[b],
+                               y_centroids[a] - y_centroids[b])
+                cost = abs(sep - expected_sep)
+                # tie-break toward the brighter pair
+                score = (cost, -(fluxes[a] + fluxes[b]))
+                if best is None or score < best[0]:
+                    best = (score, a, b)
+        a, b = best[1], best[2]
+        # order deterministically: pol1 = left (smaller x), pol2 = right
+        if x_centroids[a] <= x_centroids[b]:
+            i1, i2 = a, b
+        else:
+            i1, i2 = b, a
 
-            x_centroids[np.isnan(x_centroids)]=0
-            y_centroids[np.isnan(y_centroids)]=0
-            act_cents_1.append((pol1_x,pol1_y))
-            act_cents_2.append((pol2_x,pol2_y))
+        # DAOStarFinder ran on an 8x-downsampled image, so these centers are only
+        # accurate to ~8 detector pixels. That is good enough to identify which two
+        # sources are the pol spots, but not to register the crops: the flat math
+        # median-combines source-centered crops and divides each frame by that median,
+        # so a compact stellar PSF misregistered by several pixels between frames leaves
+        # PSF-shaped residuals instead of a flat. Refine each spot at full resolution
+        # with the same disk-overlap centroid the regular imaging flat uses.
+        coarse_centers = [(int(x_centroids[i1]), int(y_centroids[i1])),
+                          (int(x_centroids[i2]), int(y_centroids[i2]))]
+        refined_centers = []
+        for cx, cy in coarse_centers:
+            y0 = max(0, cy - up_radius)
+            y1 = min(planet_image.shape[0], cy + up_radius)
+            x0 = max(0, cx - up_radius)
+            x1 = min(planet_image.shape[1], cx + up_radius)
+            window = planet_image[y0:y1, x0:x1]
+            center = find_disk_center(window, planet_rad)
+            if center is None:
+                center = source_centroid(window)
+            if center is None:
+                # fall back to the coarse DAOStarFinder position
+                refined_centers.append((cx, cy))
+            else:
+                refined_centers.append((int(round(x0 + center[0])),
+                                        int(round(y0 + center[1]))))
+        pol1_x, pol1_y = refined_centers[0]
+        pol2_x, pol2_y = refined_centers[1]
+        act_cents_1.append((pol1_x,pol1_y))
+        act_cents_2.append((pol2_x,pol2_y))
 
-
-        # sky subtraction if needed
-        xc=np.mean([pol1_x,pol2_x])
-        yc=np.mean([pol1_y,pol2_y])
+        # sky subtraction if needed: estimate the sky per pol component from an annulus
+        # centered on that component's own disk (create_onsky_flatfield does this for its
+        # single source; centering on the midpoint between the two disks would sample the
+        # disks themselves rather than blank sky).
+        sky_pol1 = 0.0
+        sky_pol2 = 0.0
         if sky_annulus_rin is not None and sky_annulus_rout is not None:
             ycoords, xcoords = np.indices(planet_image.shape)
-            dist_from_planet = np.sqrt((xcoords - xc)**2 + (ycoords - yc)**2)
-            sky_annulus = np.where((dist_from_planet >= sky_annulus_rin*planet_rad) & (dist_from_planet < sky_annulus_rout*planet_rad))
-            planet_image -= np.nanmedian(planet_image[sky_annulus])
+            dist_pol1 = np.sqrt((xcoords - pol1_x)**2 + (ycoords - pol1_y)**2)
+            annulus_pol1 = (dist_pol1 >= sky_annulus_rin*planet_rad) & (dist_pol1 < sky_annulus_rout*planet_rad)
+            sky_pol1 = np.nanmedian(planet_image[annulus_pol1])
+            dist_pol2 = np.sqrt((xcoords - pol2_x)**2 + (ycoords - pol2_y)**2)
+            annulus_pol2 = (dist_pol2 >= sky_annulus_rin*planet_rad) & (dist_pol2 < sky_annulus_rout*planet_rad)
+            sky_pol2 = np.nanmedian(planet_image[annulus_pol2])
 
-        
-        # cropping the raster scanned images
-        raster_images_pol1=planet_image[pol1_y-up_radius:pol1_y+up_radius,pol1_x-up_radius:pol1_x+up_radius]
-        raster_images_pol2=planet_image[pol2_y-up_radius:pol2_y+up_radius,pol2_x-up_radius:pol2_x+up_radius]
-        
+        # cropping the raster scanned images (subtract each component's own sky level)
+        raster_images_pol1=planet_image[pol1_y-up_radius:pol1_y+up_radius,pol1_x-up_radius:pol1_x+up_radius] - sky_pol1
+        raster_images_pol2=planet_image[pol2_y-up_radius:pol2_y+up_radius,pol2_x-up_radius:pol2_x+up_radius] - sky_pol2
+
         raster_images_pol1_err=planet_image_err[pol1_y-up_radius:pol1_y+up_radius,pol1_x-up_radius:pol1_x+up_radius]
         raster_images_pol2_err=planet_image_err[pol2_y-up_radius:pol2_y+up_radius,pol2_x-up_radius:pol2_x+up_radius]
         
@@ -633,16 +714,10 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
     resi_images_pol1_dataset=flatfield_residuals(raster_images_pol1_dataset,N=N)
     resi_images_pol2_dataset=flatfield_residuals(raster_images_pol2_dataset,N=N)
 
-    combined_rasters_pol1=combine_flatfield_rasters(resi_images_pol1_dataset,planet=planet,band=band,cent=cent_pol1, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=512,image_center_y=512)
-    combined_rasters_pol2=combine_flatfield_rasters(resi_images_pol2_dataset,planet=planet,band=band,cent=cent_pol2, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=512,image_center_y=512)
+    combined_rasters_pol1=combine_flatfield_rasters(resi_images_pol1_dataset,planet=planet,band=band,cent=cent_pol1, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=image_center_x,image_center_y=image_center_y)
+    combined_rasters_pol2=combine_flatfield_rasters(resi_images_pol2_dataset,planet=planet,band=band,cent=cent_pol2, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=image_center_x,image_center_y=image_center_y)
     
-    if dpamname == 'POL0':
-    #place image according to specified angle
-        angle_rad = (alignment_angle_WP1 * np.pi) / 180
-    else:
-        angle_rad = (alignment_angle_WP2 * np.pi) / 180
-     
-    
+    # place image according to specified angle (angle_rad computed above from dpamname)
     displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * plate_scale)))
     displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * plate_scale)))
     center_left = (image_center_x - displacement_x, image_center_y + displacement_y)
