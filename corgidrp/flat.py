@@ -489,6 +489,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
             rad_mask = 1.25
          elif band[0] == "4":
             rad_mask = 1.75
+    
 
     raster_frames = []
     cent = []
@@ -612,6 +613,11 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
             rad_mask = 1.25
          elif band[0] == "4":
             rad_mask = 1.75
+    if n_pix is None:
+        if observing_mode=='NFOV':
+            n_pix=44
+        elif observing_mode=='WFOV':
+            n_pix=174
     # n_pix is left as passed (None -> combine_flatfield_rasters auto-sizes each
     # component's region to its largest hole-free disk, avoiding in-FOV NaNs)
 
@@ -622,6 +628,7 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         angle_rad = (alignment_angle_WP2 * np.pi) / 180
 
     # find the two pol spots in each frame, then flatten each one
+    is_planet = planet.lower() in ('neptune', 'uranus')
     raster_frames_pol1=[];raster_frames_pol2=[]; cent_pol1=[]; cent_pol2=[]; act_cents_1=[]; act_cents_2=[];
     for j in range(len(dataset)):
         planet_image=dataset[j].data.copy()  # copy: the sky subtraction below is in-place
@@ -637,7 +644,7 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         x_centroids, y_centroids, weights = sources
 
         # the two spots sit a known distance apart, so pick the detected pair whose
-        # separation best matches it (a spurious detection won't fit the geometry)
+        # separation best matches it
         expected_sep = separation_diameter_arcsec / plate_scale
         n_src = len(x_centroids)
         best = None
@@ -657,29 +664,31 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         else:
             i1, i2 = b, a
 
-        # refine each spot at full resolution with the same disk-overlap centroid the
-        # regular imaging flat uses, so the crops register to sub-pixel accuracy
-        # (mis-registered spots leave source-shaped residuals instead of a flat)
-        coarse_centers = [(int(round(x_centroids[i1])), int(round(y_centroids[i1]))),
-                          (int(round(x_centroids[i2])), int(round(y_centroids[i2])))]
-        refined_centers = []
-        for cx, cy in coarse_centers:
-            y0 = max(0, cy - up_radius)
-            y1 = min(planet_image.shape[0], cy + up_radius)
-            x0 = max(0, cx - up_radius)
-            x1 = min(planet_image.shape[1], cx + up_radius)
-            window = planet_image[y0:y1, x0:x1]
-            center = find_disk_center(window, planet_rad)
-            if center is None:
-                center = source_centroid(window)
-            if center is None:
-                # fall back to the coarse segmentation centroid
-                refined_centers.append((cx, cy))
+        # center each spot the way imaging mode does, by source type: a planet keeps its
+        # flux-weighted centroid (find_two_sources already returns it); a rastered star is
+        # located by sliding a disk of the measured radius over the lit pixels
+        centers = []
+        for idx in (i1, i2):
+            if is_planet:
+                cx, cy = x_centroids[idx], y_centroids[idx]
             else:
-                refined_centers.append((int(round(x0 + center[0])),
-                                        int(round(y0 + center[1]))))
-        pol1_x, pol1_y = refined_centers[0]
-        pol2_x, pol2_y = refined_centers[1]
+                cx0 = int(round(x_centroids[idx]))
+                cy0 = int(round(y_centroids[idx]))
+                y0 = max(0, cy0 - up_radius)
+                y1 = min(planet_image.shape[0], cy0 + up_radius)
+                x0 = max(0, cx0 - up_radius)
+                x1 = min(planet_image.shape[1], cx0 + up_radius)
+                window = planet_image[y0:y1, x0:x1]
+                center = find_disk_center(window, planet_rad)
+                if center is None:
+                    center = source_centroid(window)
+                if center is None:
+                    cx, cy = cx0, cy0  # fall back to the segmentation centroid
+                else:
+                    cx, cy = x0 + center[0], y0 + center[1]
+            centers.append((int(round(cx)), int(round(cy))))
+        pol1_x, pol1_y = centers[0]
+        pol2_x, pol2_y = centers[1]
         act_cents_1.append((pol1_x,pol1_y))
         act_cents_2.append((pol2_x,pol2_y))
 
