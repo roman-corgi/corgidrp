@@ -79,8 +79,14 @@ def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
 
     x0 = np.rint(xguess).astype(int)
     y0 = np.rint(yguess).astype(int)
-    fitbox = np.copy(frame[y0 - halfheight:y0 + halfheight + 1,
-                           x0 - halfwidth:x0 + halfwidth + 1])
+    ymin, ymax, xmin, xmax = y0 - halfheight, y0 + halfheight + 1, x0 - halfwidth, x0 + halfwidth + 1
+    if ymin < 0 or xmin < 0 or ymax > frame.shape[0] or xmax > frame.shape[1]:
+        # Catch case of range indices outside of array bounds 
+        raise ValueError("fitting stamp of halfwidth {0} and halfheight {1} at (xguess, yguess) = "
+                         "({2:.3f}, {3:.3f}) spans columns {4}:{5} and rows {6}:{7}, which does not "
+                         "fit inside the frame of shape {8}".format(
+                             halfwidth, halfheight, xguess, yguess, xmin, xmax, ymin, ymax, frame.shape))
+    fitbox = np.copy(frame[ymin:ymax, xmin:xmax])
     nrows = fitbox.shape[0]
     ncols = fitbox.shape[1]
     fitbox[np.where(np.isnan(fitbox))] = 0
@@ -324,6 +330,21 @@ def fit_psf_centroid(psf_data, psf_template,
     psf_data_bkg = psf_data_nonan.copy()
     psf_data_bkg[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1] = np.nan
     psf_peakpix_snr = np.max(psf_data_nonan) / np.nanstd(psf_data_bkg)
+
+    # The Powell step above can drift yfit away from ycom_data by up to the +/-2 px search bound, so
+    # the row_limit clamp above (based on ycom_data) does not guarantee this stamp fits. Here, we
+    # adjust the limits as needed.
+    if clamp_halfheight:
+        yfit_row = int(np.rint(yfit))
+        row_limit_final = min(yfit_row, psf_data_nonan.shape[0] - 1 - yfit_row)
+        if row_limit_final < 0:
+            raise ValueError("registered y center {0:.3f} falls outside the data array of shape "
+                             "{1}".format(yfit, psf_data_nonan.shape))
+        if halfheight > row_limit_final:
+            warnings.warn("reducing the fitting stamp half-height from {0} to {1} for the registered "
+                          "center at row {2} (of {3} rows) and the array edge".format(
+                              halfheight, row_limit_final, yfit_row, psf_data_nonan.shape[0]))
+            halfheight = row_limit_final
 
     (gauss2d_xfit, gauss2d_yfit, xfwhm, yfwhm, gauss2d_peakfit,
      fitted_data_stamp, model, residual) = gaussfit2d_pix(psf_data_nonan,
