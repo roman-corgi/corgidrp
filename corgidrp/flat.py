@@ -732,12 +732,12 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
     combined_rasters_pol1=combine_flatfield_rasters(resi_images_pol1_dataset,planet=planet,band=band,cent=cent_pol1, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=image_center_x,image_center_y=image_center_y)
     combined_rasters_pol2=combine_flatfield_rasters(resi_images_pol2_dataset,planet=planet,band=band,cent=cent_pol2, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=image_center_x,image_center_y=image_center_y)
     
-    # each component is auto-sized (n_pix=None) to its own largest hole-free disk,
-    # so crop/place each one with its own radius rather than a shared n_pix
-    cent_n_pol1=combined_rasters_pol1[2]; n_pix_pol1=combined_rasters_pol1[3]
-    cent_n_pol2=combined_rasters_pol2[2]; n_pix_pol2=combined_rasters_pol2[3]
-    radius_left=n_pix_pol1//2
-    radius_right=n_pix_pol2//2
+    # both spots are the same source split by the Wollaston, so they auto-size to the
+    # same region; use one radius (the smaller, in case of a 1-px rounding difference,
+    # so neither crop reaches into an uncovered region)
+    cent_n_pol1=combined_rasters_pol1[2]
+    cent_n_pol2=combined_rasters_pol2[2]
+    image_radius=min(combined_rasters_pol1[3], combined_rasters_pol2[3])//2
 
     # place image according to specified angle (angle_rad computed above from dpamname)
     displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * plate_scale)))
@@ -745,17 +745,17 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
     center_left = (image_center_x - displacement_x, image_center_y + displacement_y)
     center_right = (image_center_x + displacement_x, image_center_y - displacement_y)
 
-    start_left = (center_left[0] - radius_left, center_left[1] - radius_left)
-    start_right = (center_right[0] - radius_right, center_right[1] - radius_right)
+    start_left = (center_left[0] - image_radius, center_left[1] - image_radius)
+    start_right = (center_right[0] - image_radius, center_right[1] - image_radius)
 
     onsky_polflat=np.ones((n,n))
     onsky_polflat_error=np.zeros((n,n))
 
-    onsky_polflat[start_left[1]:start_left[1]+2*radius_left, start_left[0]:start_left[0]+2*radius_left]=combined_rasters_pol1[0][int(cent_n_pol1[1]) - radius_left:int(cent_n_pol1[1]) + radius_left,int(cent_n_pol1[0]) - radius_left:int(cent_n_pol1[0]) + radius_left]
-    onsky_polflat[start_right[1]:start_right[1]+2*radius_right, start_right[0]:start_right[0]+2*radius_right]=combined_rasters_pol2[0][int(cent_n_pol2[1])- radius_right:int(cent_n_pol2[1]) + radius_right,int(cent_n_pol2[0]) - radius_right:int(cent_n_pol2[0]) + radius_right]
+    onsky_polflat[start_left[1]:start_left[1]+2*image_radius, start_left[0]:start_left[0]+2*image_radius]=combined_rasters_pol1[0][int(cent_n_pol1[1]) - image_radius:int(cent_n_pol1[1]) + image_radius,int(cent_n_pol1[0]) - image_radius:int(cent_n_pol1[0]) + image_radius]
+    onsky_polflat[start_right[1]:start_right[1]+2*image_radius, start_right[0]:start_right[0]+2*image_radius]=combined_rasters_pol2[0][int(cent_n_pol2[1])- image_radius:int(cent_n_pol2[1]) + image_radius,int(cent_n_pol2[0]) - image_radius:int(cent_n_pol2[0]) + image_radius]
 
-    onsky_polflat_error[start_left[1]:start_left[1]+2*radius_left, start_left[0]:start_left[0]+2*radius_left]=combined_rasters_pol1[1][int(cent_n_pol1[1]) - radius_left:int(cent_n_pol1[1]) + radius_left,int(cent_n_pol1[0]) - radius_left:int(cent_n_pol1[0]) + radius_left]
-    onsky_polflat_error[start_right[1]:start_right[1]+2*radius_right, start_right[0]:start_right[0]+2*radius_right]=combined_rasters_pol2[1][int(cent_n_pol2[1]) - radius_right:int(cent_n_pol2[1]) + radius_right,int(cent_n_pol2[0]) - radius_right:int(cent_n_pol2[0]) + radius_right]
+    onsky_polflat_error[start_left[1]:start_left[1]+2*image_radius, start_left[0]:start_left[0]+2*image_radius]=combined_rasters_pol1[1][int(cent_n_pol1[1]) - image_radius:int(cent_n_pol1[1]) + image_radius,int(cent_n_pol1[0]) - image_radius:int(cent_n_pol1[0]) + image_radius]
+    onsky_polflat_error[start_right[1]:start_right[1]+2*image_radius, start_right[0]:start_right[0]+2*image_radius]=combined_rasters_pol2[1][int(cent_n_pol2[1]) - image_radius:int(cent_n_pol2[1]) + image_radius,int(cent_n_pol2[0]) - image_radius:int(cent_n_pol2[0]) + image_radius]
     
     
     onsky_pol_flatfield = data.FlatField(onsky_polflat, pri_hdr=prihdr, ext_hdr=exthdr, input_dataset=dataset)
