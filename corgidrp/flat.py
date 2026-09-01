@@ -7,13 +7,11 @@ from scipy.ndimage import gaussian_filter as gauss
 from scipy import ndimage
 from scipy.signal import convolve2d
 from scipy.signal import fftconvolve
-from scipy.ndimage import zoom
 import astropy.io.fits as fits
 from astropy.convolution import convolve_fft
 from astropy.utils.exceptions import AstropyUserWarning
 import photutils.centroids as centr
 from photutils.aperture import CircularAperture
-from photutils.detection import DAOStarFinder
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 
@@ -278,8 +276,10 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
     
     full_residuals=np.pad(p_flat, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(1))
     err_residuals=np.pad(p_flat_err, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(0))
-    
-    return (full_residuals,err_residuals,cent_n)
+
+    # return n_pix too: when passed as None it is auto-sized to the largest hole-free
+    # disk, and the pol placement needs that value to crop each component's region
+    return (full_residuals,err_residuals,cent_n,n_pix)
     
     
 def source_centroid(image, threshold_frac=0.3, smooth_size=3):
@@ -389,6 +389,43 @@ def find_disk_center(image, radius_pix, threshold_frac=0.3, smooth_size=5):
         cy_local, cx_local = ndimage.center_of_mass(w)
         return float(x0 + cx_local), float(y0 + cy_local)
     return float(peak_x), float(peak_y)
+
+
+def find_two_sources(image, threshold_frac=0.3, smooth_size=5, min_area=4):
+    """Locate the two illuminated sources (the two pol spots) in a frame.
+
+    Smooths, thresholds, and labels connected regions, returning the flux-weighted
+    centroid and area of each region above min_area. Works for both a compact star
+    PSF and an extended planet disk; DAOStarFinder is avoided because it is tuned for
+    point sources and rejects extended (and coadded) disks on shape.
+
+    Args:
+        image (np.array): 2-D image containing the two sources.
+        threshold_frac (float): cut as a fraction of the peak of the smoothed image.
+        smooth_size (int): median-filter size applied before thresholding.
+        min_area (int): drop regions smaller than this (specks, cosmic rays).
+
+    Returns:
+        tuple: (xs, ys, areas) arrays for the detected sources, or None if fewer than
+        two survive.
+    """
+    smoothed = median_filter(np.nan_to_num(image), smooth_size)
+    peak = np.nanmax(smoothed)
+    if not np.isfinite(peak) or peak <= 0:
+        return None
+    mask = smoothed >= threshold_frac * peak
+    labels, n_features = ndimage.label(mask)
+    if n_features < 2:
+        return None
+    ids = np.arange(1, n_features + 1)
+    areas = ndimage.sum(mask, labels, ids)
+    keep = ids[areas >= min_area]
+    if len(keep) < 2:
+        return None
+    centroids = ndimage.center_of_mass(smoothed, labels, keep)
+    xs = np.array([c[1] for c in centroids])
+    ys = np.array([c[0] for c in centroids])
+    return xs, ys, ndimage.sum(mask, labels, keep)
 
 
 def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=None, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4,image_center_x=512,image_center_y=512):
@@ -522,8 +559,8 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         n_pix (int): Diameter in pixels of the final flat's characterized region; beyond this radius (n_pix//2) the flat is set to 1. Defaults to 2*planet_rad so the flat covers the full illuminated disk the rastered source produces.
         observing_mode (string): observing mode of the coronagraph (retained for backward compatibility; no longer used to set n_pix)
         n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to None; rest of the FOV to reach 1024)
-        fwhm_guess (int): FWHM (in downsampled pixels) passed to DAOStarFinder when
-            locating the two polarized spots
+        fwhm_guess (int): retained for backward compatibility; no longer used now that
+            the two spots are located by segmentation
         sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad.
             If both sky_annulus_rin and sky_annulus_rout = None, skips sky subtraciton.
         sky_annulus_rout (float): Outer radius of annulus to use for sky subtraction. In units of planet_rad.
@@ -575,11 +612,9 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
             rad_mask = 1.25
          elif band[0] == "4":
             rad_mask = 1.75
-    if n_pix is None:
-        # size the flat to the full illuminated disk (radius planet_rad); the flat
-        # keeps radius n_pix//2, so use the disk diameter
-        n_pix = 2 * planet_rad
-    
+    # n_pix is left as passed (None -> combine_flatfield_rasters auto-sizes each
+    # component's region to its largest hole-free disk, avoiding in-FOV NaNs)
+
     # wollaston prism angle, used below to place the combined rasters
     if dpamname == 'POL0':
         angle_rad = (alignment_angle_WP1 * np.pi) / 180
@@ -593,29 +628,16 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         planet_image_err=dataset[j].err[0]
         prihdr=dataset[j].pri_hdr
         exthdr=dataset[j].ext_hdr
-        # detect on a median-filtered, 8x-downsampled image with a median+5*std
-        # threshold, so hot pixels/cosmic rays don't hide the (fainter) split spots
-        planet_image_downsampled = zoom(median_filter(np.nan_to_num(planet_image), 5), 1/8)
-        med = np.nanmedian(planet_image_downsampled)
-        std = np.nanstd(planet_image_downsampled)
-        threshold_value = med + 5.0 * std
-        daofind = DAOStarFinder(fwhm=fwhm_guess, threshold=threshold_value, min_separation=10.0)
-        sources = daofind(planet_image_downsampled)
-
-        if sources is None or len(sources) < 2:
+        # find the two spots by segmentation, which works for both a compact star and
+        # an extended (coadded) planet disk
+        sources = find_two_sources(planet_image)
+        if sources is None:
             raise ValueError("create_onsky_pol_flatfield: expected two polarization "
-                             "spots but DAOStarFinder found "
-                             f"{0 if sources is None else len(sources)} source(s) "
-                             f"in frame {j}.")
-
-        x_centroids = np.array(sources['xcentroid']) * 8
-        y_centroids = np.array(sources['ycentroid']) * 8
-        fluxes = np.array(sources['flux'])
-        x_centroids[np.isnan(x_centroids)] = 0
-        y_centroids[np.isnan(y_centroids)] = 0
+                             f"spots but found fewer than two in frame {j}.")
+        x_centroids, y_centroids, weights = sources
 
         # the two spots sit a known distance apart, so pick the detected pair whose
-        # separation best matches it 
+        # separation best matches it (a spurious detection won't fit the geometry)
         expected_sep = separation_diameter_arcsec / plate_scale
         n_src = len(x_centroids)
         best = None
@@ -624,8 +646,8 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
                 sep = np.hypot(x_centroids[a] - x_centroids[b],
                                y_centroids[a] - y_centroids[b])
                 cost = abs(sep - expected_sep)
-                # tie-break toward the brighter pair
-                score = (cost, -(fluxes[a] + fluxes[b]))
+                # tie-break toward the larger (brighter) pair
+                score = (cost, -(weights[a] + weights[b]))
                 if best is None or score < best[0]:
                     best = (score, a, b)
         a, b = best[1], best[2]
@@ -635,11 +657,11 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
         else:
             i1, i2 = b, a
 
-        # the downsampled centers are only accurate to ~8 px, too coarse to register
-        # the crops (mis-registered PSFs leave PSF-shaped residuals, not a flat).
-        # refine each spot at full resolution, as the regular imaging flat does.
-        coarse_centers = [(int(x_centroids[i1]), int(y_centroids[i1])),
-                          (int(x_centroids[i2]), int(y_centroids[i2]))]
+        # refine each spot at full resolution with the same disk-overlap centroid the
+        # regular imaging flat uses, so the crops register to sub-pixel accuracy
+        # (mis-registered spots leave source-shaped residuals instead of a flat)
+        coarse_centers = [(int(round(x_centroids[i1])), int(round(y_centroids[i1]))),
+                          (int(round(x_centroids[i2])), int(round(y_centroids[i2])))]
         refined_centers = []
         for cx, cy in coarse_centers:
             y0 = max(0, cy - up_radius)
@@ -651,7 +673,7 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
             if center is None:
                 center = source_centroid(window)
             if center is None:
-                # fall back to the coarse DAOStarFinder position
+                # fall back to the coarse segmentation centroid
                 refined_centers.append((cx, cy))
             else:
                 refined_centers.append((int(round(x0 + center[0])),
@@ -701,28 +723,30 @@ def create_onsky_pol_flatfield(dataset, planet=None,band=None,up_radius=55,im_si
     combined_rasters_pol1=combine_flatfield_rasters(resi_images_pol1_dataset,planet=planet,band=band,cent=cent_pol1, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=image_center_x,image_center_y=image_center_y)
     combined_rasters_pol2=combine_flatfield_rasters(resi_images_pol2_dataset,planet=planet,band=band,cent=cent_pol2, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad,image_center_x=image_center_x,image_center_y=image_center_y)
     
+    # each component is auto-sized (n_pix=None) to its own largest hole-free disk,
+    # so crop/place each one with its own radius rather than a shared n_pix
+    cent_n_pol1=combined_rasters_pol1[2]; n_pix_pol1=combined_rasters_pol1[3]
+    cent_n_pol2=combined_rasters_pol2[2]; n_pix_pol2=combined_rasters_pol2[3]
+    radius_left=n_pix_pol1//2
+    radius_right=n_pix_pol2//2
+
     # place image according to specified angle (angle_rad computed above from dpamname)
     displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * plate_scale)))
     displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * plate_scale)))
     center_left = (image_center_x - displacement_x, image_center_y + displacement_y)
     center_right = (image_center_x + displacement_x, image_center_y - displacement_y)
 
+    start_left = (center_left[0] - radius_left, center_left[1] - radius_left)
+    start_right = (center_right[0] - radius_right, center_right[1] - radius_right)
 
-    image_radius = n_pix // 2
-    start_left = (center_left[0] - image_radius, center_left[1] - image_radius)
-    start_right = (center_right[0] - image_radius, center_right[1] - image_radius)
-    
-    cent_n_pol1=combined_rasters_pol1[2]
-    cent_n_pol2=combined_rasters_pol2[2]
-    
     onsky_polflat=np.ones((n,n))
     onsky_polflat_error=np.zeros((n,n))
 
-    onsky_polflat[start_left[1]:start_left[1]+n_pix, start_left[0]:start_left[0]+n_pix]=combined_rasters_pol1[0][int(cent_n_pol1[1]) - n_pix//2:int(cent_n_pol1[1]) + n_pix//2,int(cent_n_pol1[0]) - n_pix//2:int(cent_n_pol1[0]) + n_pix//2]
-    onsky_polflat[start_right[1]:start_right[1]+n_pix, start_right[0]:start_right[0]+n_pix]=combined_rasters_pol2[0][int(cent_n_pol2[1])- n_pix//2:int(cent_n_pol2[1]) + n_pix//2,int(cent_n_pol2[0]) - n_pix//2:int(cent_n_pol2[0]) + n_pix//2]
+    onsky_polflat[start_left[1]:start_left[1]+2*radius_left, start_left[0]:start_left[0]+2*radius_left]=combined_rasters_pol1[0][int(cent_n_pol1[1]) - radius_left:int(cent_n_pol1[1]) + radius_left,int(cent_n_pol1[0]) - radius_left:int(cent_n_pol1[0]) + radius_left]
+    onsky_polflat[start_right[1]:start_right[1]+2*radius_right, start_right[0]:start_right[0]+2*radius_right]=combined_rasters_pol2[0][int(cent_n_pol2[1])- radius_right:int(cent_n_pol2[1]) + radius_right,int(cent_n_pol2[0]) - radius_right:int(cent_n_pol2[0]) + radius_right]
 
-    onsky_polflat_error[start_left[1]:start_left[1]+n_pix, start_left[0]:start_left[0]+n_pix]=combined_rasters_pol1[1][int(cent_n_pol1[1]) - n_pix//2:int(cent_n_pol1[1]) + n_pix//2,int(cent_n_pol1[0]) - n_pix//2:int(cent_n_pol1[0]) + n_pix//2]
-    onsky_polflat_error[start_right[1]:start_right[1]+n_pix, start_right[0]:start_right[0]+n_pix]=combined_rasters_pol2[1][int(cent_n_pol2[1]) - n_pix//2:int(cent_n_pol2[1]) + n_pix//2,int(cent_n_pol2[0]) - n_pix//2:int(cent_n_pol2[0]) + n_pix//2]   
+    onsky_polflat_error[start_left[1]:start_left[1]+2*radius_left, start_left[0]:start_left[0]+2*radius_left]=combined_rasters_pol1[1][int(cent_n_pol1[1]) - radius_left:int(cent_n_pol1[1]) + radius_left,int(cent_n_pol1[0]) - radius_left:int(cent_n_pol1[0]) + radius_left]
+    onsky_polflat_error[start_right[1]:start_right[1]+2*radius_right, start_right[0]:start_right[0]+2*radius_right]=combined_rasters_pol2[1][int(cent_n_pol2[1]) - radius_right:int(cent_n_pol2[1]) + radius_right,int(cent_n_pol2[0]) - radius_right:int(cent_n_pol2[0]) + radius_right]
     
     
     onsky_pol_flatfield = data.FlatField(onsky_polflat, pri_hdr=prihdr, ext_hdr=exthdr, input_dataset=dataset)
