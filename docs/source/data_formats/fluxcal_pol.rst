@@ -3,6 +3,10 @@
 FluxcalFactor Data Product
 ========================================
 
+**Filename Suffix:** **abf_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_abf_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

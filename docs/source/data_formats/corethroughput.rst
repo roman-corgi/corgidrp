@@ -3,6 +3,10 @@
 CoreThroughputCalibration Data Product
 ========================================
 
+**Filename Suffix:** **ctp_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_ctp_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

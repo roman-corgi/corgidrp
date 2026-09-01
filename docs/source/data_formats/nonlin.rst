@@ -3,6 +3,10 @@
 NonLinearityCalibration Data Product
 ========================================
 
+**Filename Suffix:** **nln_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_nln_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

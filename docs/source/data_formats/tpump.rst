@@ -3,6 +3,10 @@
 TrapCalibration Data Product
 ========================================
 
+**Filename Suffix:** **tpu_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_tpu_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

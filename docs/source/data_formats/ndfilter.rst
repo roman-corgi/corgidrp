@@ -3,6 +3,10 @@
 NDFilterSweetSpotDataset Data Product
 ========================================
 
+**Filename Suffix:** **ndf_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_ndf_cal.fits``.
+
 
 FITS HDU Structure
 ------------------
