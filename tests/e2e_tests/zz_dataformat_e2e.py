@@ -12,13 +12,16 @@ import csv
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-def generate_template(hdulist, dtype_name=None):
+def generate_template(hdulist, dtype_name=None, filename_suffix=None):
     """
     Generates an rst documentation page of the data entries
 
     Args:
         hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
         dtype_name (str): if not None, custom name to use for page title and label
+        filename_suffix (str): the CGI filename suffix used for this data product
+            (e.g. 'l2a', 'l3_', 'bpm_cal'), as validated by validate_cgi_filename.
+            If None, a placeholder is shown instead.
 
     Returns:
         str: the rst page contents
@@ -65,7 +68,8 @@ def generate_template(hdulist, dtype_name=None):
         hdr_tables += "\n\n"
 
 
-    doc = template.format(datatype.lower(), datatype, hdu_table, hdr_tables)
+    suffix_display = filename_suffix if filename_suffix is not None else "N/A"
+    doc = template.format(datatype.lower(), datatype, hdu_table, hdr_tables, suffix_display)
 
     return doc
 
@@ -464,7 +468,7 @@ def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(l2a_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='l2a')
 
     doc_filepath = os.path.join(doc_output_dir, "l2a.rst")
     with open(doc_filepath, "w") as f:
@@ -495,7 +499,7 @@ def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(l2b_data_file) as hdulist:
-        doc_contents = generate_template(hdulist, dtype_name="L2b-Analog")
+        doc_contents = generate_template(hdulist, dtype_name="L2b-Analog", filename_suffix='l2b')
 
     doc_filepath = os.path.join(doc_dir, "l2b_analog.rst")
     with open(doc_filepath, "w") as f:
@@ -526,7 +530,7 @@ def test_l2b_pc_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(l2b_data_file) as hdulist:
-        doc_contents = generate_template(hdulist, dtype_name="L2b-PhotonCounting")
+        doc_contents = generate_template(hdulist, dtype_name="L2b-PhotonCounting", filename_suffix='l2b')
 
     doc_filepath = os.path.join(doc_dir, "l2b_pc.rst")
     with open(doc_filepath, "w") as f:
@@ -558,7 +562,7 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(l3_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='l3_')
 
     doc_filepath = os.path.join(doc_dir, "l3.rst")
     with open(doc_filepath, "w") as f:
@@ -588,7 +592,7 @@ def test_l3_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(l3_spec_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='l3_')
 
     doc_filepath = os.path.join(doc_dir, "l3_spec_analog.rst")
     with open(doc_filepath, "w") as f:
@@ -618,7 +622,7 @@ def test_l3_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(l3_pol_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='l3_')
 
     doc_filepath = os.path.join(doc_dir, "l3_pol_analog.rst")
     with open(doc_filepath, "w") as f:
@@ -649,7 +653,7 @@ def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(l4_data_file) as hdulist:
-        doc_contents = generate_template(hdulist, dtype_name="L4-Coronagraphic")
+        doc_contents = generate_template(hdulist, dtype_name="L4-Coronagraphic", filename_suffix='l4_')
 
     doc_filepath = os.path.join(doc_dir, "l4coron.rst")
     with open(doc_filepath, "w") as f:
@@ -679,7 +683,7 @@ def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(kgain_data_file) as hdulist:
-        doc_contents = generate_template(hdulist, dtype_name="L4-Noncoron")
+        doc_contents = generate_template(hdulist, dtype_name="L4-Noncoron", filename_suffix='l4_')
 
     doc_filepath = os.path.join(doc_dir, "l4noncoron.rst")
     with open(doc_filepath, "w") as f:
@@ -709,7 +713,7 @@ def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(l4_pol_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='l4_')
 
     doc_filepath = os.path.join(doc_dir, "l4_pol.rst")
     with open(doc_filepath, "w") as f:
@@ -739,7 +743,7 @@ def test_l4_spec_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(l4_spec_coron_data_file) as hdulist:
-        doc_contents = generate_template(hdulist, dtype_name="L4-Spec-Coronagraphic")
+        doc_contents = generate_template(hdulist, dtype_name="L4-Spec-Coronagraphic", filename_suffix='l4_')
 
     doc_filepath = os.path.join(doc_dir, "l4_spec_coron.rst")
     with open(doc_filepath, "w") as f:
@@ -769,7 +773,7 @@ def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(l4_spec_noncoron_data_file) as hdulist:
-        doc_contents = generate_template(hdulist, dtype_name="L4-Spec-Noncoron")
+        doc_contents = generate_template(hdulist, dtype_name="L4-Spec-Noncoron", filename_suffix='l4_')
 
     doc_filepath = os.path.join(doc_dir, "l4_spec_noncoron.rst")
     with open(doc_filepath, "w") as f:
@@ -799,7 +803,7 @@ def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(astrom_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='ast_cal')
 
     doc_filepath = os.path.join(doc_dir, "astrom.rst")
     with open(doc_filepath, "w") as f:
@@ -830,7 +834,7 @@ def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(bpmap_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='bpm_cal')
 
     doc_filepath = os.path.join(doc_dir, "bpmap.rst")
     with open(doc_filepath, "w") as f:
@@ -861,7 +865,7 @@ def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(flat_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='flt_cal')
 
     doc_filepath = os.path.join(doc_dir, "flat.rst")
     with open(doc_filepath, "w") as f:
@@ -890,7 +894,7 @@ def test_polflat_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(polflat_data_file) as hdulist:
-        doc_contents = generate_template(hdulist, dtype_name="PolFlatField")
+        doc_contents = generate_template(hdulist, dtype_name="PolFlatField", filename_suffix='flt_cal')
 
     doc_filepath = os.path.join(doc_dir, "polflt.rst")
     with open(doc_filepath, "w") as f:
@@ -921,7 +925,7 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(ct_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='ctp_cal')
 
     doc_filepath = os.path.join(doc_dir, "corethroughput.rst")
     with open(doc_filepath, "w") as f:
@@ -951,7 +955,7 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(ctmap_data_file) as hdulist:
-        doc_contents = generate_template(hdulist, dtype_name="CoreThroughputMap")
+        doc_contents = generate_template(hdulist, dtype_name="CoreThroughputMap", filename_suffix='ctm_cal')
 
     doc_filepath = os.path.join(doc_dir, "corethroughput_map.rst")
     with open(doc_filepath, "w") as f:
@@ -983,7 +987,7 @@ def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(fluxcal_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='abf_cal')
 
     doc_filepath = os.path.join(doc_dir, "fluxcal.rst")
     with open(doc_filepath, "w") as f:
@@ -1013,7 +1017,7 @@ def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(kgain_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='krn_cal')
 
     doc_filepath = os.path.join(doc_dir, "kgain.rst")
     with open(doc_filepath, "w") as f:
@@ -1044,7 +1048,7 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(nonlin_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='nln_cal')
 
     doc_filepath = os.path.join(doc_dir, "nonlin.rst")
     with open(doc_filepath, "w") as f:
@@ -1074,7 +1078,7 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(nd_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='ndf_cal')
 
     doc_filepath = os.path.join(doc_dir, "ndfilter.rst")
     with open(doc_filepath, "w") as f:
@@ -1103,7 +1107,7 @@ def test_ndfilter_spec_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(nds_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='nds_cal')
 
     doc_filepath = os.path.join(doc_dir, "ndfilter_spec.rst")
     with open(doc_filepath, "w") as f:
@@ -1131,7 +1135,7 @@ def test_specfluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(sfl_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='sfl_cal')
 
     doc_filepath = os.path.join(doc_dir, "fluxcal_spec.rst")
     with open(doc_filepath, "w") as f:
@@ -1160,7 +1164,7 @@ def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(noisemaps_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='dnm_cal')
 
     doc_filepath = os.path.join(doc_dir, "noisemaps.rst")
     with open(doc_filepath, "w") as f:
@@ -1191,7 +1195,7 @@ def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(dark_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='drk_cal')
 
     doc_filepath = os.path.join(doc_dir, "dark.rst")
     with open(doc_filepath, "w") as f:
@@ -1229,11 +1233,11 @@ def test_darks_comparison_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(trad_data_file) as hdulist:
-        trad_doc_contents = generate_template(hdulist)
+        trad_doc_contents = generate_template(hdulist, filename_suffix='drk_cal')
     with fits.open(pc_data_file) as hdulist:
-        pc_doc_contents = generate_template(hdulist)
+        pc_doc_contents = generate_template(hdulist, filename_suffix='drk_cal')
     with fits.open(synth_data_file) as hdulist:
-        synth_doc_contents = generate_template(hdulist)
+        synth_doc_contents = generate_template(hdulist, filename_suffix='drk_cal')
 
     # files' array shapes will be different, but check that the headers are the same
     compare_docs(trad_doc_contents, pc_doc_contents, data_product_name="Dark (Traditional vs Photon Counting)", skip_hdu_structure_check=True)
@@ -1256,7 +1260,7 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(tpump_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='tpu_cal')
 
     doc_filepath = os.path.join(doc_dir, "tpump.rst")
     with open(doc_filepath, "w") as f:
@@ -1283,7 +1287,7 @@ def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
 
     with fits.open(fluxcal_pol_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='abf_cal')
 
     doc_filepath = os.path.join(doc_dir, "fluxcal_pol.rst")
     with open(doc_filepath, "w") as f:
@@ -1312,7 +1316,7 @@ def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(polcal_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='mmx_cal')
 
     doc_filepath = os.path.join(doc_dir, "mmx_cal.rst")
     with open(doc_filepath, "w") as f:
@@ -1341,7 +1345,7 @@ def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(polcal_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='ndm_cal')
 
     doc_filepath = os.path.join(doc_dir, "ndm_cal.rst")
     with open(doc_filepath, "w") as f:
@@ -1371,7 +1375,7 @@ def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(spec_linespread_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='lsf_cal')
 
     doc_filepath = os.path.join(doc_dir, "lsf_cal.rst")
     with open(doc_filepath, "w") as f:
@@ -1400,7 +1404,7 @@ def test_spec_prism_disp_dataformat_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(doc_dir)
 
     with fits.open(spec_prism_disp_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, filename_suffix='dpm_cal')
 
     doc_filepath = os.path.join(doc_dir, "dpm_cal.rst")
     with open(doc_filepath, "w") as f:

@@ -3,6 +3,10 @@
 L4 Data Product
 ========================================
 
+**Filename Suffix:** **l4_**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_l4_.fits``.
+
 
 FITS HDU Structure
 ------------------
