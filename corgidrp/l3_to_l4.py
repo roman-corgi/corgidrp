@@ -18,6 +18,7 @@ from corgidrp.corethroughput import get_1d_ct
 from astropy.io import fits
 from scipy.ndimage import shift
 from numpy.lib.stride_tricks import sliding_window_view
+from corgidrp import spec
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation, star_pos_spec
 from corgidrp.spec import DEFAULT_SPEC_EXTRACT_HEIGHTS
 from corgidrp import pol
@@ -1050,10 +1051,148 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     return processed_dataset
 
 
-def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
-    """ 
+# Half-height of the stamp used to register a broadband prism image against a model template.
+# Also used by tests/test_spec.py::test_template_headers_complete
+BROADBAND_PRISM_HALFHEIGHT = 38
+
+# Half-height of the stamp used to register a narrowband prism image against a model template.
+NARROWBAND_PRISM_HALFHEIGHT = 26
+
+def _select_broadband_group(band):
+    """
+    Return the index of the broadband science filter group among the CFAM filter groups.
+
+    Args:
+        band (numpy.ndarray of str): uppercased CFAMNAME of each split group
+
+    Returns:
+        int: index into band of the broadband science group
+    """
+    broadband = [b for b in ("3F", "3", "2F", "2") if b in band]
+    if len(broadband) != 1:
+        raise AttributeError("Expected exactly one broadband science filter group (3F/3/2F/2), "
+                             "but found CFAMNAME groups {0}".format(list(band)))
+    return int(np.nonzero(band == broadband[0])[0].item())
+
+def _fit_zeropoint_position(offset_dataset, template_dataset, nb_filter, use_model_template,
+                            spec_filter_offset, xcent_guess = None, ycent_guess = None,
+                            bb_nb_dx = None, bb_nb_dy = None):
+    """
+    Fit the wavelength zeropoint position from one group of frames.
+
+    Args:
+        offset_dataset (corgidrp.data.Dataset): frames to centroid, either the offset satellite spot
+            frames taken through the narrowband filter or, on the model template path, the broadband
+            science frames themselves
+        template_dataset (corgidrp.data.Dataset): template frames to register against
+        nb_filter (str): narrowband CFAM filter defining the zeropoint wavelength, "3D" or "2C"
+        use_model_template (bool): True if template_dataset is a noiseless model of a dispersed star
+        spec_filter_offset (corgidrp.data.SpecFilterOffset): CFAM filter-wedge image offsets
+        xcent_guess (float): initial x guess for the centroid fit of all frames
+        ycent_guess (float): initial y guess for the centroid fit of all frames
+        bb_nb_dx (float): narrowband to broadband x offset overriding the lookup table
+        bb_nb_dy (float): narrowband to broadband y offset overriding the lookup table
+
+    Returns:
+        float: zeropoint wavelength in nm
+        float: zeropoint x position, and its uncertainty
+        float: zeropoint y position, and its uncertainty
+    """
+    if xcent_guess is not None and ycent_guess is not None:
+        initial_cent = {"xcent": np.repeat(xcent_guess, len(offset_dataset)),
+                        "ycent": np.repeat(ycent_guess, len(offset_dataset))}
+    else:
+        initial_cent = None
+    # Both paths need a stamp taller than the dispersed feature they register. Truncating it shifts
+    # the cross-correlation peak by a whole pixel, a bias the sub-pixel refinement cannot undo
+    # because it is bounded to +/-1 px. The model path registers the full broadband trace, so it
+    # needs the taller of the two stamps.
+    halfheight = BROADBAND_PRISM_HALFHEIGHT if use_model_template else NARROWBAND_PRISM_HALFHEIGHT
+    spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset,
+                                          initial_cent = initial_cent, halfheight = halfheight)
+    cen_wave, _, _, _ = read_cent_wave(nb_filter)
+    if use_model_template:
+        # No CFAM filter-wedge correction applies here. The wedge displaces everything seen through
+        # a given filter by the same amount, so within this broadband frame it shifts the fitted
+        # centroid and the true zeropoint alike and cancels out of their difference. The template's
+        # (WV0 - CENT) is that difference, a pure dispersion displacement. spec_filter_offset exists
+        # to move a centroid measured through the narrowband filter into the broadband frame, which
+        # is not what happened here, so applying it would introduce a spurious ~0.84 px x shift.
+        xcent_temp, ycent_temp, wv0x_temp, wv0y_temp = spec.read_template_zeropoint(template_dataset[0])
+        x0 = np.mean(spot_centroids.xfit) + (wv0x_temp - xcent_temp)
+        y0 = np.mean(spot_centroids.yfit) + (wv0y_temp - ycent_temp)
+    elif bb_nb_dx is not None and bb_nb_dy is not None:
+        x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
+        y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
+    else:
+        # Correct the centroid for the filter-to-filter image offset, so that the coordinates
+        # (x0,y0) correspond to the wavelength location in the broadband filter.
+        xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
+        xoff_bb, yoff_bb = spec_filter_offset.get_offsets(nb_filter[0])
+        x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
+        y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
+    x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
+    y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+    return cen_wave, x0, x0err, y0, y0err
+
+def _resolve_model_template(frame_subset, host_sptype):
+    """
+    Find the model template matching the mask configuration and the star of a group of frames.
+
+    Args:
+        frame_subset (corgidrp.data.Dataset): broadband prism frames of one group
+        host_sptype (str): assumed spectral type of the star, or None to look up its name
+
+    Returns:
+        corgidrp.data.Dataset: the one-frame model template dataset
+        str: the assumed spectral type of the star
+        str: the narrowband CFAM filter whose central wavelength defines the zeropoint
+    """
+    sptype = spec.get_star_spectral_type(frame_subset[0].pri_hdr["TARGET"], sptype = host_sptype)
+    template_dataset, _ = spec.get_template_dataset(frame_subset, host_sptype = sptype)
+    nb_filter = spec.NARROWBAND_FILTER[frame_subset[0].ext_hdr["CFAMNAME"].upper()[0]]
+    return template_dataset, sptype, nb_filter
+
+def _stamp_wave_zeropoint(frame, cen_wave, x0, x0err, y0, y0err, dimx, dimy):
+    """
+    Write the wavelength zeropoint keywords into a frame's extension header.
+
+    Args:
+        frame (corgidrp.data.Image): frame to stamp, modified in place
+        cen_wave (float): zeropoint wavelength in nm
+        x0 (float): zeropoint x position in EXCAM pixels
+        x0err (float): uncertainty of x0
+        y0 (float): zeropoint y position in EXCAM pixels
+        y0err (float): uncertainty of y0
+        dimx (int): x dimension of the frame the zeropoint was measured in
+        dimy (int): y dimension of the frame the zeropoint was measured in
+    """
+    frame.ext_hdr["WAVLEN0"] = cen_wave
+    frame.ext_hdr["WV0_X"] = x0
+    frame.ext_hdr["WV0_XERR"] = x0err
+    frame.ext_hdr["WV0_Y"] = y0
+    frame.ext_hdr["WV0_YERR"] = y0err
+    frame.ext_hdr["WV0_DIMX"] = dimx
+    frame.ext_hdr["WV0_DIMY"] = dimy
+
+def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False, host_sptype = None, allow_template_fallback = True):
+    """
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
+
+    If the dataset contains no narrowband frames, which is the case for the non-coronagraphic
+    standard star visits (CGIVST_CAL_ABSFLUX_BRIGHT / _FAINT, CGIVST_CAL_SPEC_TGTREF), the
+    broadband frames are instead registered against a noiseless model template of a dispersed
+    star of matching spectral type and optical configuration. The same fallback applies to
+    individual groups of broadband frames that have no narrowband frames of their own, such as the
+    bright standard star observed through the ND filter in a separate visit from the dim star in
+    the ND filter calibration. The template carries both its own
+    broadband centroid and the zeropoint position measured from a matched narrowband simulation,
+    so their difference transfers the fitted centroid to the zeropoint. The CFAM filter-wedge
+    offset is not applied on that path, because the centroid is measured through the broadband
+    filter directly. The accuracy of the fallback is limited by the fidelity of the template
+    simulation and by any spectral-type mismatch between the star and the template grid; the
+    latter is not folded into WV0_XERR / WV0_YERR.
 
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing 2-D PSF or satellite spot images taken through the narrowband filter and slit.
@@ -1073,7 +1212,12 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         bb_nb_dy (float): vertical image offset between the narrowband and broadband filters, in EXCAM pixels. 
                           This will override the offset in the existing lookup table. 
         return_all (boolean): if false (default) returns only the broad band science frames, if true it returns all (including narrow band) frames
-    
+        host_sptype (str): MK spectral type of the host star, overriding the lookup of the TARGET name in
+                           corgidrp/data/spectroscopy/standard_star_sptypes.csv. Only used on the
+                           model-template fallback path.
+        allow_template_fallback (boolean): if True (default) a dataset without narrowband frames is
+                           registered against a model template; if False such a dataset raises.
+
     Returns:
         corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
                                information as header keywords, which is WAVLEN0, WV0_X, WV0_XERR, WV0_Y, WV0_YERR, WV0_DIMX, WV0_DIMY
@@ -1081,25 +1225,42 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     dataset = input_dataset.copy()
     dpamname = dataset.frames[0].ext_hdr["DPAMNAME"]
     if not dpamname.startswith("PRISM"):
-        raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
-    if dataset.frames[0].ext_hdr["FPAMNAME"] == 'OPEN_34':
+        raise AttributeError("This is not a spectroscopic observation. but {0}".format(dpamname))
+    fpamname = dataset.frames[0].ext_hdr["FPAMNAME"]
+    # FPAM settings that pass an unocculted star, i.e. no coronagraph focal-plane mask in the beam.
+    if str(fpamname).strip().upper().startswith(("OPEN", "ND")):
         if subtract_no_offset_frames:
-            warnings.warn("The dataset has FPAMNAME = OPEN_34, identicating that this is a non-coronagraphic spectroscopy observation, setting subtract_no_offset_frames = False")
+            warnings.warn("The dataset has FPAMNAME = {0}, indicating that this is a non-coronagraphic "
+                          "spectroscopy observation, setting subtract_no_offset_frames = False".format(fpamname))
             subtract_no_offset_frames = False
 
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
     band = np.array([s.upper() for s in band])
     with_science = True
-    if len(band) < 2:
-        if "3D" not in band and "2C" not in band:
-            raise AttributeError("there needs to be at least 1 narrowband and 1 science band prism frame in the dataset\
-                                  to determine the wavelength zero point")
-        else:
-            with_science = False
-            print("No science frames found in input dataset")
-        
-    if "3D" in band:
+    use_model_template = False
+    narrowband_present = bool(np.any(np.isin(band, ("3D", "2C"))))
+
+    if not narrowband_present:
+        # No narrowband frame to centroid: fall back to registering the broadband frames against a
+        # noiseless model template of a dispersed star.
+        if not allow_template_fallback:
+            raise AttributeError("No narrowband frames found in input dataset")
+        if not str(fpamname).strip().upper().startswith(("OPEN", "ND")):
+            raise AttributeError("No narrowband frames found in input dataset, and the model-template "
+                                 "wavelength zeropoint fallback is only valid for unocculted "
+                                 "observations (FPAMNAME = {0})".format(fpamname))
+        use_model_template = True
+        sci_index = _select_broadband_group(band)
+        # The broadband frames serve as both the zeropoint frames and the science frames.
+        sat_dataset = narrow_dataset[sci_index]
+        sci_dataset = sat_dataset
+        nb_filter = "3D" if band[sci_index].startswith("3") else "2C"
+    elif len(band) < 2:
+        with_science = False
+        print("No science frames found in input dataset")
+
+    if narrowband_present and "3D" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
         if with_science:
             science_bands = band[band != "3D"]
@@ -1111,19 +1272,18 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
                 # 3A/3B/3C/3E alongside the broadband): select the band-3 broadband science
                 # filter (3F or 3). Sub-band frames are dispersion-calibration frames, not
                 # science, so they are excluded from the wavelength-zeropoint-stamped output.
-                broadband = [b for b in ("3F", "3") if b in band]
-                if len(broadband) != 1:
-                    raise AttributeError("Expected a single science band or one band-3 broadband "
-                        "filter (3F/3), but found CFAMNAME groups {0}".format(list(band)))
-                sci_index = int(np.nonzero(band == broadband[0])[0].item())
+                sci_index = _select_broadband_group(band)
             sci_dataset = narrow_dataset[sci_index]
-    elif "2C" in band:
+    elif narrowband_present:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
         if with_science:
             sci_dataset = narrow_dataset[int(np.nonzero(band != "2C")[0].item())]
-    else:
-        raise AttributeError("No narrowband frames found in input dataset")
-    
+
+    # Model templates used, as (file name, spectral type) pairs, for the processing history
+    model_templates_used = []
+    if use_model_template and template_dataset is not None:
+        model_templates_used.append((os.path.basename(str(template_dataset[0].filepath)), host_sptype))
+
     # Default is split satspot/science dataset according to VISITID
     pri_keys = ["VISITID"]
     ext_keys = additional_frame_sep_extkeys
@@ -1134,6 +1294,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         science_dataset, keywords_sci = sci_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
 
     all_science_frames = []
+    matched_sci_keywords = []
 
     for matched_index, keyword in enumerate(keywords_sat):
 
@@ -1165,54 +1326,66 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             satspot_subset = satspot_dataset[int(matched_index)]
             offset_dataset = satspot_subset
 
-        if xcent_guess is not None and ycent_guess is not None:
-            n = len(offset_dataset)
-            initial_cent = {"xcent": np.repeat(xcent_guess, n),
-                            "ycent": np.repeat(ycent_guess, n)}
-        else:
-            initial_cent = None
-        spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
-    
-        nb_filter = offset_dataset[0].ext_hdr["CFAMNAME"]
-        bb_filter = nb_filter[0]
-        cen_wave, _, _, _ = read_cent_wave(nb_filter)
-        xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
-        xoff_bb, yoff_bb = spec_filter_offset.get_offsets(bb_filter)
-        # Correct the centroid for the filter-to-filter image offset, so that
-        # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
-        if bb_nb_dx is not None and bb_nb_dy is not None:
-            x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
-            y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
-        else:
-            x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
-            y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
-        x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
-        y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+        group_template = template_dataset
+        if not use_model_template:
+            nb_filter = offset_dataset[0].ext_hdr["CFAMNAME"]
+        elif template_dataset is None:
+            # The template is resolved per group, because the groups of one dataset can differ in
+            # star and in FPAM setting, as the dim and bright visits of an ND filter calibration do.
+            group_template, group_sptype, nb_filter = _resolve_model_template(offset_dataset, host_sptype)
+            model_templates_used.append((os.path.basename(str(group_template[0].filepath)), group_sptype))
+        cen_wave, x0, x0err, y0, y0err = _fit_zeropoint_position(
+            offset_dataset, group_template, nb_filter, use_model_template, spec_filter_offset,
+            xcent_guess = xcent_guess, ycent_guess = ycent_guess, bb_nb_dx = bb_nb_dx, bb_nb_dy = bb_nb_dy)
 
         if return_all or with_science == False:
             science_subset = offset_dataset
-        
+
         if with_science:
             matched_index_sci = [i for i, key in enumerate(keywords_sci) if key == keyword]
             science_subset = science_dataset[int(matched_index_sci[0])]
-        
+            matched_sci_keywords.append(keyword)
+
 
         science_frames = []
         for frame in science_subset:
-            frame.ext_hdr["WAVLEN0"] = cen_wave
-            frame.ext_hdr["WV0_X"] = x0
-            frame.ext_hdr["WV0_XERR"] = x0err
-            frame.ext_hdr["WV0_Y"] = y0
-            frame.ext_hdr["WV0_YERR"] = y0err
-            frame.ext_hdr["WV0_DIMX"] = offset_dataset[0].ext_hdr['NAXIS1']
-            frame.ext_hdr["WV0_DIMY"] = offset_dataset[0].ext_hdr['NAXIS2']
+            _stamp_wave_zeropoint(frame, cen_wave, x0, x0err, y0, y0err,
+                                  offset_dataset[0].ext_hdr['NAXIS1'], offset_dataset[0].ext_hdr['NAXIS2'])
             science_frames.append(frame)
 
         all_science_frames += science_frames
 
+    # Science frames whose group has no narrowband frames of its own are registered against a broadband template.
+    if with_science and narrowband_present and allow_template_fallback:
+        for sci_index, keyword in enumerate(keywords_sci):
+            if keyword in matched_sci_keywords:
+                continue
+            science_subset = science_dataset[int(sci_index)]
+            group_fpam = science_subset[0].ext_hdr["FPAMNAME"]
+            if not str(group_fpam).strip().upper().startswith(("OPEN", "ND")):
+                warnings.warn("no narrowband frames matching the science frames of group {0}, and the "
+                              "broadband template wavelength zeropoint fallback is only valid for unocculted "
+                              "observations (FPAMNAME = {1}); these frames are dropped".format(
+                                  keyword, group_fpam))
+                continue
+            group_template, group_sptype, group_nb_filter = _resolve_model_template(science_subset, host_sptype)
+            cen_wave, x0, x0err, y0, y0err = _fit_zeropoint_position(
+                science_subset, group_template, group_nb_filter, True, spec_filter_offset,
+                xcent_guess = xcent_guess, ycent_guess = ycent_guess)
+            for frame in science_subset:
+                _stamp_wave_zeropoint(frame, cen_wave, x0, x0err, y0, y0err,
+                                      science_subset[0].ext_hdr['NAXIS1'], science_subset[0].ext_hdr['NAXIS2'])
+                all_science_frames.append(frame)
+            model_templates_used.append((os.path.basename(str(group_template[0].filepath)), group_sptype))
+
     sci_dataset = data.Dataset(all_science_frames)
 
     history_msg = "wavelength zeropoint values added to header"
+    if len(model_templates_used) > 0:
+        history_msg += ("; frames without matching narrowband frames were registered against the broadband "
+                        "template(s) {0}, and the CFAM filter-wedge offset was not applied for those".format(
+                            ", ".join("{0} of spectral type {1}".format(name, sptype)
+                                      for name, sptype in dict.fromkeys(model_templates_used))))
     sci_dataset.update_after_processing_step(history_msg)
     return sci_dataset
 
