@@ -3,9 +3,11 @@ import os
 
 import corgidrp.data as data
 import corgidrp.mocks as mocks
+from corgidrp.mocks import get_pol_image_centers
 from corgidrp.l1_to_l2a import detect_cosmic_rays, remove_sat_images
 from corgidrp.detector import find_plateaus, calc_sat_fwc
 from corgidrp.data import Image, Dataset
+from corgidrp.spec import read_cent_wave
 
 import numpy as np
 from astropy.time import Time
@@ -336,6 +338,29 @@ def remove_cosmics_iit(image, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_bo
                 mask_rav[rav_ind:rav_ind + int(ex_l[j])] = 1
 
     return mask
+
+def inject_cr(frame, xloc, yloc, plateau_length, fwc):
+    """
+    helper function to add in a cosmic ray at some specified location
+
+    Args:
+        frame (np.array): 2D frame to inject the cosmic ray into
+        xloc (int): x location of where the injected cosmic ray should be
+        yloc (int): y location of where the injected cosmic ray should be
+        plateau_length (int): length of the saturated plateau in pixels
+        fwc (float): the full well capacity of the detector
+    """
+
+    # add saturated plateau
+    x_length = frame.shape[1]
+    tail_start = np.min([xloc+plateau_length, x_length])
+    frame[yloc, xloc:tail_start] += fwc
+
+    # add tail
+    if tail_start < x_length:
+        tail_len = x_length-tail_start
+        cr_tail = [fwc/(j+1) for j in range(tail_len)]
+        frame[yloc, tail_start:] += cr_tail
 
 ## Run tests ##
 
@@ -908,6 +933,101 @@ def test_oversaturated_frames_are_marked_not_removed():
     assert not np.all(output_dataset[0].dq > 0)
     assert np.all(np.bitwise_and(output_dataset[0].dq, 128) == 0)
 
+def test_iwa_masking():
+    """
+    Test that for a given coronagraphic observation, the coronagraph IWA is excluded correctly from cosmic ray masking
+    """
+    # useful parameters for data construction
+    kgain = detector_params.params['KGAINPAR']
+    fwc_em = detector_params.params['FWC_EM_E'] / kgain
+    fwc_pp = detector_params.params['FWC_PP_E'] / kgain
+    fwc = np.min([fwc_em, 500 * fwc_pp])
+
+    # construct and define the iwa radius for NFOV in band 1F
+    platescale = 0.0218
+    mirror_diam = 2.36 
+    iwa = 3
+    iwa_arcsec = iwa * ((read_cent_wave("1F")[0] * 1e-9) / mirror_diam) * 206265
+    iwa_pix = int(round(iwa_arcsec / platescale))
+
+    # DQ flag for cosmic rays
+    cr_dq = 128
+
+    # baseline: test that an injected cr outside the IWA gets flagged
+    dataset_baseline = mocks.create_cr_dataset(nonlin_fits_filepath, numfiles=1, em_gain=500, numCRs=0)
+    frame_baseline = dataset_baseline[0]
+    # inject cr somewhere outside IWA
+    inject_cr(frame_baseline.data, 300, 700, 2, fwc)
+    # set appropriate headers
+    frame_baseline.ext_hdr['CFAMNAME'] = '1F'
+    frame_baseline.ext_hdr['DPAMNAME'] = 'IMAGING'
+    frame_baseline.ext_hdr['LSAMNAME'] = 'NFOV'
+    output_dataset_baseline = detect_cosmic_rays(dataset_baseline, detector_params, k_gain, coronagraph_iwa_radius=3)
+    # check the output DQ to ensure the cosmic ray placed outside the IWA is flagged
+    dq_baseline = output_dataset_baseline.all_dq[0]
+    assert (dq_baseline[700, 300] & cr_dq) != 0
+
+    # inject cr at image center for imaging mode, assert it is not flagged
+    dataset_cor = mocks.create_cr_dataset(nonlin_fits_filepath, numfiles=1, em_gain=500, numCRs=0)
+    frame_cor = dataset_cor[0]
+    # inject cr in the image center
+    inject_cr(frame_cor.data, 512, 512, 2, fwc)
+    # set appropriate headers
+    frame_cor.ext_hdr['CFAMNAME'] = '1F'
+    frame_cor.ext_hdr['DPAMNAME'] = 'IMAGING'
+    frame_cor.ext_hdr['LSAMNAME'] = 'NFOV'
+    output_dataset_cor = detect_cosmic_rays(dataset_cor, detector_params, k_gain, coronagraph_iwa_radius=3)
+    dq_cor = output_dataset_cor.all_dq[0]
+
+    # inject cr at pol spots for WP1, assert it is not flagged
+    dataset_wp1 = mocks.create_cr_dataset(nonlin_fits_filepath, numfiles=1, em_gain=500, numCRs=0)
+    frame_wp1 = dataset_wp1[0]
+    # inject cr at the center of the ordinary/extraordinary beams
+    center_ord_wp1, center_ext_wp1 = get_pol_image_centers(7.5, 0)
+    inject_cr(frame_wp1.data, center_ord_wp1[0], center_ord_wp1[1], 2, fwc)
+    inject_cr(frame_wp1.data, center_ext_wp1[0], center_ext_wp1[1], 2, fwc)
+    # set appropriate headers
+    frame_wp1.ext_hdr['CFAMNAME'] = '1F'
+    frame_wp1.ext_hdr['DPAMNAME'] = 'POL0'
+    frame_wp1.ext_hdr['LSAMNAME'] = 'NFOV'
+    output_dataset_wp1 = detect_cosmic_rays(dataset_wp1, detector_params, k_gain, coronagraph_iwa_radius=3)
+    dq_wp1 = output_dataset_wp1.all_dq[0]
+
+    # inject cr at pol spots for WP2, assert it is not flagged
+    dataset_wp2 = mocks.create_cr_dataset(nonlin_fits_filepath, numfiles=1, em_gain=500, numCRs=0)
+    frame_wp2 = dataset_wp2[0]
+    # inject cr at the center of the ordinary/extraordinary beams
+    center_ord_wp2, center_ext_wp2 = get_pol_image_centers(7.5, 45)
+    inject_cr(frame_wp2.data, center_ord_wp2[0], center_ord_wp2[1], 2, fwc)
+    inject_cr(frame_wp2.data, center_ext_wp2[0], center_ext_wp2[1], 2, fwc)
+    # set appropriate headers
+    frame_wp2.ext_hdr['CFAMNAME'] = '1F'
+    frame_wp2.ext_hdr['DPAMNAME'] = 'POL45'
+    frame_wp2.ext_hdr['LSAMNAME'] = 'NFOV'
+    output_dataset_wp2 = detect_cosmic_rays(dataset_wp2, detector_params, k_gain, coronagraph_iwa_radius=3)
+    dq_wp2 = output_dataset_wp2.all_dq[0]
+
+    # check the appropriate IWAs for all three test datasets are not flagged for cosmic rays
+    img_shape = frame_cor.data.shape
+    y, x = np.ogrid[:img_shape[0], :img_shape[1]]
+    # create iwa regions for each dataset
+    r_cor = r = np.sqrt((y - 512)**2 + (x - 512)**2)
+    iwa_region_cor = r_cor < iwa_pix
+    r_wp1_ord = np.sqrt((y - center_ord_wp1[1])**2 + (x - center_ord_wp1[0])**2)
+    r_wp1_ext = np.sqrt((y - center_ext_wp1[1])**2 + (x - center_ext_wp1[0])**2)
+    iwa_region_wp1 = (r_wp1_ord < iwa_pix) | (r_wp1_ext < iwa_pix)
+    r_wp2_ord = np.sqrt((y - center_ord_wp2[1])**2 + (x - center_ord_wp2[0])**2)
+    r_wp2_ext = np.sqrt((y - center_ext_wp2[1])**2 + (x - center_ext_wp2[0])**2)
+    iwa_region_wp2 = (r_wp2_ord < iwa_pix) | (r_wp2_ext < iwa_pix)
+    # check that no cr_flags fall inside the iwa for all three datasets
+    cr_flags_cor = (dq_cor & cr_dq).astype(bool)
+    assert not cr_flags_cor[iwa_region_cor].any() # regular imaging
+    cr_flags_wp1 = (dq_wp1 & cr_dq).astype(bool)
+    assert not cr_flags_wp1[iwa_region_wp1].any() # pol WP1
+    cr_flags_wp2 = (dq_wp2 & cr_dq).astype(bool)
+    assert not cr_flags_wp2[iwa_region_wp2].any() # pol WP2
+    
+
 if __name__ == "__main__":
     test_cosm_tail_bleed_over()
     test_EM_gain_1()
@@ -931,3 +1051,4 @@ if __name__ == "__main__":
     test_cosm_tail_2()
     test_remove_sat_images()
     test_oversaturated_frames_are_marked_not_removed()
+    test_iwa_masking()
