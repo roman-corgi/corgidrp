@@ -306,7 +306,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
             dq_temp = Image(dataset[j].filepath).dq
             dq_sum += dq_temp.astype(float)
         dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
-        output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
+        output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int))
         output_dq = output_dq.filled(0).astype(int)
     else:
         output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
