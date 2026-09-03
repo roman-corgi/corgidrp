@@ -3,6 +3,10 @@
 DetectorNoiseMaps Data Product
 ========================================
 
+**Filename Suffix:** **dnm_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_dnm_cal.fits``.
+
 
 FITS HDU Structure
 ------------------
@@ -391,6 +395,10 @@ Image Header (HDU 1)
 | IS_BAD     | bool       | False                          | Was this frame deemed bad?                                                                                               |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | RECIPE     | str        | {"name": "noisemap_generati... | DRP recipe and steps; paths to noise maps, calib                                                                         |
++------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
+| RECIPE2    | str        | {"name": "second_recipe"...    | Next recipe in the chain if this file was produced by more than one DRP call; see RECIPE                                 |
++------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
+| NRECIPES   | int        | 2                              | Number of chained recipes recorded (RECIPE, RECIPE2, ...); present only when more than one recipe processed this file    |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 | DRPVERSN   | str        | 3.1                            | corgidrp version that produced this file                                                                                 |
 +------------+------------+--------------------------------+--------------------------------------------------------------------------------------------------------------------------+

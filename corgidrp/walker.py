@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import astropy.io.fits as fits
 import astropy.time as time
 import warnings
 import xml.etree.ElementTree as ET
@@ -173,6 +174,84 @@ def _validate_template_structure(user_template, default_template_path, recipe_fi
             )
             raise ValueError(error_msg)
 
+def _read_prior_recipe_history(filepath):
+    """Read whatever recipe chain is already recorded in a FITS file's header.
+
+    Used once, up front, by run_recipe to fold in recipe history left by an
+    earlier, separate call on this same file (e.g. re-processing files that
+    were already through a prior chain), so that history is prepended to
+    prev_recipes rather than lost.
+
+    Args:
+        filepath (str): path to a FITS file previously written by corgidrp.
+
+    Returns:
+        list: recipe dicts recorded in the file's header, oldest first. Empty
+            if the file has no (valid) recipe history recorded.
+    """
+    history = []
+    with fits.open(filepath) as hdulist:
+        hdr = hdulist[1].header
+        if 'RECIPE' in hdr:
+            n_existing = hdr.get('NRECIPES', 1)
+            for idx in range(1, n_existing + 1):
+                key = 'RECIPE' if idx == 1 else 'RECIPE{0}'.format(idx)
+                if key not in hdr:
+                    continue
+                try:
+                    history.append(json.loads(hdr[key]))
+                except (json.JSONDecodeError, TypeError):
+                    # Not an actual recipe record (e.g. mock/placeholder
+                    # header value) -- nothing real to preserve.
+                    return []
+    return history
+
+
+def _set_recipe_header(frame, recipe, prev_recipes=None, is_last_frame=True):
+    """Write recipe chain headers into frame.ext_hdr.
+
+    Standalone recipe: RECIPE = recipe.
+    Chained recipe: RECIPE = prev_recipes[0], RECIPE2 = prev_recipes[1], ...,
+    RECIPE{N} = recipe, NRECIPES = N.
+
+    Stateless: never reads history from frame.ext_hdr, only
+    from prev_recipes, so repeat calls (even on different derived objects)
+    can't duplicate entries. Callers fold in any pre-existing header history
+    themselves (see run_recipe).
+
+    On non-last frames, RAM-heavy recipes replace the full input list with a
+    compact pointer ("See RECIPE header value in <anchor>") to avoid repeating
+    large input lists in every frame. The last frame always stores the full list
+    inline so it does not depend on an anchor file that a later chain could
+    overwrite.
+
+    Args:
+        frame (corgidrp.data.Image): frame whose ext_hdr to update.
+        recipe (dict): recipe currently being executed.
+        prev_recipes (list): recipes that ran before this one in the chain.
+            Empty list or None means standalone. Defaults to None.
+        is_last_frame (bool): True stores full input lists; False uses compact
+            pointers for RAM-heavy recipes. Defaults to True.
+    """
+    all_recipes = list(prev_recipes or []) + [recipe]
+
+    # Clear existing RECIPE2+/NRECIPES headers before rewriting the full chain
+    if 'NRECIPES' in frame.ext_hdr:
+        for idx in range(2, frame.ext_hdr['NRECIPES'] + 1):
+            del frame.ext_hdr['RECIPE{0}'.format(idx)]
+        del frame.ext_hdr['NRECIPES']
+
+    for idx, r in enumerate(all_recipes):
+        key = 'RECIPE' if idx == 0 else 'RECIPE{0}'.format(idx + 1)
+        r_to_store = {k: v for k, v in r.items() if not k.startswith('_')} # drops tmp keys starting with _
+        if not is_last_frame and r.get("ram_heavy") and isinstance(r.get("inputs"), list) and r["inputs"]:
+            target = r.get("_recipe_anchor") or r["inputs"][-1]
+            r_to_store["inputs"] = "See RECIPE header value in {0}".format(target)
+        frame.ext_hdr[key] = json.dumps(r_to_store)
+    if len(all_recipes) > 1:
+        frame.ext_hdr['NRECIPES'] = len(all_recipes)
+
+
 def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     """
     Automatically create a recipe and process the input filelist.
@@ -255,8 +334,8 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
                         sat_spot_info = _get_satellite_spot_info_from_xml(cpgs_xml)
                         step['keywords']['r_lamD'] = sat_spot_info['spot1_sep']
                         step['keywords']['phi_deg'] = sat_spot_info['spot1_angle']
-
-            output_filelist = run_recipe(recipe)
+            
+            output_filelist = run_recipe(recipe, prev_recipes=recipes[:i])
 
     # return just the recipe if there was only one
     if len(list_of_recipe_chains) == 1:
@@ -495,6 +574,42 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
 
     return step
 
+def _fsm_positions_differ(dataset, tolerance=4.0):
+    """
+    Return True if FSMX or FSMY values differ across the dataset by more than tolerance.
+    This is an indirect way of checking if the images were dithered.
+
+    Args:
+        dataset (corgidrp.data.Dataset): a Dataset to process
+        tolerance (float): [mas] the tolerance for considering values different
+
+    Returns:
+        bool: True if FSMX or FSMY values across a series of images
+              differ by more than tolerance, False otherwise
+    """
+    # basic check: if there are fewer than 2 frames, they can't differ
+    if len(dataset) < 2.:
+        return False
+
+    # load header fsm vals
+    fsmx_vals = [frame.ext_hdr['FSMX'] for frame in dataset]
+    fsmy_vals = [frame.ext_hdr['FSMY'] for frame in dataset]
+
+    # starting point for comparison
+    ref_fsmx = fsmx_vals[0]
+    ref_fsmy = fsmy_vals[0]
+
+    # check x and y separately
+    if any(abs(value - ref_fsmx) > tolerance for value in fsmx_vals[1:]):
+        print("Dithering detected")
+        return True
+    if any(abs(value - ref_fsmy) > tolerance for value in fsmy_vals[1:]):
+        print("Dithering detected")
+        return True
+
+    return False
+
+
 def guess_template(dataset):
     """
     Guesses what template should be used to process a specific image
@@ -558,16 +673,18 @@ def guess_template(dataset):
                     recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_spec.json", "l2b_to_spec_flux.json"]
                     chained = True
             else:
-                _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-                if len(fsm_unique) > 1:
+                _, vistype_unique = dataset.split_dataset(prihdr_keywords=['VISTYPE'])
+                # pol fluxcal
+                if image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']:
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
+                    chained = True
+                # ND filter calibration if bright targets in dataset
+                elif len(vistype_unique) > 1 or vistype_unique[0] == 'CGIVST_CAL_ABSFLUX_BRIGHT':
                     recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
                     chained = True
+                # abs flux if dataset contains dim targets only
                 else:
-                    # Check for polarimetry mode to use appropriate flux calibration recipe
-                    if image.ext_hdr.get('DPAMNAME', '') in ['POL0', 'POL45']:
-                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_fluxcal_factor_pol.json"]
-                    else:
-                        recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+                    recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
                     chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
@@ -579,10 +696,17 @@ def guess_template(dataset):
             recipe_filename = ['trap_pump_cal_1.json', 'trap_pump_cal_2.json']
             chained = True
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_POL_SETUP':
-            recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
-            chained = True
+            # check if there are multiple FSM positions. If so, we need to do a polcal recipe.
+            # if not, go to l3.
+            if _fsm_positions_differ(dataset):
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_polcal.json"]
+                chained = True
+            else:
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b_pol.json", "l2b_to_l3_pol.json"]
+                chained = True
         else:
-            recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
+            recipe_filename = "l1_to_l2a_basic.json" # science data and all else (including photon counting)
+
     # L2a -> L2b data processing
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "CGIVST_CAL_DRK":
@@ -646,8 +770,7 @@ def guess_template(dataset):
                 else:
                     recipe_filename = "l2b_to_spec_flux.json"
             else:
-                _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-                if len(fsm_unique) > 1:
+                if _fsm_positions_differ(dataset):
                     recipe_filename = "l2b_to_nd_filter.json"
                 else:
                     if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
@@ -657,7 +780,14 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == 'CGIVST_CAL_CORETHRPT':
             recipe_filename = 'l2b_to_corethroughput.json'
         elif image.pri_hdr['VISTYPE'] == "CGIVST_CAL_POL_SETUP":
-            recipe_filename = "l2b_to_polcal.json"
+            # check if there are multiple FSM positions. If so, we need to do a polcal recipe.
+            # if not, go to l3.
+            if _fsm_positions_differ(dataset):
+                recipe_filename = "l2b_to_polcal.json"
+                chained = True
+            else:
+                recipe_filename = "l2b_to_l3_pol.json"
+                chained = True
         elif image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
             recipe_filename = "l2b_to_l3_pol.json"
         elif 'TDD' not in image.pri_hdr['VISTYPE'] and image.pri_hdr['VISTYPE'] != "CGIVST_CAL_SPEC_TGTREF":
@@ -731,13 +861,18 @@ def save_data(dataset_or_image, outputdir, suffix="", ram_heavy_save=False):
             this_caldb = caldb.CalDB()
             this_caldb.create_entry(image)
 
-def run_recipe(recipe, save_recipe_file=True):
+
+def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
     """
     Run the specified recipe
 
     Args:
         recipe (dict or str): either the filepath to the recipe or the already loaded in recipe
         save_recipe_file (bool): saves the recipe as a JSON file in the outputdir (true by default)
+        prev_recipes (list): ordered list of recipe dicts that ran before this one in a chain.
+            When provided, RECIPE in the output headers holds the first recipe for backwards
+            compatibility, RECIPE2/RECIPE3/... hold subsequent ones, and NRECIPES records the count.
+            Defaults to None (standalone recipe, single RECIPE header written).
 
     Returns:
         list: list of filepaths to the saved files, or None if no files were saved
@@ -745,6 +880,17 @@ def run_recipe(recipe, save_recipe_file=True):
     if isinstance(recipe, str):
         # need to load in
         recipe = json.load(open(recipe, "r"))
+
+    # Prepend any recipe history already on the input files (e.g. from an
+    # earlier, separate call) that isn't already covered by prev_recipes, so
+    # it's preserved instead of overwritten. Read once, up front, since
+    # _set_recipe_header itself must stay stateless (see its docstring).
+    if recipe.get("inputs"):
+        prior_history = _read_prior_recipe_history(recipe["inputs"][0])
+        n_prev = len(prev_recipes or [])
+        n_new_old = max(0, len(prior_history) - n_prev)
+        if n_new_old:
+            prev_recipes = prior_history[:n_new_old] + list(prev_recipes or [])
 
     # configure pipeline as needed
     # these settings should only apply to this recipe, so we will restore old settings later
@@ -794,20 +940,21 @@ def run_recipe(recipe, save_recipe_file=True):
         save_step = False
         output_filepaths = []
         for filelist in filelist_chunks:
+            # anchor_sctsrt tracks which frame should hold the full recipe in RAM-heavy mode.
+            # Initialised to the SCTSRT of the last input frame; updated below when a
+            # sorting/filtering step removes that frame from the dataset.
+            anchor_sctsrt = None
             if recipe["inputs"]:
                 if ram_heavy_bool:
                     curr_dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
-                    recipe_temp = recipe.copy()
-                    # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
-                    recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
                 else:
                     curr_dataset = data.Dataset(filelist)
-                    recipe_temp = recipe
-                # write the recipe into the image extension header
-                curr_dataset[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                if len(curr_dataset) > 1:
-                    for frame in curr_dataset[:-1]:
-                        frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                # Write recipe chain headers to all frames, preserving any existing history
+                frames = list(curr_dataset)
+                for j, frame in enumerate(frames):
+                    _set_recipe_header(frame, recipe, prev_recipes, is_last_frame=(j == len(frames) - 1))
+                if ram_heavy_bool and frames:
+                    anchor_sctsrt = frames[-1].ext_hdr.get('SCTSRT')
             # execute each pipeline step
             print('Executing recipe: {0}'.format(recipe['name']))
             if isinstance(filelist, list):
@@ -833,6 +980,13 @@ def run_recipe(recipe, save_recipe_file=True):
                     save_data(curr_dataset, recipe["outputdir"], suffix=suffix, ram_heavy_save=ram_heavy_save)
                     if isinstance(curr_dataset, data.Dataset):
                         output_filepaths += [frame.filepath for frame in curr_dataset]
+                        # Record the anchor output file so downstream compact pointers
+                        # can reference the frame that holds the full input list.
+                        if ram_heavy_bool and anchor_sctsrt is not None:
+                            for frame in curr_dataset:
+                                if frame.ext_hdr.get('SCTSRT') == anchor_sctsrt:
+                                    recipe["_recipe_anchor"] = frame.filepath
+                                    break
                     else:
                         output_filepaths += [curr_dataset.filepath]
                     save_step = True
@@ -861,17 +1015,10 @@ def run_recipe(recipe, save_recipe_file=True):
                                 ref_image = data.Image(ref_image.filepath) #load in data for calibration matching
                             _fill_in_calib_files(step, this_caldb, ref_image)
 
-                            # also update the recipe we used in the headers
-                            if ram_heavy_bool:
-                                recipe_temp = recipe.copy()
-                                # don't want to keep all ~26000 filepaths in all ~26000 ext headers b/c that's a lot of memory
-                                recipe_temp["inputs"] = "See RECIPE header value in {0}".format(curr_dataset[-1].filepath)
-                            else:
-                                recipe_temp = recipe
-                            list_of_frames[-1].ext_hdr["RECIPE"] = json.dumps(recipe)
-                            if len(list_of_frames) > 1:
-                                for frame in list_of_frames[:-1]:
-                                    frame.ext_hdr["RECIPE"] = json.dumps(recipe_temp)
+                            # also update the recipe headers now that calibs are resolved
+                            lof = list(list_of_frames)
+                            for j, frame in enumerate(lof):
+                                _set_recipe_header(frame, recipe, prev_recipes, is_last_frame=(j == len(lof) - 1))
 
                         # load the calibration files in from disk
                         for calib in step["calibs"]:
@@ -893,13 +1040,40 @@ def run_recipe(recipe, save_recipe_file=True):
                     # run the step!
                     curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
 
-                    # make sure RECIPE header is propagated to output
+                    # make sure recipe headers are propagated to any newly created frames
                     if isinstance(curr_dataset, data.Dataset):
-                        for frame in curr_dataset:
-                            if "RECIPE" not in frame.ext_hdr:
-                                frame.ext_hdr["RECIPE"] = json.dumps(recipe)
-                    elif hasattr(curr_dataset, 'ext_hdr') and "RECIPE" not in curr_dataset.ext_hdr:
-                        curr_dataset.ext_hdr["RECIPE"] = json.dumps(recipe)
+                        if ram_heavy_bool and anchor_sctsrt is not None:
+                            # In RAM-heavy mode a sorting/filtering step (e.g.
+                            # sort_pupilimg_frames) may remove the anchor frame from the
+                            # dataset.  When that happens, promote the frame with the
+                            # highest SCTSRT in the surviving dataset to anchor so that
+                            # at least one output file will hold the full input list.
+                            frames_now = list(curr_dataset)
+                            sctsrts = {f.ext_hdr.get('SCTSRT') for f in frames_now}
+                            if anchor_sctsrt not in sctsrts and frames_now:
+                                new_anchor = max(frames_now,
+                                                 key=lambda f: f.ext_hdr.get('SCTSRT', 0))
+                                anchor_sctsrt = new_anchor.ext_hdr.get('SCTSRT')
+                                for frame in frames_now:
+                                    is_anc = (frame.ext_hdr.get('SCTSRT') == anchor_sctsrt)
+                                    _set_recipe_header(frame, recipe, prev_recipes,
+                                                       is_last_frame=is_anc)
+                            else:
+                                for frame in curr_dataset:
+                                    if "RECIPE" not in frame.ext_hdr:
+                                        _set_recipe_header(frame, recipe, prev_recipes,
+                                                           is_last_frame=(frame.ext_hdr.get('SCTSRT') == anchor_sctsrt))
+                        else:
+                            for frame in curr_dataset:
+                                if "RECIPE" not in frame.ext_hdr:
+                                    _set_recipe_header(frame, recipe, prev_recipes)
+                    elif hasattr(curr_dataset, 'ext_hdr'):
+                        # Single Image-like output (e.g. NonLinCal, KGainCal): always
+                        # (re)write recipe headers with is_last_frame=True so the
+                        # full prev_recipe chain is stored inline, even if ext_hdr was
+                        # inherited from a non-last input frame.
+                        _set_recipe_header(curr_dataset, recipe, prev_recipes,
+                                           is_last_frame=True)
 
         if not save_step:
             output_filepaths = None

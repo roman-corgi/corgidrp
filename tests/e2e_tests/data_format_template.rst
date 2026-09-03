@@ -3,6 +3,10 @@
 {1} Data Product
 ========================================
 
+**Filename Suffix:** **{4}**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_{4}.fits``.
+
 
 FITS HDU Structure
 ------------------

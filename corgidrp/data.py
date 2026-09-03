@@ -58,7 +58,7 @@ class Dataset():
         all_data (np.array): an array with all the data combined together. First dimension is always number of images
         frames (np.array): list of data objects (probably corgidrp.data.Image)
     """
-    def __init__(self, frames_or_filepaths, no_data=False, no_err=False, no_dq=False):
+    def __init__(self, frames_or_filepaths, no_data=False, no_err=False, no_dq=False, allow_inhomogeneous_frames=False):
         """
         Args:
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
@@ -66,6 +66,7 @@ class Dataset():
                 each frame will have the default loaded in (arrays of zeros).  Defaults to False.
             no_err (bool): If True, no err arrays are loaded in.  This overrides the condition concerning err in the no_data description above.  Defaults to False.
             no_dq (bool): If True, no dq arrays are loaded in.  This overrides the condition concerning dq in the no_data description above.  Defaults to False.
+            allow_inhomogeneous_frames (bool): If True, disables the creation of all_data/all_err/all_dq datacubes so the dataset can contain frames of differing dimensions. Defaults to False.
         """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
@@ -102,16 +103,25 @@ class Dataset():
         if isinstance(self.frames, list):
             self.frames = np.array(self.frames) # list of objects
 
-        # create 3-D cube of all the data
-        self.all_data = np.array([frame.data for frame in self.frames])
-        self.all_err = np.array([frame.err for frame in self.frames])
-        self.all_dq = np.array([frame.dq for frame in self.frames])
-        # do a clever thing to point all the individual frames to the data in this cube
-        # this way editing a single frame will also edit the entire datacube
-        for i, frame in enumerate(self.frames):
-            frame.data = self.all_data[i]
-            frame.err = self.all_err[i]
-            frame.dq = self.all_dq[i]
+        if allow_inhomogeneous_frames:
+            # set all_data, all_err, and all_dq to None
+            self.all_data = None
+            self.all_err = None
+            self.all_dq = None
+        else:
+            # create 3-D cube of all the data
+            self.all_data = np.array([frame.data for frame in self.frames])
+            self.all_err = np.array([frame.err for frame in self.frames])
+            self.all_dq = np.array([frame.dq for frame in self.frames])
+            # do a clever thing to point all the individual frames to the data in this cube
+            # this way editing a single frame will also edit the entire datacube
+            for i, frame in enumerate(self.frames):
+                frame.data = self.all_data[i]
+                frame.err = self.all_err[i]
+                frame.dq = self.all_dq[i]
+
+        # keep track of this to guard against calling all_data/all_err/all_dq in other places when it's none
+        self.contain_inhomogeneous_frames = allow_inhomogeneous_frames
 
     def __iter__(self):
         return self.frames.__iter__()
@@ -166,7 +176,7 @@ class Dataset():
             frame.pri_hdr['FILENAME'] = frame.filename
             frame.save(filename=filename, filedir=filedir)
 
-        if not ram_heavy_save:
+        if not ram_heavy_save and not self.contain_inhomogeneous_frames:
             # relink frames with all_data
             self.all_data = np.array([frame.data for frame in self.frames])
             self.all_err = np.array([frame.err for frame in self.frames])
