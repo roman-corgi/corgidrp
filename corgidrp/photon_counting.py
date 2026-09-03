@@ -363,10 +363,10 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         errs.append(np.max([up - mean_expected, mean_expected - low], axis=0))
         good_inds = np.where(nframes != 0)
         if dataset[0].data is None:
-            dq = np.zeros_like(mean_expected).astype(float)
+            dq = np.zeros_like(mean_expected).astype(int)
             for j in range(len(dataset)):
                 dq_temp = data.Image(dataset[j].filepath).dq 
-                dq |= dq_temp.astype(float)
+                dq = dq | dq_temp.astype(int)
         else:
             dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
         dq[good_inds] = 0 

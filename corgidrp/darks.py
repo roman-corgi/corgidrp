@@ -301,10 +301,10 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     # frames
     fittable_inds = np.where(combined_bpmap ==0)
     if dataset[0].data is None:
-        output_dq = np.zeros_like(mean_frame).astype(float)
+        output_dq = np.zeros_like(mean_frame).astype(int)
         for j in range(len(dataset)):
             dq_temp = Image(dataset[j].filepath).dq
-            output_dq |= dq_temp.astype(float)
+            output_dq = output_dq | dq_temp.astype(int)
     else:
         output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
     output_dq[fittable_inds] = 0
@@ -701,10 +701,10 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # frames
         fittable_inds = np.where(combined_bpmap != 1)
         if datasets[i][0].data is None:
-            output_dq = np.zeros_like(mean_frame).astype(float)
+            output_dq = np.zeros_like(mean_frame).astype(int)
             for j in range(len(datasets[i])):
                 dq_temp = Image(datasets[i][j].filepath).dq
-                output_dq |= dq_temp.astype(float)
+                output_dq = output_dq | dq_temp.astype(int)
         else:
             output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
         output_dq[fittable_inds] = 0
