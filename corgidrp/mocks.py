@@ -5581,7 +5581,7 @@ def get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale 
 
 def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
                             image_separation_arcsec=7.5, q_inst=0.5,u_inst=-0.1,
-                            q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03):
+                            q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03, fsmx=0, fsmy=0):
     '''
     Generate a mock L2b polarimetric dataset for polcal testing
 
@@ -5595,6 +5595,8 @@ def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
         uq_ct (float): U to Q crosstalk
         u_eff (float): U efficiency
         qu_ct (float): Q to U crosstalk
+        fsmx (float): X-axis dither position of the fast steering mirror
+        fsmy (float): Y-axis dither position of the fast steering mirror
 
     Returns:
         corgidrp.data.Dataset: The simulated L2b polarimetric dataset for polcal testing
@@ -5654,6 +5656,8 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
     mock_dataset = data.Dataset(image_list)
     for frame in mock_dataset.frames:
         frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_POL_SETUP"
+        frame.ext_hdr['FSMX'] = fsmx
+        frame.ext_hdr['FSMY'] = fsmy
 
     return mock_dataset
 
