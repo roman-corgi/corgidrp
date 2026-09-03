@@ -46,7 +46,7 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
             If True, a PC dark is built later from L2a frames rather than here.
     """
     # Use a temporary CSV to avoid issues with real CalDB
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_linespread_e2e_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_dispersion_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     if os.path.exists(tmp_caldb_csv):
         os.remove(tmp_caldb_csv)
