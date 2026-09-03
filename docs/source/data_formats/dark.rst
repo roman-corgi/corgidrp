@@ -3,6 +3,10 @@
 Dark Data Product
 ========================================
 
+**Filename Suffix:** **drk_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_drk_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

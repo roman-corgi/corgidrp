@@ -3,6 +3,10 @@
 L3 Polarimetry Analog Data Product
 ========================================
 
+**Filename Suffix:** **l3_**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_l3_.fits``.
+
 
 FITS HDU Structure
 ------------------

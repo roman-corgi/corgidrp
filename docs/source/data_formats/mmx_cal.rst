@@ -3,6 +3,10 @@
 MuellerMatrix Data Product
 ========================================
 
+**Filename Suffix:** **mmx_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_mmx_cal.fits``.
+
 
 FITS HDU Structure
 ------------------
