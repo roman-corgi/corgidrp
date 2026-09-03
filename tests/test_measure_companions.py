@@ -435,7 +435,7 @@ def test_update_companion_location():
     dummy_hdr['SNYX001'] = "5.0,522,502"  # signal, y, x
     
     dummy_data = np.zeros(FULL_SIZE_IMAGE)
-    img = Image(data_or_filepath=dummy_data, pri_hdr={}, ext_hdr=dummy_hdr.copy())
+    img = Image(data_or_filepath=dummy_data, pri_hdr=Header(), ext_hdr=dummy_hdr.copy())
     
     # Define host centers:
     old_host = (512, 512)   # full image center

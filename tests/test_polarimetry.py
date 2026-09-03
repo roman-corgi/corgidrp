@@ -706,6 +706,25 @@ def test_mueller_matrix_cal_source_pol_errors_increase_mm_err():
             os.unlink(zero_err_path)
 
 
+def test_shipped_pol_ref_file_is_valid():
+    """
+    Tests that the polarization reference file shipped with the pipeline parses and has the
+    columns generate_mueller_matrix_cal requires. This is the file used when neither an explicit
+    path nor a user-supplied file in the corgidrp config directory is available, so it must stay
+    readable even though nothing in the frozen environment can fix it.
+    """
+    shipped_pol_ref_file = os.path.join(os.path.dirname(pol.__file__), "data",
+                                        "stellar_polarization_database.csv")
+
+    assert os.path.isfile(shipped_pol_ref_file), \
+        f"shipped pol reference file is missing: {shipped_pol_ref_file}"
+
+    shipped = pd.read_csv(shipped_pol_ref_file, skipinitialspace=True)
+    for column in ("TARGET", "P", "P_err", "PA", "PA_err"):
+        assert column in shipped.columns, \
+            f"shipped pol reference file is missing required column {column}"
+
+
 def test_subtract_stellar_polarization():
     """
     Test that the subtract_stellar_polarization step function separates the input dataset by target star
@@ -826,6 +845,155 @@ def test_subtract_stellar_polarization():
     assert np.allclose(star_1_fpm_wp2_data[0] + star_1_fpm_wp2_data[1], output_dataset.frames[1].data[0] + output_dataset.frames[1].data[1])
     assert np.allclose(star_2_fpm_wp1_data[0] + star_2_fpm_wp1_data[1], output_dataset.frames[2].data[0] + output_dataset.frames[2].data[1])
     assert np.allclose(star_2_fpm_wp2_data[0] + star_2_fpm_wp2_data[1], output_dataset.frames[3].data[0] + output_dataset.frames[3].data[1])
+
+def test_subtract_stellar_polarization_mm_errors():
+    """
+    Tests that nonzero Mueller matrix errors are correctly propagated through
+    subtract_stellar_polarization, and that the function handles NaN entries
+    in the MM error array (for fixed elements) without producing NaN outputs.
+    Also checks that doubling the MM errors increases the output errors.
+    Uses 2 target stars (8 frames) to match the existing test.
+    """
+    # reuse the same mock setup as test_subtract_stellar_polarization
+    nd_mueller_matrix = np.array([
+        [0.5, 0.1, 0, 0],
+        [0.1, -0.5, 0, 0],
+        [0.05, 0.05, 0.5, 0],
+        [0, 0, 0, 0.5]
+    ])
+    system_mueller_matrix = np.array([
+        [0.9, -0.02, 0, 0],
+        [0.01, -0.8, 0, 0],
+        [0, 0, 0.8, 0.005],
+        [0, 0, -0.01, 0.9]
+    ])
+    # star_1 carries a small nonzero polarization deliberately: an exactly-unpolarized
+    # star makes the recovered Stokes U ~0, which makes the existing normalized_diff_err
+    # term divide ~0/~0 (NaN on some platforms) -- unrelated to this PR's MM-error fix.
+    star_1_pol = np.array([1, 0.01, 0.02, 0])
+    star_2_pol = np.array([1, -0.01, -0.02, 0])
+
+    star_1 = mocks.gaussian_array(amp=100) + 0.001
+    star_2 = mocks.gaussian_array(amp=150) + 0.001
+    pa_aper_deg_unocculted = 30
+    pa_aper_deg = 45
+
+    star_1_nd_pol = nd_mueller_matrix @ pol.rotation_mueller_matrix(pa_aper_deg_unocculted) @ star_1_pol
+    star_2_nd_pol = nd_mueller_matrix @ pol.rotation_mueller_matrix(pa_aper_deg_unocculted) @ star_2_pol
+    star_1_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(pa_aper_deg) @ star_1_pol
+    star_2_fpm_pol = system_mueller_matrix @ pol.rotation_mueller_matrix(pa_aper_deg) @ star_2_pol
+
+    star_1_nd_wp1_data = np.array([(pol.lin_polarizer_mueller_matrix(0)   @ star_1_nd_pol)[0] * star_1,
+                                   (pol.lin_polarizer_mueller_matrix(90)  @ star_1_nd_pol)[0] * star_1])
+    star_1_nd_wp2_data = np.array([(pol.lin_polarizer_mueller_matrix(45)  @ star_1_nd_pol)[0] * star_1,
+                                   (pol.lin_polarizer_mueller_matrix(135) @ star_1_nd_pol)[0] * star_1])
+    star_2_nd_wp1_data = np.array([(pol.lin_polarizer_mueller_matrix(0)   @ star_2_nd_pol)[0] * star_2,
+                                   (pol.lin_polarizer_mueller_matrix(90)  @ star_2_nd_pol)[0] * star_2])
+    star_2_nd_wp2_data = np.array([(pol.lin_polarizer_mueller_matrix(45)  @ star_2_nd_pol)[0] * star_2,
+                                   (pol.lin_polarizer_mueller_matrix(135) @ star_2_nd_pol)[0] * star_2])
+    star_1_fpm_wp1_data = np.array([(pol.lin_polarizer_mueller_matrix(0)   @ star_1_fpm_pol)[0] * star_1,
+                                    (pol.lin_polarizer_mueller_matrix(90)  @ star_1_fpm_pol)[0] * star_1])
+    star_1_fpm_wp2_data = np.array([(pol.lin_polarizer_mueller_matrix(45)  @ star_1_fpm_pol)[0] * star_1,
+                                    (pol.lin_polarizer_mueller_matrix(135) @ star_1_fpm_pol)[0] * star_1])
+    star_2_fpm_wp1_data = np.array([(pol.lin_polarizer_mueller_matrix(0)   @ star_2_fpm_pol)[0] * star_2,
+                                    (pol.lin_polarizer_mueller_matrix(90)  @ star_2_fpm_pol)[0] * star_2])
+    star_2_fpm_wp2_data = np.array([(pol.lin_polarizer_mueller_matrix(45)  @ star_2_fpm_pol)[0] * star_2,
+                                    (pol.lin_polarizer_mueller_matrix(135) @ star_2_fpm_pol)[0] * star_2])
+
+    prihdr, exthdr, errhdr, dqhdr = mocks.create_default_L3_headers()
+    input_list = [data.Image(d, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+                  for d in [star_1_nd_wp1_data, star_1_nd_wp2_data,
+                            star_2_nd_wp1_data, star_2_nd_wp2_data,
+                            star_1_fpm_wp1_data, star_1_fpm_wp2_data,
+                            star_2_fpm_wp1_data, star_2_fpm_wp2_data]]
+    for i in range(len(input_list)):
+        input_list[i].ext_hdr['DATALVL'] = 'L3'
+        if i % 2 == 0:
+            input_list[i].ext_hdr['DPAMNAME'] = 'POL0'
+        else:
+            input_list[i].ext_hdr['DPAMNAME'] = 'POL45'
+        if i < 4:
+            input_list[i].ext_hdr['FPAMNAME'] = 'ND225'
+            input_list[i].pri_hdr['PA_APER'] = pa_aper_deg_unocculted
+        else:
+            input_list[i].pri_hdr['PA_APER'] = pa_aper_deg
+        if i in [0, 1, 4, 5]:
+            input_list[i].pri_hdr['TARGET'] = '1'
+        else:
+            input_list[i].pri_hdr['TARGET'] = '2'
+
+    input_dataset = data.Dataset(input_list)
+    mm_prihdr, mm_exthdr, _, _ = mocks.create_default_calibration_product_headers()
+
+    # --- Run 1: zero MM errors (baseline) ---
+    sys_mm_cal_zero = data.MuellerMatrix(
+        system_mueller_matrix, pri_hdr=mm_prihdr.copy(),
+        ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[4:])
+    nd_mm_cal_zero = data.NDMuellerMatrix(
+        nd_mueller_matrix, pri_hdr=mm_prihdr.copy(),
+        ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[:4])
+    out_zero = l3_to_l4.subtract_stellar_polarization(
+        input_dataset=input_dataset.copy(),
+        system_mueller_matrix_cal=sys_mm_cal_zero,
+        nd_mueller_matrix_cal=nd_mm_cal_zero)
+
+    # --- Run 2: nonzero MM errors with NaN on fixed elements ---
+    mm_err = np.zeros((4, 4)) * np.nan
+    mm_err[1, 0] = 0.01
+    mm_err[1, 1] = 0.02
+    mm_err[1, 2] = 0.005
+    mm_err[2, 0] = 0.005
+    mm_err[2, 1] = 0.005
+    mm_err[2, 2] = 0.02
+    sys_mm_cal_err = data.MuellerMatrix(
+        system_mueller_matrix, pri_hdr=mm_prihdr.copy(),
+        ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[4:],
+        err=mm_err)
+    nd_mm_cal_err = data.NDMuellerMatrix(
+        nd_mueller_matrix, pri_hdr=mm_prihdr.copy(),
+        ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[:4],
+        err=mm_err)
+    out_err = l3_to_l4.subtract_stellar_polarization(
+        input_dataset=input_dataset.copy(),
+        system_mueller_matrix_cal=sys_mm_cal_err,
+        nd_mueller_matrix_cal=nd_mm_cal_err)
+
+    # output errors should be finite (no NaN propagation from NaN MM err elements)
+    for frame in out_err:
+        assert np.all(np.isfinite(frame.err)), \
+            "Output errors should be finite — NaN in MM err must not propagate"
+
+    # output errors with nonzero MM uncertainty should be >= zero-MM-error case
+    for f_err, f_zero in zip(out_err.frames, out_zero.frames):
+        assert np.all(f_err.err >= f_zero.err), \
+            "Output errors should increase when MM calibration errors are nonzero"
+
+    # data values (the actual subtraction) should be identical in both runs
+    for f_err, f_zero in zip(out_err.frames, out_zero.frames):
+        assert np.allclose(f_err.data, f_zero.data), \
+            "Data values should be unchanged — only errors are affected by MM err"
+
+    # --- Run 3: doubled MM errors ---
+    sys_mm_cal_err_2x = data.MuellerMatrix(
+        system_mueller_matrix, pri_hdr=mm_prihdr.copy(),
+        ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[4:],
+        err=mm_err * 2)
+    nd_mm_cal_err_2x = data.NDMuellerMatrix(
+        nd_mueller_matrix, pri_hdr=mm_prihdr.copy(),
+        ext_hdr=mm_exthdr.copy(), input_dataset=input_dataset[:4],
+        err=mm_err * 2)
+    out_err_2x = l3_to_l4.subtract_stellar_polarization(
+        input_dataset=input_dataset.copy(),
+        system_mueller_matrix_cal=sys_mm_cal_err_2x,
+        nd_mueller_matrix_cal=nd_mm_cal_err_2x)
+
+    # larger MM errors should give larger output errors
+    for f_2x, f_err in zip(out_err_2x.frames, out_err.frames):
+        assert np.all(f_2x.err >= f_err.err), \
+            "Output errors should not decrease when MM calibration errors are doubled"
+        assert np.any(f_2x.err > f_err.err), \
+            "Output errors should increase when MM calibration errors are doubled"
+
 
 def test_combine_polarization_states():
     '''

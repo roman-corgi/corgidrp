@@ -1086,7 +1086,7 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin', da
                                 gains.append(frame.ext_hdr['EMGAIN_A'])
                             else: # use commanded gain otherwise
                                 gains.append(frame.ext_hdr['EMGAIN_C'])
-                            record_gain = False
+                        record_gain = False
                     if gains[-1] == 1:
                         smallest_set_len = smallest_set_length
                 if ram_heavy:

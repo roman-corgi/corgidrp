@@ -296,7 +296,10 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     astrom_cal = data.AstrometricCalibration(astrom_cal_files[0])
 
     # check that the astrometric calibration filename is based on the last file in the input file list
-    expected_last_filename = sim_data_filelist[-1].split('_l1_')[0].split(os.path.sep)[-1]
+    filename_time_list = [f.split('_l1_')[0].split(os.path.sep)[-1].split('_')[-1] for f in sim_data_filelist] # grab the UTC time section of the filename
+    sim_data_filelist_sorted = np.array(sim_data_filelist)[np.argsort(filename_time_list)] # sort the filename list based on the UTC time
+    expected_last_filename = sim_data_filelist_sorted[-1].split('_l1_')[0].split(os.path.sep)[-1]
+
     assert astrom_cal.filename.split('l2b')[-1] == expected_last_filename + '_ast_cal.fits'
 
     # check orientation is correct within 0.05 [deg]

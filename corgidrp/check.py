@@ -806,7 +806,7 @@ invalid_keywords_default = ['FTIMEUTC', 'PROXET', 'DATETIME']
 # FILETIME is the only one calculated in merge_heades, the others are calculated elsewhere in the
 # pipeline but are included here so that they are exempt from the identical check
 calculated_value_keywords_default = (
-    ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE']
+    ['FILETIME', 'NUM_FR', 'DRPCTIME', 'DRPNFILE', 'COMMENT', 'HISTORY', 'FILENAME', 'RECIPE', 'RECIPE2', 'RECIPE3']
     + [f'FILE{i}' for i in range(100)]
 )
 any_true_keywords_default = ['OVEREXP']
@@ -1299,3 +1299,28 @@ def hdr_type_conform(orig_pri_hdr, orig_img_hdr, header_template=None):
         # otherwise, could have been '-999', which is fine (still str)
 
     return (adjusted_pri_hdr, adjusted_img_hdr)
+
+def check_uniq_keyword(dataset, keyword):
+    """
+    checks the uniqueness of a pri_hdr or ext_hdr keyword in the frames of a dataset
+    
+    Args:
+       dataset (data.Dataset): input dataset to check on
+       keyword (str): pri_hdr or ext_hdr keyword
+       
+    Returns:
+       boolean, list: True in case of an unique keyword, False in case not, additionally list of unique keywords
+    """
+    uni_hd = []
+    for frame in dataset:
+        if keyword in frame.pri_hdr:
+            uni_hd.append(frame.pri_hdr[keyword])
+        elif keyword in frame.ext_hdr:
+            uni_hd.append(frame.ext_hdr[keyword])
+        else:
+            raise AttributeError("keyword {0} not in header".format(keyword))
+    uni = False
+    if len(np.unique(uni_hd)) == 1:
+        uni = True
+ 
+    return uni, np.unique(uni_hd)
