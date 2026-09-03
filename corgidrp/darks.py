@@ -301,13 +301,10 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     # frames
     fittable_inds = np.where(combined_bpmap ==0)
     if dataset[0].data is None:
-        dq_sum = np.zeros_like(mean_frame).astype(float)
+        output_dq = np.zeros_like(mean_frame).astype(float)
         for j in range(len(dataset)):
             dq_temp = Image(dataset[j].filepath).dq
-            dq_sum += dq_temp.astype(float)
-        dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
-        output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int))
-        output_dq = output_dq.filled(0).astype(int)
+            output_dq |= dq_temp.astype(float)
     else:
         output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
     output_dq[fittable_inds] = 0
@@ -563,7 +560,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             print('The number of frames in dataset is less than 1176 frames, '
             'which is the minimum number for the analog synthesized '
             'master dark')
-    unreliable_pix_masks = []
+    #unreliable_pix_masks = [] for debugging
     for i in range(len(datasets)):
         frames = []
         bpmaps = []
@@ -583,32 +580,33 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             else: # use commanded gain otherwise
                 emgain = datasets[i].frames[0].ext_hdr['EMGAIN_C']
 
-        # check to see if certain frames should be rejected in calibration: Is the cosmic ray threshold low enough to truncate the distribution variates in the frame stacks?  If so, reject.
-        # We don't just check the mean and variance of each mean frame to save processing time (avoids mean_combine) and also b/c the mean will be skewed by cosmic rays;
-        # and even if we ignore cosmic rays like mean_combine does, if the threshold was chosen poorly, the frame mean and variance are not reliable.
-        nem = detector_params.params['NEMGAIN'] # number of gain stages in gain register
-        poisson_var = cic_fid  + dc_fid * exptime
-        # assumes no variance from FPN
-        expected_std = ENF(emgain, nem) * emgain * np.sqrt(poisson_var) 
-        expected_mean = fpn_fid + cic_fid  + dc_fid * exptime
-        cosm_thresh_used_dn = None 
-        if 'HISTORY' in datasets[i][0].ext_hdr.keys():
-            hist_str = str(datasets[i][0].ext_hdr['HISTORY'])
-            split_hist_str = hist_str.split('\n')
-            clean_hist_str = ''
-            for piece in split_hist_str:
-                clean_hist_str += piece
-            ind = clean_hist_str.find('Cosmic ray threshold of ')
-            end_ind = clean_hist_str[ind:].find('used.') #finds next instance of this, which immediately follows the number
-            if ind != -1 and end_ind != -1:
-                cosm_thresh_used_dn = float(clean_hist_str[ind+24 : ind+end_ind])
-        if cosm_thresh_used_dn is None: #if not available from HISTORY, use SAT_DN 
-            cosm_thresh_used_dn = datasets[i][0].ext_hdr['SAT_DN']
-        cosmic_thresh_used_e = cosm_thresh_used_dn * datasets[i][0].ext_hdr['KGAINPAR']
-        CR_thresholds_e = np.append(CR_thresholds_e, cosmic_thresh_used_e)
-        threshold = expected_mean + num_stds * expected_std
-        if CR_thresholds_e[i] <= threshold and CR_threshold_check:
-            continue #skips over this exptime-gain combination
+        if CR_threshold_check:
+            # check to see if certain frames should be rejected in calibration: Is the cosmic ray threshold low enough to truncate the distribution variates in the frame stacks?  If so, reject.
+            # We don't just check the mean and variance of each mean frame to save processing time (avoids mean_combine) and also b/c the mean will be skewed by cosmic rays;
+            # and even if we ignore cosmic rays like mean_combine does, if the threshold was chosen poorly, the frame mean and variance are not reliable.
+            nem = detector_params.params['NEMGAIN'] # number of gain stages in gain register
+            poisson_var = cic_fid  + dc_fid * exptime
+            # assumes no variance from FPN
+            expected_std = ENF(emgain, nem) * emgain * np.sqrt(poisson_var) 
+            expected_mean = fpn_fid + cic_fid  + dc_fid * exptime
+            cosm_thresh_used_dn = None 
+            if 'HISTORY' in datasets[i][0].ext_hdr.keys():
+                hist_str = str(datasets[i][0].ext_hdr['HISTORY'])
+                split_hist_str = hist_str.split('\n')
+                clean_hist_str = ''
+                for piece in split_hist_str:
+                    clean_hist_str += piece
+                ind = clean_hist_str.find('Cosmic ray threshold of ')
+                end_ind = clean_hist_str[ind:].find('used.') #finds next instance of this, which immediately follows the number
+                if ind != -1 and end_ind != -1:
+                    cosm_thresh_used_dn = float(clean_hist_str[ind+24 : ind+end_ind])
+            if cosm_thresh_used_dn is None: #if not available from HISTORY, use SAT_DN 
+                cosm_thresh_used_dn = datasets[i][0].ext_hdr['SAT_DN']
+            cosmic_thresh_used_e = cosm_thresh_used_dn * datasets[i][0].ext_hdr['KGAINPAR']
+            CR_thresholds_e = np.append(CR_thresholds_e, cosmic_thresh_used_e)
+            threshold = expected_mean + num_stds * expected_std
+            if CR_thresholds_e[i] <= threshold:
+                continue #skips over this exptime-gain combination
 
         EMgain_arr = np.append(EMgain_arr, emgain)
         exptime_arr = np.append(exptime_arr, exptime)
@@ -697,26 +695,23 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         weights.append((unmasked_num)) # /len(datasets[i].frames))) #not normalized per sub-stack since different sub-stacks can have different number of frames
         mean_num_good_fr.append(mean_num)
         unreliable_pix_map += pixel_mask
-        unreliable_pix_masks.append(pixel_mask)
+        #unreliable_pix_masks.append(pixel_mask) for debugging
         unfittable_pix_map += combined_bpmap
         # bitwise_or flag value for those that are masked all the way through for all
         # frames
         fittable_inds = np.where(combined_bpmap != 1)
         if datasets[i][0].data is None:
-            dq_sum = np.zeros_like(mean_frame).astype(float)
+            output_dq = np.zeros_like(mean_frame).astype(float)
             for j in range(len(datasets[i])):
                 dq_temp = Image(datasets[i][j].filepath).dq
-                dq_sum += dq_temp.astype(float)
-            dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
-            output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) 
-            output_dq = output_dq.filled(0).astype(int)
+                output_dq |= dq_temp.astype(float)
         else:
             output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
         output_dq[fittable_inds] = 0
         output_dqs.append(output_dq)
     output_dqs = np.stack(output_dqs)
     unreliable_pix_map = unreliable_pix_map.astype(int)
-    unreliable_pix_masks = np.stack(unreliable_pix_masks)
+    #unreliable_pix_masks = np.stack(unreliable_pix_masks) for debugging
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
     mean_stat_err_stack = np.stack(stat_errs)

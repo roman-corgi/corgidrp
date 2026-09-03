@@ -292,8 +292,8 @@ def test_weighting():
     # the result is a number closer to the correct value compared to the case where no appropriate weighting is used:
     assert(np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map_dq)) < 
            np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map)))
-    # and err different now that very few frames determined one of the data points
-    assert(np.nanmean(wrong_noise_maps_dq.CIC_err) != np.nanmean(wrong_noise_maps.CIC_err))
+    # and err greater now that very few frames determined one of the data points
+    assert(np.nanmean(wrong_noise_maps_dq.CIC_err) > np.nanmean(wrong_noise_maps.CIC_err))
     # demonstrate weighting through fewer frames in the erroneous sub-stacks:
     del_list = []
     for s in [s1, s2]:
@@ -312,7 +312,7 @@ def test_weighting():
     # similar logic that applied for masking via DQ above
     assert(np.abs(np.mean(CIC_image_map) - np.mean(smaller_CIC_image_map)) < 
            np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map)))
-    assert(np.nanmean(smaller_noise_maps.CIC_err) != np.nanmean(wrong_noise_maps.CIC_err))
+    assert(np.nanmean(smaller_noise_maps.CIC_err) > np.nanmean(wrong_noise_maps.CIC_err))
     
 def test_no_data():
     '''Tests that a Dataset with only metadata (and has data read in one 
@@ -344,12 +344,12 @@ def test_cosm_thresh():
 if __name__ == '__main__':
     setup_module()
 
+    test_weighting()
     test_cosm_thresh()
     test_no_data()
     test_g_gtr_1()
     test_t_gtr_0()
     test_k_gtr_0()
-    test_weighting()
     test_mean_num()
     test_expected_results_sub()
     test_sub_stack_len()
