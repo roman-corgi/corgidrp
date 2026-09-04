@@ -1,5 +1,6 @@
 # A file that holds the functions to handle polarimetry data 
 import os
+import corgidrp
 import numpy as np
 import pandas as pd
 
@@ -243,7 +244,7 @@ def generate_mueller_matrix_cal(input_dataset,
     TARGET, P, P_err, PA, PA_err
     where TARGET is the name of the target, P is the degree of polarization in percent, P_err is the error
     in the degree of polarization in percent, PA is the polarization angle in degrees, and PA_err is the
-    error in the polarization angle in degrees.
+    error in the polarization angle in degrees. Each target must appear in exactly one row.
 
     The error calculation propagates both the photometric measurement noise on the observed Stokes vectors
     and the uncertainties in the reference star polarization fraction and angle (P_err, PA_err from the
@@ -252,8 +253,12 @@ def generate_mueller_matrix_cal(input_dataset,
     Args: 
         input_dataset (corgidrp.data.Dataset): A CorgiDRP dataset consisting of stokes vectors.
             This data should be either all ND datasets or all non-ND datasets.
-        path_to_pol_ref_file (str): The path to the polarization reference file. 
-            Default is "./data/stellar_polarization_database.csv".
+        path_to_pol_ref_file (str, optional): The path to the polarization reference file.
+            If None (default), "stellar_polarization_database.csv" is looked for in the corgidrp
+            configuration directory (the directory holding corgidrp.config_filepath, normally
+            ~/.corgidrp), which allows the file to be overridden without modifying the installed
+            pipeline. If that file does not exist, the copy shipped with the pipeline in
+            ./data/stellar_polarization_database.csv is used.
         svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
     
     Returns:
@@ -263,7 +268,11 @@ def generate_mueller_matrix_cal(input_dataset,
     dataset = input_dataset.copy()
 
     if path_to_pol_ref_file is None:
-        path_to_pol_ref_file = os.path.join(os.path.dirname(__file__), "data", "stellar_polarization_database.csv")
+        user_pol_ref_path = os.path.join(os.path.dirname(corgidrp.config_filepath), "stellar_polarization_database.csv")
+        if os.path.isfile(user_pol_ref_path):
+            path_to_pol_ref_file = user_pol_ref_path
+        else:
+            path_to_pol_ref_file = os.path.join(os.path.dirname(__file__), "data", "stellar_polarization_database.csv")
 
     # check that all the data in the dataset is either ND or non-ND, by looking for ND in the FPAMNAME keyword
     nd_flags = [("ND" in data.ext_hdr["FPAMNAME"]) for data in dataset]
@@ -276,6 +285,14 @@ def generate_mueller_matrix_cal(input_dataset,
 
     # Read in the polarization reference file
     pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
+    # check the reference file has the columns this function needs, since it may be user-supplied
+    missing_columns = [col for col in ("TARGET", "P", "P_err", "PA", "PA_err") if col not in pol_ref.columns]
+    if missing_columns:
+        raise ValueError(f"Polarization reference file {path_to_pol_ref_file} is missing required column(s): {missing_columns}")
+    # a repeated target would silently resolve to whichever row happens to come first
+    duplicate_targets = pol_ref["TARGET"][pol_ref["TARGET"].duplicated()].unique().tolist()
+    if duplicate_targets:
+        raise ValueError(f"Polarization reference file {path_to_pol_ref_file} has more than one row for target(s): {duplicate_targets}")
     # extract the target names
     pol_ref_targets = pol_ref["TARGET"].tolist()
 
@@ -396,6 +413,8 @@ def generate_mueller_matrix_cal(input_dataset,
         mueller_matrix_obj = MuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
                          ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset,
                          err=mueller_matrix_err)
+
+    mueller_matrix_obj.ext_hdr.add_history(f"Pol reference file: {path_to_pol_ref_file}")
 
     return mueller_matrix_obj
 

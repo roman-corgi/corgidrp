@@ -3,6 +3,10 @@
 NDMuellerMatrix Data Product
 ========================================
 
+**Filename Suffix:** **ndm_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_ndm_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

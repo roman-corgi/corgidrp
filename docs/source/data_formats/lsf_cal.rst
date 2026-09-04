@@ -3,6 +3,10 @@
 LineSpread Data Product
 ========================================
 
+**Filename Suffix:** **lsf_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_lsf_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

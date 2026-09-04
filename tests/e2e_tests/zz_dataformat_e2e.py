@@ -1,4 +1,5 @@
 import os
+import re
 import argparse
 import difflib
 import glob
@@ -12,13 +13,47 @@ import csv
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-def generate_template(hdulist, dtype_name=None):
+# Matches the CGI filename convention checked by validate_cgi_filename():
+# cgi_VISITID(19 digits)_YYYYMMDDtHHMMSSS_SUFFIX.fits
+CGI_FILENAME_SUFFIX_PATTERN = re.compile(r'^cgi_\d{19}_\d{8}t\d{7}_(.+)\.fits$')
+
+def parse_filename_suffix(hdulist):
+    """
+    Derives the CGI filename suffix (e.g. 'l2a', 'l3_', 'bpm_cal') from the
+    filename of the FITS file backing hdulist, using the same
+    'cgi_VISITID_YYYYMMDDtHHMMSSS_suffix.fits' convention checked by
+    validate_cgi_filename().
+
+    Args:
+        hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
+
+    Returns:
+        str: the parsed filename suffix, or None if the filename is
+            unavailable or doesn't match the CGI naming convention
+    """
+    filepath = hdulist.filename()
+    if filepath is None:
+        return None
+
+    match = CGI_FILENAME_SUFFIX_PATTERN.match(os.path.basename(filepath))
+    if match is None:
+        return None
+
+    return match.group(1)
+
+def generate_template(hdulist, dtype_name=None, filename_suffix=None):
     """
     Generates an rst documentation page of the data entries
 
     Args:
         hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
         dtype_name (str): if not None, custom name to use for page title and label
+        filename_suffix (str): the CGI filename suffix used for this data product
+            (e.g. 'l2a', 'l3_', 'bpm_cal'), as validated by validate_cgi_filename.
+            If None (the default), the suffix is parsed automatically from
+            hdulist's filename via parse_filename_suffix(). If that also
+            fails (e.g. the filename doesn't follow the CGI convention), a
+            placeholder is shown instead.
 
     Returns:
         str: the rst page contents
@@ -65,7 +100,10 @@ def generate_template(hdulist, dtype_name=None):
         hdr_tables += "\n\n"
 
 
-    doc = template.format(datatype.lower(), datatype, hdu_table, hdr_tables)
+    if filename_suffix is None:
+        filename_suffix = parse_filename_suffix(hdulist)
+    suffix_display = filename_suffix if filename_suffix is not None else "N/A"
+    doc = template.format(datatype.lower(), datatype, hdu_table, hdr_tables, suffix_display)
 
     return doc
 
