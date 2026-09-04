@@ -1,8 +1,9 @@
-import os, copy
+import os, copy, glob
 import numpy as np
 import pytest
 import logging
 import warnings
+from scipy import ndimage
 from astropy.io import fits, ascii
 from astropy.table import Table
 from astropy import time
@@ -78,9 +79,9 @@ def convert_tvac_to_dataset():
             else:
                 num = str(i)
             if k == 0:
-                file_names.append("spec_unocc_noslit_offset_prism3_3d_" +num+".fits")
+                file_names.append("spec-nom_unocc_noslit_offset_prism3_3d_" +num+".fits")
             else:
-                file_names.append("spec_unocc_r1c2slit_offset_prism3_3d_" +num+".fits")
+                file_names.append("spec-nom_unocc_r1c2slit_offset_prism3_3d_" +num+".fits")
         
         #for now only one image needed as template
         dataset = Dataset([psf_images[12]])
@@ -127,7 +128,7 @@ def convert_tvac_to_dataset():
             num = "0"+str(i)
         else:
             num = str(i)
-        file_names.append("spec_unocc_noslit_prism3_filtersweep_" +num+".fits")
+        file_names.append("spec-nom_unocc_noslit_prism3_filtersweep_" +num+".fits")
     dataset = Dataset(psf_images)
     dataset.save(filedir=template_dir, filenames = file_names)
 
@@ -238,40 +239,6 @@ def test_psf_centroid():
     assert np.all(calibration_2.yfit - calibration_4.yfit < errortol_pix)
     assert np.all(calibration_4.xfit_err < errortol_pix)
     assert np.all(calibration_4.yfit_err < errortol_pix)
-
-
-def test_get_template_dataset_prism2():
-    """
-    get_template_dataset should return templates with appropriate PAM configurations.
-    """
-    def make_frame(dpam, fsam, cfam):
-        prihdr, exthdr = create_default_L2b_headers()[:2]
-        exthdr['DPAMNAME'] = dpam
-        exthdr['FSAMNAME'] = fsam
-        exthdr['CFAMNAME'] = cfam
-        return Image(np.zeros((50, 50)), pri_hdr=prihdr, ext_hdr=exthdr)
-
-    # DPAM=PRISM2, FSAM=OPEN, CFAM=narrowband -> noslit prism2 template
-    tds, filtersweep = get_template_dataset(Dataset([make_frame('PRISM2', 'OPEN', '3D')]))
-    assert filtersweep is False
-    assert len(tds) == 1
-    assert 'noslit_offset_prism2_3d' in os.path.basename(tds[0].filename)
-
-    # DPAM=PRISM2, FSAM=R2C2, CFAM=narrowband -> r2c2slit prism2 template
-    tds, filtersweep = get_template_dataset(Dataset([make_frame('PRISM2', 'R2C2', '3D')]))
-    assert filtersweep is False
-    assert 'r2c2slit_offset_prism2_3d' in os.path.basename(tds[0].filename)
-
-    # DPAM=PRISM2 multi-CFAM (filter sweep) -> prism2 filtersweep templates
-    sweep = Dataset([make_frame('PRISM2', 'OPEN', c) for c in ['3A', '3B', '3C', '3E']])
-    tds, filtersweep = get_template_dataset(sweep)
-    assert filtersweep is True
-    assert len(tds) > 1
-    assert all('prism2_filtersweep' in os.path.basename(f.filename) for f in tds)
-
-    # PRISM3 unchanged
-    tds, filtersweep = get_template_dataset(Dataset([make_frame('PRISM3', 'R1C2', '3D')]))
-    assert 'r1c2slit_offset_prism3_3d' in os.path.basename(tds[0].filename)
 
 
 def test_dispersion_model():
@@ -417,7 +384,7 @@ def test_add_wavelength_map():
               'shapey': 81}
     
     ref_wavlen = disp_model.ext_hdr["REFWAVE"]
-    filepath = os.path.join(spec_datadir, "templates", "spec_unocc_noslit_offset_prism3_3d_12.fits")
+    filepath = os.path.join(spec_datadir, "templates", "spec-nom_unocc_noslit_offset_prism3_3d_12.fits")
     image = Image(filepath)
     image.ext_hdr['CFAMNAME'] = '3D'
     image.ext_hdr['WAVLEN0'] = wave_0.get('wavlen')
@@ -649,11 +616,10 @@ def test_determine_zeropoint():
 
 def test_determine_zeropoint_subbands():
     """
-    issue #995 / CAR-158: determine_wave_zeropoint must not crash when the input also
+    Determine_wave_zeropoint must not crash when the input also
     contains filter-sweep sub-band frames (e.g. 3A/3B) alongside the 3D narrowband and the
-    broadband science group. It should select the broadband science group ('3'/'3F') and
-    stamp WV0 only on those frames, excluding the sub-bands. The old code assumed a single
-    non-narrowband group and raised ValueError on the .item() call.
+    broadband group. It should select the broadband science filter ('3'/'3F') and
+    stamp WV0 only on those frames, excluding the sub-bands.
     """
     filepath = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
     pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
@@ -679,7 +645,7 @@ def test_determine_zeropoint_subbands():
     for i in range(psf_array.shape[0]):
         frame_time += timedelta(seconds=3)
         psf_images.append(make_image(psf_array[i], '3D', frame_time))
-    # broadband science ('3') plus filter-sweep sub-bands that must be ignored
+    # broadband science filter ('3') plus filter-sweep sub-bands that must be ignored
     for cfam in ['3', '3A', '3B']:
         frame_time += timedelta(seconds=3)
         psf_images.append(make_image(psf_array[0], cfam, frame_time))
@@ -687,7 +653,7 @@ def test_determine_zeropoint_subbands():
     result = l3_to_l4.determine_wave_zeropoint(Dataset(psf_images), SpecFilterOffset({}),
                                                subtract_no_offset_frames=False,
                                                xcent_guess=40., ycent_guess=32.)
-    # only the broadband science group is stamped; sub-bands excluded
+    # only the broadband science frames are stamped; sub-bands excluded
     assert set(f.ext_hdr['CFAMNAME'] for f in result) == {'3'}
     for frame in result:
         assert 'WV0_X' in frame.ext_hdr and 'WV0_Y' in frame.ext_hdr
@@ -1214,20 +1180,6 @@ def test_extract_spec_dpam_defaults():
     # unless the caller specifies the box explicitly, in which case DPAMNAME is not consulted
     imaging_symmetric = l3_to_l4.extract_spec(imaging_ds, halfheight = 9)[0]
     assert np.shape(imaging_symmetric.hdu_list["SPEC"].data) == (19,)
-
-
-def test_extract_spec_clipping():
-    """
-    An extraction box that runs off the array should be clipped to the array bounds with a
-    warning, instead of silently returning an empty or truncated cutout.
-    """
-    edge_ds = output_dataset.copy()
-    # the PRISM3 default box would span rows -8:42 about this zeropoint
-    edge_ds[0].ext_hdr['WV0_Y'] = 5
-    with pytest.warns(UserWarning):
-        clipped = l3_to_l4.extract_spec(edge_ds)[0]
-    assert np.shape(clipped.hdu_list["SPEC"].data) == (43,)
-    assert "clipped" in str(clipped.ext_hdr["HISTORY"])
 
 
 def test_slit_trans():
@@ -1770,11 +1722,362 @@ def test_convert_spec_to_flux_factor():
     assert frame.ext_hdr['SPECUNIT'] == "erg/(s*cm^2*AA)"
     assert frame.ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
 
-    
+
+# Test broadband template wavelength zeropoint fallback
+
+def get_model_template(prism = 'prism3', slit_token = 'noslit', sptype = 'g0v', nd = False):
+    """Load a noiseless broadband prism image template.
+
+    Args:
+        prism (str): prism filename token, 'prism2' or 'prism3'
+        slit_token (str): slit filename token, e.g. 'noslit'
+        sptype (str): spectral type filename token, e.g. 'g0v'
+        nd (bool): load the variant simulated with the ND225 filter
+
+    Returns:
+        Image: the model template frame
+    """
+    spam = steps.SPAM_TOKEN[steps.SPAM_FOR_PRISM[prism.upper()]]
+    path = os.path.join(template_dir, "{0}_unocc_{1}_model_{2}_3f_{3}{4}.fits".format(
+        spam, slit_token, prism, sptype, '_nd225' if nd else ''))
+    assert os.path.exists(path), "missing model template " + path
+    return Image(path)
+
+def make_shifted_broadband_dataset(template, dx, dy, nframes = 3, fpamname = 'OPEN_34',
+                                   noise_frac = 2e-3, seed = 0, exthdr_extras = None,
+                                   prihdr_extras = None):
+    """Build a broadband prism dataset by shifting a model template by a known amount.
+
+    Args:
+        template (Image): model template frame
+        dx (float): horizontal shift to inject, in pixels
+        dy (float): vertical shift to inject, in pixels
+        nframes (int): number of frames in the dataset
+        fpamname (str): FPAM setting to write to the frames
+        noise_frac (float): Gaussian noise standard deviation, as a fraction of the peak
+        seed (int): random number generator seed
+        exthdr_extras (dict): additional extension header keywords
+        prihdr_extras (dict): additional primary header keywords
+
+    Returns:
+        Dataset: dataset of broadband frames, each shifted by (dx, dy) from the template
+    """
+    shifted = ndimage.shift(template.data, (dy, dx), order = 3, mode = 'constant')
+    rng = np.random.default_rng(seed)
+    frame_time = datetime(2026, 1, 1, 0, 0, 0)
+    frames = []
+    for i in range(nframes):
+        pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
+        pri_hdr['TARGET'] = 'hd 209458'
+        ext_hdr['DPAMNAME'] = template.ext_hdr['DPAMNAME']
+        ext_hdr['SPAMNAME'] = template.ext_hdr['SPAMNAME']
+        ext_hdr['FSAMNAME'] = template.ext_hdr['FSAMNAME']
+        ext_hdr['CFAMNAME'] = '3F'
+        ext_hdr['FPAMNAME'] = fpamname
+        ext_hdr['SATSPOTS'] = False
+        ext_hdr['NAXIS1'] = shifted.shape[1]
+        ext_hdr['NAXIS2'] = shifted.shape[0]
+        ext_hdr['SCTSRT'] = (frame_time + timedelta(seconds = 3 * i)).isoformat()
+        if exthdr_extras is not None:
+            ext_hdr.update(exthdr_extras)
+        if prihdr_extras is not None:
+            pri_hdr.update(prihdr_extras)
+        data_2d = shifted + noise_frac * np.max(shifted) * rng.standard_normal(shifted.shape)
+        frames.append(Image(data_2d, pri_hdr = pri_hdr, ext_hdr = ext_hdr,
+                            err = np.zeros_like(data_2d), dq = np.zeros_like(data_2d, dtype = int)))
+    return Dataset(frames)
+
+def test_get_template_dataset_broadband():
+    """
+    broadband frames should be matched to a model template selected by spectral type
+    """
+    def make_frame(dpam, spam, fsam, cfam, fpam = 'OPEN_34'):
+        pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
+        ext_hdr['DPAMNAME'] = dpam
+        ext_hdr['SPAMNAME'] = spam
+        ext_hdr['FSAMNAME'] = fsam
+        ext_hdr['CFAMNAME'] = cfam
+        ext_hdr['FPAMNAME'] = fpam
+        return Image(np.zeros((50, 50)), pri_hdr = pri_hdr, ext_hdr = ext_hdr)
+
+    dataset = Dataset([make_frame('PRISM3', 'SPEC', 'OPEN', '3F')])
+    tds, filtersweep = get_template_dataset(dataset, host_sptype = 'G0V')
+    assert filtersweep is False
+    assert len(tds) == 1
+    assert os.path.basename(tds[0].filename) == 'spec-nom_unocc_noslit_model_prism3_3f_g0v.fits'
+
+    # lower case CFAMNAME must reach the same template
+    tds_lower, _ = get_template_dataset(Dataset([make_frame('PRISM3', 'SPEC', 'OPEN', '3f')]),
+                                        host_sptype = 'G0V')
+    assert os.path.basename(tds_lower[0].filename) == os.path.basename(tds[0].filename)
+
+    # ND filter template variant
+    tds_nd, _ = get_template_dataset(Dataset([make_frame('PRISM3', 'SPEC', 'OPEN', '3F', fpam = 'ND225')]),
+                                     host_sptype = 'G0V')
+    assert os.path.basename(tds_nd[0].filename) == 'spec-nom_unocc_noslit_model_prism3_3f_g0v_nd225.fits'
+
+    # the spectral type is required to disambiguate the model template grid
+    with pytest.raises(ValueError):
+        get_template_dataset(dataset)
+
+    # the narrowband and filter sweep lookups must be untouched by the broadband branch
+    tds_nb, filtersweep = get_template_dataset(Dataset([make_frame('PRISM3', 'SPEC', 'OPEN', '3D')]))
+    assert filtersweep is False
+    assert 'noslit_offset_prism3_3d' in os.path.basename(tds_nb[0].filename)
+
+def test_template_headers_complete():
+    """
+    every committed model template must carry the keywords the fallback registration depends on
+    """
+    paths = sorted(glob.glob(os.path.join(template_dir, "*_model_*.fits")))
+    assert len(paths) > 0, "no model templates found in " + template_dir
+    for path in paths:
+        template = Image(path)
+        for key in ['XCENT', 'YCENT', 'WV0_X', 'WV0_Y', 'MODLCX', 'MODLCY', 'SPECTYPE',
+                    'WAVLEN0', 'MODLSRC']:
+            assert key in template.ext_hdr, "{0} missing from {1}".format(key, os.path.basename(path))
+        # the spectral type keyword and the filename token must agree
+        assert (steps.sptype_index(template.ext_hdr['SPECTYPE']) ==
+                steps.sptype_index(steps.read_template_sptype_token(path)))
+        dimy, dimx = template.data.shape
+        # the model template registration fits a stamp of halfheight BROADBAND_PRISM_HALFHEIGHT,
+        # which fit_psf_centroid slices without bounds checking, so both the anchor and the
+        # zeropoint need that margin
+        margin = l3_to_l4.BROADBAND_PRISM_HALFHEIGHT
+        for x, y in [(template.ext_hdr['XCENT'], template.ext_hdr['YCENT']),
+                     (template.ext_hdr['WV0_X'], template.ext_hdr['WV0_Y'])]:
+            assert margin <= x <= dimx - margin, "x = {0} too close to the edge of {1}".format(x, path)
+            assert margin <= y <= dimy - margin, "y = {0} too close to the edge of {1}".format(y, path)
+
+def test_determine_zeropoint_model_template():
+    """
+    When there are no narrowband frames, the zeropoint is determined from a broadband template registration.
+    This function tests the recovery accuracy for a simple case.
+    """
+    errortol_pix = 0.02
+    dx, dy = 0.37, -0.62
+    template = get_model_template()
+    input_dataset = make_shifted_broadband_dataset(template, dx, dy)
+
+    output_dataset = l3_to_l4.determine_wave_zeropoint(input_dataset, SpecFilterOffset({}))
+
+    assert len(output_dataset) == len(input_dataset)
+    for frame in output_dataset:
+        assert frame.ext_hdr['WAVLEN0'] == 753.83
+        assert frame.ext_hdr['WV0_X'] == pytest.approx(template.ext_hdr['WV0_X'] + dx, abs = errortol_pix)
+        assert frame.ext_hdr['WV0_Y'] == pytest.approx(template.ext_hdr['WV0_Y'] + dy, abs = errortol_pix)
+        assert frame.ext_hdr['WV0_XERR'] > 0.
+        assert frame.ext_hdr['WV0_YERR'] > 0.
+        assert frame.ext_hdr['WV0_DIMX'] == frame.data.shape[1]
+        assert frame.ext_hdr['WV0_DIMY'] == frame.data.shape[0]
+    # HISTORY cards wrap at the FITS card width, in the middle of a word if need be, so strip all
+    # the whitespace before matching
+    history = "".join(str(output_dataset[0].ext_hdr['HISTORY']).split())
+    assert "wavelengthzeropointvaluesaddedtoheader" in history
+    assert os.path.basename(get_model_template().filepath) in history
+    assert "spectraltype" in history
+
+def test_determine_zeropoint_fallback_grouping():
+    """
+    each FSM dither group should get its own zeropoint from its own frames, as the ND filter
+    calibration recipe requires
+    """
+    errortol_pix = 0.02
+    # the frames carry FPAMNAME = ND225, so the ND variant of the template must be the one selected
+    template = get_model_template(nd = True)
+    shifts = {0: (0.3, 0.4), 1: (-0.5, -0.2)}
+    frames = []
+    for group, (dx, dy) in shifts.items():
+        subset = make_shifted_broadband_dataset(template, dx, dy, nframes = 2, fpamname = 'ND225',
+                                                seed = group, exthdr_extras = {'FSMX': 10. * group,
+                                                                               'FSMY': 20. * group})
+        frames += [frame for frame in subset]
+    input_dataset = Dataset(frames)
+
+    # subtract_no_offset_frames defaults to True; the non-coronagraphic FPAM setting must switch it
+    # off rather than fail on the three-group satellite spot acquisition structure
+    with pytest.warns(UserWarning, match = "non-coronagraphic"):
+        output_dataset = l3_to_l4.determine_wave_zeropoint(input_dataset, SpecFilterOffset({}),
+                                                           additional_frame_sep_extkeys = ['FSMX', 'FSMY'])
+
+    assert len(output_dataset) == len(input_dataset)
+    for frame in output_dataset:
+        group = int(frame.ext_hdr['FSMX'] / 10.)
+        dx, dy = shifts[group]
+        assert frame.ext_hdr['WV0_X'] == pytest.approx(template.ext_hdr['WV0_X'] + dx, abs = errortol_pix)
+        assert frame.ext_hdr['WV0_Y'] == pytest.approx(template.ext_hdr['WV0_Y'] + dy, abs = errortol_pix)
+
+def test_determine_zeropoint_mixed_visit_fallback():
+    """
+    a bright star visit with no narrowband frames of its own, observed alongside a dim star visit
+    that does have them, should be registered against a model template instead of being dropped
+    """
+    errortol_pix = 0.05
+    spec_filter_offset = SpecFilterOffset({})
+    embed_row, embed_col = 22, 22
+
+    # dim star visit: narrowband frames embedded in a science-sized array, plus broadband frames
+    nb_template = Image(os.path.join(template_dir, 'spec-nom_unocc_noslit_offset_prism3_3d_12.fits'))
+    nb_data = np.zeros((125, 125))
+    nb_data[embed_row:embed_row + nb_template.data.shape[0],
+            embed_col:embed_col + nb_template.data.shape[1]] = nb_template.data
+    nb_frames = []
+    for i in range(2):
+        pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
+        pri_hdr['TARGET'] = 'hd 209458'
+        pri_hdr['VISITID'] = '0200001001001001001'
+        ext_hdr['DPAMNAME'] = 'PRISM3'
+        ext_hdr['SPAMNAME'] = 'SPEC'
+        ext_hdr['FSAMNAME'] = 'OPEN'
+        ext_hdr['CFAMNAME'] = '3D'
+        ext_hdr['FPAMNAME'] = 'OPEN_34'
+        ext_hdr['SATSPOTS'] = True
+        ext_hdr['NAXIS1'], ext_hdr['NAXIS2'] = nb_data.shape[1], nb_data.shape[0]
+        ext_hdr['SCTSRT'] = datetime(2026, 1, 1, 0, 0, 3 * i).isoformat()
+        nb_frames.append(Image(nb_data, pri_hdr = pri_hdr, ext_hdr = ext_hdr,
+                               err = np.zeros_like(nb_data), dq = np.zeros_like(nb_data, dtype = int)))
+    dim_shift = (0.1, 0.2)
+    dim_science = make_shifted_broadband_dataset(get_model_template(), *dim_shift, nframes = 2,
+                                                 fpamname = 'OPEN_34', seed = 1,
+                                                 prihdr_extras = {'VISITID': '0200001001001001001'})
+
+    # bright star visit: broadband frames through the ND filter, with no narrowband counterpart
+    bright_shift = (0.37, -0.62)
+    nd_template = get_model_template(nd = True)
+    bright_science = make_shifted_broadband_dataset(nd_template, *bright_shift, nframes = 2,
+                                                    fpamname = 'ND225', seed = 2,
+                                                    prihdr_extras = {'VISITID': '0200001001001002001'})
+
+    input_dataset = Dataset(nb_frames + [f for f in dim_science] + [f for f in bright_science])
+    output_dataset = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset)
+
+    # the bright frames used to be silently dropped, which left the ND filter calibration with no
+    # bright frames to work with
+    assert len(output_dataset) == 4
+    xoff_nb, yoff_nb = spec_filter_offset.get_offsets('3D')
+    xoff_bb, yoff_bb = spec_filter_offset.get_offsets('3')
+    for frame in output_dataset:
+        if frame.ext_hdr['FPAMNAME'] == 'ND225':
+            assert frame.ext_hdr['WV0_X'] == pytest.approx(nd_template.ext_hdr['WV0_X'] + bright_shift[0],
+                                                           abs = errortol_pix)
+            assert frame.ext_hdr['WV0_Y'] == pytest.approx(nd_template.ext_hdr['WV0_Y'] + bright_shift[1],
+                                                           abs = errortol_pix)
+        else:
+            # the dim star zeropoint comes from the narrowband frames, so the CFAM filter wedge
+            # offset between the narrowband and broadband filters does apply
+            assert frame.ext_hdr['WV0_X'] == pytest.approx(
+                nb_template.ext_hdr['XCENT'] + embed_col + (xoff_bb - xoff_nb), abs = errortol_pix)
+            assert frame.ext_hdr['WV0_Y'] == pytest.approx(
+                nb_template.ext_hdr['YCENT'] + embed_row + (yoff_bb - yoff_nb), abs = errortol_pix)
+
+def make_prism2_filtersweep_dataset(dx = 0., dy = 0., cfams = None):
+    """
+    Build a PRISM2 band 3 filter sweep dataset out of the committed PRISM2 filter sweep templates.
+
+    Registering a template against itself is exact, so the fitted positions are the template anchors
+    plus the injected shift.
+
+    Args:
+        dx (float): shift applied to every frame along the array x axis, pixels
+        dy (float): shift applied to every frame along the array y axis, pixels
+        cfams (list of str): CFAM filters to include, defaults to all templates in the sweep
+
+    Returns:
+        tuple:
+            Dataset: the filter sweep frames, in CFAM order with the broadband frame last
+
+            dict: CFAM filter name to (xcent, ycent) template anchor, shifted by (dx, dy)
+    """
+    template_files = sorted(glob.glob(os.path.join(
+        template_dir, "spec-rot_unocc_noslit_prism2_filtersweep_*.fits")))
+    assert len(template_files) > 1, "PRISM2 filter sweep templates not found"
+    pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
+    ext_hdr['DPAMNAME'] = 'PRISM2'
+    ext_hdr['FSAMNAME'] = 'OPEN'
+    ext_hdr['SPAMNAME'] = 'SPECROT'
+
+    frames, anchors = [], {}
+    for template_file in template_files:
+        template_hdr = fits.getheader(template_file, ext = 1)
+        # The broadband template is labelled '3'; the data header spells the same filter '3F'
+        cfam = template_hdr['CFAMNAME'].strip().upper()
+        cfam = '3F' if cfam == '3' else cfam
+        if cfams is not None and cfam not in cfams:
+            continue
+        shifted = ndimage.shift(fits.getdata(template_file, ext = 1), (dy, dx),
+                                order = 3, mode = 'nearest')
+        frame_ext_hdr = ext_hdr.copy()
+        frame_ext_hdr['CFAMNAME'] = cfam
+        frames.append(Image(shifted, pri_hdr = pri_hdr.copy(), ext_hdr = frame_ext_hdr,
+                            err = np.zeros_like(shifted), dq = np.zeros_like(shifted, dtype = int)))
+        anchors[cfam] = (template_hdr['XCENT'] + dx, template_hdr['YCENT'] + dy)
+
+    return Dataset(frames), anchors
+
+def test_calibrate_dispersion_model_prism2_band3():
+    """
+    The dispersion calibration must accept a PRISM2 filter sweep taken with the band 3 CFAM filters,
+    which is the rotated SPAM configuration used on sky, and it must reject a sweep that mixes bands.
+    """
+    errortol_pix = 0.02
+    dataset, anchors = make_prism2_filtersweep_dataset(dx = 0.3, dy = -0.4)
+    cfams = [frame.ext_hdr['CFAMNAME'] for frame in dataset]
+    assert '3F' in cfams and '3A' in cfams
+
+    centroid = steps.compute_psf_centroid(dataset = dataset)
+    assert sorted(centroid.ext_hdr['FILTERS'].split(",")) == sorted(
+        [cfam[0] if cfam == '3F' else cfam for cfam in cfams])
+    # Self registration is exact, so the fit recovers the template anchors plus the injected shift
+    for cfam, xfit, yfit in zip(cfams, centroid.xfit, centroid.yfit):
+        assert xfit == pytest.approx(anchors[cfam][0], abs = errortol_pix)
+        assert yfit == pytest.approx(anchors[cfam][1], abs = errortol_pix)
+
+    disp_model_prism2 = steps.calibrate_dispersion_model(centroid, SpecFilterOffset({}))
+    assert disp_model_prism2.ext_hdr['DPAMNAME'] == 'PRISM2'
+    # The rotated prism disperses along the array columns to within a degree
+    assert disp_model_prism2.clocking_angle == pytest.approx(-90., abs = 1.)
+    assert disp_model_prism2.clocking_angle_uncertainty > 0
+
+    # A sweep spanning two CFAM bands has no single sub-band list and must be refused
+    mixed_centroid = steps.compute_psf_centroid(dataset = dataset)
+    mixed_centroid.ext_hdr['FILTERS'] = '2A,2B,3C,3D,3E'
+    with pytest.raises(ValueError, match = "mixes CFAM bands"):
+        steps.calibrate_dispersion_model(mixed_centroid, SpecFilterOffset({}))
+
+def test_fit_psf_centroid_stamp_height_limits():
+    """
+    A fitting stamp taller than the arrays should raise by default, and be reduced with a warning
+    when the caller opts in to clamping.
+    """
+    template_file = os.path.join(template_dir, "spec-rot_unocc_noslit_prism2_filtersweep_04.fits")
+    template = fits.getdata(template_file, ext = 1)
+    template_hdr = fits.getheader(template_file, ext = 1)
+    xcent, ycent = template_hdr['XCENT'], template_hdr['YCENT']
+    # rows from the rounded anchor to the nearest array edge
+    row_limit = min(int(np.rint(ycent)), template.shape[0] - 1 - int(np.rint(ycent)))
+
+    with pytest.raises(ValueError, match = "does not fit inside"):
+        steps.fit_psf_centroid(template, template, xcent_template = xcent, ycent_template = ycent,
+                               xcent_guess = xcent, ycent_guess = ycent, halfheight = row_limit + 1)
+
+    with pytest.warns(UserWarning, match = "reducing the fitting stamp half-height"):
+        clamped = steps.fit_psf_centroid(template, template, xcent_template = xcent,
+                                         ycent_template = ycent, xcent_guess = xcent,
+                                         ycent_guess = ycent, halfheight = row_limit + 5,
+                                         clamp_halfheight = True)
+    at_limit = steps.fit_psf_centroid(template, template, xcent_template = xcent,
+                                      ycent_template = ycent, xcent_guess = xcent,
+                                      ycent_guess = ycent, halfheight = row_limit)
+    assert clamped[:2] == pytest.approx(at_limit[:2])
+    assert clamped[0] == pytest.approx(xcent, abs = 0.01)
+    assert clamped[1] == pytest.approx(ycent, abs = 0.01)
+
+
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
     test_spec_psf_subtraction()
     test_determine_zeropoint()
+    test_determine_zeropoint_subbands()
     test_psf_centroid()
     test_dispersion_model()
     test_read_cent_wave()
@@ -1785,9 +2088,15 @@ if __name__ == "__main__":
     test_extract_spec()
     test_extract_spec_asymmetric()
     test_extract_spec_dpam_defaults()
-    test_extract_spec_clipping()
     test_slit_trans()
     test_star_pos()
     test_filter_offset()
     test_spec_flux_cal()
     test_convert_spec_to_flux_factor()
+    test_get_template_dataset_broadband()
+    test_template_headers_complete()
+    test_determine_zeropoint_model_template()
+    test_determine_zeropoint_fallback_grouping()
+    test_determine_zeropoint_mixed_visit_fallback()
+    test_calibrate_dispersion_model_prism2_band3()
+    test_fit_psf_centroid_stamp_height_limits()

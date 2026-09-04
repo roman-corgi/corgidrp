@@ -9,7 +9,8 @@ L1 -> L2a  (l1_to_l2a_basic.json)
    -> L2b  (l2a_to_l2b_spec.json)
    -> SpecFluxCal cal product  (l2b_to_spec_flux.json)
         steps: divide_by_exptime
-               determine_wave_zeropoint   (needs 3D + 3F frames)
+               determine_wave_zeropoint   (3D + 3F frames, or 3F frames alone
+                                           registered against a model template)
                add_wavelength_map         (needs DispersionModel from CalDB)
                extract_spec
                spec_fluxcal
@@ -24,6 +25,9 @@ a single dark can be subtracted.
        VISTYPE  = CGIVST_CAL_ABSFLUX_FAINT
        TARGET   = dim CALSPEC star "tyc 4424-1286-1"
        Purpose  : wavelength zero-point via determine_wave_zeropoint
+       Optional : test_spec_fluxcal_broadband_only_e2e leaves these frames out 
+                  and estimates the zero-point by registering the broadband frames 
+                  against a noiseless template
 
   2. Broadband dim-star frames   (CFAMNAME=3F, FPAMNAME=OPEN_34, DPAMNAME=PRISM3)
        VISTYPE  = CGIVST_CAL_ABSFLUX_FAINT
@@ -93,6 +97,37 @@ import corgidrp.spec as spec
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def select_l1_files(l1_datadir, cfamname=None, target=None, limit=None):
+    """
+    List the L1 files in a directory, optionally filtered by CFAM filter and target star.
+
+    Args:
+        l1_datadir (str): directory containing L1 FITS files
+        cfamname (str): if given, keep only frames with this CFAMNAME
+        target (str): if given, keep only frames with this TARGET
+        limit (int): if given, keep only the first this many files
+
+    Returns:
+        list of str: sorted filepaths of the selected L1 files
+    """
+    filelist = sorted(
+        os.path.join(l1_datadir, f)
+        for f in os.listdir(l1_datadir)
+        if f.endswith('l1_.fits') or f.endswith('l1.fits')
+    )
+    if cfamname is not None:
+        filelist = [f for f in filelist
+                    if fits.getheader(f, ext=1).get('CFAMNAME', '').upper() == cfamname.upper()]
+    if target is not None:
+        filelist = [f for f in filelist
+                    if fits.getheader(f, ext=0).get('TARGET', '').lower() == target.lower()]
+    if limit is not None:
+        filelist = filelist[:limit]
+    if not filelist:
+        raise FileNotFoundError(f"No matching L1 files found in {l1_datadir}")
+    return filelist
+
 
 def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
     """
@@ -248,23 +283,25 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
 # Test 
 # ---------------------------------------------------------------------------
 
-def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
+def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir, l1_filelist=None):
     """
     Run and validate the spectroscopy flux calibration pipeline.
 
     1. Build a temporary CalDB from detector files + corgidrp default
-       spectroscopy calibrations 
-    2. L1 -> SpecFluxCal  via walker 
+       spectroscopy calibrations
+    2. L1 -> SpecFluxCal  via walker
     3. Validate the output SpecfluxCal product (shape, wavelength range,
        values, header keywords)
 
     Args:
     l1_datadir (str): Directory containing L1 FITS files
     processed_cal_path (str): Directory containing detector calibration files
-    outputdir (str): Root output directory.  Intermediate L2a/L2b files and the 
+    outputdir (str): Root output directory.  Intermediate L2a/L2b files and the
         final SpecFluxCal product are written here.
+    l1_filelist (list of str): L1 files to process. Defaults to the first five files in
+        l1_datadir.
 
-    Returns: 
+    Returns:
     spec_flux_cal (corgidrp.data.SpecFluxCal): Spectroscopy flux calibration 
         product with:
             .wavelengths  — wavelength grid (nm), shape (M,)
@@ -283,19 +320,14 @@ def run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir):
     # ------------------------------------------------------------------
     # 2. Prepare L1 input files (only 5 of the faint star without ND filter)
     # ------------------------------------------------------------------
-    l1_filelist = sorted(
-        os.path.join(l1_datadir, f)
-        for f in os.listdir(l1_datadir)
-        if f.endswith('l1_.fits') or f.endswith('l1.fits')
-    )[0:5]
-    if not l1_filelist:
-        raise FileNotFoundError(f"No L1 files found in {l1_datadir}")
+    if l1_filelist is None:
+        l1_filelist = select_l1_files(l1_datadir, limit=5)
 
     print(f"Found {len(l1_filelist)} L1 input files.")
 
-    # ------------------------------------------------------------------ 
-    # 3. L1 ->SpecFluxCal                                                        
-    # ------------------------------------------------------------------ 
+    # ------------------------------------------------------------------
+    # 3. L1 ->SpecFluxCal
+    # ------------------------------------------------------------------
     print("Running L1 -> SpecFluxCal")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
@@ -412,6 +444,31 @@ def test_spec_fluxcal_e2e(e2edata_path, e2eoutput_path):
     os.makedirs(outputdir)
 
     run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir)
+
+
+@pytest.mark.e2e
+def test_spec_fluxcal_broadband_only_e2e(e2edata_path, e2eoutput_path):
+    """
+    Pytest wrapper for the spectroscopy flux calibration E2E test with no narrowband frames.
+
+    Args:
+        e2edata_path (str): Path to the E2E test data
+        e2eoutput_path (str): Path to the E2E test output
+
+    """
+    l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
+    outputdir = os.path.join(e2eoutput_path, "l1_to_spec_fluxcal_broadband_only_e2e")
+
+    if os.path.exists(outputdir):
+        shutil.rmtree(outputdir)
+    os.makedirs(outputdir)
+
+    # Broadband frames of the dim star only
+    l1_filelist = select_l1_files(l1_datadir, cfamname='3F', target='tyc 4424-1286-1')
+    # The catalog spectral type of the target is A4V, so the zeropoint registration falls back to
+    # the nearest available model template, a0v.
+    run_spec_flux_e2e(l1_datadir, processed_cal_path, outputdir, l1_filelist=l1_filelist)
 
 
 # ---------------------------------------------------------------------------
