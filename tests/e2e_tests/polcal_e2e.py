@@ -43,14 +43,29 @@ def run_polcal_test(output_dir, do_ND=False,
 #To test this we need this catalog with the same values as the test data also in corgidrp/data/stellar_polarization_database.csv
     path_to_pol_ref_file = os.path.join(current_file_path, "..","test_data","stellar_polarization_database.csv")
 
-    
-    mock_dataset = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file,
+    # create a mock dataset with two dithers
+    mock_dataset_dither_1 = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file,
                                            q_inst=q_instrumental_polarization,
                                            u_inst=u_instrumental_polarization,
                                            q_eff=q_efficiency,
                                            u_eff=u_efficiency,
                                            uq_ct=uq_cross_talk,
-                                           qu_ct=qu_cross_talk)
+                                           qu_ct=qu_cross_talk,
+                                           fsmx=-20,
+                                           fsmy=20)
+
+    mock_dataset_dither_2 = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file,
+                                               q_inst=q_instrumental_polarization,
+                                               u_inst=u_instrumental_polarization,
+                                               q_eff=q_efficiency,
+                                               u_eff=u_efficiency,
+                                               uq_ct=uq_cross_talk,
+                                               qu_ct=qu_cross_talk,
+                                               fsmx=20,
+                                               fsmy=-20)
+
+    # combine the two dither datasets
+    mock_dataset = Dataset(list(mock_dataset_dither_1.frames) + list(mock_dataset_dither_2.frames))
     
     frames = [frame for frame in mock_dataset]
     if do_ND: 
