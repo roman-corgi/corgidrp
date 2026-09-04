@@ -1218,8 +1218,9 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
                           "spectroscopy observation, setting subtract_no_offset_frames = False".format(fpamname))
             subtract_no_offset_frames = False
 
-    # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
-    narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
+    # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint.
+    # Split the dataset into one sub-dataset per CFAM filter; band holds the corresponding filter names.
+    cfam_datasets, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
     band = np.array([s.upper() for s in band])
     with_science = True
     use_model_template = False
@@ -1237,15 +1238,16 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         use_model_template = True
         sci_index = _select_broadband_group(band)
         # The broadband frames serve as both the zeropoint frames and the science frames.
-        sat_dataset = narrow_dataset[sci_index]
+        sat_dataset = cfam_datasets[sci_index]
         sci_dataset = sat_dataset
         nb_filter = "3D" if band[sci_index].startswith("3") else "2C"
     elif len(band) < 2:
+        # Only one filter group, and it is the narrowband one, so there are no science frames
         with_science = False
-        print("No science frames found in input dataset")
+        print("Narrowband frames only, no separate science filter group in input dataset")
 
     if narrowband_present and "3D" in band:
-        sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
+        sat_dataset = cfam_datasets[int(np.nonzero(band == "3D")[0].item())]
         if with_science:
             non_narrowband_bands = band[band != "3D"]
             if len(non_narrowband_bands) == 1:
@@ -1255,11 +1257,11 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
                 # Several non-narrowband groups present, e.g. the filter-sweep sub-bands
                 # 3A/3B/3C/3E alongside the broadband filter. Select only the broadband filter.
                 sci_index = _select_broadband_group(band)
-            sci_dataset = narrow_dataset[sci_index]
+            sci_dataset = cfam_datasets[sci_index]
     elif narrowband_present:
-        sat_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
+        sat_dataset = cfam_datasets[int(np.nonzero(band == "2C")[0].item())]
         if with_science:
-            sci_dataset = narrow_dataset[int(np.nonzero(band != "2C")[0].item())]
+            sci_dataset = cfam_datasets[int(np.nonzero(band != "2C")[0].item())]
 
     # Model templates used, as (file name, spectral type) pairs, for the processing history
     model_templates_used = []
@@ -1278,9 +1280,14 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     all_science_frames = []
     matched_sci_keywords = []
 
+    # One zeropoint fit per group of zeropoint frames, on every path: the narrowband satellite spot
+    # frames of an occulted star when they are present, and otherwise the unocculted broadband
+    # frames themselves, which the model template path assigns to both sat_dataset and sci_dataset.
+    # Only the subtract_no_offset_frames branch is specific to occulted data, since it is forced
+    # off above for an unocculted star.
     for matched_index, keyword in enumerate(keywords_sat):
 
-        if subtract_no_offset_frames:    
+        if subtract_no_offset_frames:
             satspot_subset = satspot_dataset[int(matched_index)]
             satspot_frames = []
             for frame in satspot_subset:
@@ -1337,7 +1344,11 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
 
         all_science_frames += science_frames
 
-    # Science frames whose group has no narrowband frames of its own are registered against a broadband template.
+    # Apply model template registration to science frames whose group has no narrowband frames.
+    # The narrowband_present flag is dataset-wide, and is True here because some other group
+    # does have narrowband frames, so the wholesale model template registration path above was not taken.
+    # When narrowband_present is False, the for loop above already applied the broadband template fallback, 
+    # so this loop would find nothing to do.
     if with_science and narrowband_present and allow_template_fallback:
         for sci_index, keyword in enumerate(keywords_sci):
             if keyword in matched_sci_keywords:
