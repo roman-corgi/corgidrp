@@ -43,6 +43,7 @@ pa_aper_degs = [0,10.,0,0]
 
 # Injection test settings
 inj_flux = 10.
+relative_scaling = 0.5
 
 # KLIP throughput calculation settings
 inject_snr = 10.
@@ -152,12 +153,23 @@ def test_inject_psf():
                   pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
-    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
-    
+    # Test peak-amplitude scaling
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)   
     assert np.max(frame_out.data) == pytest.approx(inj_flux)
-
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak
-    
+
+    # Test relative scaling
+    unscaled_psf = get_closest_psf(ctcal, cenx, ceny, 0, 0).copy()
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal, None, sep, pa, relative_scaling=relative_scaling)
+    assert psf_model == pytest.approx(unscaled_psf * relative_scaling)
+
+    # Test invalid scaling inputs
+    with pytest.raises(ValueError):
+        inject_psf(frame, ctcal, None, sep, pa)
+
+    with pytest.raises(ValueError):
+        inject_psf(frame, ctcal, inj_flux, sep, pa, relative_scaling=relative_scaling)
+   
     # Test separation of exactly 1 pixel
     sep = 1.0
     pa = 0.0
