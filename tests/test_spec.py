@@ -618,7 +618,7 @@ def test_determine_zeropoint_subbands():
     """
     Determine_wave_zeropoint must not crash when the input also
     contains filter-sweep sub-band frames (e.g. 3A/3B) alongside the 3D narrowband and the
-    broadband science group. It should select the broadband science group ('3'/'3F') and
+    broadband group. It should select the broadband science filter ('3'/'3F') and
     stamp WV0 only on those frames, excluding the sub-bands.
     """
     filepath = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
@@ -645,7 +645,7 @@ def test_determine_zeropoint_subbands():
     for i in range(psf_array.shape[0]):
         frame_time += timedelta(seconds=3)
         psf_images.append(make_image(psf_array[i], '3D', frame_time))
-    # broadband science ('3') plus filter-sweep sub-bands that must be ignored
+    # broadband science filter ('3') plus filter-sweep sub-bands that must be ignored
     for cfam in ['3', '3A', '3B']:
         frame_time += timedelta(seconds=3)
         psf_images.append(make_image(psf_array[0], cfam, frame_time))
@@ -653,7 +653,7 @@ def test_determine_zeropoint_subbands():
     result = l3_to_l4.determine_wave_zeropoint(Dataset(psf_images), SpecFilterOffset({}),
                                                subtract_no_offset_frames=False,
                                                xcent_guess=40., ycent_guess=32.)
-    # only the broadband science group is stamped; sub-bands excluded
+    # only the broadband science frames are stamped; sub-bands excluded
     assert set(f.ext_hdr['CFAMNAME'] for f in result) == {'3'}
     for frame in result:
         assert 'WV0_X' in frame.ext_hdr and 'WV0_Y' in frame.ext_hdr

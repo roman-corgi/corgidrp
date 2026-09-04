@@ -1060,17 +1060,17 @@ NARROWBAND_PRISM_HALFHEIGHT = 26
 
 def _select_broadband_group(band):
     """
-    Return the index of the broadband science filter group among the CFAM filter groups.
+    Return the index of the broadband filter group among the CFAM filter groups.
 
     Args:
         band (numpy.ndarray of str): uppercased CFAMNAME of each split group
 
     Returns:
-        int: index into band of the broadband science group
+        int: index into band of the broadband group
     """
     broadband = [b for b in ("3F", "3", "2F", "2") if b in band]
     if len(broadband) != 1:
-        raise AttributeError("Expected exactly one broadband science filter group (3F/3/2F/2), "
+        raise AttributeError("Expected exactly one broadband filter group (3F/3/2F/2), "
                              "but found CFAMNAME groups {0}".format(list(band)))
     return int(np.nonzero(band == broadband[0])[0].item())
 
@@ -1103,21 +1103,13 @@ def _fit_zeropoint_position(offset_dataset, template_dataset, nb_filter, use_mod
                         "ycent": np.repeat(ycent_guess, len(offset_dataset))}
     else:
         initial_cent = None
-    # Both paths need a stamp taller than the dispersed feature they register. Truncating it shifts
-    # the cross-correlation peak by a whole pixel, a bias the sub-pixel refinement cannot undo
-    # because it is bounded to +/-1 px. The model path registers the full broadband trace, so it
-    # needs the taller of the two stamps.
+    # Both registration strategies need a stamp taller than the image they register.
     halfheight = BROADBAND_PRISM_HALFHEIGHT if use_model_template else NARROWBAND_PRISM_HALFHEIGHT
     spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset,
                                           initial_cent = initial_cent, halfheight = halfheight)
     cen_wave, _, _, _ = read_cent_wave(nb_filter)
     if use_model_template:
-        # No CFAM filter-wedge correction applies here. The wedge displaces everything seen through
-        # a given filter by the same amount, so within this broadband frame it shifts the fitted
-        # centroid and the true zeropoint alike and cancels out of their difference. The template's
-        # (WV0 - CENT) is that difference, a pure dispersion displacement. spec_filter_offset exists
-        # to move a centroid measured through the narrowband filter into the broadband frame, which
-        # is not what happened here, so applying it would introduce a spurious ~0.84 px x shift.
+        # No CFAM filter-wedge correction applies here.
         xcent_temp, ycent_temp, wv0x_temp, wv0y_temp = spec.read_template_zeropoint(template_dataset[0])
         x0 = np.mean(spot_centroids.xfit) + (wv0x_temp - xcent_temp)
         y0 = np.mean(spot_centroids.yfit) + (wv0y_temp - ycent_temp)
@@ -1180,19 +1172,11 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
 
-    If the dataset contains no narrowband frames, which is the case for the non-coronagraphic
-    standard star visits (CGIVST_CAL_ABSFLUX_BRIGHT / _FAINT, CGIVST_CAL_SPEC_TGTREF), the
-    broadband frames are instead registered against a noiseless model template of a dispersed
-    star of matching spectral type and optical configuration. The same fallback applies to
-    individual groups of broadband frames that have no narrowband frames of their own, such as the
-    bright standard star observed through the ND filter in a separate visit from the dim star in
-    the ND filter calibration. The template carries both its own
-    broadband centroid and the zeropoint position measured from a matched narrowband simulation,
-    so their difference transfers the fitted centroid to the zeropoint. The CFAM filter-wedge
-    offset is not applied on that path, because the centroid is measured through the broadband
-    filter directly. The accuracy of the fallback is limited by the fidelity of the template
-    simulation and by any spectral-type mismatch between the star and the template grid; the
-    latter is not folded into WV0_XERR / WV0_YERR.
+    If the dataset contains no narrowband frames, the broadband frames are
+    instead registered against a noiseless model template of a dispersed star of
+    matching spectral type and optical configuration.  The template carries both
+    its own broadband centroid and the zeropoint position, so their difference
+    transfers the fitted centroid to the zeropoint. 
 
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing 2-D PSF or satellite spot images taken through the narrowband filter and slit.
@@ -1263,15 +1247,13 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     if narrowband_present and "3D" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
         if with_science:
-            science_bands = band[band != "3D"]
-            if len(science_bands) == 1:
-                # single science group: use it directly
+            non_narrowband_bands = band[band != "3D"]
+            if len(non_narrowband_bands) == 1:
+                # only one non-narrowband group: use it directly
                 sci_index = int(np.nonzero(band != "3D")[0].item())
             else:
-                # Multiple non-narrowband groups present (e.g. filter-sweep sub-bands
-                # 3A/3B/3C/3E alongside the broadband): select the band-3 broadband science
-                # filter (3F or 3). Sub-band frames are dispersion-calibration frames, not
-                # science, so they are excluded from the wavelength-zeropoint-stamped output.
+                # Several non-narrowband groups present, e.g. the filter-sweep sub-bands
+                # 3A/3B/3C/3E alongside the broadband filter. Select only the broadband filter.
                 sci_index = _select_broadband_group(band)
             sci_dataset = narrow_dataset[sci_index]
     elif narrowband_present:
