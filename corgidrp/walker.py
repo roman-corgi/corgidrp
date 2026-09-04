@@ -159,7 +159,7 @@ def _validate_template_structure(user_template, default_template_path, recipe_fi
         # Extract step names from both templates
         user_steps = [step['name'] for step in user_template.get('steps', [])]
         default_steps = [step['name'] for step in default_template.get('steps', [])]
-    
+
         # Check if step names and order match
         if user_steps != default_steps:
             error_msg = (

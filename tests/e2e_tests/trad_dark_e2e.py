@@ -252,8 +252,26 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # means the ones above will be preferentially selected
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
+
+    recipe = walker.autogen_recipe(trad_dark_data_filelist, build_trad_dark_outputdir, template="build_trad_dark_full_frame.json")
+    ### Modify a keyword
+    for step in recipe['steps']:
+        if step['name'] == "prescan_biassub":
+            step['keywords']['num_stds'] = np.inf
+        if step['name'] == "detect_cosmic_rays":
+            step['keywords']['sat_thresh'] = 0.95 # what is used for TVAC data in II&T code
+            step['keywords']['plat_thresh'] = 0.85 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_filter'] = 2 # what is used for TVAC data in II&T code
+            step['keywords']['median_filter_mode'] = 0 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_thresh'] = 0.95 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_box'] = 3 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_tail'] = 10 # what is used for TVAC data in II&T code
+            step['keywords']['skip_coronagraph_iwa'] = False # what is used for TVAC data in II&T code
+
+    output_filepaths = walker.run_recipe(recipe, save_recipe_file=True)
+
     ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
-    walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir, template="build_trad_dark_full_frame.json")
+    # walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir, template="build_trad_dark_full_frame.json")
 
     # find cal file (naming convention for data.Dark class)
     for f in os.listdir(build_trad_dark_outputdir):
@@ -488,8 +506,27 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # means the ones above will be preferentially selected
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
+    recipe = walker.autogen_recipe(trad_dark_data_filelist, build_trad_dark_outputdir)
+    ### Modify a keyword
+    for step in recipe[0]['steps']:
+        if step['name'] == "prescan_biassub":
+            step['keywords']['num_stds'] = np.inf
+        if step['name'] == "detect_cosmic_rays":
+            step['keywords']['sat_thresh'] = 0.95 # what is used for TVAC data in II&T code
+            step['keywords']['plat_thresh'] = 0.85 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_filter'] = 2 # what is used for TVAC data in II&T code
+            step['keywords']['median_filter_mode'] = 0 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_thresh'] = 0.95 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_box'] = 3 # what is used for TVAC data in II&T code
+            step['keywords']['cosm_tail'] = 10 # what is used for TVAC data in II&T code
+            step['keywords']['skip_coronagraph_iwa'] = False # what is used for TVAC data in II&T code
+
+    output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
+    recipe[1]['inputs'] = output_filepaths
+    walker.run_recipe(recipe[1], save_recipe_file=True)
+
     ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
-    walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir) #, template="build_trad_dark_image.json")
+    #walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir) #, template="build_trad_dark_image.json")
 
     # find cal file (naming convention for data.Dark class)
     for f in os.listdir(build_trad_dark_outputdir):
