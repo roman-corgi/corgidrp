@@ -10,7 +10,8 @@ L1 -> L2a  (l1_to_l2a_basic.json)
    -> L2b  (l2a_to_l2b_spec.json)
    -> NDSpectroscopy cal product  (l2b_to_nd_filter_spec.json)
         steps: divide_by_exptime
-               determine_wave_zeropoint   (needs 3D + 3F frames)
+               determine_wave_zeropoint   (3D + 3F frames, or 3F frames alone
+                                           registered against a model template)
                add_wavelength_map         (needs DispersionModel from CalDB)
                extract_spec
                create_nd_filter_cal_spec  (needs SpecFluxCal or dim-star frames)
@@ -26,6 +27,9 @@ that a separate dark can be subtracted.
        VISTYPE  = CGIVST_CAL_ABSFLUX_FAINT
        TARGET   = dim CALSPEC star "tyc 4424-1286-1"
        Purpose  : wavelength zero-point via determine_wave_zeropoint
+       Optional : test_nd_filter_spec_broadband_only_e2e leaves these frames out
+                  and estimates the zero-point by registering the broadband frames 
+                  against a noiseless template
 
   2. Broadband dim-star frames   (CFAMNAME=3F, FPAMNAME=OPEN_34, DPAMNAME=PRISM3)
        VISTYPE  = CGIVST_CAL_ABSFLUX_FAINT
@@ -111,6 +115,28 @@ thisfile_dir = os.path.dirname(__file__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def setup_logger(name, log_file):
+    """
+    Make a logger writing to both a file and the console.
+
+    Args:
+        name (str): logger name
+        log_file (str): path of the log file to write
+
+    Returns:
+        logging.Logger: the configured logger
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    formatter = logging.Formatter('%(message)s')
+    for handler in [logging.FileHandler(log_file), logging.StreamHandler()]:
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    return logger
+
 
 def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir, logger):
     """
@@ -287,7 +313,7 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir, logger):
 # Test 
 # ---------------------------------------------------------------------------
 
-def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
+def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger, skip_narrowband=False):
     """
     Run and validate the ND filter spectroscopy calibration pipeline.
 
@@ -306,6 +332,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     outputdir (str): Root output directory.  Intermediate L2a/L2b files and the
         final NDSpectroscopy product are written here.
     logger (logging.Logger): Logger instance for output
+    skip_narrowband (bool): if True, leave the narrowband frames out of the input
 
     Returns:
     nd_spec_cal (corgidrp.data.NDSpectroscopy): Spectroscopy ND filter calibration
@@ -357,7 +384,13 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
         for f in os.listdir(input_l1_datadir)
         if f.endswith('l1_.fits') or f.endswith('l1.fits')
     )
-    
+
+    if skip_narrowband:
+        l1_filelist = [f for f in l1_filelist
+                       if fits.getheader(f, ext=1)['CFAMNAME'].upper() not in ('3D', '2C')]
+        logger.info(f"Narrowband frames left out: {len(l1_filelist)} broadband L1 files remain.")
+
+
     # Separating file into brightstar and faint star dataset and assigning a different visit id to the former.
     bright_star_filelist = sorted(f for f in l1_filelist if fits.getheader(f, ext=1)['FPAMNAME'] == 'ND225')
     faint_star_filelist = sorted(f for f in l1_filelist if fits.getheader(f, ext=1)['FPAMNAME'] != 'ND225')
@@ -722,31 +755,8 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
         shutil.rmtree(outputdir)
     os.makedirs(outputdir)
 
-    log_file = os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log')
-
-    # Create a new logger specifically for this test
-    logger = logging.getLogger('l1_to_nd_filter_spec_e2e')
-    logger.setLevel(logging.INFO)
-
-    # Clear any existing handlers to avoid duplicates
-    logger.handlers.clear()
-
-    # Create file handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-
-    # Create console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-
-    # Create formatter
-    formatter = logging.Formatter('%(message)s')
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
-    # Add handlers to logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    logger = setup_logger('l1_to_nd_filter_spec_e2e',
+                          os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log'))
 
     logger.info('='*80)
     logger.info('L1 TO ND FILTER SPECTROSCOPY CALIBRATION END-TO-END TEST')
@@ -765,6 +775,49 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
         logger.error("Full traceback:")
         logger.error(traceback.format_exc())
         print(f'e2e test for L1 to ND filter spectroscopy FAILED: {str(e)}')
+        raise
+
+
+@pytest.mark.e2e
+def test_nd_filter_spec_broadband_only_e2e(e2edata_path, e2eoutput_path):
+    """
+    Pytest wrapper for the spectroscopy ND filter calibration E2E test with no narrowband
+    frames. The wavelength zeropoint is registered against a noiseless model template instead.
+
+    Args:
+        e2edata_path (str): Path to the E2E test data
+        e2eoutput_path (str): Path to the E2E test output
+
+    """
+    l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "SPEC_NOM_L1")
+    processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
+    outputdir = os.path.join(e2eoutput_path, "l1_to_nd_filter_spec_broadband_only_e2e")
+
+    if os.path.exists(outputdir):
+        shutil.rmtree(outputdir)
+    os.makedirs(outputdir)
+
+    logger = setup_logger('l1_to_nd_filter_spec_broadband_only_e2e',
+                          os.path.join(outputdir, 'l1_to_nd_filter_spec_broadband_only_e2e.log'))
+
+    logger.info('='*80)
+    logger.info('L1 TO ND FILTER SPECTROSCOPY CALIBRATION END-TO-END TEST, BROADBAND FRAMES ONLY')
+    logger.info('='*80)
+    logger.info("")
+
+    try:
+        run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger,
+                               skip_narrowband=True)
+        print('e2e test for L1 to ND filter spectroscopy without narrowband frames passed')
+    except Exception as e:
+        logger.error('='*80)
+        logger.error('END-TO-END TEST FAILED')
+        logger.error('='*80)
+        logger.error(f"Error: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error("Full traceback:")
+        logger.error(traceback.format_exc())
+        print(f'e2e test for L1 to ND filter spectroscopy without narrowband frames FAILED: {str(e)}')
         raise
 
 
@@ -796,31 +849,8 @@ if __name__ == "__main__":
         shutil.rmtree(outputdir)
     os.makedirs(outputdir)
 
-    log_file = os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log')
-
-    # Create a new logger specifically for this test
-    logger = logging.getLogger('l1_to_nd_filter_spec_e2e')
-    logger.setLevel(logging.INFO)
-
-    # Clear any existing handlers to avoid duplicates
-    logger.handlers.clear()
-
-    # Create file handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-
-    # Create console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-
-    # Create formatter
-    formatter = logging.Formatter('%(message)s')
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
-    # Add handlers to logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    logger = setup_logger('l1_to_nd_filter_spec_e2e',
+                          os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log'))
 
     logger.info('='*80)
     logger.info('L1 TO ND FILTER SPECTROSCOPY CALIBRATION END-TO-END TEST')
