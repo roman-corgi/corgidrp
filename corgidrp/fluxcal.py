@@ -305,7 +305,7 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
 
 def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', subpixels=5,
               background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5,
-              centering_initial_guess=None):
+              centering_initial_guess=None, return_xy=False):
     """
     Returns the flux in photo-electrons of a point source, either by placing an aperture using a 
         centroiding method, or by using WCS information.
@@ -326,7 +326,9 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
         centroid_roi_radius (int or float): Half-size of the box around the peak,
                                    in pixels. Adjust based on desired λ/D.
         centering_initial_guess (tuple): (Optional) (x,y) initial guess to perform centroiding.  
-    
+        return_xy (bool, optional): If True, also return the x and y coordinates of the aperture center.
+            Default is False.
+
     Returns:
         tuple: (flux, flux_err) or (flux, flux_err, back) if background_sub is True.
     """
@@ -368,7 +370,9 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
     
     flux = aperture_sums[0] / frac_enc_energy
     flux_err = aperture_sums_errs[0] / frac_enc_energy
-    
+
+    if return_xy:
+        return flux, flux_err, pos
     if background_sub:
         return flux, flux_err, back
     else:

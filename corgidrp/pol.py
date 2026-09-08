@@ -7,7 +7,7 @@ import pandas as pd
 from corgidrp.data import Image, NDMuellerMatrix, MuellerMatrix, Dataset
 from corgidrp.fluxcal import aper_phot, measure_aper_flux_pol
 
-def aper_phot_pol(image, phot_kwargs):
+def aper_phot_pol(image, phot_kwargs, return_xy = False):
     """
     Perform aperture photometry on both channels of a 2-channel polarimetric image.
 
@@ -19,25 +19,39 @@ def aper_phot_pol(image, phot_kwargs):
             Must contain `data`, `err`, and `dq` attributes.
         phot_kwargs (dict): Keyword arguments passed to `aper_phot`, defining
             aperture radius, centering method, background subtraction, etc.
+        return_xy (bool, optional): If True, also return the x and y coordinates of the aperture center.
+            Default is False.
 
     Returns:
-        tuple[list, list]:
+        tuple[list, list] or tuple[list, list, list, list]:
             (flux, flux_err) lists of fluxes and uncertainties for both polarization channels.
+            If return_xy is True, also returns (x, y) lists of aperture center coordinates.
     """
     flux = []
     flux_err = []
+
+    if return_xy:
+        xys = []
+
     for i in range(2):
         im_copy = image.copy()
         im_copy.data = im_copy.data[i]
         im_copy.err = im_copy.err[0][i].reshape(np.append([1], [im_copy.data.shape]))
         im_copy.dq  = im_copy.dq[i]
 
-        f, f_e = aper_phot(im_copy, **phot_kwargs)
+        if return_xy:
+            f, f_e, xy = aper_phot(im_copy, **phot_kwargs, return_xy=return_xy)
+            xys.append(xy)
+        else: 
+            f, f_e = aper_phot(im_copy, **phot_kwargs, return_xy=return_xy)
 
         flux.append(f)
         flux_err.append(f_e)
 
-    return flux, flux_err
+    if return_xy:
+        return flux, flux_err, xys
+    else:
+        return flux, flux_err
 
 def calc_stokes_unocculted(input_dataset,
                            phot_kwargs=None,
@@ -148,7 +162,7 @@ def calc_stokes_unocculted(input_dataset,
             if prism not in prism_map:
                 raise ValueError(f"Unknown prism: {prism}")
             
-            flux, flux_err = aper_phot_pol(ds, phot_kwargs)
+            flux, flux_err, xy = aper_phot_pol(ds, phot_kwargs, return_xy = True)
             fluxes.append(flux)
             flux_errs.append(flux_err)
             
@@ -224,6 +238,12 @@ def calc_stokes_unocculted(input_dataset,
         )
         stokes_vector.filename = os.path.basename(dataset[0].filename).replace("l3", "stokes")
 
+        #Update header with xys position, for the two beams
+        stokes_vector.ext_hdr['STAR_X1'] = xy[0][0]
+        stokes_vector.ext_hdr['STAR_Y1'] = xy[0][1]
+        stokes_vector.ext_hdr['STAR_X2'] = xy[1][0]
+        stokes_vector.ext_hdr['STAR_Y2'] = xy[1][1]
+
         stokes_vectors.append(stokes_vector)
 
     stokes_dataset = Dataset(stokes_vectors)
@@ -232,7 +252,8 @@ def calc_stokes_unocculted(input_dataset,
 
 def generate_mueller_matrix_cal(input_dataset, 
                                 path_to_pol_ref_file=None,
-                                svd_threshold=1e-5):
+                                svd_threshold=1e-5,
+                                mode = "match_position"):
     '''
     Calculates the Mueller Matrix calibration for a given dataset of polarimetric observations.
     The expected input is a dataset of stokes vectors measured from known polarized standard stars, separated by 
@@ -260,7 +281,13 @@ def generate_mueller_matrix_cal(input_dataset,
             pipeline. If that file does not exist, the copy shipped with the pipeline in
             ./data/stellar_polarization_database.csv is used.
         svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
-    
+        mode (str, optional): The mode of operation. Defaults to "match_position".
+            - "match_position": The function will calculate the Mueller Matrix using only input stokes vectors where 
+            the stokes vectors match within the same resolution element. If there are multiple sets that match it will
+            pick the one with the least movment. If there is no match it will raise an error. This is the default mode. 
+            - "closest_match": The function will calculate the Mueller Matrix using the closest matching stokes vectors 
+            in terms of position.
+            - "all": The function will calculate the Mueller Matrix using all input stokes vectors, regardless of position.
     Returns:
         mueller_matrix_obj (MuellerMatrix or NDMuellerMatrix): The generated Mueller Matrix object.
     '''
@@ -296,12 +323,83 @@ def generate_mueller_matrix_cal(input_dataset,
     # extract the target names
     pol_ref_targets = pol_ref["TARGET"].tolist()
 
+    #Get the target names for each frame. 
     frame_targets = [image.pri_hdr["TARGET"] for image in dataset]
 
     # check that all the targets from the dataset are in the pol reference file
     for target in frame_targets:
         if target not in pol_ref_targets:
             raise ValueError(f"Target {target} not found in polarization reference file.")
+
+    #get the xy positions of the first pol state from each frame: 
+    frame_xys = [image.ext_hdr["STAR_X1"], image.ext_hdr["STAR_Y1"] for image in dataset]
+
+    # If mode =='all' just skip ahead. 
+    # If mode =='match_position', we need to see if we can find a set frames that includes each target 
+    # where the position is under one resolution element. If there are multiple sets that match, we 
+    # will pick the one with the least movement.
+    if mode != "all":
+        # group the frames by target
+        target_groups = {}
+        for i, target in enumerate(frame_targets):
+            if target not in target_groups:
+                target_groups[target] = []
+            target_groups[target].append(i)
+
+        #For each frame in the first target group calculate the distances to each frame in all the other target groups
+        #and save it to a variable. 
+        distances = []
+        for i in target_groups[list(target_groups.keys())[0]]:
+            #Cycle through all the targets
+            target_distances = [] #For this frame in the first target list this holds the minimum distances to frames in each of the other target groups
+            for target_name in target_groups.keys()[1:]:
+                frame_distances = []
+                for j in target_groups[target_name]:
+                    #Calculate the distance between the two frames
+                    dist = np.sqrt((frame_xys[i][0] - frame_xys[j][0])**2 + (frame_xys[i][1] - frame_xys[j][1])**2)
+                    frame_distances.append(dist)
+                #Get the minimum distance for this target group and append it to the distances list, saving the index
+                min_dist = np.min(frame_distances)
+                min_dist_arg = target_groups[target_name][np.argmin(frame_distances)] #This saves the index in the original frame list
+                target_distances.append((min_dist, min_dist_arg))
+            distances.append(target_distances)
+
+        #List all the distances from the first target group. Make it a 2D array
+        dists = np.array([[d[0] for d in td] for td in distances])
+        #Get the maximum distance for each frame in the first target group across all other target groups
+        max_dists = np.max(dists, axis=0)
+
+        #If the mode is "match_position", check if there is any match with all targets within one resolution element of each other
+        if mode == "match_position":
+            #Get the filter wavelength based on the CFAMNAME, throw an error if not in filter_wavs
+            filter_wavs = {'1F': 575e-9, '4F': 825e-9}
+            filter_wav = filter_wavs.get(image.pri_hdr["CFAMNAME"], 0)
+            if filter_wav == 0:
+                raise ValueError("Filter wavelength not yet supported for CFAMNAME: {}".format(image.pri_hdr["CFAMNAME"]))
+            # Calculate the resolution element (lambda/D)
+            roman_D = 2.36 #m
+            resolution_element = filter_wav / roman_D * 206265 #arcsec
+            #Grab the pixel scale from the extension header
+            pixel_scale = image.ext_hdr["PLTSCALE"]*1000 # arcsec/pixel
+            # Convert the resolution element to pixels
+            resolution_element_pix = resolution_element / pixel_scale
+            # print("Resolution element in pixels: {}".format(resolution_element_pix))
+
+            #Check to see if all of the maximum distances are greater than the resolution element
+            if not all(max_dists > resolution_element_pix):
+                raise ValueError("No set of frames found where all targets are within one resolution element (lambda/D) of each other.")
+        elif mode != "closest_match":
+            raise ValueError("Mode must be one of 'match_position', 'closest_match', or 'all'.")
+
+        minimum_maximum = np.argmin(max_dists, axis=0) #We want to use the set where the maximum distance is the smallest.
+        #build a frame list based on the 'j' values of the min_dists
+        frame_indices = np.array([[d[1] for d in td] for td in distances])
+        good_frame_indices = frame_indices[minimum_maximum]
+        #The frame list will be the first frame of the first target group, and the frames of the other target groups that are closest to it.
+        final_list = [dataset[minimum_maximum]]
+        final_list += [dataset[good_frame_indices[i]] for i in range(1, len(good_frame_indices))]
+
+        dataset = Dataset(final_list)
 
     # measure the normalized difference for each dataset
     stokes_vectors = []
