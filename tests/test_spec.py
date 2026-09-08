@@ -1,6 +1,7 @@
-import os, copy, glob
+import os, copy, glob, shutil
 import numpy as np
 import pytest
+import corgidrp
 import logging
 import warnings
 from scipy import ndimage
@@ -1825,6 +1826,65 @@ def test_get_template_dataset_broadband():
     assert filtersweep is False
     assert 'noslit_offset_prism3_3d' in os.path.basename(tds_nb[0].filename)
 
+def test_config_folder_overrides(tmp_path, monkeypatch):
+    """
+    the spectral type table and the model templates must be overridable from ~/.corgidrp
+    """
+    # corgidrp.config_filepath points at ~/.corgidrp/corgidrp.cfg, so the spectroscopy directory
+    # is resolved relative to its parent
+    monkeypatch.setattr(corgidrp, 'config_filepath', str(tmp_path / "corgidrp.cfg"))
+    user_dir = tmp_path / "spectroscopy"
+    user_templates = user_dir / "templates"
+    user_templates.mkdir(parents=True)
+
+    # with nothing in the user directory the bundled files are used
+    bundled = steps.find_template_files("spec-nom_unocc_noslit_model_prism3_3f_g0v.fits")
+    assert len(bundled) == 1
+    assert bundled[0].startswith(spec_datadir)
+    assert steps.get_star_spectral_type('eta uma') == 'B3V'
+
+    # a user copy of the same name replaces the bundled one
+    shutil.copy(bundled[0], user_templates / os.path.basename(bundled[0]))
+    override = steps.find_template_files("spec-nom_unocc_noslit_model_prism3_3f_g0v.fits")
+    assert len(override) == 1
+    assert override[0] == str(user_templates / os.path.basename(bundled[0]))
+
+    # a name found only in the user directory is added to the bundled ones
+    new_type = user_templates / "spec-nom_unocc_noslit_model_prism3_3f_k5v.fits"
+    shutil.copy(bundled[0], new_type)
+    names = [os.path.basename(path) for path in
+             steps.find_template_files("spec-nom_unocc_noslit_model_prism3_3f_*.fits")]
+    assert 'spec-nom_unocc_noslit_model_prism3_3f_k5v.fits' in names
+    assert 'spec-nom_unocc_noslit_model_prism3_3f_m0v.fits' in names
+    # and it is available to the spectral type match, which has no bundled K5V template
+    assert steps.get_model_template_filename('spec-nom', 'noslit', 'prism3', '3F', 'K5V') == str(new_type)
+
+    # a user spectral type table replaces the bundled one
+    user_sptypes = user_dir / "standard_star_sptypes.csv"
+    user_sptypes.write_text("Target star name,Spectral type,Source\neta uma,A0V,test\n")
+    assert steps.get_star_spectral_type('eta uma') == 'A0V'
+    # a star only in the bundled table is no longer found, and the error names the file that was read
+    with pytest.raises(ValueError, match=str(user_sptypes)):
+        steps.get_star_spectral_type('tyc 4413-304-1')
+
+def test_model_template_sptype_tolerance():
+    """
+    the spectral type match tolerance must be overridable and must reject a distant template
+    """
+    # G2V is bundled, so an exact match needs no tolerance at all
+    exact = steps.get_model_template_filename('spec-nom', 'noslit', 'prism3', '3F', 'G2V',
+                                              max_sptype_index_mismatch = 0)
+    assert os.path.basename(exact) == 'spec-nom_unocc_noslit_model_prism3_3f_g2v.fits'
+
+    # K5V is 5 subtypes from both K0V and M0V, the widest gap in the bundled grid
+    with pytest.warns(UserWarning, match='closest available type'):
+        nearest = steps.get_model_template_filename('spec-nom', 'noslit', 'prism3', '3F', 'K5V')
+    assert os.path.basename(nearest) in ('spec-nom_unocc_noslit_model_prism3_3f_k0v.fits',
+                                         'spec-nom_unocc_noslit_model_prism3_3f_m0v.fits')
+    with pytest.raises(ValueError, match='more than the tolerance'):
+        steps.get_model_template_filename('spec-nom', 'noslit', 'prism3', '3F', 'K5V',
+                                          max_sptype_index_mismatch = 1)
+
 def test_template_headers_complete():
     """
     every committed model template must carry the keywords the fallback registration depends on
@@ -1836,9 +1896,14 @@ def test_template_headers_complete():
         for key in ['XCENT', 'YCENT', 'WV0_X', 'WV0_Y', 'MODLCX', 'MODLCY', 'SPECTYPE',
                     'WAVLEN0', 'MODLSRC']:
             assert key in template.ext_hdr, "{0} missing from {1}".format(key, os.path.basename(path))
-        # the spectral type keyword and the filename token must agree
+        # the spectral type keyword and the filename token must agree. The token is the last
+        # underscore-delimited field of the file stem, before any ND filter suffix.
+        stem = os.path.splitext(os.path.basename(path))[0]
+        nd_stem = os.path.splitext(steps.ND_TEMPLATE_SUFFIX)[0]
+        if stem.endswith(nd_stem):
+            stem = stem[:-len(nd_stem)]
         assert (steps.sptype_index(template.ext_hdr['SPECTYPE']) ==
-                steps.sptype_index(steps.read_template_sptype_token(path)))
+                steps.sptype_index(stem.rsplit("_", 1)[1]))
         dimy, dimx = template.data.shape
         # the model template registration fits a stamp of halfheight BROADBAND_PRISM_HALFHEIGHT,
         # which fit_psf_centroid slices without bounds checking, so both the anchor and the
@@ -1876,6 +1941,24 @@ def test_determine_zeropoint_model_template():
     assert "wavelengthzeropointvaluesaddedtoheader" in history
     assert os.path.basename(get_model_template().filepath) in history
     assert "spectraltype" in history
+
+    # passing the default stamp half-height explicitly must reproduce the same zeropoint
+    explicit = l3_to_l4.determine_wave_zeropoint(
+        make_shifted_broadband_dataset(template, dx, dy), SpecFilterOffset({}),
+        zeropoint_halfheight = l3_to_l4.BROADBAND_PRISM_HALFHEIGHT)
+    assert explicit[0].ext_hdr['WV0_X'] == output_dataset[0].ext_hdr['WV0_X']
+    assert explicit[0].ext_hdr['WV0_Y'] == output_dataset[0].ext_hdr['WV0_Y']
+
+    # A shorter stamp changes the fit, but compute_psf_centroid will not let a broadband frame go
+    # below BROADBAND_HALFHEIGHT, so a request under that floor lands on the floor instead.
+    at_floor = l3_to_l4.determine_wave_zeropoint(
+        make_shifted_broadband_dataset(template, dx, dy), SpecFilterOffset({}),
+        zeropoint_halfheight = steps.BROADBAND_HALFHEIGHT)
+    below_floor = l3_to_l4.determine_wave_zeropoint(
+        make_shifted_broadband_dataset(template, dx, dy), SpecFilterOffset({}),
+        zeropoint_halfheight = steps.BROADBAND_HALFHEIGHT - 10)
+    assert below_floor[0].ext_hdr['WV0_Y'] == at_floor[0].ext_hdr['WV0_Y']
+    assert at_floor[0].ext_hdr['WV0_Y'] != output_dataset[0].ext_hdr['WV0_Y']
 
 def test_determine_zeropoint_fallback_grouping():
     """
@@ -2094,6 +2177,7 @@ if __name__ == "__main__":
     test_spec_flux_cal()
     test_convert_spec_to_flux_factor()
     test_get_template_dataset_broadband()
+    test_model_template_sptype_tolerance()
     test_template_headers_complete()
     test_determine_zeropoint_model_template()
     test_determine_zeropoint_fallback_grouping()

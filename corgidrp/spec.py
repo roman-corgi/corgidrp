@@ -26,6 +26,27 @@ ND_TEMPLATE_SUFFIX = "_nd225.fits"
 FILTERSWEEP_HALFHEIGHT = 24
 BROADBAND_HALFHEIGHT = 30
 
+def find_template_files(pattern):
+    """
+    Template file paths matching a glob pattern of file names.
+
+    A file in ~/.corgidrp/spectroscopy/templates replaces the bundled file of the same name,
+    and names found only there are added, so templates can be revised or extended without
+    modifying the package.
+
+    Args:
+        pattern (str): glob pattern matched against template file names
+
+    Returns:
+        list of str: matching paths, ordered by file name
+    """
+    paths = {}
+    for directory in (os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "templates"),
+                      os.path.join(os.path.dirname(corgidrp.config_filepath), "spectroscopy", "templates")):
+        for path in glob.glob(os.path.join(directory, pattern)):
+            paths[os.path.basename(path)] = path
+    return [paths[name] for name in sorted(paths)]
+
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     """
     2d gaussian function for gaussfit2d
@@ -374,7 +395,6 @@ def get_template_dataset(dataset, host_sptype = None):
         Dataset: template dataset
         boolean: filtersweep true or false
     """
-    template_dir = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "templates")
     filtersweep = False
     cfamname = []
     slits = []
@@ -407,23 +427,23 @@ def get_template_dataset(dataset, host_sptype = None):
             if len(np.unique(fpamnames)) != 1:
                 raise AttributeError("all frames must share the same FPAMNAME, not "+ str(np.unique(fpamnames)))
             filenames = [get_model_template_filename(spam, SLIT_TOKEN[slit], prism, band,
-                                                     host_sptype, fpamname = fpamnames[0],
-                                                     template_dir = template_dir)]
+                                                     host_sptype, fpamname = fpamnames[0])]
         else:
-            filenames = sorted(glob.glob(os.path.join(template_dir,
-                "{0}_unocc_{1}_offset_{2}_3d_*.fits".format(spam, SLIT_TOKEN[slit], prism))))
+            filenames = find_template_files(
+                "{0}_unocc_{1}_offset_{2}_3d_*.fits".format(spam, SLIT_TOKEN[slit], prism))
     else:
         #filtersweep
-        filenames = sorted(glob.glob(os.path.join(template_dir,
-            "{0}_unocc_noslit_{1}_filtersweep_*.fits".format(spam, prism))))
+        filenames = find_template_files(
+            "{0}_unocc_noslit_{1}_filtersweep_*.fits".format(spam, prism))
         filtersweep = True
     if len(filenames) == 0:
-        raise AttributeError("no template files found in {0} for SPAM {1}, prism {2}, slit {3}, "
-                             "filters {4}".format(template_dir, spam, prism, slits[0], np.unique(cfamname)))
+        raise AttributeError("no template files found in the bundled data/spectroscopy/templates "
+                             "directory or in ~/.corgidrp/spectroscopy/templates for SPAM {0}, prism {1}, "
+                             "slit {2}, filters {3}".format(spam, prism, slits[0], np.unique(cfamname)))
     return Dataset(filenames), filtersweep
 
 def get_model_template_filename(spam, slit_token, prism, band, host_sptype, fpamname = None,
-                                template_dir = None):
+                                max_sptype_index_mismatch = 5):
     """
     Find the noiseless model template that best matches a broadband prism image
     of a calibration star.
@@ -435,47 +455,53 @@ def get_model_template_filename(spam, slit_token, prism, band, host_sptype, fpam
         band (str): broadband CFAM filter
         host_sptype (str): spectral type of the calibration star
         fpamname (str): FPAM setting
-        template_dir (str): template directory; defaults to the bundled one
+        max_sptype_index_mismatch (float): largest spectral subtype separation tolerated between
+            the star and its model template, on the sptype_index scale. Defaults to 5, half of
+            the widest gap (K0 to M0) in the set of bundled templates.
 
     Returns:
         str: path of the matching model template file
     """
-    if template_dir is None:
-        template_dir = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "templates")
     if host_sptype is None:
-        sptype_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "standard_star_sptypes.csv")
         raise ValueError("a host star spectral type is required to select a model template for "
-                         "broadband filter {0}; pass host_sptype or add the target to {1}".format(
-                             band, os.path.basename(sptype_file)))
+                         "broadband filter {0}; pass host_sptype or add the target to "
+                         "standard_star_sptypes.csv".format(band))
     pattern = "{0}_unocc_{1}_model_{2}_{3}_*.fits".format(spam, slit_token, prism, band.lower())
-    candidates = sorted(glob.glob(os.path.join(template_dir, pattern)))
+    candidates = find_template_files(pattern)
     nd_wanted = fpamname is not None and str(fpamname).strip().upper().startswith("ND")
     filenames = [f for f in candidates if f.endswith(ND_TEMPLATE_SUFFIX) == nd_wanted]
     if nd_wanted and len(filenames) == 0:
         # The ND filter transmission is chromatic, so a template without it is an approximation.
-        warnings.warn("no ND model template matching {0} in {1}; falling back to a template without "
-                      "an ND filter".format(pattern, template_dir))
+        warnings.warn("no ND model template matching {0}; falling back to a template without "
+                      "an ND filter".format(pattern))
         filenames = [f for f in candidates if not f.endswith(ND_TEMPLATE_SUFFIX)]
     if len(filenames) == 0:
-        raise AttributeError("no model template files matching {0} in {1}".format(pattern, template_dir))
-    available = [read_template_sptype_token(f) for f in filenames]
-    matched = match_template_spectral_type(host_sptype, available)
-    return filenames[available.index(matched)]
+        raise AttributeError("no model template files matching {0}".format(pattern))
 
-def read_template_sptype_token(filename):
-    """
-    Extract the spectral type token from a model template filename.
+    # The spectral type token is the last underscore-delimited field of the file stem,
+    # before any ND filter suffix.
+    nd_stem = os.path.splitext(ND_TEMPLATE_SUFFIX)[0]
+    available = []
+    for filename in filenames:
+        stem = os.path.splitext(os.path.basename(filename))[0]
+        if stem.endswith(nd_stem):
+            stem = stem[:-len(nd_stem)]
+        available.append(stem.rsplit("_", 1)[1])
 
-    Args:
-        filename (str): model template file name or path
-
-    Returns:
-        str: spectral type token, e.g. "g0v"
-    """
-    stem = os.path.splitext(os.path.basename(filename))[0]
-    if stem.endswith(os.path.splitext(ND_TEMPLATE_SUFFIX)[0]):
-        stem = stem[:-len(os.path.splitext(ND_TEMPLATE_SUFFIX)[0])]
-    return stem.rsplit("_", 1)[1]
+    index = sptype_index(host_sptype)
+    offsets = [abs(sptype_index(candidate) - index) for candidate in available]
+    best = int(np.argmin(offsets))
+    if offsets[best] > max_sptype_index_mismatch:
+        raise ValueError("the closest model template spectral type {0} is {1:.1f} subtypes away from "
+                         "the spectral type {2} of the observed star, more than the tolerance of {3}; "
+                         "available types are {4}".format(available[best], offsets[best], host_sptype,
+                                                          max_sptype_index_mismatch, list(available)))
+    if offsets[best] > 0:
+        warnings.warn("no model template of spectral type {0}; using the closest available type {1}, "
+                      "{2:.1f} subtypes away. The wavelength zero point may be biased by the "
+                      "difference in spectral energy distribution.".format(
+                          host_sptype, available[best], offsets[best]))
+    return filenames[best]
 
 def get_star_spectral_type(star_name, sptype = None, sptype_file = None):
     """
@@ -484,7 +510,10 @@ def get_star_spectral_type(star_name, sptype = None, sptype_file = None):
     Args:
         star_name (str): star name, as it appears in the TARGET primary header keyword
         sptype (str): if given, returned unchanged; overrides the table lookup
-        sptype_file (str): spectral type table; defaults to the bundled one
+        sptype_file (str): spectral type table. Defaults to
+            ~/.corgidrp/spectroscopy/standard_star_sptypes.csv if that file exists, so that the
+            table can be edited or extended without modifying the package, and otherwise to the
+            bundled copy.
 
     Returns:
         str: MK spectral type, e.g. "G0V"
@@ -492,14 +521,19 @@ def get_star_spectral_type(star_name, sptype = None, sptype_file = None):
     if sptype is not None:
         return sptype
     if sptype_file is None:
-        sptype_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "standard_star_sptypes.csv")
+        sptype_file = os.path.join(os.path.dirname(corgidrp.config_filepath), "spectroscopy",
+                                   "standard_star_sptypes.csv")
+        if not os.path.isfile(sptype_file):
+            sptype_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy",
+                                       "standard_star_sptypes.csv")
     table = ascii.read(sptype_file, format = 'csv', data_start = 1)
     # Collapse repeated whitespace so that e.g. "TYC  4424-1286-1" matches "tyc 4424-1286-1".
     names = [" ".join(str(name).split()).lower() for name in table.columns[0]]
     key = " ".join(str(star_name).split()).lower()
     if key not in names:
-        raise ValueError("{0} is not in the list of anticipated target stars \n {1},\n please check "
-                         "naming or pass the spectral type explicitly".format(star_name, names))
+        raise ValueError("{0} is not in the list of anticipated target stars \n {1}\n read from {2},\n "
+                         "please check naming or pass the spectral type explicitly".format(
+                             star_name, names, sptype_file))
     return str(table.columns[1][names.index(key)]).strip()
 
 def sptype_index(sptype):
@@ -531,36 +565,6 @@ def sptype_index(sptype):
         raise ValueError("{0} has no numeric spectral subtype".format(sptype))
     return mk_class_index[sptype[0]] + float(subtype)
 
-def match_template_spectral_type(sptype, available_sptypes):
-    """
-    Return the available template spectral type closest to that of the observed star.
-
-    Args:
-        sptype (str): spectral type of the observed star
-        available_sptypes (list of str): spectral types for which a template exists
-
-    Returns:
-        str: the closest entry of available_sptypes
-    """
-
-    # max spectral type mismatch tolerated between a star and its model template
-    max_sptype_index_mismatch = 5
-
-    index = sptype_index(sptype)
-    offsets = [abs(sptype_index(candidate) - index) for candidate in available_sptypes]
-    best = int(np.argmin(offsets))
-    if offsets[best] > max_sptype_index_mismatch:
-        raise ValueError("the closest model template spectral type {0} is {1:.1f} subtypes away from "
-                         "the spectral type {2} of the observed star, more than the tolerance of {3}; "
-                         "available types are {4}".format(available_sptypes[best], offsets[best], sptype,
-                                                          max_sptype_index_mismatch, list(available_sptypes)))
-    if offsets[best] > 0:
-        warnings.warn("no model template of spectral type {0}; using the closest available type {1}, "
-                      "{2:.1f} subtypes away. The wavelength zero point may be biased by the "
-                      "difference in spectral energy distribution.".format(
-                          sptype, available_sptypes[best], offsets[best]))
-    return available_sptypes[best]
-
 def read_template_zeropoint(template_image):
     """
     Read the registration anchor and the wavelength zero point position from a model template.
@@ -587,7 +591,9 @@ def read_template_zeropoint(template_image):
     return (_read("XCENT"), _read("YCENT"), _read("WV0_X"), _read("WV0_Y"))
 
 
-def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, filtersweep = False, halfwidth=10, halfheight=10, verbose = False, host_sptype = None):
+def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, filtersweep = False,
+                         halfwidth=10, halfheight=10, filtersweep_halfheight = FILTERSWEEP_HALFHEIGHT,
+                         broadband_halfheight = BROADBAND_HALFHEIGHT, verbose = False, host_sptype = None):
     """
     Compute PSF centroids for a grid of PSFs and return them as a calibration object.
 
@@ -599,6 +605,10 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
         filtersweep (bool): If True, it uses a filter sweep/scan dataset, this parameter is only relevant if template_dataset is not None.
         halfwidth (int): Half-width of the PSF fitting box.
         halfheight (int): Half-height of the PSF fitting box.
+        filtersweep_halfheight (int): Minimum half-height applied to filter sweep frames, whose
+            dispersed trace is taller than the default box. Defaults to FILTERSWEEP_HALFHEIGHT.
+        broadband_halfheight (int): Minimum half-height applied to broadband (band 2 or 3) frames,
+            whose trace spans the whole bandpass. Defaults to BROADBAND_HALFHEIGHT.
         verbose (bool): If True, prints fitted centroid values for each frame.
         host_sptype (str): Spectral type of the host star, only used when template_dataset is None
             and the frames are broadband, so that a model template must be selected by spectral type.
@@ -695,12 +705,12 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
                 temp_psf_data = template_dataset[-1].data
                 temp_x = xcent_temp[-1]
                 temp_y = ycent_temp[-1]
-        # Enable taller fitting stamps based on settings of global constants
+        # Enable taller fitting stamps for the frames with a longer dispersed trace
         frame_halfheight = halfheight
         if filtersweep:
-            frame_halfheight = max(frame_halfheight, FILTERSWEEP_HALFHEIGHT)
+            frame_halfheight = max(frame_halfheight, filtersweep_halfheight)
         if cfam == '2' or cfam == '3':
-            frame_halfheight = max(frame_halfheight, BROADBAND_HALFHEIGHT)
+            frame_halfheight = max(frame_halfheight, broadband_halfheight)
 
         xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis = fit_psf_centroid(
             psf_data, temp_psf_data,

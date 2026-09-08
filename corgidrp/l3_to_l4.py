@@ -1055,8 +1055,9 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
 # Also used by tests/test_spec.py::test_template_headers_complete
 BROADBAND_PRISM_HALFHEIGHT = 38
 
-# Half-height of the stamp used to register a narrowband prism image against a model template.
-NARROWBAND_PRISM_HALFHEIGHT = 26
+# Half-height of the stamp used to register a narrowband prism image against its template.
+# The narrowband streak is only a few pixels long, so this matches the historical default.
+NARROWBAND_PRISM_HALFHEIGHT = 10
 
 def _select_broadband_group(band):
     """
@@ -1076,7 +1077,7 @@ def _select_broadband_group(band):
 
 def _fit_zeropoint_position(offset_dataset, template_dataset, nb_filter, use_model_template,
                             spec_filter_offset, xcent_guess = None, ycent_guess = None,
-                            bb_nb_dx = None, bb_nb_dy = None):
+                            bb_nb_dx = None, bb_nb_dy = None, halfheight = None):
     """
     Fit the wavelength zeropoint position from one group of frames.
 
@@ -1092,6 +1093,8 @@ def _fit_zeropoint_position(offset_dataset, template_dataset, nb_filter, use_mod
         ycent_guess (float): initial y guess for the centroid fit of all frames
         bb_nb_dx (float): narrowband to broadband x offset overriding the lookup table
         bb_nb_dy (float): narrowband to broadband y offset overriding the lookup table
+        halfheight (int): half-height of the centroid fitting stamp; None selects the default
+            for the registration strategy in use
 
     Returns:
         float: zeropoint wavelength in nm
@@ -1103,8 +1106,10 @@ def _fit_zeropoint_position(offset_dataset, template_dataset, nb_filter, use_mod
                         "ycent": np.repeat(ycent_guess, len(offset_dataset))}
     else:
         initial_cent = None
-    # Both registration strategies need a stamp taller than the image they register.
-    halfheight = BROADBAND_PRISM_HALFHEIGHT if use_model_template else NARROWBAND_PRISM_HALFHEIGHT
+    # A broadband image registers against a model template spanning the whole band 3 trace, so it
+    # needs a much taller stamp than the short narrowband streak.
+    if halfheight is None:
+        halfheight = BROADBAND_PRISM_HALFHEIGHT if use_model_template else NARROWBAND_PRISM_HALFHEIGHT
     spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset,
                                           initial_cent = initial_cent, halfheight = halfheight)
     cen_wave, _, _, _ = read_cent_wave(nb_filter)
@@ -1167,7 +1172,7 @@ def _stamp_wave_zeropoint(frame, cen_wave, x0, x0err, y0, y0err, dimx, dimy):
     frame.ext_hdr["WV0_DIMX"] = dimx
     frame.ext_hdr["WV0_DIMY"] = dimy
 
-def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False, host_sptype = None, allow_template_fallback = True):
+def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False, host_sptype = None, allow_template_fallback = True, zeropoint_halfheight = None):
     """
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -1201,6 +1206,10 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
                            model-template fallback path.
         allow_template_fallback (boolean): if True (default) a dataset without narrowband frames is
                            registered against a model template; if False such a dataset raises.
+        zeropoint_halfheight (int): half-height of the centroid fitting stamp, in EXCAM pixels.
+                           Default None takes BROADBAND_PRISM_HALFHEIGHT on the model template path
+                           and NARROWBAND_PRISM_HALFHEIGHT otherwise. The stamp must be tall enough
+                           to contain the dispersed trace being registered.
 
     Returns:
         corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
@@ -1325,7 +1334,8 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             model_templates_used.append((os.path.basename(str(group_template[0].filepath)), group_sptype))
         cen_wave, x0, x0err, y0, y0err = _fit_zeropoint_position(
             offset_dataset, group_template, nb_filter, use_model_template, spec_filter_offset,
-            xcent_guess = xcent_guess, ycent_guess = ycent_guess, bb_nb_dx = bb_nb_dx, bb_nb_dy = bb_nb_dy)
+            xcent_guess = xcent_guess, ycent_guess = ycent_guess, bb_nb_dx = bb_nb_dx, bb_nb_dy = bb_nb_dy,
+            halfheight = zeropoint_halfheight)
 
         if return_all or with_science == False:
             science_subset = offset_dataset
@@ -1364,7 +1374,8 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             group_template, group_sptype, group_nb_filter = _resolve_model_template(science_subset, host_sptype)
             cen_wave, x0, x0err, y0, y0err = _fit_zeropoint_position(
                 science_subset, group_template, group_nb_filter, True, spec_filter_offset,
-                xcent_guess = xcent_guess, ycent_guess = ycent_guess)
+                xcent_guess = xcent_guess, ycent_guess = ycent_guess,
+                halfheight = zeropoint_halfheight)
             for frame in science_subset:
                 _stamp_wave_zeropoint(frame, cen_wave, x0, x0err, y0, y0err,
                                       science_subset[0].ext_hdr['NAXIS1'], science_subset[0].ext_hdr['NAXIS2'])

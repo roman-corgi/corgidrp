@@ -68,8 +68,8 @@ B. Spectroscopy calibrations (loaded automatically from corgidrp.default_cal_dir
 Output
 ------
 A single NDSpectroscopy FITS product (*_nds_cal.fits) containing:
-    data[:, :, 0]  — OD(lambda) spectrum
-    data[:, :, 1]  — wavelength grid (nm)
+    data[:, :, 0]  — wavelength grid (nm)
+    data[:, :, 1]  — OD(lambda) spectrum
     data[:, :, 2]  - EXCAM star position in x-direction
     data[:, :, 3]  - EXCAM star position in y-direction
     err[0, :, :, 0] — OD uncertainty (1-sigma)
@@ -106,6 +106,7 @@ import corgidrp.walker as walker
 from corgidrp.photon_counting import get_pc_mean
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.fluxcal import get_calspec_file
+from corgidrp.spec import read_cent_wave
 import corgidrp.detector as detector
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 
@@ -592,6 +593,100 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger, sk
             logger.info(f"  Dither {i+1}: Wavelength range {wv[0]:.1f}–{wv[-1]:.1f} nm outside expected range. FAIL")
             assert False, f"Wavelengths for dither {i+1} outside expected range."
 
+    # ------------------------------------------------------------------
+    # Wavelength solution accuracy, per dither position
+    # ------------------------------------------------------------------
+    # The simulated OD is flat in wavelength, so the OD checks below would pass even with a badly
+    # wrong wavelength solution. Compare the recovered wavelength zeropoint against the CorgiSim
+    # truth instead. The noiseless template shipped with the L1 data gives the offset between the
+    # broadband dispersed centroid and the zeropoint, and each L1 primary header carries the true
+    # broadband centroid of its own dither as free-form COMMENT cards.
+    logger.info("")
+    logger.info('='*80)
+    logger.info('Test Case 3: Wavelength solution accuracy against the simulation truth')
+    logger.info('='*80)
+
+    template_hdr = fits.getheader(
+        os.path.join(input_l1_datadir, 'G0V_PRISM3_template_slitless_cfam3F.fits'), ext=0)
+    zeropoint_dx = template_hdr['WV0_X'] - template_hdr['CENTX']
+    zeropoint_dy = template_hdr['WV0_Y'] - template_hdr['CENTY']
+
+    # With narrowband frames present, determine_wave_zeropoint fits the 3D spot and transfers it to
+    # the broadband frame with the tabulated CFAM filter wedge offset. CorgiSim places the 3D and 3F
+    # traces in one coordinate system and does not simulate that wedge, so the tabulated correction
+    # appears as a known offset that the truth has to carry too. On the model template path the
+    # template supplies the zeropoint directly and no wedge correction is applied.
+    if skip_narrowband:
+        wedge_dx, wedge_dy = 0., 0.
+    else:
+        xoff_bb, yoff_bb = read_cent_wave('3')[2:4]
+        xoff_nb, yoff_nb = read_cent_wave('3D')[2:4]
+        wedge_dx, wedge_dy = xoff_bb - xoff_nb, yoff_bb - yoff_nb
+
+    # The zeropoint is measured in the cropped frame, so the CorgiSim full-frame truth needs both
+    # the origin of the image area and the crop origin recorded by the crop step subtracted.
+    row0, col0 = detector.detector_areas['SCI']['image']['r0c0']
+    detpix0x = nd_spec_cal.ext_hdr['DETPIX0X']
+    detpix0y = nd_spec_cal.ext_hdr['DETPIX0Y']
+    assert detpix0x != -999.0 and detpix0y != -999.0, (
+        "DETPIX0X/DETPIX0Y were scrubbed from the merged header, so the crop origin of the frames "
+        "the zeropoint was measured in is unknown")
+
+    truth_zeropoint = {}
+    for filename in bright_star_filelist:
+        exthdr = fits.getheader(filename, ext=1)
+        if exthdr['CFAMNAME'].upper() != '3F':
+            continue
+        truth = {}
+        for card in fits.getheader(filename, ext=0)['COMMENT']:
+            if ':' in str(card):
+                key, value = str(card).split(':', 1)
+                truth[key.strip()] = value.strip()
+        truth_zeropoint[(float(exthdr['FSMX']), float(exthdr['FSMY']))] = (
+            float(truth['dispersed_fullframe_centx']) + zeropoint_dx - col0 - detpix0x + wedge_dx,
+            float(truth['dispersed_fullframe_centy']) + zeropoint_dy - row0 - detpix0y + wedge_dy)
+    assert len(truth_zeropoint) == M, (
+        f"Found CorgiSim truth centroids for {len(truth_zeropoint)} dither positions, "
+        f"but the product has {M}.")
+
+    # fsm was split with the same keywords, and therefore in the same order, as the dither grouping
+    # that built the product in nd_filter_calibration.create_nd_filter_cal_spec.
+    errortol_pix = 0.3
+    zeropoint_passed = True
+    for i, fsm_pos in enumerate(fsm):
+        dither = (float(fsm_pos[0]), float(fsm_pos[1]))
+        assert dither in truth_zeropoint, (
+            f"No CorgiSim truth centroid for dither {i+1} at (FSMX, FSMY) = {dither}.")
+        truth_x, truth_y = truth_zeropoint[dither]
+        # one zeropoint is fitted per dither, so every wavelength sample of a row repeats it
+        fit_x, fit_y = np.mean(nd_spec_cal.x_values[i]), np.mean(nd_spec_cal.y_values[i])
+        if abs(fit_x - truth_x) < errortol_pix and abs(fit_y - truth_y) < errortol_pix:
+            logger.info(f"  Dither {i+1} (FSMX, FSMY) = {dither}: zeropoint ({fit_x:.3f}, {fit_y:.3f}) "
+                        f"within {errortol_pix} pix of the truth ({truth_x:.3f}, {truth_y:.3f}). PASS")
+        else:
+            logger.info(f"  Dither {i+1} (FSMX, FSMY) = {dither}: zeropoint ({fit_x:.3f}, {fit_y:.3f}) "
+                        f"differs from the truth ({truth_x:.3f}, {truth_y:.3f}) by "
+                        f"({fit_x - truth_x:+.3f}, {fit_y - truth_y:+.3f}) pix. FAIL")
+            zeropoint_passed = False
+    assert zeropoint_passed, (
+        f"One or more dither positions recovered a wavelength zeropoint more than {errortol_pix} "
+        "pixels from the CorgiSim truth")
+
+    # The dispersion is shared by all dithers, so the wavelength sampling must be too. The grid
+    # start wavelength is not comparable across dithers: it is sampled on the integer pixel grid
+    # while the zeropoint is sub-pixel, so it varies by up to one sample spacing.
+    sample_spacing = [(wv[-1] - wv[0]) / (len(wv) - 1) for wv in wave]
+    logger.info(f"  Wavelength sample spacing across dither positions: "
+                f"{min(sample_spacing):.3f}-{max(sample_spacing):.3f} nm")
+    assert np.ptp(sample_spacing) < 0.1, (
+        f"Wavelength sample spacing varies by {np.ptp(sample_spacing):.3f} nm between dither "
+        "positions, but all dithers share one dispersion model")
+
+    # WAVLEN0 is a per-frame keyword that create_nd_filter_cal_spec scrubs when it merges headers
+    assert nd_spec_cal.ext_hdr['WAVLEN0'] == -999.0, (
+        "WAVLEN0 should be scrubbed to -999.0 in the merged NDSpectroscopy header, but is "
+        f"{nd_spec_cal.ext_hdr['WAVLEN0']}")
+
     # OD values should be positive and finite
     od_all = nd_spec_cal.od_spectra
     x_all = nd_spec_cal.x_values
@@ -649,7 +744,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger, sk
     # Test CGI-REQT-5478: ND Filter Calibration at new location
     # ==================================================================
     logger.info('='*80)
-    logger.info('Test Case 3: CGI-REQT-5478 - ND Filter Calibration at new location')
+    logger.info('Test Case 4: CGI-REQT-5478 - ND Filter Calibration at new location')
     logger.info('='*80)
 
     # Make a mock 'clean_spec_image' with the wavelength zeropoint at (60,65) -> cropped 125x125 image
