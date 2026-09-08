@@ -33,7 +33,7 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     attenuated_flux = true_flux_bright / (10 ** od_truth)
 
     fsm_positions = [(0.0, 0.0),                     
-                     (1.0, -1.0)]                   
+                     (50.0, -50.0)]                   
 
     bright_frames = []
     for fsm_x, fsm_y in fsm_positions:
