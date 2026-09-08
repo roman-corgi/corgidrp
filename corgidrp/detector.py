@@ -298,9 +298,10 @@ def unpack_geom(arrtype, key, detector_regions=None):
         detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
-        rows (int): Number of rows of frame
-        cols (int): Number of columns of frame
-        r0c0 (tuple): Tuple of (row position, column position) of corner closest to (0,0)
+        tuple:
+            - rows (int): Number of rows of frame
+            - cols (int): Number of columns of frame
+            - r0c0 (tuple): Tuple of (row position, column position) of corner closest to (0,0)
     """
     if detector_regions is None:
         detector_regions = detector_areas
@@ -320,9 +321,10 @@ def imaging_area_geom(arrtype, detector_regions=None):
         detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
-        rows (int): Number of rows of imaging area
-        cols (int): Number of columns of imaging area
-        r0c0 (tuple): Tuple of (row position, column position) of corner closest to (0,0)
+        tuple:
+            - rows (int): Number of rows of imaging area
+            - cols (int): Number of columns of imaging area
+            - r0c0 (tuple): Tuple of (row position, column position) of corner closest to (0,0)
     """
     if detector_regions is None:
         detector_regions = detector_areas
@@ -352,7 +354,7 @@ def imaging_slice(arrtype, frame, detector_regions=None):
         detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
-        sl (array_like): Imaging slice
+        array_like: Imaging slice
     """
     rows, cols, r0c0 = imaging_area_geom(arrtype, detector_regions)
     sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
