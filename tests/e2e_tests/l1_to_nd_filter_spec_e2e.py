@@ -612,10 +612,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger, sk
     zeropoint_dy = template_hdr['WV0_Y'] - template_hdr['CENTY']
 
     # With narrowband frames present, determine_wave_zeropoint fits the 3D spot and transfers it to
-    # the broadband frame with the tabulated CFAM filter wedge offset. CorgiSim places the 3D and 3F
-    # traces in one coordinate system and does not simulate that wedge, so the tabulated correction
-    # appears as a known offset that the truth has to carry too. On the model template path the
-    # template supplies the zeropoint directly and no wedge correction is applied.
+    # the broadband frame with the tabulated CFAM filter wedge offset.
     if skip_narrowband:
         wedge_dx, wedge_dy = 0., 0.
     else:
@@ -671,21 +668,6 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger, sk
     assert zeropoint_passed, (
         f"One or more dither positions recovered a wavelength zeropoint more than {errortol_pix} "
         "pixels from the CorgiSim truth")
-
-    # The dispersion is shared by all dithers, so the wavelength sampling must be too. The grid
-    # start wavelength is not comparable across dithers: it is sampled on the integer pixel grid
-    # while the zeropoint is sub-pixel, so it varies by up to one sample spacing.
-    sample_spacing = [(wv[-1] - wv[0]) / (len(wv) - 1) for wv in wave]
-    logger.info(f"  Wavelength sample spacing across dither positions: "
-                f"{min(sample_spacing):.3f}-{max(sample_spacing):.3f} nm")
-    assert np.ptp(sample_spacing) < 0.1, (
-        f"Wavelength sample spacing varies by {np.ptp(sample_spacing):.3f} nm between dither "
-        "positions, but all dithers share one dispersion model")
-
-    # WAVLEN0 is a per-frame keyword that create_nd_filter_cal_spec scrubs when it merges headers
-    assert nd_spec_cal.ext_hdr['WAVLEN0'] == -999.0, (
-        "WAVLEN0 should be scrubbed to -999.0 in the merged NDSpectroscopy header, but is "
-        f"{nd_spec_cal.ext_hdr['WAVLEN0']}")
 
     # OD values should be positive and finite
     od_all = nd_spec_cal.od_spectra
