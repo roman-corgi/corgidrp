@@ -351,12 +351,12 @@ class Dataset():
                     order = np.argsort(values)
                     representatives = np.zeros(len(values))
                     start = 0
-                    for i in range(1, len(order) + 1):
-                        if i == len(order) or values[order[i]] - values[order[i - 1]] > tolerances[key]:
-                            members = order[start:i]
+                    for j in range(1, len(order) + 1):
+                        if j == len(order) or values[order[j]] - values[order[j - 1]] > tolerances[key]:
+                            members = order[start:j]
                             representatives[members] = np.mean(values[members])
-                            start = i
-                col_vals[i] = representatives
+                            start = j
+                    col_vals[i] = representatives
 
         all_data = np.array(col_vals).T
 
