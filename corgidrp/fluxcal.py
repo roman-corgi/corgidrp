@@ -327,10 +327,11 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
                                    in pixels. Adjust based on desired λ/D.
         centering_initial_guess (tuple): (Optional) (x,y) initial guess to perform centroiding.  
         return_xy (bool, optional): If True, also return the x and y coordinates of the aperture center.
-            Default is False.
+            Default is False. 
 
     Returns:
-        tuple: (flux, flux_err) or (flux, flux_err, back) if background_sub is True.
+        tuple: (flux, flux_err) or (flux, flux_err, back) if background_sub is True or (flux, fluex_err, pos) if return_xy is True. 
+        If both return_xy and background_sub are True, only (flux, fluex_err, pos) gets returned. 
     """
     if frac_enc_energy <= 0 or frac_enc_energy > 1:
         raise ValueError("frac_enc_energy {0} should be within 0 < fee <= 1".format(str(frac_enc_energy)))
