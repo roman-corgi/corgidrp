@@ -58,7 +58,8 @@ def calc_stokes_unocculted(input_dataset,
                            image_center_x=None, 
                            image_center_y=None,
                            split_pa_states=True,
-                           pa_tolerance=0.1):
+                           pa_tolerance=0.1,
+                           fsm_tolerance=1.0):
     """
     Compute uncalibrated Stokes parameters (I, Q/I, U/I) from unocculted L3 polarimetric datacubes.
 
@@ -84,6 +85,12 @@ def calc_stokes_unocculted(input_dataset,
         pa_tolerance (float, optional):
             Maximum allowed difference in PA_APER (deg) to group frames together when split_pa_states is True.
             Default is 0.1.
+        fsm_tolerance (float, optional):
+            Maximum allowed difference in the FSM position (mas) to group frames together. Frames taken
+            at different dithers are always kept apart, since the Mueller matrix calibration needs the
+            star on the same resolution element and averaging over dithers would defeat that. The
+            tolerance is there because the reported FSM position drifts a little even when the mirror
+            is not commanded to move. Default is 1.0.
 
     Returns:
         Image:
@@ -113,14 +120,22 @@ def calc_stokes_unocculted(input_dataset,
 
     prism_map = {'POL0': [0., 90.], 'POL45': [45., 135.]}
 
-    # split datasets by target if there are multiple targets
+    # Split the dataset by target and by dither position. The dithers have to be kept apart
+    # because the Mueller matrix calibration needs every star measured on the same resolution
+    # element, so combining frames across dithers would reintroduce the flat field error the
+    # dithers exist to avoid.
+    pointing_datasets, _ = input_dataset.split_dataset(
+        prihdr_keywords=["TARGET"],
+        exthdr_keywords=["FSMX", "FSMY"],
+        tolerances={"FSMX": fsm_tolerance, "FSMY": fsm_tolerance})
+
+    # split each of those further by PA_APER if there are multiple roll angles
     if split_pa_states:
         datasets = []
-        target_datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
-        for target_dataset in target_datasets:
+        for pointing_dataset in pointing_datasets:
             # Assign frames to a cluster based on the nearest PA_APER
             clusters = []
-            for frame in target_dataset.frames:
+            for frame in pointing_dataset.frames:
                 pa = frame.pri_hdr["PA_APER"] % 360.0 # in case PA_APER can be negative..
                 pa_rad = np.deg2rad(pa)
                 pa_sin = np.sin(pa_rad)
@@ -150,7 +165,7 @@ def calc_stokes_unocculted(input_dataset,
             for cluster in clusters:
                 datasets.append(Dataset(cluster["frames"]))
     else:
-        datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
+        datasets = pointing_datasets
 
     stokes_vectors = []
 
@@ -253,7 +268,8 @@ def calc_stokes_unocculted(input_dataset,
 def generate_mueller_matrix_cal(input_dataset, 
                                 path_to_pol_ref_file=None,
                                 svd_threshold=1e-5,
-                                mode = "match_position"):
+                                mode = "match_position",
+                                pa_tolerance=0.1):
     '''
     Calculates the Mueller Matrix calibration for a given dataset of polarimetric observations.
     The expected input is a dataset of stokes vectors measured from known polarized standard stars, separated by 
@@ -282,12 +298,15 @@ def generate_mueller_matrix_cal(input_dataset,
             ./data/stellar_polarization_database.csv is used.
         svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
         mode (str, optional): The mode of operation. Defaults to "match_position".
-            - "match_position": The function will calculate the Mueller Matrix using only input stokes vectors where 
+            - "match_position": The function will calculate the Mueller Matrix using only input stokes vectors where
             the stokes vectors match within the same resolution element. If there are multiple sets that match it will
-            pick the one with the least movment. If there is no match it will raise an error. This is the default mode. 
-            - "closest_match": The function will calculate the Mueller Matrix using the closest matching stokes vectors 
+            pick the one with the least movment. If there is no match it will raise an error. This is the default mode.
+            - "closest_match": The function will calculate the Mueller Matrix using the closest matching stokes vectors
             in terms of position.
             - "all": The function will calculate the Mueller Matrix using all input stokes vectors, regardless of position.
+        pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) for two stokes vectors to
+            count as the same roll angle when selecting by position. One stokes vector is kept per target per
+            roll, so this decides which vectors are treated as alternatives to choose between. Default is 0.1.
     Returns:
         mueller_matrix_obj (MuellerMatrix or NDMuellerMatrix): The generated Mueller Matrix object.
     '''
@@ -331,47 +350,52 @@ def generate_mueller_matrix_cal(input_dataset,
         if target not in pol_ref_targets:
             raise ValueError(f"Target {target} not found in polarization reference file.")
 
-    #get the xy positions of the first pol state from each frame: 
-    frame_xys = [(image.ext_hdr["STAR_X1"], image.ext_hdr["STAR_Y1"]) for image in dataset]
-
-    # If mode =='all' just skip ahead. 
-    # If mode =='match_position', we need to see if we can find a set frames that includes each target 
-    # where the position is under one resolution element. If there are multiple sets that match, we 
+    # If mode =='all' just skip ahead.
+    # If mode =='match_position', we need to see if we can find a set frames that includes each target
+    # where the position is under one resolution element. If there are multiple sets that match, we
     # will pick the one with the least movement.
     if mode != "all":
-        # group the frames by target
-        target_groups = {}
-        for i, target in enumerate(frame_targets):
-            if target not in target_groups:
-                target_groups[target] = []
-            target_groups[target].append(i)
-
-        target_names = list(target_groups.keys())
+        def star_position(image):
+            """The measured position of the star in the first polarization state of a frame."""
+            return (image.ext_hdr["STAR_X1"], image.ext_hdr["STAR_Y1"])
 
         def star_separation(xy_a, xy_b):
             """Separation in pixels between two star positions."""
             return np.sqrt((xy_a[0] - xy_b[0])**2 + (xy_a[1] - xy_b[1])**2)
 
+        # Group the frames by target and by roll angle. Every roll has to be kept, because a
+        # different roll rotates the reference Q and U and so places an independent constraint on
+        # the Mueller matrix, whereas the dithers of one target at one roll are alternatives to
+        # pick between. Grouping on the target alone would let the rolls of a target compete with
+        # each other as though they were repeat observations and all but one would be thrown out.
+        # The roll is matched to a tolerance because PA_APER can vary slightly within one roll.
+        pointing_datasets, _ = dataset.split_dataset(prihdr_keywords=["TARGET", "PA_APER"],
+                                                     tolerances={"PA_APER": pa_tolerance})
+        groups = [list(pointing_dataset.frames) for pointing_dataset in pointing_datasets]
+
         # Try every frame's star position in turn as a candidate dither position. For each
-        # candidate, keep the one frame per target whose star landed closest to it, then measure
-        # how far apart the stars in that set of frames actually are. The best set is the one
-        # whose two most widely separated stars are the closest together.
+        # candidate, keep the one frame per target and roll whose star landed closest to it, then
+        # measure how far apart the stars in that set of frames actually are. The best set is the
+        # one whose two most widely separated stars are the closest together.
         best_frames = None
         best_separation = np.inf
-        for candidate_xy in frame_xys:
-            #Take the frame of each target whose star landed closest to this candidate position
+        for candidate_image in dataset:
+            candidate_xy = star_position(candidate_image)
+
+            #Take the frame of each target and roll whose star landed closest to this position
             candidate_frames = []
-            for target_name in target_names:
-                group = target_groups[target_name]
-                distances_to_candidate = [star_separation(frame_xys[j], candidate_xy) for j in group]
+            for group in groups:
+                distances_to_candidate = [star_separation(star_position(image), candidate_xy)
+                                          for image in group]
                 candidate_frames.append(group[np.argmin(distances_to_candidate)])
 
             #A set of frames is only as good as its worst pair, so check every pair in it
             candidate_separation = 0.
-            for i in candidate_frames:
-                for j in candidate_frames:
+            for image_a in candidate_frames:
+                for image_b in candidate_frames:
                     candidate_separation = max(candidate_separation,
-                                               star_separation(frame_xys[i], frame_xys[j]))
+                                               star_separation(star_position(image_a),
+                                                               star_position(image_b)))
 
             if candidate_separation < best_separation:
                 best_frames = candidate_frames
@@ -401,8 +425,8 @@ def generate_mueller_matrix_cal(input_dataset,
         elif mode != "closest_match":
             raise ValueError("Mode must be one of 'match_position', 'closest_match', or 'all'.")
 
-        #Keep only the selected frames, one per target, in their original dataset order
-        dataset = Dataset([dataset[i] for i in sorted(best_frames)])
+        #Keep only the selected frames, one per target per roll angle
+        dataset = Dataset(best_frames)
 
     # measure the normalized difference for each dataset
     stokes_vectors = []
