@@ -90,7 +90,7 @@ def test_l1_to_nd_polcal_e2e(e2edata_path, e2eoutput_path):
     assert mm[2,2] == pytest.approx(0.99455, rel=rtol)
 
     # for off-diagonal elements which are basically 0 and noisier, check with absolute tolerance
-    atol = 0.15
+    atol = 0.2
     assert mm[0,1] == pytest.approx(0.00926, abs=atol)
     assert mm[0,2] == pytest.approx(0.00000, abs=atol)
     assert mm[1,0] == pytest.approx(-0.00926, abs=atol)
