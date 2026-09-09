@@ -530,13 +530,20 @@ def generate_mueller_matrix_cal(input_dataset,
     mueller_matrix_err[2,1] = mueller_elements_err[4]
     mueller_matrix_err[2,2] = mueller_elements_err[5]
 
+    # The star positions record where the star landed in whichever frame happened to be selected
+    # first. They are what the position matching above works from, but they describe a single
+    # measurement rather than the instrument, so they do not belong on the calibration product.
+    cal_ext_hdr = dataset[0].ext_hdr.copy()
+    for keyword in ("STAR_X1", "STAR_Y1", "STAR_X2", "STAR_Y2"):
+        cal_ext_hdr.remove(keyword, ignore_missing=True)
+
     if is_nd:
         mueller_matrix_obj = NDMuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
-                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset,
+                         ext_hdr=cal_ext_hdr, input_dataset=dataset,
                          err=mueller_matrix_err)
     else:
         mueller_matrix_obj = MuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
-                         ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset,
+                         ext_hdr=cal_ext_hdr, input_dataset=dataset,
                          err=mueller_matrix_err)
 
     mueller_matrix_obj.ext_hdr.add_history(f"Pol reference file: {path_to_pol_ref_file}")
