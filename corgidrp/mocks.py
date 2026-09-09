@@ -5596,8 +5596,8 @@ def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
         uq_ct (float): U to Q crosstalk
         u_eff (float): U efficiency
         qu_ct (float): Q to U crosstalk
-        fsmx (float): X-axis dither position of the fast steering mirror
-        fsmy (float): Y-axis dither position of the fast steering mirror
+        fsmx (float): X-axis dither position of the fast steering mirror, in milliarcseconds
+        fsmy (float): Y-axis dither position of the fast steering mirror, in milliarcseconds
 
     Returns:
         corgidrp.data.Dataset: The simulated L2b polarimetric dataset for polcal testing
@@ -5606,6 +5606,16 @@ def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
     #Read in the test polarization stellar database from test_data/
     pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
     pol_ref_targets = pol_ref["TARGET"].tolist()
+
+    # Convert the FSM dither position from mas to pixels, so that the stars are actually
+    # displaced by the dither rather than only labelled with it. A positive FSM position puts
+    # the star at larger x/y, following the convention used elsewhere in this module. The
+    # offset is applied to the gaussian within its own array, so it is not rounded to whole
+    # pixels and a sub-pixel dither is represented faithfully.
+    platescale = 21.8 # mas/pixel
+    dither_x = fsmx / platescale
+    dither_y = fsmy / platescale
+
     #Create mock data for three targets in the database - for each target inject known polarization
     image_list = []
     for i, target in enumerate(pol_ref_targets):
@@ -5630,12 +5640,17 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
         q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_rotation_angle)
         q_meas = q * q_eff + u * uq_ct + q_inst/100.0
         u_meas = u * u_eff + q * qu_ct + u_inst/100.0
-        # generate four gaussians scaled appropriately for the target's polarization
+        # generate four gaussians scaled appropriately for the target's polarization,
+        # each displaced from its nominal beam center by the FSM dither
         gauss_array_shape = [26,26]
-        gauss1 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + q_meas)/2 #left image, POL0
-        gauss2 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - q_meas)/2 #right image, POL0
-        gauss3 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + u_meas)/2 #left image, POL45
-        gauss4 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - u_meas)/2 #right image, POL45
+        gauss1 = gaussian_array(array_shape=gauss_array_shape,amp=1000000,
+                                xoffset=dither_x,yoffset=dither_y) * (1 + q_meas)/2 #left image, POL0
+        gauss2 = gaussian_array(array_shape=gauss_array_shape,amp=1000000,
+                                xoffset=dither_x,yoffset=dither_y) * (1 - q_meas)/2 #right image, POL0
+        gauss3 = gaussian_array(array_shape=gauss_array_shape,amp=1000000,
+                                xoffset=dither_x,yoffset=dither_y) * (1 + u_meas)/2 #left image, POL45
+        gauss4 = gaussian_array(array_shape=gauss_array_shape,amp=1000000,
+                                xoffset=dither_x,yoffset=dither_y) * (1 - u_meas)/2 #right image, POL45
         #add the gaussians to the mock images
         center_left0, center_right0 = get_pol_image_centers(image_separation_arcsec, 0)
         center_left45, center_right45 = get_pol_image_centers(image_separation_arcsec, 45)
@@ -5659,6 +5674,9 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
         frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_POL_SETUP"
         frame.ext_hdr['FSMX'] = fsmx
         frame.ext_hdr['FSMY'] = fsmy
+        # create_wcs writes PLTSCALE in the polcal recipe, but tests that call the polcal
+        # steps directly skip it, so provide the nominal CGI value here
+        frame.ext_hdr['PLTSCALE'] = platescale # mas/pixel
 
     return mock_dataset
 
