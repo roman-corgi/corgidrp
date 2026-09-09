@@ -5582,7 +5582,8 @@ def get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale 
 
 def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
                             image_separation_arcsec=7.5, q_inst=0.5,u_inst=-0.1,
-                            q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03, fsmx=0, fsmy=0):
+                            q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03, fsmx=0, fsmy=0,
+                            pa_apers=None):
     '''
     Generate a mock L2b polarimetric dataset for polcal testing
 
@@ -5598,6 +5599,12 @@ def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
         qu_ct (float): Q to U crosstalk
         fsmx (float): X-axis dither position of the fast steering mirror, in milliarcseconds
         fsmy (float): Y-axis dither position of the fast steering mirror, in milliarcseconds
+        pa_apers (float or list of float): Roll angle (deg) to use for each target. A single value
+            is used for every target, and a list is taken one entry per target in the order the
+            targets appear in the reference file. If None (the default) a random roll is drawn for
+            each target. Pass this when building several dither positions that have to share their
+            roll angles, since the injected polarization depends on the roll and so the roll cannot
+            be changed in the header afterwards.
 
     Returns:
         corgidrp.data.Dataset: The simulated L2b polarimetric dataset for polcal testing
@@ -5632,7 +5639,12 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
         pol45.err = (np.ones_like(pol45.data) * 1)[None,:]
 
         #Add Random rotation angle - This should still work everywhere.
-        random_rotation_angle = np.random.randint(0,360)
+        if pa_apers is None:
+            random_rotation_angle = np.random.randint(0,360)
+        elif np.ndim(pa_apers) == 0:
+            random_rotation_angle = pa_apers
+        else:
+            random_rotation_angle = pa_apers[i]
         pol0.pri_hdr['PA_APER'] = random_rotation_angle
         pol45.pri_hdr['PA_APER'] = random_rotation_angle
 
