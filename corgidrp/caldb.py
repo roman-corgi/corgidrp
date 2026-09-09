@@ -324,13 +324,87 @@ class CalDB:
         if to_disk:
             self.save()
 
+    # Spectroscopy CFAMNAME sub-band values that share a dispersion/flux
+    # calibration with their parent broadband setting (e.g. a narrowband spot
+    # image taken at 2C or 3D uses the same calibration as broadband 2F/3F
+    # science data).
+    _SPEC_CFAM_SUBBANDS = ['2F', '3F', '2A', '2B', '2C', '3A', '3B', '3C', '3D', '3E', '3G']
+
+    # Calibration types that are inherently defined by the ND filter position.
+    # Datasets for these types intentionally mix ND-filter-in frames (e.g. a
+    # bright star observed through the ND filter) with ND-filter-out frames
+    # (e.g. a dim star used for the flux calibration), so the PAM values used
+    # for lookup must come from one of the ND-filter-in frames specifically,
+    # not an arbitrary frame in the dataset.
+    _ND_FILTER_CAL_TYPES = ['NDFilterSweetSpot', 'NDMuellerMatrix', 'NDSpectroscopy']
+
+    def _normalize_spec_cfam(self, cfamname):
+        """
+        Maps a spectroscopy CFAMNAME to its parent broadband value (e.g. '2C' -> '2F'),
+        so that narrowband and broadband frames of the same band family resolve to the
+        same calibration entry.
+
+        Args:
+            cfamname (str): CFAMNAME value from a frame header
+
+        Returns:
+            str: the broadband CFAMNAME to filter calibrations on, or cfamname unchanged
+                if it is not a recognized spectroscopy sub-band
+        """
+        if cfamname in self._SPEC_CFAM_SUBBANDS:
+            return cfamname[0] + 'F'
+        return cfamname
+
+    def _select_reference_frame(self, frame_or_dataset, dtype_label):
+        """
+        Resolves a single representative frame to use for calibration selection, from
+        either a single frame or a full Dataset.
+
+        Some datasets intentionally mix frames with different PAM configurations, e.g.
+        ND filter calibration products mix ND-filter-in and ND-filter-out frames, or
+        L3->L4 spectroscopy datasets mix a narrowband spot image with broadband science
+        frames. Picking an arbitrary frame (e.g. always the first one) from such a
+        dataset can select the wrong PAM configuration for calibration lookup.
+
+        For calibration types where this matters (currently the ND-filter-based
+        calibrations, since ND-filter-out frames don't share a normalizable FPAMNAME
+        with ND-filter-in frames the way narrowband/broadband CFAMNAME values do), this
+        looks across the whole dataset for a frame with the relevant PAM configuration.
+        For every other calibration type, the first frame of the dataset is used, same
+        as passing a single frame directly.
+
+        Args:
+            frame_or_dataset (corgidrp.data.Image or corgidrp.data.Dataset or None): a
+                single science frame, a full Dataset of frames, or None
+            dtype_label (str): calibration type label (see `labels`)
+
+        Returns:
+            corgidrp.data.Image or None: the frame to use for calibration selection
+        """
+        if not isinstance(frame_or_dataset, data.Dataset):
+            return frame_or_dataset
+
+        if dtype_label in self._ND_FILTER_CAL_TYPES:
+            for candidate in frame_or_dataset:
+                if str(candidate.ext_hdr.get('FPAMNAME', '')).startswith('ND'):
+                    return candidate
+            # no ND-filter-in frame found; fall back to the first frame and let
+            # the filter_calib err_if_none logic raise a clear error downstream
+
+        return frame_or_dataset[0]
+
     def get_calib(self, frame, dtype, to_disk=True):
         """
         Outputs the best calibration file of the given type for the input science frame.
 
         Args:
-            frame (corgidrp.data.Image): an image frame to request a calibration for. If None is passed in, looks for the 
-                                         most recently created calibration. 
+            frame (corgidrp.data.Image or corgidrp.data.Dataset): an image frame, or a
+                full Dataset, to request a calibration for. If None is passed in, looks
+                for the most recently created calibration. Passing a Dataset (rather than
+                a single frame) is required to get correct results for calibration types
+                whose datasets intentionally mix frames with different PAM
+                configurations -- e.g. ND filter calibration products, which mix
+                ND-filter-in and ND-filter-out frames. See `_select_reference_frame`.
             dtype (corgidrp.data Class): for example: corgidrp.data.Dark (TODO: document the entire list of options)
             to_disk (bool): True by default, will update DB from disk before matching
 
@@ -343,8 +417,19 @@ class CalDB:
             )
         dtype_label = labels[dtype]
 
+        # resolve a single representative frame, handling the case where a full
+        # Dataset was passed in instead of a single frame
+        science_frame = self._select_reference_frame(frame, dtype_label)
+
+        # if the chosen frame's pixel data wasn't loaded (e.g. Dataset(..., no_data=True)
+        # used for RAM-heavy processing), reload just this one frame from disk --
+        # _get_values_from_entry needs the data shape, and reloading only the frame
+        # actually used (rather than the whole dataset) keeps this RAM-efficient
+        if science_frame is not None and science_frame.data is None:
+            science_frame = data.Image(science_frame.filepath)
+
         # get values for this science frame
-        _, frame_dict = self._get_values_from_entry(frame, is_calib=False)
+        _, frame_dict = self._get_values_from_entry(science_frame, is_calib=False)
 
         # update database from disk in case anything changed
         if to_disk:
@@ -357,7 +442,7 @@ class CalDB:
 
         # different logic for different cases
         # each if/else statement sets options_sorted: candidates ordered by preference (best first)
-        if frame is None:
+        if science_frame is None:
             # no frame is passed in, get the most recently created
             options_sorted = calibdf.sort_values("Date Created", ascending=False)
 
@@ -367,7 +452,7 @@ class CalDB:
             options = self.filter_calib(options, "EMGAIN_C", frame_dict["EMGAIN_C"], err_if_none=True)
 
             # for analog frames, exclude PC master darks. for PC frames, prefer them
-            is_pc = frame.ext_hdr.get('ISPC', 0)
+            is_pc = science_frame.ext_hdr.get('ISPC', 0)
             if is_pc:
                 # prefer PC master dark if available, otherwise fall back to any matching dark
                 pc_options = options[options['PC_STAT'] == 'photon-counted master dark']
@@ -404,13 +489,11 @@ class CalDB:
             dtype = data.FluxcalFactor
 
         elif dtype_label in ['SpecFluxCal']:
-            # filter by color filter and DPAM
-            if frame_dict['CFAMNAME'] in ['2F', '3F', '2A', '2B', '2C', '3A', '3B', '3C', '3D', '3E', '3G']:
-                value = list(frame_dict['CFAMNAME'])[0] + 'F'
-                options = self.filter_calib(calibdf, "CFAMNAME", value, err_if_none=True)
-            else:
-                options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+            # filter by color filter, DPAM (prism), and SPAM (slit)
+            cfam_value = self._normalize_spec_cfam(frame_dict['CFAMNAME'])
+            options = self.filter_calib(calibdf, "CFAMNAME", cfam_value, err_if_none=True)
             options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "SPAMNAME", frame_dict['SPAMNAME'], err_if_none=True)
 
             # sort by closest in time
             options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
@@ -488,8 +571,42 @@ class CalDB:
             # sort by closest in time
             options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         elif dtype_label in ['DispersionModel']:
-            # filter by prism (DPAM) so PRISM2 and PRISM3 data get their own model
+            # filter by prism (DPAM) so PRISM2 and PRISM3 data get their own model,
+            # and by color filter (CFAM) so each band's dispersion model is used
+            cfam_value = self._normalize_spec_cfam(frame_dict['CFAMNAME'])
             options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", cfam_value, err_if_none=True)
+
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+        elif dtype_label in ['NDFilterSweetSpot']:
+            # filter by prism (DPAM), focal plane mask (FPAM, the ND filter position),
+            # and color filter (CFAM). CFAM sub-bands fall back to their parent
+            # broadband calibration if no exact sub-band match exists.
+            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
+            exact_cfam_match = options[options["CFAMNAME"] == frame_dict['CFAMNAME']]
+            if len(exact_cfam_match) > 0:
+                options = exact_cfam_match
+            else:
+                cfam_value = self._normalize_spec_cfam(frame_dict['CFAMNAME'])
+                options = self.filter_calib(options, "CFAMNAME", cfam_value, err_if_none=True)
+
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+        elif dtype_label in ['NDMuellerMatrix']:
+            # filter by focal plane mask (FPAM, the ND filter position) and color filter (CFAM)
+            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+        elif dtype_label in ['NDSpectroscopy']:
+            # filter by prism (DPAM), focal plane mask (FPAM, the ND filter position),
+            # and color filter (CFAM)
+            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
+            options = self.filter_calib(options, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
             # sort by closest in time
             options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
