@@ -4361,7 +4361,7 @@ class MuellerMatrix(Image):
             # whose stars share a resolution element. They say nothing about the instrument, so
             # they are dropped rather than carried onto the combined calibration product.
             deleted_keywords=corgidrp.check.deleted_keywords_default + [
-                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2',
+                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2', 'STARPRSM',
             ]
         )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
@@ -4448,7 +4448,7 @@ class NDMuellerMatrix(Image):
             # whose stars share a resolution element. They say nothing about the instrument, so
             # they are dropped rather than carried onto the combined calibration product.
             deleted_keywords=corgidrp.check.deleted_keywords_default + [
-                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2',
+                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2', 'STARPRSM',
             ]
         )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
