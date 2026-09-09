@@ -10,7 +10,8 @@ L1 -> L2a  (l1_to_l2a_basic.json)
    -> L2b  (l2a_to_l2b_spec.json)
    -> NDSpectroscopy cal product  (l2b_to_nd_filter_spec.json)
         steps: divide_by_exptime
-               determine_wave_zeropoint   (needs 3D + 3F frames)
+               determine_wave_zeropoint   (3D + 3F frames, or 3F frames alone
+                                           registered against a model template)
                add_wavelength_map         (needs DispersionModel from CalDB)
                extract_spec
                create_nd_filter_cal_spec  (needs SpecFluxCal or dim-star frames)
@@ -26,6 +27,9 @@ that a separate dark can be subtracted.
        VISTYPE  = CGIVST_CAL_ABSFLUX_FAINT
        TARGET   = dim CALSPEC star "tyc 4424-1286-1"
        Purpose  : wavelength zero-point via determine_wave_zeropoint
+       Optional : test_nd_filter_spec_broadband_only_e2e leaves these frames out
+                  and estimates the zero-point by registering the broadband frames 
+                  against a noiseless template
 
   2. Broadband dim-star frames   (CFAMNAME=3F, FPAMNAME=OPEN_34, DPAMNAME=PRISM3)
        VISTYPE  = CGIVST_CAL_ABSFLUX_FAINT
@@ -64,8 +68,8 @@ B. Spectroscopy calibrations (loaded automatically from corgidrp.default_cal_dir
 Output
 ------
 A single NDSpectroscopy FITS product (*_nds_cal.fits) containing:
-    data[:, :, 0]  — OD(lambda) spectrum
-    data[:, :, 1]  — wavelength grid (nm)
+    data[:, :, 0]  — wavelength grid (nm)
+    data[:, :, 1]  — OD(lambda) spectrum
     data[:, :, 2]  - EXCAM star position in x-direction
     data[:, :, 3]  - EXCAM star position in y-direction
     err[0, :, :, 0] — OD uncertainty (1-sigma)
@@ -102,6 +106,7 @@ import corgidrp.walker as walker
 from corgidrp.photon_counting import get_pc_mean
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.fluxcal import get_calspec_file
+from corgidrp.spec import read_cent_wave
 import corgidrp.detector as detector
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 
@@ -111,6 +116,28 @@ thisfile_dir = os.path.dirname(__file__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def setup_logger(name, log_file):
+    """
+    Make a logger writing to both a file and the console.
+
+    Args:
+        name (str): logger name
+        log_file (str): path of the log file to write
+
+    Returns:
+        logging.Logger: the configured logger
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    formatter = logging.Formatter('%(message)s')
+    for handler in [logging.FileHandler(log_file), logging.StreamHandler()]:
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    return logger
+
 
 def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir, logger):
     """
@@ -287,7 +314,7 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir, logger):
 # Test 
 # ---------------------------------------------------------------------------
 
-def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
+def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger, skip_narrowband=False):
     """
     Run and validate the ND filter spectroscopy calibration pipeline.
 
@@ -306,6 +333,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     outputdir (str): Root output directory.  Intermediate L2a/L2b files and the
         final NDSpectroscopy product are written here.
     logger (logging.Logger): Logger instance for output
+    skip_narrowband (bool): if True, leave the narrowband frames out of the input
 
     Returns:
     nd_spec_cal (corgidrp.data.NDSpectroscopy): Spectroscopy ND filter calibration
@@ -357,7 +385,13 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
         for f in os.listdir(input_l1_datadir)
         if f.endswith('l1_.fits') or f.endswith('l1.fits')
     )
-    
+
+    if skip_narrowband:
+        l1_filelist = [f for f in l1_filelist
+                       if fits.getheader(f, ext=1)['CFAMNAME'].upper() not in ('3D', '2C')]
+        logger.info(f"Narrowband frames left out: {len(l1_filelist)} broadband L1 files remain.")
+
+
     # Separating file into brightstar and faint star dataset and assigning a different visit id to the former.
     bright_star_filelist = sorted(f for f in l1_filelist if fits.getheader(f, ext=1)['FPAMNAME'] == 'ND225')
     faint_star_filelist = sorted(f for f in l1_filelist if fits.getheader(f, ext=1)['FPAMNAME'] != 'ND225')
@@ -559,6 +593,82 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
             logger.info(f"  Dither {i+1}: Wavelength range {wv[0]:.1f}–{wv[-1]:.1f} nm outside expected range. FAIL")
             assert False, f"Wavelengths for dither {i+1} outside expected range."
 
+    # ------------------------------------------------------------------
+    # Wavelength solution accuracy, per dither position
+    # ------------------------------------------------------------------
+    # The simulated OD is flat in wavelength, so the OD checks below would pass even with a badly
+    # wrong wavelength solution. Compare the recovered wavelength zeropoint against the CorgiSim
+    # truth instead. The noiseless template shipped with the L1 data gives the offset between the
+    # broadband dispersed centroid and the zeropoint, and each L1 primary header carries the true
+    # broadband centroid of its own dither as free-form COMMENT cards.
+    logger.info("")
+    logger.info('='*80)
+    logger.info('Test Case 3: Wavelength solution accuracy against the simulation truth')
+    logger.info('='*80)
+
+    template_hdr = fits.getheader(
+        os.path.join(input_l1_datadir, 'G0V_PRISM3_template_slitless_cfam3F.fits'), ext=0)
+    zeropoint_dx = template_hdr['WV0_X'] - template_hdr['CENTX']
+    zeropoint_dy = template_hdr['WV0_Y'] - template_hdr['CENTY']
+
+    # With narrowband frames present, determine_wave_zeropoint fits the 3D spot and transfers it to
+    # the broadband frame with the tabulated CFAM filter wedge offset.
+    if skip_narrowband:
+        wedge_dx, wedge_dy = 0., 0.
+    else:
+        xoff_bb, yoff_bb = read_cent_wave('3')[2:4]
+        xoff_nb, yoff_nb = read_cent_wave('3D')[2:4]
+        wedge_dx, wedge_dy = xoff_bb - xoff_nb, yoff_bb - yoff_nb
+
+    # The zeropoint is measured in the cropped frame, so the CorgiSim full-frame truth needs both
+    # the origin of the image area and the crop origin recorded by the crop step subtracted.
+    row0, col0 = detector.detector_areas['SCI']['image']['r0c0']
+    detpix0x = nd_spec_cal.ext_hdr['DETPIX0X']
+    detpix0y = nd_spec_cal.ext_hdr['DETPIX0Y']
+    assert detpix0x != -999.0 and detpix0y != -999.0, (
+        "DETPIX0X/DETPIX0Y were scrubbed from the merged header, so the crop origin of the frames "
+        "the zeropoint was measured in is unknown")
+
+    truth_zeropoint = {}
+    for filename in bright_star_filelist:
+        exthdr = fits.getheader(filename, ext=1)
+        if exthdr['CFAMNAME'].upper() != '3F':
+            continue
+        truth = {}
+        for card in fits.getheader(filename, ext=0)['COMMENT']:
+            if ':' in str(card):
+                key, value = str(card).split(':', 1)
+                truth[key.strip()] = value.strip()
+        truth_zeropoint[(float(exthdr['FSMX']), float(exthdr['FSMY']))] = (
+            float(truth['dispersed_fullframe_centx']) + zeropoint_dx - col0 - detpix0x + wedge_dx,
+            float(truth['dispersed_fullframe_centy']) + zeropoint_dy - row0 - detpix0y + wedge_dy)
+    assert len(truth_zeropoint) == M, (
+        f"Found CorgiSim truth centroids for {len(truth_zeropoint)} dither positions, "
+        f"but the product has {M}.")
+
+    # fsm was split with the same keywords, and therefore in the same order, as the dither grouping
+    # that built the product in nd_filter_calibration.create_nd_filter_cal_spec.
+    errortol_pix = 0.3
+    zeropoint_passed = True
+    for i, fsm_pos in enumerate(fsm):
+        dither = (float(fsm_pos[0]), float(fsm_pos[1]))
+        assert dither in truth_zeropoint, (
+            f"No CorgiSim truth centroid for dither {i+1} at (FSMX, FSMY) = {dither}.")
+        truth_x, truth_y = truth_zeropoint[dither]
+        # one zeropoint is fitted per dither, so every wavelength sample of a row repeats it
+        fit_x, fit_y = np.mean(nd_spec_cal.x_values[i]), np.mean(nd_spec_cal.y_values[i])
+        if abs(fit_x - truth_x) < errortol_pix and abs(fit_y - truth_y) < errortol_pix:
+            logger.info(f"  Dither {i+1} (FSMX, FSMY) = {dither}: zeropoint ({fit_x:.3f}, {fit_y:.3f}) "
+                        f"within {errortol_pix} pix of the truth ({truth_x:.3f}, {truth_y:.3f}). PASS")
+        else:
+            logger.info(f"  Dither {i+1} (FSMX, FSMY) = {dither}: zeropoint ({fit_x:.3f}, {fit_y:.3f}) "
+                        f"differs from the truth ({truth_x:.3f}, {truth_y:.3f}) by "
+                        f"({fit_x - truth_x:+.3f}, {fit_y - truth_y:+.3f}) pix. FAIL")
+            zeropoint_passed = False
+    assert zeropoint_passed, (
+        f"One or more dither positions recovered a wavelength zeropoint more than {errortol_pix} "
+        "pixels from the CorgiSim truth")
+
     # OD values should be positive and finite
     od_all = nd_spec_cal.od_spectra
     x_all = nd_spec_cal.x_values
@@ -616,7 +726,7 @@ def run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger):
     # Test CGI-REQT-5478: ND Filter Calibration at new location
     # ==================================================================
     logger.info('='*80)
-    logger.info('Test Case 3: CGI-REQT-5478 - ND Filter Calibration at new location')
+    logger.info('Test Case 4: CGI-REQT-5478 - ND Filter Calibration at new location')
     logger.info('='*80)
 
     # Make a mock 'clean_spec_image' with the wavelength zeropoint at (60,65) -> cropped 125x125 image
@@ -722,31 +832,8 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
         shutil.rmtree(outputdir)
     os.makedirs(outputdir)
 
-    log_file = os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log')
-
-    # Create a new logger specifically for this test
-    logger = logging.getLogger('l1_to_nd_filter_spec_e2e')
-    logger.setLevel(logging.INFO)
-
-    # Clear any existing handlers to avoid duplicates
-    logger.handlers.clear()
-
-    # Create file handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-
-    # Create console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-
-    # Create formatter
-    formatter = logging.Formatter('%(message)s')
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
-    # Add handlers to logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    logger = setup_logger('l1_to_nd_filter_spec_e2e',
+                          os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log'))
 
     logger.info('='*80)
     logger.info('L1 TO ND FILTER SPECTROSCOPY CALIBRATION END-TO-END TEST')
@@ -765,6 +852,49 @@ def test_nd_filter_spec_e2e(e2edata_path, e2eoutput_path):
         logger.error("Full traceback:")
         logger.error(traceback.format_exc())
         print(f'e2e test for L1 to ND filter spectroscopy FAILED: {str(e)}')
+        raise
+
+
+@pytest.mark.e2e
+def test_nd_filter_spec_broadband_only_e2e(e2edata_path, e2eoutput_path):
+    """
+    Pytest wrapper for the spectroscopy ND filter calibration E2E test with no narrowband
+    frames. The wavelength zeropoint is registered against a noiseless model template instead.
+
+    Args:
+        e2edata_path (str): Path to the E2E test data
+        e2eoutput_path (str): Path to the E2E test output
+
+    """
+    l1_datadir        = os.path.join(e2edata_path, "ND_SPEC", "SPEC_NOM_L1")
+    processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
+    outputdir = os.path.join(e2eoutput_path, "l1_to_nd_filter_spec_broadband_only_e2e")
+
+    if os.path.exists(outputdir):
+        shutil.rmtree(outputdir)
+    os.makedirs(outputdir)
+
+    logger = setup_logger('l1_to_nd_filter_spec_broadband_only_e2e',
+                          os.path.join(outputdir, 'l1_to_nd_filter_spec_broadband_only_e2e.log'))
+
+    logger.info('='*80)
+    logger.info('L1 TO ND FILTER SPECTROSCOPY CALIBRATION END-TO-END TEST, BROADBAND FRAMES ONLY')
+    logger.info('='*80)
+    logger.info("")
+
+    try:
+        run_nd_filter_spec_e2e(l1_datadir, processed_cal_path, outputdir, logger,
+                               skip_narrowband=True)
+        print('e2e test for L1 to ND filter spectroscopy without narrowband frames passed')
+    except Exception as e:
+        logger.error('='*80)
+        logger.error('END-TO-END TEST FAILED')
+        logger.error('='*80)
+        logger.error(f"Error: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error("Full traceback:")
+        logger.error(traceback.format_exc())
+        print(f'e2e test for L1 to ND filter spectroscopy without narrowband frames FAILED: {str(e)}')
         raise
 
 
@@ -796,31 +926,8 @@ if __name__ == "__main__":
         shutil.rmtree(outputdir)
     os.makedirs(outputdir)
 
-    log_file = os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log')
-
-    # Create a new logger specifically for this test
-    logger = logging.getLogger('l1_to_nd_filter_spec_e2e')
-    logger.setLevel(logging.INFO)
-
-    # Clear any existing handlers to avoid duplicates
-    logger.handlers.clear()
-
-    # Create file handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-
-    # Create console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-
-    # Create formatter
-    formatter = logging.Formatter('%(message)s')
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
-    # Add handlers to logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    logger = setup_logger('l1_to_nd_filter_spec_e2e',
+                          os.path.join(outputdir, 'l1_to_nd_filter_spec_e2e.log'))
 
     logger.info('='*80)
     logger.info('L1 TO ND FILTER SPECTROSCOPY CALIBRATION END-TO-END TEST')
