@@ -591,7 +591,16 @@ def test_mueller_matrix_cal_keeps_all_rolls():
     dithers = [(-50., 50.), (50., -50.)]
 
     def build_stokes_dataset(roll_dither_pairs):
-        """Mock stokes vectors from frames at each of the given (roll, dither) combinations."""
+        """
+        Mock stokes vectors from frames at each of the given (roll, dither) combinations.
+
+        Args:
+            roll_dither_pairs (list): (roll, (fsmx, fsmy)) pairs to generate frames for, where
+                the roll is in degrees and the FSM dither position is in milliarcseconds
+
+        Returns:
+            corgidrp.data.Dataset: the stokes vectors measured from those frames
+        """
         frames = []
         for roll, (fsmx, fsmy) in roll_dither_pairs:
             mock_dataset = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file, fsmx=fsmx,

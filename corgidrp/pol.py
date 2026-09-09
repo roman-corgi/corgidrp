@@ -307,6 +307,7 @@ def generate_mueller_matrix_cal(input_dataset,
         pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) for two stokes vectors to
             count as the same roll angle when selecting by position. One stokes vector is kept per target per
             roll, so this decides which vectors are treated as alternatives to choose between. Default is 0.1.
+
     Returns:
         mueller_matrix_obj (MuellerMatrix or NDMuellerMatrix): The generated Mueller Matrix object.
     '''
@@ -356,11 +357,28 @@ def generate_mueller_matrix_cal(input_dataset,
     # will pick the one with the least movement.
     if mode != "all":
         def star_position(image):
-            """The measured position of the star in the first polarization state of a frame."""
+            """
+            The measured position of the star in the first polarization state of a frame.
+
+            Args:
+                image (corgidrp.data.Image): a stokes vector frame
+
+            Returns:
+                tuple: the (x, y) position of the star in pixels
+            """
             return (image.ext_hdr["STAR_X1"], image.ext_hdr["STAR_Y1"])
 
         def star_separation(xy_a, xy_b):
-            """Separation in pixels between two star positions."""
+            """
+            Separation between two star positions.
+
+            Args:
+                xy_a (tuple): the (x, y) position of the first star in pixels
+                xy_b (tuple): the (x, y) position of the second star in pixels
+
+            Returns:
+                float: the separation between the two positions in pixels
+            """
             return np.sqrt((xy_a[0] - xy_b[0])**2 + (xy_a[1] - xy_b[1])**2)
 
         # Group the frames by target and by roll angle. Every roll has to be kept, because a
