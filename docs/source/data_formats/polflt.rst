@@ -3,6 +3,10 @@
 PolFlatField Data Product
 ========================================
 
+**Filename Suffix:** **flt_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_flt_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

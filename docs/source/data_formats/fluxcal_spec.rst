@@ -3,6 +3,10 @@
 Spectroscopy Flux Calibration Data Product
 ===========================================
 
+**Filename Suffix:** **sfl_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_sfl_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

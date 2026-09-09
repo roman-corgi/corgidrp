@@ -3,6 +3,10 @@
 KGain Data Product
 ========================================
 
+**Filename Suffix:** **krn_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_krn_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

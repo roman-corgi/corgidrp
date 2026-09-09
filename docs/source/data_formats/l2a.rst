@@ -3,6 +3,10 @@
 L2a Data Product
 ========================================
 
+**Filename Suffix:** **l2a**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_l2a.fits``.
+
 
 FITS HDU Structure
 ------------------

@@ -3,6 +3,10 @@
 DetectorNoiseMaps Data Product
 ========================================
 
+**Filename Suffix:** **dnm_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_dnm_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

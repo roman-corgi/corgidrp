@@ -3,6 +3,10 @@
 L2b-Analog Data Product
 ========================================
 
+**Filename Suffix:** **l2b**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_l2b.fits``.
+
 
 FITS HDU Structure
 ------------------

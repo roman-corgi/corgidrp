@@ -3,6 +3,10 @@
 ND Filter Spectroscopy Data Product
 ========================================
 
+**Filename Suffix:** **nds_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_nds_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

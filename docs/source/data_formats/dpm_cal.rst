@@ -3,6 +3,10 @@
 DispersionModel Data Product
 ========================================
 
+**Filename Suffix:** **dpm_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_dpm_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

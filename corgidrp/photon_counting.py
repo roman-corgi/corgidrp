@@ -358,18 +358,15 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         # expected error from photon counting (biggest source from the actual values, not 
         # mean_expected_up or mean_expected_low):
         pc_variance = varL23(em_gain,mean_expected,thresh,nframes)
-        up = mean_expected_up +  pc_variance
-        low = mean_expected_low -  pc_variance
+        up = mean_expected_up +  pc_variance**0.5
+        low = mean_expected_low -  pc_variance**0.5
         errs.append(np.max([up - mean_expected, mean_expected - low], axis=0))
         good_inds = np.where(nframes != 0)
         if dataset[0].data is None:
-            dq_sum = np.zeros_like(mean_expected).astype(float)
+            dq = np.zeros_like(mean_expected).astype(int)
             for j in range(len(dataset)):
                 dq_temp = data.Image(dataset[j].filepath).dq 
-                dq_sum += dq_temp.astype(float)
-            dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
-            dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
-            dq = dq.filled(0).astype(int)
+                dq = dq | dq_temp.astype(int)
         else:
             dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
         dq[good_inds] = 0 

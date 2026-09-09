@@ -3,6 +3,10 @@
 CoreThroughputMap Data Product
 ========================================
 
+**Filename Suffix:** **ctm_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_ctm_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

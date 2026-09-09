@@ -3,6 +3,10 @@
 BadPixelMap Data Product
 ========================================
 
+**Filename Suffix:** **bpm_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_bpm_cal.fits``.
+
 
 FITS HDU Structure
 ------------------

@@ -47,21 +47,26 @@ def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
 
 
 def inject_psf(frame_in, ct_calibration, amp, 
-               sep_pix,pa_deg):
+               sep_pix, pa_deg, relative_scaling=None):
     """Injects a fake psf from the CT calibration object into a corgidrp Image with 
     the desired position and amplitude. 
 
     Args:
         frame_in (corgidrp.data.Image): 2D image to inject a fake signal into.
         ct_calibration (corgidrp.data.CoreThroughputCalibration): CT calibration object containing PSF samples.
-        amp (float): peak pixel amplitude of psf to inject.
+        amp (float or None): peak pixel amplitude of psf to inject. must be None if relative_scaling is specified.
         sep_pix (float): separation from star in pixels to inject 
         pa_deg (float): position angle to inject (counterclockise from north/up)
+        relative_scaling (float or None): scaling factor relative to the model PSF. must be None if amp is specified.
 
     Returns: 
         corgidrp.data.Image: a copy of the input Image but with a fake PSF injected.
     """
 
+    # Validate PSF scaling inputs
+    if (amp is None) == (relative_scaling is None):
+        raise ValueError("Specify exactly one of amp or relative_scaling.")
+    
     frame = frame_in.copy()
 
     # Get closest psf model
@@ -74,9 +79,14 @@ def inject_psf(frame_in, ct_calibration, amp,
                                 frame.ext_hdr['STARLOCY'],
                                 dx,dy).copy() 
 
-    # Scale counts
-    peak_count = np.nanmax(psf_model)
-    psf_model *= amp / peak_count
+    # Scale PSF by relative scaling factor or to specified peak amplitude
+    if relative_scaling is not None:
+        scale = relative_scaling
+    else:
+        peak_count = np.nanmax(psf_model)
+        scale = amp / peak_count
+
+    psf_model *= scale
 
     # Assume PSF is centered in the data cutout for now
     model_shape = np.array(psf_model.shape)

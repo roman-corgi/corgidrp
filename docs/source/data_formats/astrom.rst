@@ -3,6 +3,10 @@
 AstrometricCalibration Data Product
 ========================================
 
+**Filename Suffix:** **ast_cal**
+
+Filenames follow the convention ``cgi_<visitid>_<timestamp>_ast_cal.fits``.
+
 
 FITS HDU Structure
 ------------------
