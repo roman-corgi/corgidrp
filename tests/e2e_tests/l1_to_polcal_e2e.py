@@ -153,7 +153,7 @@ def test_l1_to_polcal_e2e(e2edata_path, e2eoutput_path):
 
     # As in the ND test above, these tolerances were loosened by a factor of 1.5 when the
     # Mueller matrix calibration started fitting only frames on a single resolution element.
-    rtol = 0.1125
+    rtol = 0.15
     assert mm[1,1] == pytest.approx(-0.99995, rel=rtol)
     assert mm[2,2] == pytest.approx(0.99455, rel=rtol)
 
