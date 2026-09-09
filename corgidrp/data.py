@@ -4376,6 +4376,12 @@ class MuellerMatrix(Image):
                 'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
                 'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ],
+            # the star positions are per-frame measurements, used to pick out the stokes vectors
+            # whose stars share a resolution element. They say nothing about the instrument, so
+            # they are dropped rather than carried onto the combined calibration product.
+            deleted_keywords=corgidrp.check.deleted_keywords_default + [
+                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2',
             ]
         )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
@@ -4457,6 +4463,12 @@ class NDMuellerMatrix(Image):
                 'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
                 'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ],
+            # the star positions are per-frame measurements, used to pick out the stokes vectors
+            # whose stars share a resolution element. They say nothing about the instrument, so
+            # they are dropped rather than carried onto the combined calibration product.
+            deleted_keywords=corgidrp.check.deleted_keywords_default + [
+                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2',
             ]
         )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
