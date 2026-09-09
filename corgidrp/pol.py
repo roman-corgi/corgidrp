@@ -332,7 +332,7 @@ def generate_mueller_matrix_cal(input_dataset,
             raise ValueError(f"Target {target} not found in polarization reference file.")
 
     #get the xy positions of the first pol state from each frame: 
-    frame_xys = [image.ext_hdr["STAR_X1"], image.ext_hdr["STAR_Y1"] for image in dataset]
+    frame_xys = [(image.ext_hdr["STAR_X1"], image.ext_hdr["STAR_Y1"]) for image in dataset]
 
     # If mode =='all' just skip ahead. 
     # If mode =='match_position', we need to see if we can find a set frames that includes each target 
@@ -346,60 +346,63 @@ def generate_mueller_matrix_cal(input_dataset,
                 target_groups[target] = []
             target_groups[target].append(i)
 
-        #For each frame in the first target group calculate the distances to each frame in all the other target groups
-        #and save it to a variable. 
-        distances = []
-        for i in target_groups[list(target_groups.keys())[0]]:
-            #Cycle through all the targets
-            target_distances = [] #For this frame in the first target list this holds the minimum distances to frames in each of the other target groups
-            for target_name in target_groups.keys()[1:]:
-                frame_distances = []
-                for j in target_groups[target_name]:
-                    #Calculate the distance between the two frames
-                    dist = np.sqrt((frame_xys[i][0] - frame_xys[j][0])**2 + (frame_xys[i][1] - frame_xys[j][1])**2)
-                    frame_distances.append(dist)
-                #Get the minimum distance for this target group and append it to the distances list, saving the index
-                min_dist = np.min(frame_distances)
-                min_dist_arg = target_groups[target_name][np.argmin(frame_distances)] #This saves the index in the original frame list
-                target_distances.append((min_dist, min_dist_arg))
-            distances.append(target_distances)
+        target_names = list(target_groups.keys())
 
-        #List all the distances from the first target group. Make it a 2D array
-        dists = np.array([[d[0] for d in td] for td in distances])
-        #Get the maximum distance for each frame in the first target group across all other target groups
-        max_dists = np.max(dists, axis=0)
+        def star_separation(xy_a, xy_b):
+            """Separation in pixels between two star positions."""
+            return np.sqrt((xy_a[0] - xy_b[0])**2 + (xy_a[1] - xy_b[1])**2)
 
-        #If the mode is "match_position", check if there is any match with all targets within one resolution element of each other
+        # Try every frame's star position in turn as a candidate dither position. For each
+        # candidate, keep the one frame per target whose star landed closest to it, then measure
+        # how far apart the stars in that set of frames actually are. The best set is the one
+        # whose two most widely separated stars are the closest together.
+        best_frames = None
+        best_separation = np.inf
+        for candidate_xy in frame_xys:
+            #Take the frame of each target whose star landed closest to this candidate position
+            candidate_frames = []
+            for target_name in target_names:
+                group = target_groups[target_name]
+                distances_to_candidate = [star_separation(frame_xys[j], candidate_xy) for j in group]
+                candidate_frames.append(group[np.argmin(distances_to_candidate)])
+
+            #A set of frames is only as good as its worst pair, so check every pair in it
+            candidate_separation = 0.
+            for i in candidate_frames:
+                for j in candidate_frames:
+                    candidate_separation = max(candidate_separation,
+                                               star_separation(frame_xys[i], frame_xys[j]))
+
+            if candidate_separation < best_separation:
+                best_frames = candidate_frames
+                best_separation = candidate_separation
+
+        #If the mode is "match_position", require that the stars in the best set all land within
+        #one resolution element of each other
         if mode == "match_position":
             #Get the filter wavelength based on the CFAMNAME, throw an error if not in filter_wavs
             filter_wavs = {'1F': 575e-9, '4F': 825e-9}
-            filter_wav = filter_wavs.get(image.pri_hdr["CFAMNAME"], 0)
+            filter_wav = filter_wavs.get(dataset[0].ext_hdr["CFAMNAME"], 0)
             if filter_wav == 0:
-                raise ValueError("Filter wavelength not yet supported for CFAMNAME: {}".format(image.pri_hdr["CFAMNAME"]))
+                raise ValueError("Filter wavelength not yet supported for CFAMNAME: {}".format(dataset[0].ext_hdr["CFAMNAME"]))
             # Calculate the resolution element (lambda/D)
             roman_D = 2.36 #m
             resolution_element = filter_wav / roman_D * 206265 #arcsec
             #Grab the pixel scale from the extension header
-            pixel_scale = image.ext_hdr["PLTSCALE"]*1000 # arcsec/pixel
+            pixel_scale = dataset[0].ext_hdr["PLTSCALE"]/1000 # arcsec/pixel
             # Convert the resolution element to pixels
             resolution_element_pix = resolution_element / pixel_scale
             # print("Resolution element in pixels: {}".format(resolution_element_pix))
 
-            #Check to see if all of the maximum distances are greater than the resolution element
-            if not all(max_dists > resolution_element_pix):
-                raise ValueError("No set of frames found where all targets are within one resolution element (lambda/D) of each other.")
+            if best_separation > resolution_element_pix:
+                raise ValueError("No set of frames found where all targets are within one resolution "
+                                 "element (lambda/D) of each other: the best set spans {:.2f} pix "
+                                 "while lambda/D is {:.2f} pix.".format(best_separation, resolution_element_pix))
         elif mode != "closest_match":
             raise ValueError("Mode must be one of 'match_position', 'closest_match', or 'all'.")
 
-        minimum_maximum = np.argmin(max_dists, axis=0) #We want to use the set where the maximum distance is the smallest.
-        #build a frame list based on the 'j' values of the min_dists
-        frame_indices = np.array([[d[1] for d in td] for td in distances])
-        good_frame_indices = frame_indices[minimum_maximum]
-        #The frame list will be the first frame of the first target group, and the frames of the other target groups that are closest to it.
-        final_list = [dataset[minimum_maximum]]
-        final_list += [dataset[good_frame_indices[i]] for i in range(1, len(good_frame_indices))]
-
-        dataset = Dataset(final_list)
+        #Keep only the selected frames, one per target, in their original dataset order
+        dataset = Dataset([dataset[i] for i in sorted(best_frames)])
 
     # measure the normalized difference for each dataset
     stokes_vectors = []
