@@ -47,37 +47,6 @@ typical_cal_invalid_keywords = [
                     'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME',
                 ]
 
-def _cluster_by_tolerance(values, tolerance):
-    """
-    Replace each value by a representative shared with every value it clusters with.
-
-    The values are sorted and a new cluster is started wherever neighbouring values are
-    separated by more than the tolerance. Every member of a cluster is assigned that cluster's
-    mean, so that a test for identical values groups the members together. Note that this is
-    single linkage: a run of values each within the tolerance of the next forms one cluster,
-    however wide the run is overall.
-
-    Args:
-        values (array-like): the values to cluster
-        tolerance (float): the largest gap between neighbouring values within one cluster
-
-    Returns:
-        np.ndarray: the cluster representative for each input value, in the input order
-    """
-    values = np.asarray(values, dtype=float)
-    if not np.all(np.isfinite(values)):
-        raise ValueError("Cannot cluster values that are not all finite: {0}".format(values))
-
-    order = np.argsort(values)
-    representatives = np.zeros(len(values))
-    start = 0
-    for i in range(1, len(order) + 1):
-        if i == len(order) or values[order[i]] - values[order[i - 1]] > tolerance:
-            members = order[start:i]
-            representatives[members] = np.mean(values[members])
-            start = i
-
-    return representatives
 
 class Dataset():
     """
@@ -376,7 +345,18 @@ class Dataset():
                                  "not being split on: {1}".format(unknown_keywords, col_names))
             for i, key in enumerate(col_names):
                 if key in tolerances:
-                    col_vals[i] = _cluster_by_tolerance(col_vals[i], tolerances[key])
+                    values = np.asarray(col_vals[i], dtype=float)
+                    if not np.all(np.isfinite(values)):
+                        raise ValueError("Cannot cluster values that are not all finite: {0}".format(values))
+                    order = np.argsort(values)
+                    representatives = np.zeros(len(values))
+                    start = 0
+                    for i in range(1, len(order) + 1):
+                        if i == len(order) or values[order[i]] - values[order[i - 1]] > tolerances[key]:
+                            members = order[start:i]
+                            representatives[members] = np.mean(values[members])
+                            start = i
+                col_vals[i] = representatives
 
         all_data = np.array(col_vals).T
 
