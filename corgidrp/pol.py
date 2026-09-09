@@ -59,7 +59,7 @@ def calc_stokes_unocculted(input_dataset,
                            image_center_y=None,
                            split_pa_states=True,
                            pa_tolerance=0.1,
-                           fsm_tolerance=1.0):
+                           fsm_tolerance=4.0):
     """
     Compute uncalibrated Stokes parameters (I, Q/I, U/I) from unocculted L3 polarimetric datacubes.
 
