@@ -46,7 +46,7 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
             If True, a PC dark is built later from L2a frames rather than here.
     """
     # Use a temporary CSV to avoid issues with real CalDB
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_dispersion_e2e_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_slittrans_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     if os.path.exists(tmp_caldb_csv):
         os.remove(tmp_caldb_csv)
@@ -172,11 +172,11 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
 @pytest.mark.e2e
 def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
-    l1_datadir = os.path.join(e2edata_path, "spec_dispersion_sims")
-    processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
+    l1_datadir = os.path.join(e2edata_path, "slit_trans_simdata")
+    #processed_cal_path = os.path.join(e2edata_path, "ND_SPEC", "Cals")
 
     # make output directory if needed
-    test_outputdir = os.path.join(e2eoutput_path, "l1_to_dispersion_e2e")
+    test_outputdir = os.path.join(e2eoutput_path, "l1_to_spec_slittrans_e2e")
     if os.path.exists(test_outputdir):
         shutil.rmtree(test_outputdir)
     os.makedirs(test_outputdir)
@@ -193,8 +193,19 @@ def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
     for file in os.listdir(l2b_outputdir):
         os.remove(os.path.join(l2b_outputdir, file))
     
-    this_caldb, _ = setup_caldb(
-        l1_datadir, processed_cal_path, calibrations_dir)    
+    #this_caldb, _ = setup_caldb(
+    #    l1_datadir, processed_cal_path, calibrations_dir)    
+    
+    # Use a temporary CSV to avoid issues with real CalDB
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_slittrans_e2e_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    if os.path.exists(tmp_caldb_csv):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB()
+
+    # Get default spectroscopy calibrations 
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    print(f"Loaded default calibrations from {corgidrp.default_cal_dir}")
     
     l1_data_filelist=[os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in range(len(os.listdir(l1_datadir))) if os.listdir(l1_datadir)[i].endswith("l1_.fits")]
     
@@ -232,41 +243,36 @@ def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
         # ------------------------------------------------------------------ 
     # L2b -> spec dispersion                                                        
     # ------------------------------------------------------------------ 
-    print("Running L2b -> DispersionModel …")
+    print("Running L2b -> SlitTransmission …")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
         walker.walk_corgidrp(l2b_filelist, "", l2b_outputdir,
-                             template="l2b_to_spec_prism_disp.json")
+                             template="l2b_to_spec_slittrans.json")
 
-    print(f"L2b -> DispersionModel complete.")
+    print(f"L2b -> SlitTransmission complete.")
     
-    ####### Load in the output data. It should be the latest dispersion calibration file produced.
-    dispersion_cal_file = glob.glob(os.path.join(l2b_outputdir, '*dpm_cal*.fits'))[0]
-    dispersion = data.DispersionModel(dispersion_cal_file)
+    ####### Load in the output data. It should be the latest slit transmission calibration file produced.
+    slittrans_cal_file = glob.glob(os.path.join(l2b_outputdir, '*slt_cal*.fits'))[0]
+    slittrans = data.SlitTransmission(slittrans_cal_file)
     
-    ### validate DispersionModel product 
-    check.compare_to_mocks_hdrs(dispersion_cal_file)
+    ### validate SlitTransmission product 
+    check.compare_to_mocks_hdrs(slittrans_cal_file)
 
-    assert dispersion.ext_hdr["DATATYPE"] == "DispersionModel"
-    assert dispersion.ext_hdr["DATALVL"] == "CAL"
-    assert dispersion.ext_hdr['BAND'] == '3'
-    assert dispersion.ext_hdr['REFWAVE'] == 730
+    assert slittrans.ext_hdr["DATATYPE"] == "SlitTransmission"
+    assert slittrans.ext_hdr["DATALVL"] == "CAL"
+    assert slittrans.ext_hdr['BAND'] == '3'
+    assert slittrans.ext_hdr['REFWAVE'] == 730
     
-    assert np.abs(dispersion.clocking_angle) == pytest.approx(90, abs = dispersion.clocking_angle_uncertainty) 
-    assert len(dispersion.pos_vs_wavlen_polycoeff) == len(dispersion.wavlen_vs_pos_polycoeff) == 4
-    print("clocking angle: ", dispersion.clocking_angle)
-    print("clocking angle uncertainty: ", dispersion.clocking_angle_uncertainty)
-    print("pos_vs_wavlen_polycoeff: ", dispersion.pos_vs_wavlen_polycoeff)
-    print("pos_vs_wavlen_cov: ", dispersion.pos_vs_wavlen_cov)
-    print("wavlen_vs_pos_polycoeff: ", dispersion.wavlen_vs_pos_polycoeff)
-    print("wavlen_vs_pos_cov: ", dispersion.wavlen_vs_pos_cov)
+    #check the values
+    
+    
+    
     
     # Remove temporary CalDB
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_dispersion_e2e_caldb.csv')
     if os.path.exists(tmp_caldb_csv):
         os.remove(tmp_caldb_csv)
     # Print success message
-    print('e2e test for dispersion calibration passed')
+    print('e2e test for slit transmission calibration passed')
     
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
