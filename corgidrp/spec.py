@@ -41,6 +41,8 @@ def find_template_files(pattern):
         list of str: matching paths, ordered by file name
     """
     paths = {}
+    # Look for matches in the user config directory second, so that if a template file appears in both locations,
+    # the user config file path overwrites the path in the returned list.
     for directory in (os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "templates"),
                       os.path.join(os.path.dirname(corgidrp.config_filepath), "spectroscopy", "templates")):
         for path in glob.glob(os.path.join(directory, pattern)):
