@@ -44,8 +44,40 @@ typical_cal_invalid_keywords = [
                     'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
                     'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
                     'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME',
                 ]
+
+def _cluster_by_tolerance(values, tolerance):
+    """
+    Replace each value by a representative shared with every value it clusters with.
+
+    The values are sorted and a new cluster is started wherever neighbouring values are
+    separated by more than the tolerance. Every member of a cluster is assigned that cluster's
+    mean, so that a test for identical values groups the members together. Note that this is
+    single linkage: a run of values each within the tolerance of the next forms one cluster,
+    however wide the run is overall.
+
+    Args:
+        values (array-like): the values to cluster
+        tolerance (float): the largest gap between neighbouring values within one cluster
+
+    Returns:
+        np.ndarray: the cluster representative for each input value, in the input order
+    """
+    values = np.asarray(values, dtype=float)
+    if not np.all(np.isfinite(values)):
+        raise ValueError("Cannot cluster values that are not all finite: {0}".format(values))
+
+    order = np.argsort(values)
+    representatives = np.zeros(len(values))
+    start = 0
+    for i in range(1, len(order) + 1):
+        if i == len(order) or values[order[i]] - values[order[i - 1]] > tolerance:
+            members = order[start:i]
+            representatives[members] = np.mean(values[members])
+            start = i
+
+    return representatives
 
 class Dataset():
     """
@@ -295,7 +327,7 @@ class Dataset():
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
 
-    def split_dataset(self, prihdr_keywords=None, exthdr_keywords=None):
+    def split_dataset(self, prihdr_keywords=None, exthdr_keywords=None, tolerances=None):
         """
         Splits up this dataset into multiple smaller datasets that have the same set of header keywords
         The code uses all keywords together to determine an unique group
@@ -303,6 +335,14 @@ class Dataset():
         Args:
             prihdr_keywords (list of str): list of primary header keywords to split
             exthdr_keywords (list of str): list of 1st extension header keywords to split on
+            tolerances (dict of str: float): optional map of keyword to an absolute tolerance.
+                Frames whose values for that keyword lie within the tolerance of each other are
+                grouped together instead of having to match exactly, which is what you want for
+                a keyword that drifts. Passing {'FSMX': 5., 'FSMY': 5.} groups frames taken at
+                the same commanded dither even if the reported FSM position wandered a few mas.
+                Any keyword not listed here is still matched exactly. The frames themselves are
+                never modified, but the unique values returned for a keyword given a tolerance
+                are the mean of each group rather than any one frame's value.
 
         Returns:
             list of datasets: list of sub datasets
@@ -326,6 +366,17 @@ class Dataset():
 
                 col_names.append(key)
                 col_vals.append(dataset_vals)
+
+        # Stand in a shared representative for the values of any keyword given a tolerance, so
+        # that the grouping below can stay a simple test for identical values
+        if tolerances is not None:
+            unknown_keywords = [key for key in tolerances if key not in col_names]
+            if unknown_keywords:
+                raise ValueError("Cannot apply a tolerance to keyword(s) {0} that the dataset is "
+                                 "not being split on: {1}".format(unknown_keywords, col_names))
+            for i, key in enumerate(col_names):
+                if key in tolerances:
+                    col_vals[i] = _cluster_by_tolerance(col_vals[i], tolerances[key])
 
         all_data = np.array(col_vals).T
 
