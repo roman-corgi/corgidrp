@@ -553,9 +553,36 @@ def test_bias_offset():
             if not np.nanmax(np.abs(image_slice_0 - image_slice_10)) < tol:
                 raise Exception(f"Bias offset subtraction did not produce the correct result. absmax value : {np.nanmax(np.abs(image_slice_0 - image_slice_10))}")
 
+def test_prescan_cosmic_streak():
+    '''Test that bias is subtracted appropriately when a cosmic ray overspills into good columns used for bias subtraction.'''
+    # create simulated data
+    np.random.seed(2222)
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    dataset = mocks.create_prescan_files(filedir=datadir, numfiles=1, arrtype='SCI')
+    bias_level = np.median(dataset[0].data[:, 800:1000]) 
+    bias_std = np.std(dataset[0].data[:, 800:1000]) 
+    bad_full_row = 40 #which is 40-13 in resultant image area
+    bad_im_row = 40 -13
+    dataset[0].data[bad_full_row, 800:1000] = bias_level + 5 * bias_std
+
+    # bias subtraction will be biased since we don't appropriately subtract
+    output_dset1 = prescan_biassub(dataset, num_stds=100)
+    max_row = np.argmin(np.mean(output_dset1[0].data, axis=1))
+    assert max_row == bad_im_row
+    # the row is now over-subtracted by about 5*bias_std, so the median of that row plus that amount should be close to 0 (less than a std dev)
+    assert np.abs(np.median(output_dset1[0].data[bad_im_row]) + 5*bias_std) < bias_std
+    assert output_dset1[0].hdu_list['BIAS'].data[bad_im_row] == bias_level + bias_std*5
+
+    # now catch the cosmic streak and assign the bias to an appropriate level
+    output_dset2 = prescan_biassub(dataset, num_stds=5)
+    assert np.abs(np.median(output_dset2[0].data[bad_im_row])) < bias_std
+    assert output_dset2[0].hdu_list['BIAS'].data[bad_im_row] == bias_level
+    
+
 
 if __name__ == "__main__":
-    test_prescan_sub()
+    test_prescan_cosmic_streak()
+    test_prescan_sub() 
     test_bias_zeros_frame()
     test_bias_hvoff()
     test_bias_hvon()

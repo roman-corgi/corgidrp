@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath('..'))
 project = 'corgidrp'
 copyright = '2026, corgidrp Developers'
 author = 'corgidrp Developers'
-release = "5.0"
+release = "5.1"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -72,13 +72,9 @@ html_last_updated_fmt = "%Y %b %d at %H:%M:%S UTC"
 html_show_sourcelink = False
 
 html_sidebars = {
-    "*": ["sidebar-nav-bs.html"],
+    "*": ["sidebar-nav-bs.html", "page-toc"],
     "index": [],
-    "pages/install": ["page-toc"],
-    "pages/tutorials": [],
-    "pages/data_formats/index": [],
-    "tutorials/**": ["page-toc", "sidebar-nav-bs.html"],
-    "case_studies/**": ["page-toc", "sidebar-nav-bs.html"]
+    "data_formats/index": [],
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,

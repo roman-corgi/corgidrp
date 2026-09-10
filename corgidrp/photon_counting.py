@@ -25,11 +25,12 @@ def varL23(g, L, T, N):
     Const = 6/(6 + L*(6 + L*(3 + L)))
     eThresh = (Const*(np.e**(-T/g)*L*(2*g**2*(6 + L*(3 + L)) +
             2*g*L*(3 + L)*T + L**2*T**2))/(12*g**2))
-    std_dev = np.sqrt(N * eThresh * (1-eThresh))
 
     with warnings.catch_warnings():
-        # prevent RuntimeWarning: divide by zero and invalid value
         warnings.filterwarnings('ignore', category=RuntimeWarning)
+        # prevent RuntimeWarning: invalid value encountered in sqrt
+        std_dev = np.sqrt(N * eThresh * (1-eThresh))
+        # prevent RuntimeWarning: divide by zero and invalid value
         var_after_corr = (std_dev)**2*(((np.e**((T/g)))/N) +
         2*((np.e**((2*T)/g)*(g - T))/(2*g*N**2))*(N*eThresh) +
         3*(((np.e**(((3*T)/g)))*(4*g**2 - 8*g*T + 5*T**2))/(
@@ -357,21 +358,21 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         # expected error from photon counting (biggest source from the actual values, not 
         # mean_expected_up or mean_expected_low):
         pc_variance = varL23(em_gain,mean_expected,thresh,nframes)
-        up = mean_expected_up +  pc_variance
-        low = mean_expected_low -  pc_variance
+        up = mean_expected_up +  pc_variance**0.5
+        low = mean_expected_low -  pc_variance**0.5
         errs.append(np.max([up - mean_expected, mean_expected - low], axis=0))
         good_inds = np.where(nframes != 0)
         if dataset[0].data is None:
-            dq_sum = np.zeros_like(mean_expected).astype(float)
+            dq = np.zeros_like(mean_expected).astype(int)
             for j in range(len(dataset)):
                 dq_temp = data.Image(dataset[j].filepath).dq 
-                dq_sum += dq_temp.astype(float)
-            dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
-            dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
-            dq = dq.filled(0).astype(int)
+                dq = dq | dq_temp.astype(int)
         else:
             dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
         dq[good_inds] = 0 
+        # flag pixels with negative values as a result of the application of
+        # PC with photometric corections (corr_photon_count)
+        dq[np.where(mean_expected < 0)] = 256 
         pc_means.append(mean_expected)
         dqs.append(dq)
         
@@ -547,8 +548,8 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter, mask_indices):
         lam_est_m -= func / dfunc
 
     if np.nanmin(lam_est_m.data[mask_indices]) < 0:
-        raise PhotonCountException('negative number of photon counts; '
-        'try decreasing the frametime')
+        warnings.warn('negative number of photon counts; '
+        'try decreasing the frametime if these are not isolated, spurious pixels')
 
     # Fill zero values back in
     lam = lam_est_m.filled(0)

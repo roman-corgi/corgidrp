@@ -369,15 +369,17 @@ def trap_id(cor_img_stack, ill_corr_min, ill_corr_max, timings, thresh_factor,
 
     Returns:
         rc_above (dict): A dictionary with keys for each bright pixel of an 'above' dipole,
-            formatted as:
-            {
-                (row, col): {
-                    'amps_above': array([amp1, amp2, ...]),
-                    'loc_med_min': float,
-                    'loc_med_max': float
-                },
-                ...
-            }
+            formatted as::
+
+                {
+                    (row, col): {
+                        'amps_above': array([amp1, amp2, ...]),
+                        'loc_med_min': float,
+                        'loc_med_max': float
+                    },
+                    ...
+                }
+
             'amps_above' is an array of amplitudes in the same order as the phase time
             order in `timings`. 'loc_med_min' and 'loc_med_max' are the minimum and maximum
             bias values over all phase times, respectively.
@@ -386,23 +388,25 @@ def trap_id(cor_img_stack, ill_corr_min, ill_corr_max, timings, thresh_factor,
             formatted similarly to `rc_above`.
 
         rc_both (dict): A dictionary with keys for each bright pixel that is both an 'above'
-            and 'below' dipole, formatted as:
-            {
-                (row, col): {
-                    'amps_both': array([amp1, amp2, ...]),
-                    'loc_med_min': float,
-                    'loc_med_max': float,
-                    'above': {
-                        'amp': array([amp1a, amp2a, ...]),
-                        't': array([t1a, t2a, ...])
+            and 'below' dipole, formatted as::
+
+                {
+                    (row, col): {
+                        'amps_both': array([amp1, amp2, ...]),
+                        'loc_med_min': float,
+                        'loc_med_max': float,
+                        'above': {
+                            'amp': array([amp1a, amp2a, ...]),
+                            't': array([t1a, t2a, ...])
+                        },
+                        'below': {
+                            'amp': array([amp1b, amp2b, ...]),
+                            't': array([t1b, t2b, ...])
+                        }
                     },
-                    'below': {
-                        'amp': array([amp1b, amp2b, ...]),
-                        't': array([t1b, t2b, ...])
-                    }
-                },
-                ...
-            }
+                    ...
+                }
+
             'amps' and 't' under 'above' and 'below' are arrays identified specifically with
             their respective dipoles. 'amps_both' contains all amplitudes for that pixel
             in the same order as `timings`.
@@ -601,18 +605,19 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
             - tau_err: Standard deviation of tau
 
         The structure of the returned dictionary varies based on `both_a`:
+
         - If `both_a` is None and one trap is the best fit:
-            {prob: [[pc, pc_err, tau, tau_err]]}
+          {prob: [[pc, pc_err, tau, tau_err]]}
         - If `both_a` is None and two traps are the best fit:
-            {prob1: [[pc, pc_err, tau, tau_err]],
-             prob2: [[pc2, pc2_err, tau2, tau2_err]]}
+          {prob1: [[pc, pc_err, tau, tau_err]],
+          prob2: [[pc2, pc2_err, tau2, tau2_err]]}
         - If both traps are of prob1 type:
-            {prob1: [[pc, pc_err, tau, tau_err], [pc2, pc2_err, tau2, tau2_err]]}
+          {prob1: [[pc, pc_err, tau, tau_err], [pc2, pc2_err, tau2, tau2_err]]}
         - If `both_a` is not None:
-            {type1: {1: [[pc, pc_err, tau, tau_err]]},
-             type2: {2: [[pc2, pc2_err, tau2, tau2_err]]}}
-            where type1 is either 'a' for above or 'b' for below, and type2 is
-            whichever of those type1 is not.
+          {type1: {1: [[pc, pc_err, tau, tau_err]]},
+          type2: {2: [[pc2, pc2_err, tau2, tau2_err]]}}
+          where type1 is either 'a' for above or 'b' for below, and type2 is
+          whichever of those type1 is not.
     """
 
 
@@ -1249,18 +1254,19 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
             - tau_err: Standard deviation of tau
 
         The structure of the returned dictionary varies based on `both_a`:
+
         - If `both_a` is None and one trap is the best fit:
-            {prob: [[pc, pc_err, tau, tau_err]]}
+          {prob: [[pc, pc_err, tau, tau_err]]}
         - If `both_a` is None and two traps are the best fit:
-            {prob1: [[pc, pc_err, tau, tau_err]],
-             prob2: [[pc2, pc2_err, tau2, tau2_err]]}
+          {prob1: [[pc, pc_err, tau, tau_err]],
+          prob2: [[pc2, pc2_err, tau2, tau2_err]]}
         - If both traps are of prob1 type:
-            {prob1: [[pc, pc_err, tau, tau_err], [pc2, pc2_err, tau2, tau2_err]]}
+          {prob1: [[pc, pc_err, tau, tau_err], [pc2, pc2_err, tau2, tau2_err]]}
         - If `both_a` is not None:
-            {type1: {1: [[pc, pc_err, tau, tau_err]]},
-             type2: {2: [[pc2, pc2_err, tau2, tau2_err]]}}
-            where type1 is either 'a' for above or 'b' for below, and type2 is
-            whichever of those type1 is not.
+          {type1: {1: [[pc, pc_err, tau, tau_err]]},
+          type2: {2: [[pc2, pc2_err, tau2, tau2_err]]}}
+          where type1 is either 'a' for above or 'b' for below, and type2 is
+          whichever of those type1 is not.
     """
 
     # TODO time-dep pc and pc2:  assume constant charge packet throughout the
@@ -2019,15 +2025,21 @@ def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
 
     Returns:
         E (float): Energy level (in eV).
+
         sig_E (float): Standard deviation error of energy level, in eV.
+
         cs (float): Cross section for holes, in cm^2.
+
         sig_cs (float): Standard deviation error of cross section for holes, in cm^2.
+
         Rsq (float): Adjusted R^2 for the tau vs temperature fit that was done to obtain cs.
+
         tau_input_T (float): Tau evaluated at desired temperature of Roman EMCCD, input_T,
-            in seconds.
+        in seconds.
+
         sig_tau_input_T (float): Standard deviation error of tau at desired temperature of
-            Roman EMCCD, input_T. Found by propagating error by utilizing sig_cs and sig_E,
-            in seconds.
+        Roman EMCCD, input_T. Found by propagating error by utilizing sig_cs and sig_E,
+        in seconds.
     """
 
     # input checks
@@ -2150,37 +2162,37 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
 
     The following parameters from the II&T Trap pumping code are stored in the
     object calibration file:
-    trap_densities : list
-        A list of lists, where a list is provided for each type of trap.
-        The trap density for a trap type is the # of traps in a given 2-D bin
-        of E and tau divided by the total number of pixels in the image area.
-        The binning by default is fine enough to distinguish all trap types
-        found in the literarture. Only the bins that contain non-zero entries
-        are returned here.  Each trap-type list is of the following format:
-        [trap density, E, cs].
-        E is the central value of the E bin, and cs is the central value of the
-        cs bin. Stored in a hdu extention named 'trap_densities'
-    bad_fit_counter : int
-        Number of times trap_fit() provided fits of amplitude vs phase time
-        that were below fit_thresh over all schemes and temperature (which
-        would include any preliminary trap identifications that were rejected
-        because they weren't consistent across all schemes for sub-electrode
-        locations).
-    pre_sub_el_count : int
-        Number of times a trap was identified before filtering them through
-        sub-electrode location.  The counter is over all schemes and
-        temperatures.
-    unused_fit_data : int or None
-        Number of times traps were identified that were not matched up for
-        sub-electrode location determination.
-    unused_temp_fit_data : int
-        Number of times traps were identified that did not get used in
-        identifying release time constant values across all temperatures
-    two_or_less_count : int
-        Number of traps that only appeared at 2 or fewer temperatures.
-    noncontinuous_count : int
-        Number of traps that appeared at a noncontinuous series of
-        temperatures.
+
+    trap_densities (list): A list of lists, where a list is provided for each type of trap.
+    The trap density for a trap type is the # of traps in a given 2-D bin
+    of E and tau divided by the total number of pixels in the image area.
+    The binning by default is fine enough to distinguish all trap types
+    found in the literarture. Only the bins that contain non-zero entries
+    are returned here.  Each trap-type list is of the following format:
+    [trap density, E, cs].
+    E is the central value of the E bin, and cs is the central value of the
+    cs bin. Stored in a hdu extention named 'trap_densities'
+
+    bad_fit_counter (int): Number of times trap_fit() provided fits of amplitude vs phase time
+    that were below fit_thresh over all schemes and temperature (which
+    would include any preliminary trap identifications that were rejected
+    because they weren't consistent across all schemes for sub-electrode
+    locations).
+
+    pre_sub_el_count (int): Number of times a trap was identified before filtering them through
+    sub-electrode location.  The counter is over all schemes and
+    temperatures.
+
+    unused_fit_data (int or None): Number of times traps were identified that were not matched up for
+    sub-electrode location determination.
+
+    unused_temp_fit_data (int): Number of times traps were identified that did not get used in
+    identifying release time constant values across all temperatures
+
+    two_or_less_count (int): Number of traps that only appeared at 2 or fewer temperatures.
+
+    noncontinuous_count (int): Number of traps that appeared at a noncontinuous series of
+    temperatures.
 
     Args:
         input_dataset (corgidrp.data.Dataset): The input dataset to be analyzed. The dataset should be a stack of trap-pumped frames.
@@ -3226,44 +3238,57 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
     key denotes that this is the first trap found at this pixel and
     sub-electrode location.  If a 2nd trap was found at this same location,
     another trap with a 1 in the key would be present in trap_dict.
-    trap_dict = {
-        ((row, col), 'RHSel2', 0): {'T': [160, 162, 164, 166, 168],
-        'tau': [1.51e-6, 1.49e-6, 1.53e-6, 1.50e-6, 1.52e-6],
-        'sigma_tau': [2e-7, 1e-7, 1e-7, 2e-7, 1e-7],
-        'cap': [[cap1, cap1_err, max_amp1, cap2, cap2_err, max_amp2], ...],
-        'E': 0.23,
-        'sig_E': 0.02,
-        'cs': 2.6e-15,
-        'sig_cs': 0.3e-15,
-        'Rsq': 0.96,
-        'tau at input T': 1.61e-6,
-        'sig_tau at input T': 2.02e-6},
-        ...}
+    ::
+
+        trap_dict = {
+            ((row, col), 'RHSel2', 0): {'T': [160, 162, 164, 166, 168],
+            'tau': [1.51e-6, 1.49e-6, 1.53e-6, 1.50e-6, 1.52e-6],
+            'sigma_tau': [2e-7, 1e-7, 1e-7, 2e-7, 1e-7],
+            'cap': [[cap1, cap1_err, max_amp1, cap2, cap2_err, max_amp2], ...],
+            'E': 0.23,
+            'sig_E': 0.02,
+            'cs': 2.6e-15,
+            'sig_cs': 0.3e-15,
+            'Rsq': 0.96,
+            'tau at input T': 1.61e-6,
+            'sig_tau at input T': 2.02e-6},
+            ...}
+
     'T': temperatures for which values of tau were successfully fit. In K.
-        'tau': the tau values corresponding to these temperatures in the same
-        order.  In seconds.
-        'sigma_tau': overall uncetainty in tau taken from the errors in the
-        fits from all the schemes that were used to specify trap location
-        (corresponding to the same order as 'T' and 'tau'). In seconds.
-        'cap': cap1 is either the probability of capture
-        (if trap_fit_const() used) or tauc (capture time constant) if
-        trap_fit() used. cap1_err is the error from fitting.  max_amp1 is the
-        maximum amplitude of the dipole from the curve fit for that pixel.
-        Similarly for cap2, cap2_err, and max_amp2, and there can be a 3rd set
-        of parameters if a trap sub-electrode location was determined using
-        3 schemes.  This data may be useful for future analysis.
-        'E': energy level.  In eV.
-        'sig_E': standard deviation error of energy level.  In eV.
-        'cs': cross section for holes.  In cm^2.
-        'sig_cs': standard deviation error of cross section for holes.
-        In cm^2.
-        'Rsq': adjusted R^2 for the tau vs temperature fit that was done to
-        obtain cs.
-        'tau at input T': tau (in seconds) evaluated at desired temperature of
-        Roman EMCCD, input_T.
-        'sig_tau at input T': standard deviation error of tau at desired
-        temperature of Roman EMCCD, input_T.  Found by propagating error by
-        utilizing 'sig_cs' and 'sig_E'.
+
+    'tau': the tau values corresponding to these temperatures in the same
+    order.  In seconds.
+
+    'sigma_tau': overall uncetainty in tau taken from the errors in the
+    fits from all the schemes that were used to specify trap location
+    (corresponding to the same order as 'T' and 'tau'). In seconds.
+
+    'cap': cap1 is either the probability of capture
+    (if trap_fit_const() used) or tauc (capture time constant) if
+    trap_fit() used. cap1_err is the error from fitting.  max_amp1 is the
+    maximum amplitude of the dipole from the curve fit for that pixel.
+    Similarly for cap2, cap2_err, and max_amp2, and there can be a 3rd set
+    of parameters if a trap sub-electrode location was determined using
+    3 schemes.  This data may be useful for future analysis.
+
+    'E': energy level.  In eV.
+
+    'sig_E': standard deviation error of energy level.  In eV.
+
+    'cs': cross section for holes.  In cm^2.
+
+    'sig_cs': standard deviation error of cross section for holes.
+    In cm^2.
+
+    'Rsq': adjusted R^2 for the tau vs temperature fit that was done to
+    obtain cs.
+
+    'tau at input T': tau (in seconds) evaluated at desired temperature of
+    Roman EMCCD, input_T.
+
+    'sig_tau at input T': standard deviation error of tau at desired
+    temperature of Roman EMCCD, input_T.  Found by propagating error by
+    utilizing 'sig_cs' and 'sig_E'.
 
     We will recode the string parts of that dictionary specifying the
     sub-electrode location for a given pixel to a number code. An example of such

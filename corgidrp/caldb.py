@@ -487,6 +487,12 @@ class CalDB:
 
             # sort by closest in time
             options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
+        elif dtype_label in ['DispersionModel']:
+            # filter by prism (DPAM) so PRISM2 and PRISM3 data get their own model
+            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+
+            # sort by closest in time
+            options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]
         else:
             # sort by closest in time
             options_sorted = calibdf.iloc[np.argsort(np.abs(calibdf["MJD"] - frame_dict["MJD"]))]
@@ -669,6 +675,49 @@ def initialize():
                     'wavlen_vs_pos_polycoeff': disp_params['wavlen_vs_pos_polycoeff'],
                     'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
         
+        disp_model = data.DispersionModel(disp_dict, pri_hdr = prihdr, ext_hdr = exthdr)
+        disp_model.save(output_dir, disp_model.filename)
+        rescan_needed = True
+
+    # Add default PRISM2 DispersionModel calibration file if it doesn't exist
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, 'cgi_0200001001001001001_20240211t0000000_dpm_cal.fits')):
+        spec_datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
+        output_dir = corgidrp.default_cal_dir
+        prihdr, exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
+        dt_time = time.Time("2024-02-11 00:00:00", scale='utc')
+        dt = dt_time.to_datetime()
+        dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+        ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+        disp_filename = f"cgi_{prihdr['VISITID']}_{ftime}_dpm_cal.fits"
+        prihdr['FILETIME'] = dt_str
+        prihdr['FILENAME'] = disp_filename
+        exthdr['DATETIME'] = dt_str
+        exthdr['FTIMEUTC'] = dt_str
+        exthdr['MJDSRT'] = float(dt_time.mjd)
+        exthdr['SCTSRT'] = dt_str
+        exthdr['SCTEND'] = dt_str
+        # The only supported spectroscopy science filter is Band 3 (3F)
+        exthdr['DPAMNAME'] = 'PRISM2'
+        exthdr['CFAMNAME'] = '3F'
+        exthdr['FSAMNAME'] = 'OPEN'
+        # The prism's own Band 2 reference (660 nm), which is what the PRISM2 
+        # dispersion polynomials are centered on.
+        exthdr["REFWAVE"] = 660.
+        exthdr["BAND"] = '2'
+        band_list = spec.read_cent_wave('2')
+        band_center = band_list[0]
+        fwhm = band_list[1]
+        bandpass_frac = fwhm/band_center
+        exthdr["BANDFRAC"] = bandpass_frac
+        disp_file_path = os.path.join(spec_datadir, "TVAC_PRISM2_dispersion_profile.npz")
+        disp_params = np.load(disp_file_path)
+        disp_dict = {'clocking_angle': disp_params['clocking_angle'],
+                    'clocking_angle_uncertainty': disp_params['clocking_angle_uncertainty'],
+                    'pos_vs_wavlen_polycoeff': disp_params['pos_vs_wavlen_polycoeff'],
+                    'pos_vs_wavlen_cov' : disp_params['pos_vs_wavlen_cov'],
+                    'wavlen_vs_pos_polycoeff': disp_params['wavlen_vs_pos_polycoeff'],
+                    'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
+
         disp_model = data.DispersionModel(disp_dict, pri_hdr = prihdr, ext_hdr = exthdr)
         disp_model.save(output_dir, disp_model.filename)
         rescan_needed = True

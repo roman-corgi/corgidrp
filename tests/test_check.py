@@ -9,7 +9,9 @@ import pytest
 
 import numpy as np
 
-from corgidrp import check
+from corgidrp import check, mocks
+from corgidrp.data import Image, Dataset
+from corgidrp.check import check_uniq_keyword
 
 
 # Invalid values
@@ -545,6 +547,26 @@ def test_string_bad_vexc():
         pass
     pass
 
+def test_uniq_keyword():
+    """
+    test check.check_uniq_keyword
+    """
+    img = np.ones([100, 100])
+    err = np.ones([100, 100])
+    dq = np.zeros([100, 100], dtype = np.uint16)
+    prhd, exthd = mocks.create_default_L1_headers()
+    
+    prhd1 = prhd.copy()
+    prhd1["TARGET"] = "star"
+    
+    image1 = Image(img, err = err, dq = dq,pri_hdr = prhd, ext_hdr = exthd)
+    image2 = Image(img, err = err, dq = dq,pri_hdr = prhd1, ext_hdr = exthd)
+    dataset = Dataset([image1, image2])
+    assert check_uniq_keyword(dataset, "TARGET")[0] == False
+    dataset1 = Dataset([image1, image1])
+    assert check_uniq_keyword(dataset1, "TARGET")[0] == True
+    assert len(check_uniq_keyword(dataset, "TARGET")[1]) == 2
+
 
 if __name__ == '__main__':
     test_nonnegative_scalar_integer_bad_var()
@@ -596,3 +618,4 @@ if __name__ == '__main__':
     test_twoD_square_array_bad_vexc()
     test_twoD_square_array_bad_vname() 
     test_twoD_square_array_good()
+    test_uniq_keyword()

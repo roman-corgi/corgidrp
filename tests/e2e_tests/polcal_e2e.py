@@ -5,8 +5,11 @@ import argparse
 import glob
 import warnings
 
+import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.check as checks
+import corgidrp.caldb as caldb
+import corgidrp.astrom as astrom
 from corgidrp.data import Dataset, MuellerMatrix, NDMuellerMatrix
 from corgidrp.walker import walk_corgidrp
 
@@ -43,14 +46,38 @@ def run_polcal_test(output_dir, do_ND=False,
 #To test this we need this catalog with the same values as the test data also in corgidrp/data/stellar_polarization_database.csv
     path_to_pol_ref_file = os.path.join(current_file_path, "..","test_data","stellar_polarization_database.csv")
 
-    
-    mock_dataset = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file,
+    # create a mock dataset with two dithers. The dither throw is large enough that the two
+    # positions are unambiguously further apart than the resolution element the Mueller matrix
+    # calibration matches on: +/-50 mas is +/-2.3 pix, so the two positions are 6.5 pix apart
+    # against a lambda/D of 2.3 pix.
+    # Both dithers are given the same roll angles, as a real dither sequence would have. The
+    # calibration keeps one dither per target per roll, so if each dither were at its own roll
+    # there would be no roll observed at more than one dither and nothing to choose between.
+    roll_angles = [0., 55., 0., 55.]
+    mock_dataset_dither_1 = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file,
                                            q_inst=q_instrumental_polarization,
                                            u_inst=u_instrumental_polarization,
                                            q_eff=q_efficiency,
                                            u_eff=u_efficiency,
                                            uq_ct=uq_cross_talk,
-                                           qu_ct=qu_cross_talk)
+                                           qu_ct=qu_cross_talk,
+                                           fsmx=-50,
+                                           fsmy=50,
+                                           pa_apers=roll_angles)
+
+    mock_dataset_dither_2 = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file,
+                                               q_inst=q_instrumental_polarization,
+                                               u_inst=u_instrumental_polarization,
+                                               q_eff=q_efficiency,
+                                               u_eff=u_efficiency,
+                                               uq_ct=uq_cross_talk,
+                                               qu_ct=qu_cross_talk,
+                                               fsmx=50,
+                                               fsmy=-50,
+                                               pa_apers=roll_angles)
+
+    # combine the two dither datasets
+    mock_dataset = Dataset(list(mock_dataset_dither_1.frames) + list(mock_dataset_dither_2.frames))
     
     frames = [frame for frame in mock_dataset]
     if do_ND: 
@@ -230,25 +257,56 @@ def test_polcal_e2e(e2edata_path, e2eoutput_path,
     # Add handlers to logger
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
-    
-    #first without ND:
-    run_polcal_test(output_dir, do_ND=False,
-                    q_instrumental_polarization=q_instrumental_polarization,
-                    u_instrumental_polarization=u_instrumental_polarization,
-                    q_efficiency=q_efficiency,
-                    u_efficiency=u_efficiency,
-                    uq_cross_talk=uq_cross_talk,
-                    qu_cross_talk=qu_cross_talk)
-    #then with ND:
-    run_polcal_test(output_dir, do_ND=True,
-                    q_instrumental_polarization=q_instrumental_polarization,
-                    u_instrumental_polarization=u_instrumental_polarization,
-                    q_efficiency=q_efficiency,
-                    u_efficiency=u_efficiency,
-                    uq_cross_talk=uq_cross_talk,
-                    qu_cross_talk=qu_cross_talk)
-    
-    
+
+    # The polcal recipe creates the WCS, which needs an astrometric calibration for the plate
+    # scale, so stand up a temporary caldb holding one
+    original_caldb_filepath = corgidrp.caldb_filepath
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_polcal_e2e_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(tmp_caldb_csv):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB()
+
+    logger.info('Creating mock astrometric calibration...')
+    calibrations_dir = os.path.join(output_dir, 'calibrations')
+    os.makedirs(calibrations_dir)
+    field_path = os.path.join(os.path.dirname(__file__), "..", "test_data", "JWST_CALFIELD2020.csv")
+    astrom_dataset = mocks.create_astrom_data(field_path=field_path)
+    # create_wcs only needs the plate scale, the north angle and the boresight offset from this
+    astrom_cal = astrom.boresight_calibration(input_dataset=astrom_dataset, field_path=field_path,
+                                              find_threshold=5)
+    # the calibration has to be on disk before the caldb will take an entry for it
+    mocks.rename_files_to_cgi_format(list_of_fits=[astrom_cal], output_dir=calibrations_dir,
+                                     level_suffix="ast_cal")
+    this_caldb.create_entry(astrom_cal)
+    logger.info('')
+
+    try:
+        #first without ND:
+        run_polcal_test(output_dir, do_ND=False,
+                        q_instrumental_polarization=q_instrumental_polarization,
+                        u_instrumental_polarization=u_instrumental_polarization,
+                        q_efficiency=q_efficiency,
+                        u_efficiency=u_efficiency,
+                        uq_cross_talk=uq_cross_talk,
+                        qu_cross_talk=qu_cross_talk)
+        #then with ND:
+        run_polcal_test(output_dir, do_ND=True,
+                        q_instrumental_polarization=q_instrumental_polarization,
+                        u_instrumental_polarization=u_instrumental_polarization,
+                        q_efficiency=q_efficiency,
+                        u_efficiency=u_efficiency,
+                        uq_cross_talk=uq_cross_talk,
+                        qu_cross_talk=qu_cross_talk)
+    finally:
+        # leave the caldb as we found it, so the other tests in this file are unaffected
+        this_caldb.remove_entry(astrom_cal)
+        corgidrp.caldb_filepath = original_caldb_filepath
+        if os.path.exists(tmp_caldb_csv):
+            os.remove(tmp_caldb_csv)
+
+
 @pytest.mark.e2e
 def test_polcal_stokes_vap(e2edata_path, e2eoutput_path, 
                     q_instrumental_polarization = 0.03,  # in percent

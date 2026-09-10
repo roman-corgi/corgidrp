@@ -8,6 +8,24 @@
     "outputdir" : "",
     "steps" : [
         {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "em_gain_division"
+        },
+        {
+            "name" : "dark_subtraction",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "outputdir" : "AUTOMATIC"
+            }
+        },
+        {
             "name": "divide_by_exptime"
         },
         {

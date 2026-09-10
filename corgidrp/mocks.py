@@ -853,6 +853,7 @@ def create_synthesized_master_dark_calib(detector_areas):
             frame.ext_hdr['EMGAIN_C'] = EMgain_arr[i]
             frame.ext_hdr['EXPTIME'] = exptime_arr[i]
             frame.ext_hdr['KGAINPAR'] = eperdn
+            frame.ext_hdr['SAT_DN'] = 105000/eperdn
             frame_list.append(frame)
     dataset = data.Dataset(frame_list)
 
@@ -2035,7 +2036,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #190K: gain of 10-20
     emccd[190] = EMCCDDetect(
@@ -2052,7 +2061,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #195K: gain of 10-20
     # emccd[195] = EMCCDDetect(
@@ -2086,7 +2103,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #210K: gain of 10-20
     emccd[210] = EMCCDDetect(
@@ -2103,7 +2128,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
         )
     #220K: gain of 10-20
     emccd[220] = EMCCDDetect(
@@ -2120,7 +2153,16 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             eperdn=eperdn,
             nbits=nbits,
             numel_gain_register=604,
-            meta_path=meta_path
+            meta_path=meta_path,
+            upstream_spill_prob=None,
+            fpn_path=None,
+            bias_sigma_row=0,
+            bias_sigma_col=0,
+            fast_gain_mode=True,
+            row_read_time=0,
+            gain_CIC_Q=0,
+            tail_length=40
+            
         )
 
     #when tauc is 3e-3, that gives a mean e- field of 2090 e-
@@ -2681,7 +2723,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 nbits=nbits,
                 numel_gain_register=604,
                 meta_path=meta_path,
-                nonlin_path=nonlin_path
+                nonlin_path=nonlin_path,
+                upstream_spill_prob=None,
+                fpn_path=None,
+                bias_sigma_row=0,
+                bias_sigma_col=0,
+                fast_gain_mode=True,
+                row_read_time=0,
+                gain_CIC_Q=0,
+                tail_length=40
                 )
         # save to FITS files
         for sc in [1,2,3,4]:
@@ -2693,7 +2743,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     gain_counts = np.reshape(readout_emccd._gain_register_elements(temps[temp][sc][i].ravel()),temps[temp][sc][i].shape)
                     if gain_counts.any() >= full_well_serial:
                         raise Exception('Saturated after EM gain applied.')
-                    output_dn = readout_emccd.readout(gain_counts)
+                    output_dn = readout_emccd.readout(gain_counts,frametime)
                 else:
                     output_dn = temps[temp][sc][i]
                 prihdr, exthdr = create_default_L1_TrapPump_headers(arrtype)
@@ -2781,7 +2831,15 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000., kgain=7
         pixel_pitch=13e-6,  # m
         eperdn=kgain,
         nbits=64, # number of ADU bits
-        numel_gain_register=604 #number of gain register elements
+        numel_gain_register=604, #number of gain register elements
+        upstream_spill_prob=None,
+        fpn_path=None,
+        bias_sigma_row=0,
+        bias_sigma_col=0,
+        fast_gain_mode=True,
+        row_read_time=0,
+        gain_CIC_Q=0,
+        tail_length=40
         )
 
     thresh = emccd.em_gain/10 # threshold
@@ -3384,6 +3442,10 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
         y_image, x_image = rng.integers(100), rng.integers(100)
         image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
             512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
+        # update the FMSX/FSMY headers so the pipeline can tell frames with different dithers apart
+        platescale = 21.8
+        exthd["FSMX"] = platescale * x_image # convert pixel to mas
+        exthd["FSMY"] = platescale * y_image
         # List of known positions and list of known PSF volume
         psf_loc += [[512+x_image+model.x_mean.value-imshape[0]//2,
             512+y_image+model.y_mean.value-imshape[0]//2]]
@@ -5520,7 +5582,8 @@ def get_pol_image_centers(image_separation_arcsec, alignment_angle, pixel_scale 
 
 def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
                             image_separation_arcsec=7.5, q_inst=0.5,u_inst=-0.1,
-                            q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03):
+                            q_eff=0.8,uq_ct=0.05,u_eff=0.7,qu_ct=0.03, fsmx=0, fsmy=0,
+                            pa_apers=None):
     '''
     Generate a mock L2b polarimetric dataset for polcal testing
 
@@ -5534,6 +5597,14 @@ def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
         uq_ct (float): U to Q crosstalk
         u_eff (float): U efficiency
         qu_ct (float): Q to U crosstalk
+        fsmx (float): X-axis dither position of the fast steering mirror, in milliarcseconds
+        fsmy (float): Y-axis dither position of the fast steering mirror, in milliarcseconds
+        pa_apers (float or list of float): Roll angle (deg) to use for each target. A single value
+            is used for every target, and a list is taken one entry per target in the order the
+            targets appear in the reference file. If None (the default) a random roll is drawn for
+            each target. Pass this when building several dither positions that have to share their
+            roll angles, since the injected polarization depends on the roll and so the roll cannot
+            be changed in the header afterwards.
 
     Returns:
         corgidrp.data.Dataset: The simulated L2b polarimetric dataset for polcal testing
@@ -5542,6 +5613,16 @@ def generate_mock_polcal_dataset(path_to_pol_ref_file, read_noise=200,
     #Read in the test polarization stellar database from test_data/
     pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
     pol_ref_targets = pol_ref["TARGET"].tolist()
+
+    # Convert the FSM dither position from mas to pixels, so that the stars are actually
+    # displaced by the dither rather than only labelled with it. A positive FSM position puts
+    # the star at larger x/y, following the convention used elsewhere in this module. The
+    # offset is applied to the gaussian within its own array, so it is not rounded to whole
+    # pixels and a sub-pixel dither is represented faithfully.
+    platescale = 21.8 # mas/pixel
+    dither_x = fsmx / platescale
+    dither_y = fsmy / platescale
+
     #Create mock data for three targets in the database - for each target inject known polarization
     image_list = []
     for i, target in enumerate(pol_ref_targets):
@@ -5558,7 +5639,12 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
         pol45.err = (np.ones_like(pol45.data) * 1)[None,:]
 
         #Add Random rotation angle - This should still work everywhere.
-        random_rotation_angle = np.random.randint(0,360)
+        if pa_apers is None:
+            random_rotation_angle = np.random.randint(0,360)
+        elif np.ndim(pa_apers) == 0:
+            random_rotation_angle = pa_apers
+        else:
+            random_rotation_angle = pa_apers[i]
         pol0.pri_hdr['PA_APER'] = random_rotation_angle
         pol45.pri_hdr['PA_APER'] = random_rotation_angle
 
@@ -5566,12 +5652,17 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
         q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_rotation_angle)
         q_meas = q * q_eff + u * uq_ct + q_inst/100.0
         u_meas = u * u_eff + q * qu_ct + u_inst/100.0
-        # generate four gaussians scaled appropriately for the target's polarization
+        # generate four gaussians scaled appropriately for the target's polarization,
+        # each displaced from its nominal beam center by the FSM dither
         gauss_array_shape = [26,26]
-        gauss1 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + q_meas)/2 #left image, POL0
-        gauss2 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - q_meas)/2 #right image, POL0
-        gauss3 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 + u_meas)/2 #left image, POL45
-        gauss4 = gaussian_array(array_shape=gauss_array_shape,amp=1000000) * (1 - u_meas)/2 #right image, POL45
+        gauss1 = gaussian_array(array_shape=gauss_array_shape,amp=1000000,
+                                xoffset=dither_x,yoffset=dither_y) * (1 + q_meas)/2 #left image, POL0
+        gauss2 = gaussian_array(array_shape=gauss_array_shape,amp=1000000,
+                                xoffset=dither_x,yoffset=dither_y) * (1 - q_meas)/2 #right image, POL0
+        gauss3 = gaussian_array(array_shape=gauss_array_shape,amp=1000000,
+                                xoffset=dither_x,yoffset=dither_y) * (1 + u_meas)/2 #left image, POL45
+        gauss4 = gaussian_array(array_shape=gauss_array_shape,amp=1000000,
+                                xoffset=dither_x,yoffset=dither_y) * (1 - u_meas)/2 #right image, POL45
         #add the gaussians to the mock images
         center_left0, center_right0 = get_pol_image_centers(image_separation_arcsec, 0)
         center_left45, center_right45 = get_pol_image_centers(image_separation_arcsec, 45)
@@ -5593,6 +5684,11 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
     mock_dataset = data.Dataset(image_list)
     for frame in mock_dataset.frames:
         frame.pri_hdr['VISTYPE'] = "CGIVST_CAL_POL_SETUP"
+        frame.ext_hdr['FSMX'] = fsmx
+        frame.ext_hdr['FSMY'] = fsmy
+        # create_wcs writes PLTSCALE in the polcal recipe, but tests that call the polcal
+        # steps directly skip it, so provide the nominal CGI value here
+        frame.ext_hdr['PLTSCALE'] = platescale # mas/pixel
 
     return mock_dataset
 

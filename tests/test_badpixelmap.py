@@ -123,9 +123,9 @@ def test_packing_unpacking_uint64():
     # Checking whether we can assign demical higher than 255 to the badpixelmap to test our function for bit unpacking and packing
     packed = np.zeros((3, 3), dtype='>u8')
 
-    # Get the bit position for 'TBD'
-    bit_position = FLAG_TO_BIT_MAP["TBD"]
-    flag_value = FLAG_TO_VALUE_MAP["TBD"]
+    # Get the bit position for 'too_bright_for_pc'
+    bit_position = FLAG_TO_BIT_MAP["too_bright_for_pc"]
+    flag_value = FLAG_TO_VALUE_MAP["too_bright_for_pc"]
 
     packed[0, 0] = flag_value
 

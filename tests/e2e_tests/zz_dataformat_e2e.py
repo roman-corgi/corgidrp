@@ -1,4 +1,5 @@
 import os
+import re
 import argparse
 import difflib
 import glob
@@ -12,13 +13,47 @@ import csv
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-def generate_template(hdulist, dtype_name=None):
+# Matches the CGI filename convention checked by validate_cgi_filename():
+# cgi_VISITID(19 digits)_YYYYMMDDtHHMMSSS_SUFFIX.fits
+CGI_FILENAME_SUFFIX_PATTERN = re.compile(r'^cgi_\d{19}_\d{8}t\d{7}_(.+)\.fits$')
+
+def parse_filename_suffix(hdulist):
+    """
+    Derives the CGI filename suffix (e.g. 'l2a', 'l3_', 'bpm_cal') from the
+    filename of the FITS file backing hdulist, using the same
+    'cgi_VISITID_YYYYMMDDtHHMMSSS_suffix.fits' convention checked by
+    validate_cgi_filename().
+
+    Args:
+        hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
+
+    Returns:
+        str: the parsed filename suffix, or None if the filename is
+            unavailable or doesn't match the CGI naming convention
+    """
+    filepath = hdulist.filename()
+    if filepath is None:
+        return None
+
+    match = CGI_FILENAME_SUFFIX_PATTERN.match(os.path.basename(filepath))
+    if match is None:
+        return None
+
+    return match.group(1)
+
+def generate_template(hdulist, dtype_name=None, filename_suffix=None):
     """
     Generates an rst documentation page of the data entries
 
     Args:
         hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
         dtype_name (str): if not None, custom name to use for page title and label
+        filename_suffix (str): the CGI filename suffix used for this data product
+            (e.g. 'l2a', 'l3_', 'bpm_cal'), as validated by validate_cgi_filename.
+            If None (the default), the suffix is parsed automatically from
+            hdulist's filename via parse_filename_suffix(). If that also
+            fails (e.g. the filename doesn't follow the CGI convention), a
+            placeholder is shown instead.
 
     Returns:
         str: the rst page contents
@@ -65,7 +100,10 @@ def generate_template(hdulist, dtype_name=None):
         hdr_tables += "\n\n"
 
 
-    doc = template.format(datatype.lower(), datatype, hdu_table, hdr_tables)
+    if filename_suffix is None:
+        filename_suffix = parse_filename_suffix(hdulist)
+    suffix_display = filename_suffix if filename_suffix is not None else "N/A"
+    doc = template.format(datatype.lower(), datatype, hdu_table, hdr_tables, suffix_display)
 
     return doc
 
@@ -308,6 +346,9 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                     if skip_hdu_structure_check:
                         if 'NAXIS' in name.upper():
                             continue
+                    # skip comments in primary HDU
+                    if name == "COMMENT" and current_hdu == "Primary (HDU 0)":
+                        continue
                     # Skip keywords that vary with processing history
                     if name.startswith("FILE") and len(name) > 4 and name[4:].isdigit():
                         continue
@@ -316,6 +357,12 @@ def compare_docs(ref_doc, new_doc, data_product_name=None, skip_hdu_structure_ch
                     if name.startswith("HIERARCH FILE") and len(name) > 13 and name[13:].isdigit():
                         continue
                     if name.startswith("HIERARCH FILE_") and len(name) > 14 and name[14:].isdigit():
+                        continue
+                    # Skip numbered RECIPE keywords / NRECIPES: how many are present
+                    # depends on how many separate DRP calls have processed this file
+                    if name.startswith("RECIPE") and len(name) > 6 and name[6:].isdigit():
+                        continue
+                    if name == "NRECIPES":
                         continue
                     # Skip table header/delimiter rows
                     if name and dtype and name != 'Keyword' and name != '=' * len(name) and name != '-' * len(name) and not name.isdigit():
@@ -626,7 +673,7 @@ def test_l3_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l4_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Coronagraphic ===")
-    l4_data_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e")
+    l4_data_dir = os.path.join(e2eoutput_path, "l1_to_l4_e2e", "l1_to_l4")
     l4_data_files = glob.glob(os.path.join(l4_data_dir, "*_l4_.fits"))
     l4_data_file = max(l4_data_files, key=os.path.getmtime)
     
@@ -687,7 +734,7 @@ def test_l4_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l4_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Polarimetry ===")
-    l4_pol_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_pol_e2e")
+    l4_pol_data_dir = os.path.join(e2eoutput_path, "l1_to_l4_pol_e2e", "analog")
     l4_pol_data_files = glob.glob(os.path.join(l4_pol_data_dir, "*_l4_.fits"))
     l4_pol_data_file = max(l4_pol_data_files, key=os.path.getmtime)
     
@@ -747,7 +794,7 @@ def test_l4_spec_coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing L4 Spectroscopy Noncoronagraphic ===")
-    l4_spec_noncoron_data_dir = os.path.join(e2eoutput_path, "l3_to_l4_spec_noncoron_e2e")
+    l4_spec_noncoron_data_dir = os.path.join(e2eoutput_path, "l1_to_l4_spec_noncoron_e2e", "analog")
     l4_spec_noncoron_data_files = glob.glob(os.path.join(l4_spec_noncoron_data_dir, "*_l4_.fits"))
     l4_spec_noncoron_data_file = max(l4_spec_noncoron_data_files, key=os.path.getmtime)
     
@@ -777,12 +824,12 @@ def test_l4_spec_noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Astrometry Calibration ===")
-    astrom_data_files = glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits"))
+    astrom_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_astrom_e2e", "l2b_results", "*_ast_cal.fits"))
     astrom_data_file = max(astrom_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(astrom_data_file, 'ast_cal')
     
-    generate_fits_excel_documentation(astrom_data_file, os.path.join(e2eoutput_path, "astrom_cal_e2e", "ast_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(astrom_data_file, os.path.join(e2eoutput_path, "l1_to_astrom_e2e", "l2b_results", "ast_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -899,12 +946,12 @@ def test_polflat_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Core Throughput ===")
-    ct_data_files = glob.glob(os.path.join(e2eoutput_path, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits"))
+    ct_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "l2b_results", "*_ctp_cal.fits"))
     ct_data_file = max(ct_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(ct_data_file, 'ctp_cal')
     
-    generate_fits_excel_documentation(ct_data_file, os.path.join(e2eoutput_path, "corethroughput_cal_e2e", "band3_spc_data", "ctp_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(ct_data_file, os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "l2b_results", "ctp_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -929,12 +976,12 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Core Throughput Map ===")
-    ctmap_data_files = glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits"))
+    ctmap_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "ctmap_output", "*_ctm_cal.fits"))
     ctmap_data_file = max(ctmap_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(ctmap_data_file, 'ctm_cal')
     
-    generate_fits_excel_documentation(ctmap_data_file, os.path.join(e2eoutput_path, "ctmap_cal_e2e", "ctm_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(ctmap_data_file, os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "ctmap_output", "ctm_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1052,19 +1099,19 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing ND Filter ===")
-    nonlin_data_files = glob.glob(os.path.join(e2eoutput_path, "nd_filter_cal_e2e", "*_ndf_cal.fits"))
-    nonlin_data_file = max(nonlin_data_files, key=os.path.getmtime)
+    nd_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e", "l2b_results", "*_ndf_cal.fits"))
+    nd_data_file = max(nd_data_files, key=os.path.getmtime)
     
-    validate_cgi_filename(nonlin_data_file, 'ndf_cal')
+    validate_cgi_filename(nd_data_file, 'ndf_cal')
     
-    generate_fits_excel_documentation(nonlin_data_file, os.path.join(e2eoutput_path, "nd_filter_cal_e2e", "ndf_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(nd_data_file, os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e", "l2b_results", "ndf_cal_documentation.xlsx"))
 
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
         os.mkdir(doc_dir)
 
 
-    with fits.open(nonlin_data_file) as hdulist:
+    with fits.open(nd_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
 
     doc_filepath = os.path.join(doc_dir, "ndfilter.rst")
@@ -1264,12 +1311,12 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Flux Calibration Polarimetry ===")
-    fluxcal_pol_data_files = glob.glob(os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1", "*_abf_cal.fits"))
+    fluxcal_pol_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_fluxcal_pol_e2e", "l2b_results", "*_abf_cal.fits"))
     fluxcal_pol_data_file = max(fluxcal_pol_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(fluxcal_pol_data_file, 'abf_cal')
     
-    generate_fits_excel_documentation(fluxcal_pol_data_file, os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1", "abf_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(fluxcal_pol_data_file, os.path.join(e2eoutput_path, "l1_to_fluxcal_pol_e2e", "l2b_results", "abf_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
 
@@ -1291,12 +1338,12 @@ def test_fluxcal_pol_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Mueller Matrix ===")
-    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_mmx_cal.fits"))
+    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "*_mmx_cal.fits"))
     polcal_data_file = max(polcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(polcal_data_file, 'mmx_cal')
     
-    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "polcal_e2e", "mmx_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "l1_to_ND_polcal_e2e", "l2b_results", "mmx_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1320,12 +1367,12 @@ def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing ND Mueller Matrix ===")
-    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_ndm_cal.fits"))
+    polcal_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_polcal_e2e", "l2b_results", "*_ndm_cal.fits"))
     polcal_data_file = max(polcal_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(polcal_data_file, 'ndm_cal')
     
-    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "polcal_e2e", "ndm_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "l1_to_ND_polcal_e2e", "l2b_results", "ndm_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1350,12 +1397,12 @@ def test_nd_mueller_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Spectroscopy Line Spread Function ===")
-    spec_linespread_data_files = glob.glob(os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "*_lsf_cal.fits"))
+    spec_linespread_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_linespread_e2e", "l2b_results", "*_lsf_cal.fits"))
     spec_linespread_data_file = max(spec_linespread_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(spec_linespread_data_file, 'lsf_cal')
     
-    generate_fits_excel_documentation(spec_linespread_data_file, os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "lsf_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(spec_linespread_data_file, os.path.join(e2eoutput_path, "l1_to_linespread_e2e", "l2b_results", "lsf_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1379,12 +1426,12 @@ def test_spec_linespread_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_spec_prism_disp_dataformat_e2e(e2edata_path, e2eoutput_path):
     print("\n=== Testing Spectroscopy Prism Dispersion ===")
-    spec_prism_disp_data_files = glob.glob(os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "*_dpm_cal.fits"))
+    spec_prism_disp_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_dispersion_e2e", "l2b_results", "*_dpm_cal.fits"))
     spec_prism_disp_data_file = max(spec_prism_disp_data_files, key=os.path.getmtime)
     
     validate_cgi_filename(spec_prism_disp_data_file, 'dpm_cal')
     
-    generate_fits_excel_documentation(spec_prism_disp_data_file, os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "dpm_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(spec_prism_disp_data_file, os.path.join(e2eoutput_path, "l1_to_dispersion_e2e", "l2b_results", "dpm_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -1445,29 +1492,29 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'L3': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_e2e", "l2b_to_l3", "*_l3_.fits")),
         'L3_Spec': glob.glob(os.path.join(e2eoutput_path, "l1_to_l3_spec_e2e", "analog", "*_l3_.fits")),
         'L3_Pol': glob.glob(os.path.join(e2eoutput_path, "l1_to_l3_pol_e2e", "analog", "*_l3_.fits")),
-        'L4_Coron': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_e2e", "*_l4_.fits")),
+        'L4_Coron': glob.glob(os.path.join(e2eoutput_path, "l1_to_l4_e2e", "l1_to_l4", "*_l4_.fits")),
         'L4_Noncoron': glob.glob(os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e", "*_l4_.fits")),
-        'L4_Pol': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_pol_e2e", "*_l4_.fits")),
+        'L4_Pol': glob.glob(os.path.join(e2eoutput_path, "l1_to_l4_pol_e2e", "analog", "*_l4_.fits")),
         'L4_Spec_Coron': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_spec_psfsub_e2e", "*_l4_.fits")),
-        'L4_Spec_Noncoron': glob.glob(os.path.join(e2eoutput_path, "l3_to_l4_spec_noncoron_e2e", "*_l4_.fits")),
-        'Astrom': glob.glob(os.path.join(e2eoutput_path, "astrom_cal_e2e", "*_ast_cal.fits")),
+        'L4_Spec_Noncoron': glob.glob(os.path.join(e2eoutput_path, "l1_to_l4_spec_noncoron_e2e", "analog", "*_l4_.fits")),
+        'Astrom': glob.glob(os.path.join(e2eoutput_path, "l1_to_astrom_e2e", "l2b_results", "*_ast_cal.fits")),
         'BPMap': glob.glob(os.path.join(e2eoutput_path, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits")),
         'Flat': glob.glob(os.path.join(e2eoutput_path, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits")),
         'PolFlat': glob.glob(os.path.join(e2eoutput_path, "pol_flatfield_cal_e2e", "flat_neptune_pol0", "*_flt_cal.fits")),
-        'CoreThroughput': glob.glob(os.path.join(e2eoutput_path, "corethroughput_cal_e2e", "band3_spc_data", "*_ctp_cal.fits")),
-        'CoreThroughputMap': glob.glob(os.path.join(e2eoutput_path, "ctmap_cal_e2e", "*_ctm_cal.fits")),
+        'CoreThroughput': glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "l2b_results", "*_ctp_cal.fits")),
+        'CoreThroughputMap': glob.glob(os.path.join(e2eoutput_path, "l1_to_corethroughput_e2e", "ctmap_output", "*_ctm_cal.fits")),
         'FluxCal': glob.glob(os.path.join(e2eoutput_path, "flux_cal_e2e", "*_abf_cal.fits")),
-        'FluxCalPol': glob.glob(os.path.join(e2eoutput_path, "fluxcal_pol_e2e", "WP1","*_abf_cal.fits")),
+        'FluxCalPol': glob.glob(os.path.join(e2eoutput_path, "l1_to_fluxcal_pol_e2e", "l2b_results","*_abf_cal.fits")),
         'KGain': glob.glob(os.path.join(e2eoutput_path, "kgain_cal_e2e", "*_krn_cal.fits")),
-        'MuellerMatrix': glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_mmx_cal.fits")),
+        'MuellerMatrix': glob.glob(os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "*_mmx_cal.fits")),
         'NonLin': glob.glob(os.path.join(e2eoutput_path, "nonlin_cal_e2e", "*_nln_cal.fits")),
-        'NDFilter': glob.glob(os.path.join(e2eoutput_path, "nd_filter_cal_e2e", "*_ndf_cal.fits")),
-        'NDMueller': glob.glob(os.path.join(e2eoutput_path, "polcal_e2e", "*_ndm_cal.fits")),
+        'NDFilter': glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_filter_e2e", "l2b_results", "*_ndf_cal.fits")),
+        'NDMueller': glob.glob(os.path.join(e2eoutput_path, "l1_to_ND_polcal_e2e", "l2b_results", "*_ndm_cal.fits")),
         'NoiseMaps': glob.glob(os.path.join(e2eoutput_path, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits")),
         'Dark': glob.glob(os.path.join(e2eoutput_path, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits")),
         'TrapPump': glob.glob(os.path.join(e2eoutput_path, "trap_pump_cal_e2e", "*_tpu_cal.fits")),
-        'SpecLineSpread': glob.glob(os.path.join(e2eoutput_path, "spec_linespread_cal_e2e", "*_lsf_cal.fits")),
-        'SpecPrismDisp': glob.glob(os.path.join(e2eoutput_path, "spec_prism_disp_cal_e2e", "*_dpm_cal.fits")),
+        'SpecLineSpread': glob.glob(os.path.join(e2eoutput_path, "l1_to_linespread_e2e", "l2b_results", "*_lsf_cal.fits")),
+        'SpecPrismDisp': glob.glob(os.path.join(e2eoutput_path, "l1_to_dispersion_e2e", "l2b_results", "*_dpm_cal.fits")),
     }
     
     # Get the most recent file for each data product

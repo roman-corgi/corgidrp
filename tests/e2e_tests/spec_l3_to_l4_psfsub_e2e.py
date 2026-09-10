@@ -475,10 +475,10 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         check_dimensions(data, (125, 125), "HDU5 Data Array: 2D array containing the 2D wavelength uncertainty distribution", logger)
         # Verify HDU6 (ALGO_THRU)
         hdu6 = hdul[6]
-        check_dimensions(hdu6.data, (19,), "HDU6 Data Array: containing the algorithm throughput", logger)
+        check_dimensions(hdu6.data, (51,), "HDU6 Data Array: containing the algorithm throughput", logger)
         # verify HDU7 (SPEC)
         hdu7 = hdul[7]
-        check_dimensions(hdu7.data, (19,), "HDU7 Data Array: containing the 1D spectral distribution", logger)
+        check_dimensions(hdu7.data, (51,), "HDU7 Data Array: containing the 1D spectral distribution", logger)
         if np.isnan(hdu7.data).any() is True:
             logger.info(f"HDU7 Data Array: Contains NANs in the data. Expected: no NANs. FAIL.")
         else:
@@ -490,21 +490,21 @@ def run_spec_l3_to_l4_psfsub_e2e_test(e2edata_path, e2eoutput_path):
         # Verify HDU8 (error)
         hdu8 = hdul[8]
         err = hdu8.data
-        check_dimensions(err, (1, 19), "HDU8 Data Array: 1D array with the corresponding spectral uncertainty", logger)
+        check_dimensions(err, (1, 51), "HDU8 Data Array: 1D array with the corresponding spectral uncertainty", logger)
         # Verify HDU9 (dq)
         hdu9 = hdul[9]
         dq = hdu9.data
-        check_dimensions(dq, (19,), "HDU9 Data Array: 1D array with the corresponding spectral data quality", logger)
+        check_dimensions(dq, (51,), "HDU9 Data Array: 1D array with the corresponding spectral data quality", logger)
         
         # Verify HDU10 (wavelength)
         hdu10 = hdul[10]
         wave = hdu10.data
-        check_dimensions(wave, (19,), "HDU10 Data Array: 1D array with the corresponding wavelength", logger)
+        check_dimensions(wave, (51,), "HDU10 Data Array: 1D array with the corresponding wavelength", logger)
         
         # Verify HDU11 (wavelength uncertainties)
         hdu11 = hdul[11]
         wave_err = hdu11.data
-        check_dimensions(wave_err, (19,), "HDU11 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
+        check_dimensions(wave_err, (51,), "HDU11 Data Array: 1D array with the corresponding wavelength uncertainty", logger)
         # Verify header keywords
         verify_header_keywords(hdul[1].header, {'DATALVL': 'L4', 'CFAMNAME' : '3F', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3', 'BUNIT' : 'photoelectron/s'},
                                                "spec output product", logger)

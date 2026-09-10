@@ -3,7 +3,7 @@ import re
 import warnings
 from astropy.io import fits
 
-from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas
+from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, unpack_geom, detector_areas, ENF
 import corgidrp.check as check
 from corgidrp.data import DetectorNoiseMaps, Dark, Image, Dataset, typical_cal_invalid_keywords
 import corgidrp
@@ -29,31 +29,30 @@ def mean_combine(dataset_or_image_list, bpmap_list, err=False):
 
     Args:
         dataset_or_image_list (data.Dataset, list, or array_like): Dataset or list (or stack) of L2b data frames
-    (with no bad pixels applied to them).
+            (with no bad pixels applied to them).
         bpmap_list (list or array_like): List (or stack) of bad-pixel maps
-    associated with L2b data frames. Each must be 0 (good) or 1 (bad)
-    at every pixel. If first input is a Dataset, this input is ignored.
-        err (bool):  If True, calculates the standard error over all
-    the frames.  Intended for the corgidrp.Data.Dataset.all_err
-    arrays. Defaults to False.   
-
+            associated with L2b data frames. Each must be 0 (good) or 1 (bad)
+            at every pixel. If first input is a Dataset, this input is ignored.
+        err (bool): If True, calculates the standard error over all
+            the frames.  Intended for the corgidrp.Data.Dataset.all_err
+            arrays. Defaults to False.
 
     Returns:
-        comb_image (array_like): Mean-combined frame from input list data.
+        tuple:
+            comb_image (array_like): Mean-combined frame from input list data.
 
-        comb_bpmap (array_like): Mean-combined bad-pixel map.
+            comb_bpmap (array_like): Mean-combined bad-pixel map.
 
-        map_im (array-like): Array showing how many frames per pixel were
-        unmasked. Used for getting read noise in the calibration of the
-        master dark.
+            map_im (array-like): Array showing how many frames per pixel were
+            unmasked. Used for getting read noise in the calibration of the
+            master dark.
 
-        enough_for_rn (bool): Useful only for the calibration of the master dark.
-        False:  Fewer than half the frames available for at least one pixel in
-        the averaging due to masking, so noise maps cannot be effectively
-        determined for all pixels.
-        True:  Half or more of the frames available for all pixels, so noise
-        mpas can be effectively determined for all pixels.
-
+            enough_for_rn (bool): Useful only for the calibration of the master dark.
+            False:  Fewer than half the frames available for at least one pixel in
+            the averaging due to masking, so noise maps cannot be effectively
+            determined for all pixels.
+            True:  Half or more of the frames available for all pixels, so noise
+            mpas can be effectively determined for all pixels.
     """
     # uncomment for RAM check
     # import psutil
@@ -196,32 +195,28 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     master dark for those rows.  They are set to NaN.
 
     Args:
-    dataset (corgidrp.data.Dataset):
-        This is an instance of corgidrp.data.Dataset.
-        Each frame should accord with the SCI full frame geometry.
-        If Dataset has metadata only (as in RAM-heavy case),
-        each frame is read in from its filepath one at a time.  If Dataset has
-        its data, then all the frames are processed at once.
-    detector_params (corgidrp.data.DetectorParams):
-        a calibration file storing detector calibration values
-    detector_regions (dict):
-        a dictionary of detector geometry properties.  Keys should be as found
-        in detector_areas in detector.py.
-        Defaults to None, in which case detector_areas from detector.py is used.
-    full_frame (bool):
-        If True, a full-frame master dark is generated (which
-        may be useful for the module that statistically fits a frame to find
-        the empirically applied EM gain, for example). If False, an image-area
-        master dark is generated.  Defaults to False.
+        dataset (corgidrp.data.Dataset): This is an instance of corgidrp.data.Dataset.
+            Each frame should accord with the SCI full frame geometry.
+            If Dataset has metadata only (as in RAM-heavy case),
+            each frame is read in from its filepath one at a time.  If Dataset has
+            its data, then all the frames are processed at once.
+        detector_params (corgidrp.data.DetectorParams): a calibration file storing
+            detector calibration values
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found
+            in detector_areas in detector.py.
+            Defaults to None, in which case detector_areas from detector.py is used.
+        full_frame (bool): If True, a full-frame master dark is generated (which
+            may be useful for the module that statistically fits a frame to find
+            the empirically applied EM gain, for example). If False, an image-area
+            master dark is generated.  Defaults to False.
 
     Returns:
-    master_dark : corgidrp.data.DetectorNoiseMaps instance
-        The mean-combined master dark, in detected electrons.
-        master_dark.err includes the statistical error across all the frames as
-        well as any individual err from each frame (and accounts for masked
-        pixels in the calculations).
-        master_dark.dq: pixels that are masked for all frames have non-zero
-        values.
+        corgidrp.data.DetectorNoiseMaps: master_dark, the mean-combined master dark, in detected electrons.
+            master_dark.err includes the statistical error across all the frames as
+            well as any individual err from each frame (and accounts for masked
+            pixels in the calculations).
+            master_dark.dq: pixels that are masked for all frames have non-zero
+            values.
     """
     if detector_regions is None:
             detector_regions = detector_areas
@@ -306,13 +301,10 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     # frames
     fittable_inds = np.where(combined_bpmap ==0)
     if dataset[0].data is None:
-        dq_sum = np.zeros_like(mean_frame).astype(float)
+        output_dq = np.zeros_like(mean_frame).astype(int)
         for j in range(len(dataset)):
             dq_temp = Image(dataset[j].filepath).dq
-            dq_sum += dq_temp.astype(float)
-        dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
-        output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
-        output_dq = output_dq.filled(0).astype(int)
+            output_dq = output_dq | dq_temp.astype(int)
     else:
         output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
     output_dq[fittable_inds] = 0
@@ -353,7 +345,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
 class CalDarksLSQException(Exception):
     """Exception class for calibrate_darks_lsq."""
 
-def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regions=None):
+def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regions=None, fpn_fid=4.9, cic_fid=0.0088, dc_fid=0.001, num_stds=4, CR_threshold_check=True):
     """The input dataset represents a collection of frame stacks of the
     (in e- units), where the stacks are for various
     EM gain values and exposure times.  Stacks with fewer frames than other
@@ -410,75 +402,87 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         a calibration file storing detector calibration values
     weighting (bool):
         If True, weighting is used for the least squares fit, and the weighting
-        takes into account the err coming from the input frames, the statistical
-        variation among the supposedly identical frames in each sub-stack, and
+        takes into account the number of input frames in each sub-stack and
         the effect of any DQ masking.  If False, all data is evenly weighted in
         the least squares fit.  Defaults to True.
     detector_regions (dict):
         A dictionary of detector geometry properties.  Keys should be as found
         in detector_areas in detector.py.
         Defaults to None, in which case detector_areas from detector.py is used.
-
+    fpn_fid (float):
+        The fiducial mean of FPN in the image area, in electrons.  Defaults to current best estimate.
+    cic_fid (float):
+        The fiducial value for CIC in electrons.  Defaults to current best estimate.
+    dc_fid (float):
+        The fiducial value for dark current in electrons/s.  Defaults to current best estimate.
+    num_stds (float):
+        The number of standard deviations to use when considering whether to ignore frames based on how low 
+        the cosmic ray threshold was. Defaults to 4.
+    CR_threshold_check (bool):
+        If True, a gain-exposure time combination is skipped over if 
+        (the fiducial mean + num_stds * the fiducial standard deviation) > (threshold used for cosmic ray flagging). 
+        Defaults to True.
+        
     Returns:
-    noise_maps : corgidrp.data.DetectorNoiseMaps instance
-        Includes a 3-D stack of frames for the data, err, and the dq.
-        input data: np.stack([FPN_map, CIC_map, DC_map])
-        input err:  np.stack([FPN_std_map, C_std_map, DC_std_map])
-        FPN_std_map, C_std_map, and DC_std_map contain the fitting error.
-        In all the err, masked pixels are accounted for in
-        the calculations, and the err from the input frames, along with statistical
-        error due to having fewer frames available per sub-stack due to any masking,
-        is used for weighting the data in the least squares fit.
-        input dq:   np.stack([output_dq, output_dq, output_dq])
-        The pixels that are masked for EVERY frame in all sub-stacks
-        but 3 (or less) are assigned a flag value from the combination of the frames.
-        These pixels would have no reliability for dark subtraction.
+        corgidrp.data.DetectorNoiseMaps: noise_maps, includes a 3-D stack of frames for the data, err, and the dq.
 
-        The header info is taken from that of
-        one of the frames from the input datasets and can be changed via a call
-        to the DetectorNoiseMaps class if necessary.  The bias offset info is
-        found in the exthdr under these keys:
-        'B_O': bias offset
-        'B_O_ERR': bias offset error
-        'B_O_UNIT': DN
+            input data: np.stack([FPN_map, CIC_map, DC_map])
 
+            input err:  np.stack([FPN_std_map, C_std_map, DC_std_map])
+            FPN_std_map, C_std_map, and DC_std_map contain the fitting error.
+            In all the err, masked pixels are accounted for in
+            the calculations, and the err from the input frames, along with statistical
+            error due to having fewer frames available per sub-stack due to any masking,
+            is used for weighting the data in the least squares fit.
+
+            input dq:   np.stack([output_dq, output_dq, output_dq])
+            The pixels that are masked for EVERY frame in all sub-stacks
+            but 3 (or less) are assigned a flag value from the combination of the frames.
+            These pixels would have no reliability for dark subtraction.
+
+            The header info is taken from that of
+            one of the frames from the input datasets and can be changed via a call
+            to the DetectorNoiseMaps class if necessary.  The bias offset info is
+            found in the exthdr under these keys:
+            'B_O': bias offset
+            'B_O_ERR': bias offset error
+            'B_O_UNIT': DN
 
     Info on intermediate products in this function:
-    FPN_map : array-like (full frame)
-        A per-pixel map of fixed-pattern noise (in detected electrons).  Any negative values
-        from the fit are made positive in the end.
-    CIC_map : array-like (full frame)
-        A per-pixel map of EXCAM clock-induced charge (in detected electrons). Any negative
-        values from the fit are made positive in the end.
-    DC_map : array-like (full frame)
-        A per-pixel map of dark current (in detected electrons/s). Any negative values
-        from the fit are made positive in the end.
-    bias_offset : float
-        The median for the residual FPN+CIC in the region where bias was
+        FPN_map (array-like (full frame)): A per-pixel map of fixed-pattern noise (in detected electrons).
+        Any negative values from the fit are made positive in the end.
+
+        CIC_map (array-like (full frame)): A per-pixel map of EXCAM clock-induced charge (in detected electrons).
+        Any negative values from the fit are made positive in the end.
+
+        DC_map (array-like (full frame)): A per-pixel map of dark current (in detected electrons/s).
+        Any negative values from the fit are made positive in the end.
+
+        bias_offset (float): The median for the residual FPN+CIC in the region where bias was
         calculated (i.e., prescan). In DN.
-    bias_offset_up : float
-        The upper bound of bias offset, accounting for error in input datasets
+
+        bias_offset_up (float): The upper bound of bias offset, accounting for error in input datasets
         and the fit.
-    bias_offset_low : float
-        The lower bound of bias offset, accounting for error in input datasets
+
+        bias_offset_low (float): The lower bound of bias offset, accounting for error in input datasets
         and the fit.
-    FPN_image_map : array-like (image area)
-        A per-pixel map of fixed-pattern noise in the image area (in detected electrons).
+
+        FPN_image_map (array-like (image area)): A per-pixel map of fixed-pattern noise in the image area (in detected electrons).
         Any negative values from the fit are made positive in the end.
-    CIC_image_map : array-like (image area)
-        A per-pixel map of EXCAM clock-induced charge in the image area
+
+        CIC_image_map (array-like (image area)): A per-pixel map of EXCAM clock-induced charge in the image area
         (in deteceted electrons). Any negative values from the fit are made positive in the end.
-    DC_image_map : array-like (image area)
-        A per-pixel map of dark current in the image area (in detected electrons/s).
+
+        DC_image_map (array-like (image area)): A per-pixel map of dark current in the image area (in detected electrons/s).
         Any negative values from the fit are made positive in the end.
-    FPNvar : float
-        Variance of fixed-pattern noise map (in detected electrons).
-    CICvar : float
-        Variance of clock-induced charge map (in detected electrons).
-    DCvar : float
-        Variance of dark current map (in detected electrons).
-    read_noise : float
-        Read noise estimate from the noise profile of a mean frame (in detected electrons).
+
+        FPNvar (float): Variance of fixed-pattern noise map (in detected electrons).
+
+        CICvar (float): Variance of clock-induced charge map (in detected electrons).
+
+        DCvar (float): Variance of dark current map (in detected electrons).
+
+        read_noise (float): Read noise estimate from the noise profile of a mean frame (in detected electrons).
         It's read off from the sub-stack with the lowest product of EM gain and
         frame time so that the gained variance of C and D is comparable to or
         lower than read noise variance, thus making reading it off doable.
@@ -489,23 +493,23 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         comes from the k gain calibration, and this is just a rough estimate
         that can be used as a sanity check, for checking agreement with the
         official calibrated value.
-    R_map : array-like
-        A per-pixel map of the adjusted coefficient of determination
+
+        R_map (array-like): A per-pixel map of the adjusted coefficient of determination
         (adjusted R^2) value for the fit.
-    FPN_image_mean : float
-        F averaged over all pixels,
+
+        FPN_image_mean (float): F averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of F_image_map.  This is just for comparison.
-    CIC_image_mean : float
-        C averaged over all pixels,
+
+        CIC_image_mean (float): C averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of C_image_map.  This is just for comparison.
-    DC_image_mean : float
-        D averaged over all pixels,
+
+        DC_image_mean (float): D averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of D_image_map.  This is just for comparison.
-    unreliable_pix_map : array-like (full frame)
-        A pixel value in this array indicates how many sub-stacks are usable
+
+        unreliable_pix_map (array-like (full frame)): A pixel value in this array indicates how many sub-stacks are usable
         for a fit for that pixel.  For each sub-stack for which
         a pixel is masked for more than half of
         the frames in the sub-stack, 1 is added to that pixel's value
@@ -516,12 +520,12 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         The pixels that are masked for EVERY frame in all sub-stacks
         but 3 (or less) are assigned a flag value from the combination of the frames.
         These pixels would have no reliability for dark subtraction.
-    FPN_std_map : array-like (full frame)
-        The standard deviation per pixel for the calibrated FPN.
-    CIC_std_map : array-like (full frame)
-        The standard deviation per pixel for the calibrated CIC.
-    DC_std_map : array-like (full frame)
-        The standard deviation per pixel for the calibrated dark current.
+
+        FPN_std_map (array-like (full frame)): The standard deviation per pixel for the calibrated FPN.
+
+        CIC_std_map (array-like (full frame)): The standard deviation per pixel for the calibrated CIC.
+
+        DC_std_map (array-like (full frame)): The standard deviation per pixel for the calibrated dark current.
     """
     if type(weighting) != bool:
         raise ValueError('The input weighting should be either True or False.')
@@ -542,8 +546,11 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     EMgain_arr = np.array([])
     exptime_arr = np.array([])
     kgain_arr = np.array([])
+    CR_thresholds_e = np.array([])
     mean_frames = []
     total_errs = []
+    stat_errs = []
+    weights = []
     mean_num_good_fr = []
     output_dqs = []
     unreliable_pix_map = np.zeros((detector_regions['SCI']['frame_rows'],
@@ -553,6 +560,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             print('The number of frames in dataset is less than 1176 frames, '
             'which is the minimum number for the analog synthesized '
             'master dark')
+    #unreliable_pix_masks = [] for debugging
     for i in range(len(datasets)):
         frames = []
         bpmaps = []
@@ -561,16 +569,46 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         if i > 0:
             if np.shape(datasets[i-1].all_data)[1:] != np.shape(datasets[i].all_data)[1:]:
                 raise CalDarksLSQException('All sub-stacks must have the same frame shape.')
+            
+        exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
+        kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
         try: # if EM gain measured directly from frame
-            EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_M'])
+            emgain = datasets[i].frames[0].ext_hdr['EMGAIN_M']
         except:
             if datasets[i].frames[0].ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
-                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_A'])
+                emgain = datasets[i].frames[0].ext_hdr['EMGAIN_A']
             else: # use commanded gain otherwise
-                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_C'])
-        exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
-        cmdgain = datasets[i].frames[0].ext_hdr['EMGAIN_C']
-        kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
+                emgain = datasets[i].frames[0].ext_hdr['EMGAIN_C']
+
+        if CR_threshold_check:
+            # check to see if certain frames should be rejected in calibration: Is the cosmic ray threshold low enough to truncate the distribution variates in the frame stacks?  If so, reject.
+            # We don't just check the mean and variance of each mean frame to save processing time (avoids mean_combine) and also b/c the mean will be skewed by cosmic rays;
+            # and even if we ignore cosmic rays like mean_combine does, if the threshold was chosen poorly, the frame mean and variance are not reliable.
+            nem = detector_params.params['NEMGAIN'] # number of gain stages in gain register
+            poisson_var = cic_fid  + dc_fid * exptime
+            # assumes no variance from FPN
+            expected_std = ENF(emgain, nem) * emgain * np.sqrt(poisson_var) 
+            expected_mean = fpn_fid + cic_fid  + dc_fid * exptime
+            cosm_thresh_used_dn = None 
+            if 'HISTORY' in datasets[i][0].ext_hdr.keys():
+                hist_str = str(datasets[i][0].ext_hdr['HISTORY'])
+                split_hist_str = hist_str.split('\n')
+                clean_hist_str = ''
+                for piece in split_hist_str:
+                    clean_hist_str += piece
+                ind = clean_hist_str.find('Cosmic ray threshold of ')
+                end_ind = clean_hist_str[ind:].find('used.') #finds next instance of this, which immediately follows the number
+                if ind != -1 and end_ind != -1:
+                    cosm_thresh_used_dn = float(clean_hist_str[ind+24 : ind+end_ind])
+            if cosm_thresh_used_dn is None: #if not available from HISTORY, use SAT_DN 
+                cosm_thresh_used_dn = datasets[i][0].ext_hdr['SAT_DN']
+            cosmic_thresh_used_e = cosm_thresh_used_dn * datasets[i][0].ext_hdr['KGAINPAR']
+            CR_thresholds_e = np.append(CR_thresholds_e, cosmic_thresh_used_e)
+            threshold = expected_mean + num_stds * expected_std
+            if CR_thresholds_e[i] <= threshold:
+                continue #skips over this exptime-gain combination
+
+        EMgain_arr = np.append(EMgain_arr, emgain)
         exptime_arr = np.append(exptime_arr, exptime)
         kgain_arr = np.append(kgain_arr, kgain)
 
@@ -603,7 +641,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             if np.isnan(i0).any():
                 raise ValueError('telem_rows cannot be in image area.')
             test_frame[telem_rows] = 0
-        mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps)
+        mean_frame, combined_bpmap, unmasked_num, _ = mean_combine(frames, bpmaps) 
         mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
         if dataset[0].data is None:
             # equivalent to what is done in if statement above for datasets with data
@@ -625,7 +663,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
                 masked_mean = np.ma.masked_array(mean_frame, combined_bpmap)
                 sum_squares += (masked_frame - masked_mean)**2
             stat_std = np.zeros_like(sum_squares).astype(float)
-            stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds])/np.sqrt(unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
+            stat_std[nonzero_inds] = np.ma.sqrt(sum_squares[nonzero_inds]/unmasked_num[nonzero_inds]) #standard error=std/sqrt(N)
             stat_std[zero_inds] = 0
             stat_std = np.ma.getdata(stat_std)
         else:
@@ -645,33 +683,41 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
         stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(unmasked_num.max())/1
         total_err = np.sqrt(mean_err**2 + stat_std**2)
-        pixel_mask = (unmasked_num < len(datasets[i].frames)/2).astype(int)
+        reliable_fraction = 0.75 # not used in output product, so hard-coded number okay (for debugging)
+        pixel_mask = (unmasked_num <= len(datasets[i].frames)*reliable_fraction).astype(int) 
+        # print('for EM gain and exptime ', (EMgain_arr[i], exptime_arr[i]))
+        # print('histogram of image area of unmasked_num: ', np.histogram(slice_section(unmasked_num,'SCI','image',detector_regions))) 
         mean_num = np.mean(unmasked_num)
         mean_frame[telem_rows] = np.nan
         mean_frames.append(mean_frame)
         total_errs.append(total_err)
+        stat_errs.append(stat_std)
+        weights.append((unmasked_num)) # /len(datasets[i].frames))) #not normalized per sub-stack since different sub-stacks can have different number of frames
         mean_num_good_fr.append(mean_num)
         unreliable_pix_map += pixel_mask
+        #unreliable_pix_masks.append(pixel_mask) for debugging
         unfittable_pix_map += combined_bpmap
         # bitwise_or flag value for those that are masked all the way through for all
         # frames
         fittable_inds = np.where(combined_bpmap != 1)
         if datasets[i][0].data is None:
-            dq_sum = np.zeros_like(mean_frame).astype(float)
+            output_dq = np.zeros_like(mean_frame).astype(int)
             for j in range(len(datasets[i])):
                 dq_temp = Image(datasets[i][j].filepath).dq
-                dq_sum += dq_temp.astype(float)
-            dq_sum = np.ma.masked_array(dq_sum, dq_sum == 0)
-            output_dq = 2**((np.ma.log(dq_sum)/np.log(2)).astype(int)) - 1
-            output_dq = output_dq.filled(0).astype(int)
+                output_dq = output_dq | dq_temp.astype(int)
         else:
             output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
         output_dq[fittable_inds] = 0
         output_dqs.append(output_dq)
     output_dqs = np.stack(output_dqs)
     unreliable_pix_map = unreliable_pix_map.astype(int)
+    #unreliable_pix_masks = np.stack(unreliable_pix_masks) for debugging
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
+    mean_stat_err_stack = np.stack(stat_errs)
+    weights = np.stack(weights).astype(float)
+    #much smaller than the weight due to 1 unmasked frame but not 0, to avoid singular matrix
+    weights[np.where(weights==0)] = (1/len(dataset.frames))/100 #if normalized per sub-stack: (1/len(datasets[i].frames))/100 
 
     # uncomment for RAM check
     # import psutil
@@ -733,14 +779,20 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     # matrix to be used for least squares and covariance matrix
     # Create Xx with shape (M, 3, rows, cols), where M = len(EMgain_arr)
     rows, cols = mean_stack.shape[1], mean_stack.shape[2]
+
     X = np.array([np.ones([len(EMgain_arr)]).astype(float), EMgain_arr, EMgain_arr*exptime_arr]).T  # (M,3)
     Xx = np.broadcast_to(X[:, :, None, None], (len(EMgain_arr), 3, rows, cols))
     # weighting matrix; sub-stacks with few usable frames get a low weight
-    mean_err_stack[telem_rows] = 1 # instead of 0 to avoid inf weighting
+    for i in range(len(mean_err_stack)):
+        mean_err_stack[i][telem_rows] = 1 # instead of 0 to avoid inf weighting
+        mean_stat_err_stack[i][telem_rows] = 1
+        mean_stack[i][telem_rows] = 1
+
     if weighting:
-        W = 1/mean_err_stack
+        W = weights #1/mean_stat_err_stack
     else:
-        W = np.ones_like(mean_err_stack) # all weighted the same
+        W = np.ones_like(mean_stat_err_stack) # all weighted the same
+            
     wY = W*mean_stack
     wX = np.transpose(W*np.transpose(Xx, (1,0,2,3)), (1,0,2,3))
     wXTwX = np.einsum('ji...,ik...',np.transpose(wX,(1,0,2,3)), wX)
@@ -749,6 +801,9 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     params_t = np.einsum('...ij,j...', pinv_wX, wY)
     params = np.transpose(params_t,(2,0,1))
 
+    # pixels that could not be fit: set noise map values there to 0 (should be no pixels in this category)
+    for p in params:
+        p[np.where(unfittable_pix_map >= len(datasets)-3)] = 0
     #next line: checked with KKT method for including bounds
     #actually, do this after determining everything else so that
     # bias_offset, etc is accurate
@@ -953,22 +1008,21 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         C = CIC (clock-induced charge) map
 
         Arguments:
-        dataset: corgidrp.data.Dataset instance.  The dataset should consist of
-            frames all with the same EM gain and exposure time, which are read
-            off from the dataset headers.
-        noisemaps: corgidrp.data.DetectorNoiseMaps instance.  The noise maps used
-            to build the master dark.
-        detector_regions: dict.  A dictionary of detector geometry properties.
-            Keys should be as found in detector_areas in detector.py. Defaults to
-            detector_areas in detector.py.
-        full_frame: bool.  If True, a full-frame master dark is generated (which
-            may be useful for the module that statistically fits a frame to find
-            the empirically applied EM gain, for example). If False, an image-area
-            master dark is generated.  Defaults to False.
+            dataset (corgidrp.data.Dataset): The dataset should consist of
+                frames all with the same EM gain and exposure time, which are read
+                off from the dataset headers.
+            noisemaps (corgidrp.data.DetectorNoiseMaps): The noise maps used
+                to build the master dark.
+            detector_regions (dict): A dictionary of detector geometry properties.
+                Keys should be as found in detector_areas in detector.py. Defaults to
+                detector_areas in detector.py.
+            full_frame (bool): If True, a full-frame master dark is generated (which
+                may be useful for the module that statistically fits a frame to find
+                the empirically applied EM gain, for example). If False, an image-area
+                master dark is generated.  Defaults to False.
 
         Returns:
-        master_dark:  corgidrp.data.Dark instance.
-            This contains the master dark in detected electrons.
+            corgidrp.data.Dark: master_dark, which contains the master dark in detected electrons.
 
         """
         if detector_regions is None:

@@ -181,10 +181,7 @@ html[data-theme="dark"] div.rendered_html tbody tr:nth-child(2n+1) {
 
 /* Style the Table of Contents */
 .page-toc {
-    background: var(--pst-color-secondary);
-    padding: 15px;
     border-radius: 10px;
-    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
     font-family: var(--pst-font-family-heading);
     max-width: 300px;
 }
@@ -197,9 +194,6 @@ html[data-theme="dark"] div.rendered_html tbody tr:nth-child(2n+1) {
 .page-toc .nav-link {
     display: block;
     padding: 8px 12px;
-    color: white;
-    font-size: 16px;
-    font-weight: bold;
     border-radius: 5px;
     transition: background 0.2s ease-in-out;
 }
@@ -209,16 +203,9 @@ html[data-theme="dark"] div.rendered_html tbody tr:nth-child(2n+1) {
     color: #fff;
 }
 
-/* Indent sub-items */
+/* Only show 1 level of headings */
 .page-toc .nav .nav {
-    margin-left: 15px;
-    font-size: 14px;
-}
-
-/* Optional: Sticky positioning to keep TOC visible while scrolling */
-.page-toc {
-    position: sticky;
-    top: 80px;
+    display: none;
 }
 
 /* Stop tqdm cells from turning red (needs function in custom.js too) */

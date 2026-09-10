@@ -232,7 +232,7 @@ def test_k_gtr_0():
     with pytest.raises(CalDarksLSQException):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, module='corgidrp.darks')
-            calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
+            calibrate_darks_lsq(data_set, detector_params, detector_regions=dat, CR_threshold_check=False)
 
 def test_mean_num():
     '''If too many masked in a stack for a given pixel, warning raised. Checks
@@ -261,7 +261,7 @@ def test_mean_num():
     assert nm_out.err[0,2,10,12] == 0
 
 def test_weighting():
-    '''This tests that weighting works. Demonstrates the effect of low weighting via high err and then lots of masking.'''
+    '''This tests that weighting works. Demonstrates the effect of low weighting via lots of masking.'''
     noise_maps = calibrate_darks_lsq(dataset, detector_params, detector_regions=dat)
     CIC_image_map = imaging_slice('SCI', noise_maps.CIC_map, dat)
     wrong_dataset = dataset.copy()
@@ -280,39 +280,21 @@ def test_weighting():
     wrong_CIC_image_map = imaging_slice('SCI', wrong_noise_maps.CIC_map, dat)
     assert(not np.isclose(np.mean(CIC_image_map),
                     np.mean(wrong_CIC_image_map), atol=0.01))
-    # make err for this sub-stack large, so weighting should make fit much better
+
+    # Affect weighting through dq (all but 1 frame in the sub-stack)
     for s in [s1, s2]:
         for i in range(7):
-            #wrong_dataset.all_err[int(7*30*i + s*30):int(7*30*i + s*30+30)] += 100000
-            for j in range(int(7*30*i + s*30), min(int(7*30*i + s*30+30), len(wrong_dataset))):
-                wrong_dataset[j].err = wrong_dataset[j].err + 100000
-    wrong_noise_maps_err = calibrate_darks_lsq(wrong_dataset, detector_params, detector_regions=dat)
-    wrong_CIC_image_map_err = imaging_slice('SCI', wrong_noise_maps_err.CIC_map, dat)
-    assert(np.isclose(np.mean(CIC_image_map),
-                    np.mean(wrong_CIC_image_map_err), atol=0.01))
-    # and err should be reduced overall now, despite effectively having fewer stacks for fitting
-    assert(np.nanmean(wrong_noise_maps_err.CIC_err) < np.nanmean(wrong_noise_maps.CIC_err))
-    # This time, make err for this sub-stack large through dq (all but 1 frame in the sub-stack)
-    # (undo err adjustment I did above)
-    for s in [s1, s2]:
-        for i in range(7):
-            # wrong_dataset.all_err[int(7*30*i + s*30):int(7*30*i + s*30+30)] -= 100000
-            for j in range(int(7*30*i + s*30), min(int(7*30*i + s*30+30), len(wrong_dataset))):
-                wrong_dataset[j].err = wrong_dataset[j].err - 100000
             # wrong_dataset.all_dq[int(7*30*i + s*30):int(7*30*i + s*30+29), :, 1:] = 1 # leave one pixel unmasked so that the total masking Exception isn't raised
             for j in range(int(7*30*i + s*30), min(int(7*30*i + s*30+29), len(wrong_dataset))):
                 wrong_dataset[j].dq[:, 1:] = 1 # leave one pixel unmasked so that the total masking Exception isn't raised
     wrong_noise_maps_dq = calibrate_darks_lsq(wrong_dataset, detector_params, detector_regions=dat)
     wrong_CIC_image_map_dq = imaging_slice('SCI', wrong_noise_maps_dq.CIC_map, dat)
-    # We artificially made err big above, which brought the mean CIC value much closer to the expected value.
-    # However, our leverage in weighting is much more limited when only the DQ is used to affect the weighting. (In reality, the 
-    # err should also be large if the data is in fact bad data.) 
-    # But the result is still a number closer to the correct value compared to the case where no appropriate weighting is used:
+    # the result is a number closer to the correct value compared to the case where no appropriate weighting is used:
     assert(np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map_dq)) < 
            np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map)))
-    # and err should be reduced overall now, despite effectively having fewer stacks for fitting
-    assert(np.nanmean(wrong_noise_maps_dq.CIC_err) < np.nanmean(wrong_noise_maps.CIC_err))
-    # Finally, demonstrate weighting through fewer frames in the erroneous sub-stacks:
+    # and err greater now that very few frames determined one of the data points
+    assert(np.nanmean(wrong_noise_maps_dq.CIC_err) > np.nanmean(wrong_noise_maps.CIC_err))
+    # demonstrate weighting through fewer frames in the erroneous sub-stacks:
     del_list = []
     for s in [s1, s2]:
         for i in range(7):
@@ -330,7 +312,7 @@ def test_weighting():
     # similar logic that applied for masking via DQ above
     assert(np.abs(np.mean(CIC_image_map) - np.mean(smaller_CIC_image_map)) < 
            np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map)))
-    assert(np.nanmean(smaller_noise_maps.CIC_err) < np.nanmean(wrong_noise_maps.CIC_err))
+    assert(np.nanmean(smaller_noise_maps.CIC_err) > np.nanmean(wrong_noise_maps.CIC_err))
     
 def test_no_data():
     '''Tests that a Dataset with only metadata (and has data read in one 
@@ -345,14 +327,29 @@ def test_no_data():
     assert np.nanmax(noisemaps.err - noisemaps2.err) < 1e-10
     assert np.array_equal(noisemaps.dq, noisemaps2.dq) 
 
+def test_cosm_thresh():
+    '''
+    Tests that stacks are skipped over if the cosmic ray threshold that was applied is too low.
+    '''
+    data_set = dataset.copy()
+    noisemaps = calibrate_darks_lsq(data_set, detector_params, detector_regions=dat, CR_threshold_check=False)
+    assert('[2.0, 2.0, 30.0]' in str(noisemaps.ext_hdr['HISTORY*']))
+    for i in range(30): # first stack
+        data_set[i].ext_hdr['HISTORY'] = 'Cosmic ray threshold of 0 used.' 
+    noisemaps = calibrate_darks_lsq(data_set, detector_params, detector_regions=dat, CR_threshold_check=True)
+    # this stack should not appear now
+    assert('[2.0, 2.0, 30.0]' not in str(noisemaps.ext_hdr['HISTORY*']))
+    assert noisemaps.ext_hdr['DRPNFILE'] == 48*N #49 sets of 30, but now 48 sets 
+
 if __name__ == '__main__':
     setup_module()
 
+    test_weighting()
+    test_cosm_thresh()
     test_no_data()
     test_g_gtr_1()
     test_t_gtr_0()
     test_k_gtr_0()
-    test_weighting()
     test_mean_num()
     test_expected_results_sub()
     test_sub_stack_len()

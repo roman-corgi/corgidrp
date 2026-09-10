@@ -89,6 +89,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         # Some location for the center of the mask
         image.ext_hdr['STARLOCX'] = 522
         image.ext_hdr['STARLOCY'] = 517
+        # correct units
+        image.ext_hdr['BUNIT'] = 'DN'
     # Create coronagraphic dataset
     corDataset = data.Dataset(corDataset_image_list)
 
@@ -105,7 +107,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     calibrations_dir = os.path.join(ctmap_outputdir, 'calibrations')
     os.mkdir(calibrations_dir)
     
-    renamed_files = mocks.rename_files_to_cgi_format(list_of_fits=list(corDataset), output_dir=output_dir, level_suffix="l2b")
+    renamed_files = mocks.rename_files_to_cgi_format(list_of_fits=list(corDataset), output_dir=output_dir, level_suffix="l2a")
     
     # Update the dataset with the new filenames
     corDataset_filelist = [os.path.basename(f) for f in renamed_files]

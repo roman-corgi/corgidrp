@@ -296,6 +296,30 @@ def test_default_calibs():
     shutil.copy2(os.path.join(corgidrp.config_folder, "temp_caldb.csv"), corgidrp.caldb_filepath)
     os.remove(os.path.join(corgidrp.config_folder, "temp_caldb.csv"))
 
+def test_dispersion_model_dpam_match():
+    """
+    get_calib for DispersionModel should select the model whose DPAMNAME matches the frame's
+    (PRISM2 vs PRISM3), not merely the closest in time. Both defaults ship in default_cal_dir.
+    """
+    cdb = caldb.CalDB()
+
+    def make_ref(dpam):
+        prihdr, exthdr = mocks.create_default_L2b_headers()[:2]
+        exthdr['DPAMNAME'] = dpam
+        exthdr['CFAMNAME'] = '3F'
+        exthdr['FSAMNAME'] = 'OPEN'
+        exthdr['MJDSRT'] = 60000.0
+        return data.Image(np.zeros((50, 50)), pri_hdr=prihdr, ext_hdr=exthdr)
+
+    dm2 = cdb.get_calib(make_ref('PRISM2'), data.DispersionModel)
+    assert dm2.ext_hdr['DPAMNAME'] == 'PRISM2'
+    assert float(dm2.ext_hdr['REFWAVE']) == 660.
+
+    dm3 = cdb.get_calib(make_ref('PRISM3'), data.DispersionModel)
+    assert dm3.ext_hdr['DPAMNAME'] == 'PRISM3'
+    assert float(dm3.ext_hdr['REFWAVE']) == 730.
+
+
 def test_caldb_filter():
     '''
     test that the filter function works correctly to select the best

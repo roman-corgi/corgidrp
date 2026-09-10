@@ -1,12 +1,13 @@
 # A file that holds the functions to handle polarimetry data 
 import os
+import corgidrp
 import numpy as np
 import pandas as pd
 
 from corgidrp.data import Image, NDMuellerMatrix, MuellerMatrix, Dataset
 from corgidrp.fluxcal import aper_phot, measure_aper_flux_pol
 
-def aper_phot_pol(image, phot_kwargs):
+def aper_phot_pol(image, phot_kwargs, return_xy = False):
     """
     Perform aperture photometry on both channels of a 2-channel polarimetric image.
 
@@ -18,32 +19,47 @@ def aper_phot_pol(image, phot_kwargs):
             Must contain `data`, `err`, and `dq` attributes.
         phot_kwargs (dict): Keyword arguments passed to `aper_phot`, defining
             aperture radius, centering method, background subtraction, etc.
+        return_xy (bool, optional): If True, also return the x and y coordinates of the aperture center.
+            Default is False.
 
     Returns:
-        tuple[list, list]:
+        tuple[list, list] or tuple[list, list, list, list]:
             (flux, flux_err) lists of fluxes and uncertainties for both polarization channels.
+            If return_xy is True, also returns (x, y) lists of aperture center coordinates.
     """
     flux = []
     flux_err = []
+
+    if return_xy:
+        xys = []
+
     for i in range(2):
         im_copy = image.copy()
         im_copy.data = im_copy.data[i]
         im_copy.err = im_copy.err[0][i].reshape(np.append([1], [im_copy.data.shape]))
         im_copy.dq  = im_copy.dq[i]
 
-        f, f_e = aper_phot(im_copy, **phot_kwargs)
+        if return_xy:
+            f, f_e, xy = aper_phot(im_copy, **phot_kwargs, return_xy=return_xy)
+            xys.append(xy)
+        else: 
+            f, f_e = aper_phot(im_copy, **phot_kwargs, return_xy=return_xy)
 
         flux.append(f)
         flux_err.append(f_e)
 
-    return flux, flux_err
+    if return_xy:
+        return flux, flux_err, xys
+    else:
+        return flux, flux_err
 
 def calc_stokes_unocculted(input_dataset,
                            phot_kwargs=None,
                            image_center_x=None, 
                            image_center_y=None,
                            split_pa_states=True,
-                           pa_tolerance=0.1):
+                           pa_tolerance=0.1,
+                           fsm_tolerance=4.0):
     """
     Compute uncalibrated Stokes parameters (I, Q/I, U/I) from unocculted L3 polarimetric datacubes.
 
@@ -69,6 +85,12 @@ def calc_stokes_unocculted(input_dataset,
         pa_tolerance (float, optional):
             Maximum allowed difference in PA_APER (deg) to group frames together when split_pa_states is True.
             Default is 0.1.
+        fsm_tolerance (float, optional):
+            Maximum allowed difference in the FSM position (mas) to group frames together. Frames taken
+            at different dithers are always kept apart, since the Mueller matrix calibration needs the
+            star on the same resolution element and averaging over dithers would defeat that. The
+            tolerance is there because the reported FSM position drifts a little even when the mirror
+            is not commanded to move. Default is 4.0
 
     Returns:
         Image:
@@ -98,14 +120,22 @@ def calc_stokes_unocculted(input_dataset,
 
     prism_map = {'POL0': [0., 90.], 'POL45': [45., 135.]}
 
-    # split datasets by target if there are multiple targets
+    # Split the dataset by target and by dither position. The dithers have to be kept apart
+    # because the Mueller matrix calibration needs every star measured on the same resolution
+    # element, so combining frames across dithers would reintroduce the flat field error the
+    # dithers exist to avoid.
+    pointing_datasets, _ = input_dataset.split_dataset(
+        prihdr_keywords=["TARGET"],
+        exthdr_keywords=["FSMX", "FSMY"],
+        tolerances={"FSMX": fsm_tolerance, "FSMY": fsm_tolerance})
+
+    # split each of those further by PA_APER if there are multiple roll angles
     if split_pa_states:
         datasets = []
-        target_datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
-        for target_dataset in target_datasets:
+        for pointing_dataset in pointing_datasets:
             # Assign frames to a cluster based on the nearest PA_APER
             clusters = []
-            for frame in target_dataset.frames:
+            for frame in pointing_dataset.frames:
                 pa = frame.pri_hdr["PA_APER"] % 360.0 # in case PA_APER can be negative..
                 pa_rad = np.deg2rad(pa)
                 pa_sin = np.sin(pa_rad)
@@ -135,21 +165,22 @@ def calc_stokes_unocculted(input_dataset,
             for cluster in clusters:
                 datasets.append(Dataset(cluster["frames"]))
     else:
-        datasets, _ = input_dataset.split_dataset(prihdr_keywords=["TARGET"])
+        datasets = pointing_datasets
 
     stokes_vectors = []
 
     for dataset in datasets:
-        fluxes, flux_errs, thetas = [], [], []
+        fluxes, flux_errs, thetas, xys = [], [], [], []
         # --- Photometry loop ---
         for ds in dataset:
             prism = ds.ext_hdr.get('DPAMNAME')
             if prism not in prism_map:
                 raise ValueError(f"Unknown prism: {prism}")
             
-            flux, flux_err = aper_phot_pol(ds, phot_kwargs)
+            flux, flux_err, xy = aper_phot_pol(ds, phot_kwargs, return_xy = True)
             fluxes.append(flux)
             flux_errs.append(flux_err)
+            xys.append(xy)
             
             for phi in prism_map[prism]:
                 thetas.append(np.radians(phi))
@@ -157,6 +188,7 @@ def calc_stokes_unocculted(input_dataset,
         fluxes = np.array(fluxes)
         flux_errs = np.array(flux_errs)
         thetas = np.array(thetas)
+        xys = np.array(xys)
 
         # Prevent division by zero
         if np.any(flux_errs == 0):
@@ -223,6 +255,22 @@ def calc_stokes_unocculted(input_dataset,
         )
         stokes_vector.filename = os.path.basename(dataset[0].filename).replace("l3", "stokes")
 
+        #Update header with the star position for this pointing, for the two beams.
+        #The two prisms' beam cutouts are placed with independently rounded pixel offsets, so the
+        #same star sits at different cutout coordinates in a POL0 and a POL45 frame. Measure the
+        #position in one prism only, POL0 when it was observed and POL45 otherwise, so positions
+        #compared between stokes vectors later were all measured in the same cutout frame. Average
+        #over the frames of that prism so the result does not depend on the order they came in.
+        prisms = np.array([ds.ext_hdr.get('DPAMNAME') for ds in dataset])
+        position_prism = 'POL0' if np.any(prisms == 'POL0') else 'POL45'
+        xy = np.mean(xys[prisms == position_prism], axis=0)
+
+        stokes_vector.ext_hdr['STARPRSM'] = (position_prism, "Prism whose frames STAR_X/Y were measured in")
+        stokes_vector.ext_hdr['STAR_X1'] = (xy[0][0], "Mean star x position (pix) in beam 1")
+        stokes_vector.ext_hdr['STAR_Y1'] = (xy[0][1], "Mean star y position (pix) in beam 1")
+        stokes_vector.ext_hdr['STAR_X2'] = (xy[1][0], "Mean star x position (pix) in beam 2")
+        stokes_vector.ext_hdr['STAR_Y2'] = (xy[1][1], "Mean star y position (pix) in beam 2")
+
         stokes_vectors.append(stokes_vector)
 
     stokes_dataset = Dataset(stokes_vectors)
@@ -231,7 +279,9 @@ def calc_stokes_unocculted(input_dataset,
 
 def generate_mueller_matrix_cal(input_dataset, 
                                 path_to_pol_ref_file=None,
-                                svd_threshold=1e-5):
+                                svd_threshold=1e-5,
+                                mode = "match_position",
+                                pa_tolerance=0.1):
     '''
     Calculates the Mueller Matrix calibration for a given dataset of polarimetric observations.
     The expected input is a dataset of stokes vectors measured from known polarized standard stars, separated by 
@@ -243,7 +293,7 @@ def generate_mueller_matrix_cal(input_dataset,
     TARGET, P, P_err, PA, PA_err
     where TARGET is the name of the target, P is the degree of polarization in percent, P_err is the error
     in the degree of polarization in percent, PA is the polarization angle in degrees, and PA_err is the
-    error in the polarization angle in degrees.
+    error in the polarization angle in degrees. Each target must appear in exactly one row.
 
     The error calculation propagates both the photometric measurement noise on the observed Stokes vectors
     and the uncertainties in the reference star polarization fraction and angle (P_err, PA_err from the
@@ -252,10 +302,24 @@ def generate_mueller_matrix_cal(input_dataset,
     Args: 
         input_dataset (corgidrp.data.Dataset): A CorgiDRP dataset consisting of stokes vectors.
             This data should be either all ND datasets or all non-ND datasets.
-        path_to_pol_ref_file (str): The path to the polarization reference file. 
-            Default is "./data/stellar_polarization_database.csv".
+        path_to_pol_ref_file (str, optional): The path to the polarization reference file.
+            If None (default), "stellar_polarization_database.csv" is looked for in the corgidrp
+            configuration directory (the directory holding corgidrp.config_filepath, normally
+            ~/.corgidrp), which allows the file to be overridden without modifying the installed
+            pipeline. If that file does not exist, the copy shipped with the pipeline in
+            ./data/stellar_polarization_database.csv is used.
         svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
-    
+        mode (str, optional): The mode of operation. Defaults to "match_position".
+            - "match_position": The function will calculate the Mueller Matrix using only input stokes vectors where
+            the stokes vectors match within the same resolution element. If there are multiple sets that match it will
+            pick the one with the least movment. If there is no match it will raise an error. This is the default mode.
+            - "closest_match": The function will calculate the Mueller Matrix using the closest matching stokes vectors
+            in terms of position.
+            - "all": The function will calculate the Mueller Matrix using all input stokes vectors, regardless of position.
+        pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) for two stokes vectors to
+            count as the same roll angle when selecting by position. One stokes vector is kept per target per
+            roll, so this decides which vectors are treated as alternatives to choose between. Default is 0.1.
+
     Returns:
         mueller_matrix_obj (MuellerMatrix or NDMuellerMatrix): The generated Mueller Matrix object.
     '''
@@ -263,7 +327,11 @@ def generate_mueller_matrix_cal(input_dataset,
     dataset = input_dataset.copy()
 
     if path_to_pol_ref_file is None:
-        path_to_pol_ref_file = os.path.join(os.path.dirname(__file__), "data", "stellar_polarization_database.csv")
+        user_pol_ref_path = os.path.join(os.path.dirname(corgidrp.config_filepath), "stellar_polarization_database.csv")
+        if os.path.isfile(user_pol_ref_path):
+            path_to_pol_ref_file = user_pol_ref_path
+        else:
+            path_to_pol_ref_file = os.path.join(os.path.dirname(__file__), "data", "stellar_polarization_database.csv")
 
     # check that all the data in the dataset is either ND or non-ND, by looking for ND in the FPAMNAME keyword
     nd_flags = [("ND" in data.ext_hdr["FPAMNAME"]) for data in dataset]
@@ -276,18 +344,120 @@ def generate_mueller_matrix_cal(input_dataset,
 
     # Read in the polarization reference file
     pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
+    # check the reference file has the columns this function needs, since it may be user-supplied
+    missing_columns = [col for col in ("TARGET", "P", "P_err", "PA", "PA_err") if col not in pol_ref.columns]
+    if missing_columns:
+        raise ValueError(f"Polarization reference file {path_to_pol_ref_file} is missing required column(s): {missing_columns}")
+    # a repeated target would silently resolve to whichever row happens to come first
+    duplicate_targets = pol_ref["TARGET"][pol_ref["TARGET"].duplicated()].unique().tolist()
+    if duplicate_targets:
+        raise ValueError(f"Polarization reference file {path_to_pol_ref_file} has more than one row for target(s): {duplicate_targets}")
     # extract the target names
     pol_ref_targets = pol_ref["TARGET"].tolist()
 
-    # split the datasets into different targets
-    _, targets = dataset.split_dataset(prihdr_keywords=["TARGET"])
+    #Get the target names for each frame. 
+    frame_targets = [image.pri_hdr["TARGET"] for image in dataset]
 
-    n_targets = np.unique(targets).shape[0]
     # check that all the targets from the dataset are in the pol reference file
-    for target in targets:
+    for target in frame_targets:
         if target not in pol_ref_targets:
             raise ValueError(f"Target {target} not found in polarization reference file.")
-    
+
+    # If mode =='all' just skip ahead.
+    # If mode =='match_position', we need to see if we can find a set frames that includes each target
+    # where the position is under one resolution element. If there are multiple sets that match, we
+    # will pick the one with the least movement.
+    if mode != "all":
+        def star_position(image):
+            """
+            The measured position of the star in the first polarization state of a frame.
+
+            Args:
+                image (corgidrp.data.Image): a stokes vector frame
+
+            Returns:
+                tuple: the (x, y) position of the star in pixels
+            """
+            return (image.ext_hdr["STAR_X1"], image.ext_hdr["STAR_Y1"])
+
+        def star_separation(xy_a, xy_b):
+            """
+            Separation between two star positions.
+
+            Args:
+                xy_a (tuple): the (x, y) position of the first star in pixels
+                xy_b (tuple): the (x, y) position of the second star in pixels
+
+            Returns:
+                float: the separation between the two positions in pixels
+            """
+            return np.sqrt((xy_a[0] - xy_b[0])**2 + (xy_a[1] - xy_b[1])**2)
+
+        # Group the frames by target and by roll angle. Every roll has to be kept, because a
+        # different roll rotates the reference Q and U and so places an independent constraint on
+        # the Mueller matrix, whereas the dithers of one target at one roll are alternatives to
+        # pick between. Grouping on the target alone would let the rolls of a target compete with
+        # each other as though they were repeat observations and all but one would be thrown out.
+        # The roll is matched to a tolerance because PA_APER can vary slightly within one roll.
+        pointing_datasets, _ = dataset.split_dataset(prihdr_keywords=["TARGET", "PA_APER"],
+                                                     tolerances={"PA_APER": pa_tolerance})
+        groups = [list(pointing_dataset.frames) for pointing_dataset in pointing_datasets]
+
+        # Try every frame's star position in turn as a candidate dither position. For each
+        # candidate, keep the one frame per target and roll whose star landed closest to it, then
+        # measure how far apart the stars in that set of frames actually are. The best set is the
+        # one whose two most widely separated stars are the closest together.
+        best_frames = None
+        best_separation = np.inf
+        for candidate_image in dataset:
+            candidate_xy = star_position(candidate_image)
+
+            #Take the frame of each target and roll whose star landed closest to this position
+            candidate_frames = []
+            for group in groups:
+                distances_to_candidate = [star_separation(star_position(image), candidate_xy)
+                                          for image in group]
+                candidate_frames.append(group[np.argmin(distances_to_candidate)])
+
+            #A set of frames is only as good as its worst pair, so check every pair in it
+            candidate_separation = 0.
+            for image_a in candidate_frames:
+                for image_b in candidate_frames:
+                    candidate_separation = max(candidate_separation,
+                                               star_separation(star_position(image_a),
+                                                               star_position(image_b)))
+
+            if candidate_separation < best_separation:
+                best_frames = candidate_frames
+                best_separation = candidate_separation
+
+        #If the mode is "match_position", require that the stars in the best set all land within
+        #one resolution element of each other
+        if mode == "match_position":
+            #Get the filter wavelength based on the CFAMNAME, throw an error if not in filter_wavs
+            filter_wavs = {'1F': 575e-9, '4F': 825e-9}
+            filter_wav = filter_wavs.get(dataset[0].ext_hdr["CFAMNAME"], 0)
+            if filter_wav == 0:
+                raise ValueError("Filter wavelength not yet supported for CFAMNAME: {}".format(dataset[0].ext_hdr["CFAMNAME"]))
+            # Calculate the resolution element (lambda/D)
+            roman_D = 2.36 #m
+            resolution_element = filter_wav / roman_D * 206265 #arcsec
+            #Grab the pixel scale from the extension header
+            pixel_scale = dataset[0].ext_hdr["PLTSCALE"]/1000 # arcsec/pixel
+            # Convert the resolution element to pixels
+            resolution_element_pix = resolution_element / pixel_scale
+            # print("Resolution element in pixels: {}".format(resolution_element_pix))
+
+            if best_separation > resolution_element_pix:
+                raise ValueError("No set of frames found where all targets are within one resolution "
+                                 "element (lambda/D) of each other: the best set spans {:.2f} pix "
+                                 "while lambda/D is {:.2f} pix.".format(best_separation, resolution_element_pix))
+        elif mode != "closest_match":
+            raise ValueError("Mode must be one of 'match_position', 'closest_match', or 'all'.")
+
+        #Keep only the selected frames, one per target per roll angle
+        dataset = Dataset(best_frames)
+
     # measure the normalized difference for each dataset
     stokes_vectors = []
     stokes_vector_errs = []
@@ -302,11 +472,12 @@ def generate_mueller_matrix_cal(input_dataset,
 
     # generate the matrix of meausurements six columns [1 q_star, u_star, 0,0,0] for q_measured
     # and [0,0,0, 1, q_star, u_star] for u_measured #Where Q and U have been rotated by the PA_APER angle: 
-    Q_ref_err_sq = np.zeros(len(targets))
-    U_ref_err_sq = np.zeros(len(targets))
-    cov_QU_ref = np.zeros(len(targets))
+    Q_ref_err_sq = np.zeros(len(dataset))
+    U_ref_err_sq = np.zeros(len(dataset))
+    cov_QU_ref = np.zeros(len(dataset))
     stokes_matrix = np.zeros((2*len(dataset), 6))
-    for i, target in enumerate(targets):
+    for i, image in enumerate(dataset):
+        target = image.pri_hdr["TARGET"]
         pol_row = pol_ref[pol_ref["TARGET"] == target]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
         PA = pol_row["PA"].values[0] + rotation_angles[i] # in degrees
@@ -357,7 +528,7 @@ def generate_mueller_matrix_cal(input_dataset,
     #   Var(m_k) += c_Q^2 * Var(Q_ref) + 2*c_Q*c_U * Cov(Q_ref,U_ref) + c_U^2 * Var(U_ref)
     # where c_Q = A^+[k,2i]*m[1] + A^+[k,2i+1]*m[4], c_U = A^+[k,2i]*m[2] + A^+[k,2i+1]*m[5].
     ref_var = np.zeros(6)
-    for i in range(len(targets)):
+    for i in range(len(dataset)):
         c_Q = (stokes_matrix_inv[:, 2*i]   * mueller_elements[1] +
                stokes_matrix_inv[:, 2*i+1] * mueller_elements[4])
         c_U = (stokes_matrix_inv[:, 2*i]   * mueller_elements[2] +
@@ -397,6 +568,8 @@ def generate_mueller_matrix_cal(input_dataset,
         mueller_matrix_obj = MuellerMatrix(mueller_matrix,pri_hdr=dataset[0].pri_hdr.copy(),
                          ext_hdr=dataset[0].ext_hdr.copy(), input_dataset=dataset,
                          err=mueller_matrix_err)
+
+    mueller_matrix_obj.ext_hdr.add_history(f"Pol reference file: {path_to_pol_ref_file}")
 
     return mueller_matrix_obj
 

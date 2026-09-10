@@ -95,6 +95,12 @@ def setup_module():
     # Generate 100 psfs with fwhm=50 mas in band 1 (mock.py)
     data_psf, psf_loc_in, half_psf = create_ct_psfs(50, cfam_name='1F',
         n_psfs=100)
+    # populate data_psf header values
+    for psf in data_psf:
+        psf.ext_hdr['FPAM_H'] = FPAM_H_CT
+        psf.ext_hdr['FPAM_V'] = FPAM_V_CT
+        psf.ext_hdr['FSAM_H'] = FSAM_H_CT
+        psf.ext_hdr['FSAM_V'] = FSAM_V_CT
     # Input CT
     ct_in = half_psf/unocc_psf_norm
     # Add PSF images
@@ -127,14 +133,15 @@ def setup_module():
     # FPAM/FSAM
     # Choose some H/V values for FPAM/FSAM  during coronagraphic observations
     # These values are *different* than the ones in the dataset_ct defined before
-    exthd['FPAM_H'] = FPAM_H_CT - 107
-    exthd['FPAM_V'] = FPAM_V_CT + 37
-    exthd['FSAM_H'] = FSAM_H_CT + 97
-    exthd['FSAM_V'] = FSAM_V_CT - 135
+    exthd_cor = exthd.copy()
+    exthd_cor['FPAM_H'] = FPAM_H_CT - 107
+    exthd_cor['FPAM_V'] = FPAM_V_CT + 37
+    exthd_cor['FSAM_H'] = FSAM_H_CT + 97
+    exthd_cor['FSAM_V'] = FSAM_V_CT - 135
     # FPM center
-    exthd['STARLOCX'] = 509
-    exthd['STARLOCY'] = 513
-    data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
+    exthd_cor['STARLOCX'] = 509
+    exthd_cor['STARLOCY'] = 513
+    data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd_cor, err=err)]
     # Set proper filename following CGI convention
     data_cor[0].filename = "cgi_0000000000000090526_20240101t1200000_l2b.fits"
     dataset_cor = Dataset(data_cor)
@@ -191,6 +198,12 @@ def setup_module():
         fpm_x=fpm_ct[0],
         fpm_y=fpm_ct[1],
         norm=pupil_image_1.sum())[0]
+    # set FPAM/FSAM headers
+    for data in data_ct_interp:
+        data.ext_hdr['FPAM_H'] = FPAM_H_CT
+        data.ext_hdr['FPAM_V'] = FPAM_V_CT
+        data.ext_hdr['FSAM_H'] = FSAM_H_CT
+        data.ext_hdr['FSAM_V'] = FSAM_V_CT
     dataset_ct_interp = Dataset(data_ct_interp)
 
     # Needed for PSF interpolation
@@ -358,10 +371,11 @@ def test_fpm_pos():
         delta_fpam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
         delta_fsam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
         # Update dataset_ct headers
-        dataset_ct[0].ext_hdr['FPAM_H'] = dataset_cor[0].ext_hdr['FPAM_H'] + delta_fpam_um[0]
-        dataset_ct[0].ext_hdr['FPAM_V'] = dataset_cor[0].ext_hdr['FPAM_V'] + delta_fpam_um[1]
-        dataset_ct[0].ext_hdr['FSAM_H'] = dataset_cor[0].ext_hdr['FSAM_H'] + delta_fsam_um[0]
-        dataset_ct[0].ext_hdr['FSAM_V'] = dataset_cor[0].ext_hdr['FSAM_V'] + delta_fsam_um[1]
+        for data in dataset_ct:
+            data.ext_hdr['FPAM_H'] = dataset_cor[0].ext_hdr['FPAM_H'] + delta_fpam_um[0]
+            data.ext_hdr['FPAM_V'] = dataset_cor[0].ext_hdr['FPAM_V'] + delta_fpam_um[1]
+            data.ext_hdr['FSAM_H'] = dataset_cor[0].ext_hdr['FSAM_H'] + delta_fsam_um[0]
+            data.ext_hdr['FSAM_V'] = dataset_cor[0].ext_hdr['FSAM_V'] + delta_fsam_um[1]
         # Create CT cal file
         ct_cal_tmp = corethroughput.generate_ct_cal(dataset_ct)
         # Get CT FPM center
@@ -677,6 +691,12 @@ def test_ct_interp():
         fpm_x=fpam_ct_pix[0],
         fpm_y=fpam_ct_pix[1],
         norm=pupil_image.sum())[0]
+    # set FPAM/FSAM headers
+    for data in data_ct_interp:
+        data.ext_hdr['FPAM_H'] = FPAM_H_CT
+        data.ext_hdr['FPAM_V'] = FPAM_V_CT
+        data.ext_hdr['FSAM_H'] = FSAM_H_CT
+        data.ext_hdr['FSAM_V'] = FSAM_V_CT
     data_ct += data_ct_interp
     dataset_ct_az = Dataset(data_ct)
     # Generate core throughput calibration file

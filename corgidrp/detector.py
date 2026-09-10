@@ -3,7 +3,7 @@
 import numpy as np
 from scipy import interpolate
 from scipy.ndimage import gaussian_filter as gauss
-from scipy.ndimage import median_filter
+from scipy.ndimage import median_filter, vectorized_filter
 
 from scipy import ndimage
 from scipy.signal import convolve2d
@@ -11,6 +11,7 @@ import astropy.io.fits as fits
 from astropy.convolution import convolve_fft
 import photutils.centroids as centr
 from photutils.aperture import CircularAperture
+import warnings
 
 import corgidrp.data as data
 
@@ -292,20 +293,15 @@ def unpack_geom(arrtype, key, detector_regions=None):
     """Safely check format of geom sub-dictionary and return values.
 
     Args:
-        arrtype: str
-        Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-        key: str
-        Desired section
-        detector_regions: dict
-        a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
+        arrtype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        key (str): Desired section
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
-        rows: int
-        Number of rows of frame
-        cols : int
-        Number of columns of frame
-        r0c0: tuple
-        Tuple of (row position, column position) of corner closest to (0,0)
+        tuple:
+            - rows (int): Number of rows of frame
+            - cols (int): Number of columns of frame
+            - r0c0 (tuple): Tuple of (row position, column position) of corner closest to (0,0)
     """
     if detector_regions is None:
         detector_regions = detector_areas
@@ -321,19 +317,14 @@ def imaging_area_geom(arrtype, detector_regions=None):
     in reference to full frame.  Different from normal image area.
 
     Args:
-        arrtype: str
-        Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-        detector_regions: dict
-        a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
-
+        arrtype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
-        rows: int
-        Number of rows of imaging area
-        cols : int
-        Number of columns of imaging area
-        r0c0: tuple
-        Tuple of (row position, column position) of corner closest to (0,0)
+        tuple:
+            - rows (int): Number of rows of imaging area
+            - cols (int): Number of columns of imaging area
+            - r0c0 (tuple): Tuple of (row position, column position) of corner closest to (0,0)
     """
     if detector_regions is None:
         detector_regions = detector_areas
@@ -358,17 +349,12 @@ def imaging_slice(arrtype, frame, detector_regions=None):
     acting on only the image frame.
 
     Args:
-        arrtype: str
-        Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-        frame: array_like
-        Input frame
-        detector_regions: dict
-        a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
+        arrtype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        frame (array_like): Input frame
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
-        sl: array_like
-        Imaging slice
-
+        array_like: Imaging slice
     """
     rows, cols, r0c0 = imaging_area_geom(arrtype, detector_regions)
     sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
@@ -439,8 +425,10 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
     ledge of the plateau and kills the plateau (specified by cosm_filter) and
     the tail (specified by cosm_tail).
 
-    |<-------- streak row is the whole row ----------------------->|
-     ......|<-plateau->|<------------------tail---------->|.........
+    ::
+
+        |<-------- streak row is the whole row ----------------------->|
+         ......|<-plateau->|<------------------tail---------->|.........
 
     B Nemati and S Miller - UAH - 02-Oct-2018
     Kevin Ludwick - UAH - 2024
@@ -457,7 +445,9 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
     im_ending_col = mask.shape[2] - 1 # - 1 to get the index, not size
 
     # Do a cheap prefilter for rows that don't have anything bright
-    max_rows = np.max(cube, axis=-1,keepdims=True)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        max_rows = np.nanmax(cube, axis=-1,keepdims=True)
     ji_streak_rows = np.transpose(np.array((max_rows >= sat_thresh*fwc).nonzero()[:-1]))
 
     for j,i in ji_streak_rows:
@@ -525,7 +515,16 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     # Lowpass filter row to differentiate plateaus from standalone pixels
     # The way median_filter works, it will find cosmics that are cosm_filter-1
     # wide. Add 1 to cosm_filter to correct for this
-    filtered = median_filter(streak_row, cosm_filter+1, mode='nearest')
+    #filtered = median_filter(streak_row, cosm_filter+1, mode='nearest')
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        # relevant for median_filter_mode = 2 when flagging non-saturating 
+        # cosmic rays (marks pixels already flagged as NaN); behaves slightly differently 
+        # from median_filter in that it averages the two middle elements instead of taking median value
+        if np.isnan(streak_row).any(): 
+            filtered = vectorized_filter(streak_row, function=np.nanmedian, size=cosm_filter+1, mode='nearest')
+        else: # maintain same previous behavior for cases when median_filter_mode != 2 by using median_filter
+            filtered = median_filter(streak_row, cosm_filter+1, mode='nearest')
     saturated = (filtered >= sat_thresh*fwc).nonzero()[0]
 
     if len(saturated) > 0:
@@ -546,8 +545,8 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
 def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
 	"""Calculates the lowest full well capacity saturation threshold for each frame.
 
-	Args:
-    	emgain_arr (np.array): 1D array of the EM gain value for each frame.
+    Args:
+        emgain_arr (np.array): 1D array of the EM gain value for each frame.
         fwcpp_arr (np.array): 1D array of the full-well capacity in the image
             frame (before em gain readout) value for each frame.
         fwcem_arr (np.array): 1D array of the full-well capacity in the EM gain

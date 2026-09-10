@@ -18,7 +18,9 @@ from corgidrp.corethroughput import get_1d_ct
 from astropy.io import fits
 from scipy.ndimage import shift
 from numpy.lib.stride_tricks import sliding_window_view
+from corgidrp import spec
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave, get_shift_correlation, star_pos_spec
+from corgidrp.spec import DEFAULT_SPEC_EXTRACT_HEIGHTS
 from corgidrp import pol
 from corgidrp import fluxcal
 from astropy.io.fits.verify import VerifyWarning
@@ -1049,13 +1051,140 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center',new_center=None):
     return processed_dataset
 
 
-def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False):
-    """ 
+# Half-height of the stamp used to register a broadband prism image against a model template.
+# Also used by tests/test_spec.py::test_template_headers_complete
+BROADBAND_PRISM_HALFHEIGHT = 38
+
+# Half-height of the stamp used to register a narrowband prism image against its template.
+# The narrowband streak is only a few pixels long, so this matches the historical default.
+NARROWBAND_PRISM_HALFHEIGHT = 10
+
+def _select_broadband_group(band):
+    """
+    Return the index of the broadband filter group among the CFAM filter groups.
+
+    Args:
+        band (numpy.ndarray of str): uppercased CFAMNAME of each split group
+
+    Returns:
+        int: index into band of the broadband group
+    """
+    broadband = [b for b in ("3F", "3", "2F", "2") if b in band]
+    if len(broadband) != 1:
+        raise AttributeError("Expected exactly one broadband filter group (3F/3/2F/2), "
+                             "but found CFAMNAME groups {0}".format(list(band)))
+    return int(np.nonzero(band == broadband[0])[0].item())
+
+def _fit_zeropoint_position(offset_dataset, template_dataset, nb_filter, use_model_template,
+                            spec_filter_offset, xcent_guess = None, ycent_guess = None,
+                            bb_nb_dx = None, bb_nb_dy = None, halfheight = None):
+    """
+    Fit the wavelength zeropoint position from one group of frames.
+
+    Args:
+        offset_dataset (corgidrp.data.Dataset): frames to centroid, either the offset satellite spot
+            frames taken through the narrowband filter or, on the model template path, the broadband
+            science frames themselves
+        template_dataset (corgidrp.data.Dataset): template frames to register against
+        nb_filter (str): narrowband CFAM filter defining the zeropoint wavelength, "3D" or "2C"
+        use_model_template (bool): True if template_dataset is a noiseless model of a dispersed star
+        spec_filter_offset (corgidrp.data.SpecFilterOffset): CFAM filter-wedge image offsets
+        xcent_guess (float): initial x guess for the centroid fit of all frames
+        ycent_guess (float): initial y guess for the centroid fit of all frames
+        bb_nb_dx (float): narrowband to broadband x offset overriding the lookup table
+        bb_nb_dy (float): narrowband to broadband y offset overriding the lookup table
+        halfheight (int): half-height of the centroid fitting stamp; None selects the default
+            for the registration strategy in use
+
+    Returns:
+        float: zeropoint wavelength in nm
+        float: zeropoint x position, and its uncertainty
+        float: zeropoint y position, and its uncertainty
+    """
+    if xcent_guess is not None and ycent_guess is not None:
+        initial_cent = {"xcent": np.repeat(xcent_guess, len(offset_dataset)),
+                        "ycent": np.repeat(ycent_guess, len(offset_dataset))}
+    else:
+        initial_cent = None
+    # A broadband image registers against a model template spanning the whole band 3 trace, so it
+    # needs a much taller stamp than the short narrowband streak.
+    if halfheight is None:
+        halfheight = BROADBAND_PRISM_HALFHEIGHT if use_model_template else NARROWBAND_PRISM_HALFHEIGHT
+    spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset,
+                                          initial_cent = initial_cent, halfheight = halfheight)
+    cen_wave, _, _, _ = read_cent_wave(nb_filter)
+    if use_model_template:
+        # No CFAM filter-wedge correction applies here.
+        xcent_temp, ycent_temp, wv0x_temp, wv0y_temp = spec.read_template_zeropoint(template_dataset[0])
+        x0 = np.mean(spot_centroids.xfit) + (wv0x_temp - xcent_temp)
+        y0 = np.mean(spot_centroids.yfit) + (wv0y_temp - ycent_temp)
+    elif bb_nb_dx is not None and bb_nb_dy is not None:
+        x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
+        y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
+    else:
+        # Correct the centroid for the filter-to-filter image offset, so that the coordinates
+        # (x0,y0) correspond to the wavelength location in the broadband filter.
+        xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
+        xoff_bb, yoff_bb = spec_filter_offset.get_offsets(nb_filter[0])
+        x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
+        y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
+    x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
+    y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+    return cen_wave, x0, x0err, y0, y0err
+
+def _resolve_model_template(frame_subset, host_sptype):
+    """
+    Find the model template matching the mask configuration and the star of a group of frames.
+
+    Args:
+        frame_subset (corgidrp.data.Dataset): broadband prism frames of one group
+        host_sptype (str): assumed spectral type of the star, or None to look up its name
+
+    Returns:
+        corgidrp.data.Dataset: the one-frame model template dataset
+        str: the assumed spectral type of the star
+        str: the narrowband CFAM filter whose central wavelength defines the zeropoint
+    """
+    sptype = spec.get_star_spectral_type(frame_subset[0].pri_hdr["TARGET"], sptype = host_sptype)
+    template_dataset, _ = spec.get_template_dataset(frame_subset, host_sptype = sptype)
+    nb_filter = spec.NARROWBAND_FILTER[frame_subset[0].ext_hdr["CFAMNAME"].upper()[0]]
+    return template_dataset, sptype, nb_filter
+
+def _stamp_wave_zeropoint(frame, cen_wave, x0, x0err, y0, y0err, dimx, dimy):
+    """
+    Write the wavelength zeropoint keywords into a frame's extension header.
+
+    Args:
+        frame (corgidrp.data.Image): frame to stamp, modified in place
+        cen_wave (float): zeropoint wavelength in nm
+        x0 (float): zeropoint x position in EXCAM pixels
+        x0err (float): uncertainty of x0
+        y0 (float): zeropoint y position in EXCAM pixels
+        y0err (float): uncertainty of y0
+        dimx (int): x dimension of the frame the zeropoint was measured in
+        dimy (int): y dimension of the frame the zeropoint was measured in
+    """
+    frame.ext_hdr["WAVLEN0"] = cen_wave
+    frame.ext_hdr["WV0_X"] = x0
+    frame.ext_hdr["WV0_XERR"] = x0err
+    frame.ext_hdr["WV0_Y"] = y0
+    frame.ext_hdr["WV0_YERR"] = y0err
+    frame.ext_hdr["WV0_DIMX"] = dimx
+    frame.ext_hdr["WV0_DIMY"] = dimy
+
+def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False, host_sptype = None, allow_template_fallback = True, zeropoint_halfheight = None):
+    """
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
 
+    If the dataset contains no narrowband frames, the broadband frames are
+    instead registered against a noiseless model template of a dispersed star of
+    matching spectral type and optical configuration.  The template carries both
+    its own broadband centroid and the zeropoint position, so their difference
+    transfers the fitted centroid to the zeropoint. 
+
     Args:
-        input_dataset (corgidrp.data.Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
+        input_dataset (corgidrp.data.Dataset): Dataset containing 2-D PSF or satellite spot images taken through the narrowband filter and slit.
         spec_filter_offset (corgidrp.data.SpecFilterOffset): instance of SpecFilterOffset calibration class
         template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
                                                   path is taken
@@ -1072,7 +1201,16 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         bb_nb_dy (float): vertical image offset between the narrowband and broadband filters, in EXCAM pixels. 
                           This will override the offset in the existing lookup table. 
         return_all (boolean): if false (default) returns only the broad band science frames, if true it returns all (including narrow band) frames
-    
+        host_sptype (str): MK spectral type of the host star, overriding the lookup of the TARGET name in
+                           corgidrp/data/spectroscopy/standard_star_sptypes.csv. Only used on the
+                           model-template fallback path.
+        allow_template_fallback (boolean): if True (default) a dataset without narrowband frames is
+                           registered against a model template; if False such a dataset raises.
+        zeropoint_halfheight (int): half-height of the centroid fitting stamp, in EXCAM pixels.
+                           Default None takes BROADBAND_PRISM_HALFHEIGHT on the model template path
+                           and NARROWBAND_PRISM_HALFHEIGHT otherwise. The stamp must be tall enough
+                           to contain the dispersed trace being registered.
+
     Returns:
         corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
                                information as header keywords, which is WAVLEN0, WV0_X, WV0_XERR, WV0_Y, WV0_YERR, WV0_DIMX, WV0_DIMY
@@ -1080,34 +1218,65 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     dataset = input_dataset.copy()
     dpamname = dataset.frames[0].ext_hdr["DPAMNAME"]
     if not dpamname.startswith("PRISM"):
-        raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
-    if dataset.frames[0].ext_hdr["FPAMNAME"] == 'OPEN_34':
-        warnings.warn("The dataset has FPAMNAME = OPEN_34, identicating that this is a non-coronagraphic spectroscopy observation, setting subtract_no_offset_frames = False")
-        subtract_no_offset_frames = False
+        raise AttributeError("This is not a spectroscopic observation. but {0}".format(dpamname))
+    fpamname = dataset.frames[0].ext_hdr["FPAMNAME"]
+    # FPAM settings that pass an unocculted star, i.e. no coronagraph focal-plane mask in the beam.
+    if str(fpamname).strip().upper().startswith(("OPEN", "ND")):
+        if subtract_no_offset_frames:
+            warnings.warn("The dataset has FPAMNAME = {0}, indicating that this is a non-coronagraphic "
+                          "spectroscopy observation, setting subtract_no_offset_frames = False".format(fpamname))
+            subtract_no_offset_frames = False
 
-    # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
-    narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
+    # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint.
+    # Split the dataset into one sub-dataset per CFAM filter; band holds the corresponding filter names.
+    cfam_datasets, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
     band = np.array([s.upper() for s in band])
     with_science = True
-    if len(band) < 2:
-        if "3D" not in band and "2C" not in band:
-            raise AttributeError("there needs to be at least 1 narrowband and 1 science band prism frame in the dataset\
-                                  to determine the wavelength zero point")
-        else:
-            with_science = False
-            print("No science frames found in input dataset")
-        
-    if "3D" in band:
-        sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
+    use_model_template = False
+    narrowband_present = bool(np.any(np.isin(band, ("3D", "2C"))))
+
+    if not narrowband_present:
+        # No narrowband frame to centroid: fall back to registering the broadband frames against a
+        # noiseless model template of a dispersed star.
+        if not allow_template_fallback:
+            raise AttributeError("No narrowband frames found in input dataset")
+        if not str(fpamname).strip().upper().startswith(("OPEN", "ND")):
+            raise AttributeError("No narrowband frames found in input dataset, and the model-template "
+                                 "wavelength zeropoint fallback is only valid for unocculted "
+                                 "observations (FPAMNAME = {0})".format(fpamname))
+        use_model_template = True
+        sci_index = _select_broadband_group(band)
+        # The broadband frames serve as both the zeropoint frames and the science frames.
+        sat_dataset = cfam_datasets[sci_index]
+        sci_dataset = sat_dataset
+        nb_filter = "3D" if band[sci_index].startswith("3") else "2C"
+    elif len(band) < 2:
+        # Only one filter group, and it is the narrowband one, so there are no science frames
+        with_science = False
+        print("Narrowband frames only, no separate science filter group in input dataset")
+
+    if narrowband_present and "3D" in band:
+        sat_dataset = cfam_datasets[int(np.nonzero(band == "3D")[0].item())]
         if with_science:
-            sci_dataset = narrow_dataset[int(np.nonzero(band != "3D")[0].item())]
-    elif "2C" in band:
-        sat_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
+            non_narrowband_bands = band[band != "3D"]
+            if len(non_narrowband_bands) == 1:
+                # only one non-narrowband group: use it directly
+                sci_index = int(np.nonzero(band != "3D")[0].item())
+            else:
+                # Several non-narrowband groups present, e.g. the filter-sweep sub-bands
+                # 3A/3B/3C/3E alongside the broadband filter. Select only the broadband filter.
+                sci_index = _select_broadband_group(band)
+            sci_dataset = cfam_datasets[sci_index]
+    elif narrowband_present:
+        sat_dataset = cfam_datasets[int(np.nonzero(band == "2C")[0].item())]
         if with_science:
-            sci_dataset = narrow_dataset[int(np.nonzero(band != "2C")[0].item())]
-    else:
-        raise AttributeError("No narrowband frames found in input dataset")
-    
+            sci_dataset = cfam_datasets[int(np.nonzero(band != "2C")[0].item())]
+
+    # Model templates used, as (file name, spectral type) pairs, for the processing history
+    model_templates_used = []
+    if use_model_template and template_dataset is not None:
+        model_templates_used.append((os.path.basename(str(template_dataset[0].filepath)), host_sptype))
+
     # Default is split satspot/science dataset according to VISITID
     pri_keys = ["VISITID"]
     ext_keys = additional_frame_sep_extkeys
@@ -1118,10 +1287,16 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         science_dataset, keywords_sci = sci_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
 
     all_science_frames = []
+    matched_sci_keywords = []
 
+    # One zeropoint fit per group of zeropoint frames, on every path: the narrowband satellite spot
+    # frames of an occulted star when they are present, and otherwise the unocculted broadband
+    # frames themselves, which the model template path assigns to both sat_dataset and sci_dataset.
+    # Only the subtract_no_offset_frames branch is specific to occulted data, since it is forced
+    # off above for an unocculted star.
     for matched_index, keyword in enumerate(keywords_sat):
 
-        if subtract_no_offset_frames:    
+        if subtract_no_offset_frames:
             satspot_subset = satspot_dataset[int(matched_index)]
             satspot_frames = []
             for frame in satspot_subset:
@@ -1149,54 +1324,72 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             satspot_subset = satspot_dataset[int(matched_index)]
             offset_dataset = satspot_subset
 
-        if xcent_guess is not None and ycent_guess is not None:
-            n = len(offset_dataset)
-            initial_cent = {"xcent": np.repeat(xcent_guess, n),
-                            "ycent": np.repeat(ycent_guess, n)}
-        else:
-            initial_cent = None
-        spot_centroids = compute_psf_centroid(dataset = offset_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
-    
-        nb_filter = offset_dataset[0].ext_hdr["CFAMNAME"]
-        bb_filter = nb_filter[0]
-        cen_wave, _, _, _ = read_cent_wave(nb_filter)
-        xoff_nb, yoff_nb = spec_filter_offset.get_offsets(nb_filter)
-        xoff_bb, yoff_bb = spec_filter_offset.get_offsets(bb_filter)
-        # Correct the centroid for the filter-to-filter image offset, so that
-        # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
-        if bb_nb_dx is not None and bb_nb_dy is not None:
-            x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
-            y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
-        else:
-            x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
-            y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
-        x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
-        y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+        group_template = template_dataset
+        if not use_model_template:
+            nb_filter = offset_dataset[0].ext_hdr["CFAMNAME"]
+        elif template_dataset is None:
+            # The template is resolved per group, because the groups of one dataset can differ in
+            # star and in FPAM setting, as the dim and bright visits of an ND filter calibration do.
+            group_template, group_sptype, nb_filter = _resolve_model_template(offset_dataset, host_sptype)
+            model_templates_used.append((os.path.basename(str(group_template[0].filepath)), group_sptype))
+        cen_wave, x0, x0err, y0, y0err = _fit_zeropoint_position(
+            offset_dataset, group_template, nb_filter, use_model_template, spec_filter_offset,
+            xcent_guess = xcent_guess, ycent_guess = ycent_guess, bb_nb_dx = bb_nb_dx, bb_nb_dy = bb_nb_dy,
+            halfheight = zeropoint_halfheight)
 
         if return_all or with_science == False:
             science_subset = offset_dataset
-        
+
         if with_science:
             matched_index_sci = [i for i, key in enumerate(keywords_sci) if key == keyword]
             science_subset = science_dataset[int(matched_index_sci[0])]
-        
+            matched_sci_keywords.append(keyword)
+
 
         science_frames = []
         for frame in science_subset:
-            frame.ext_hdr["WAVLEN0"] = cen_wave
-            frame.ext_hdr["WV0_X"] = x0
-            frame.ext_hdr["WV0_XERR"] = x0err
-            frame.ext_hdr["WV0_Y"] = y0
-            frame.ext_hdr["WV0_YERR"] = y0err
-            frame.ext_hdr["WV0_DIMX"] = offset_dataset[0].ext_hdr['NAXIS1']
-            frame.ext_hdr["WV0_DIMY"] = offset_dataset[0].ext_hdr['NAXIS2']
+            _stamp_wave_zeropoint(frame, cen_wave, x0, x0err, y0, y0err,
+                                  offset_dataset[0].ext_hdr['NAXIS1'], offset_dataset[0].ext_hdr['NAXIS2'])
             science_frames.append(frame)
 
         all_science_frames += science_frames
 
+    # Apply model template registration to science frames whose group has no narrowband frames.
+    # The narrowband_present flag is dataset-wide, and is True here because some other group
+    # does have narrowband frames, so the wholesale model template registration path above was not taken.
+    # When narrowband_present is False, the for loop above already applied the broadband template fallback, 
+    # so this loop would find nothing to do.
+    if with_science and narrowband_present and allow_template_fallback:
+        for sci_index, keyword in enumerate(keywords_sci):
+            if keyword in matched_sci_keywords:
+                continue
+            science_subset = science_dataset[int(sci_index)]
+            group_fpam = science_subset[0].ext_hdr["FPAMNAME"]
+            if not str(group_fpam).strip().upper().startswith(("OPEN", "ND")):
+                warnings.warn("no narrowband frames matching the science frames of group {0}, and the "
+                              "broadband template wavelength zeropoint fallback is only valid for unocculted "
+                              "observations (FPAMNAME = {1}); these frames are dropped".format(
+                                  keyword, group_fpam))
+                continue
+            group_template, group_sptype, group_nb_filter = _resolve_model_template(science_subset, host_sptype)
+            cen_wave, x0, x0err, y0, y0err = _fit_zeropoint_position(
+                science_subset, group_template, group_nb_filter, True, spec_filter_offset,
+                xcent_guess = xcent_guess, ycent_guess = ycent_guess,
+                halfheight = zeropoint_halfheight)
+            for frame in science_subset:
+                _stamp_wave_zeropoint(frame, cen_wave, x0, x0err, y0, y0err,
+                                      science_subset[0].ext_hdr['NAXIS1'], science_subset[0].ext_hdr['NAXIS2'])
+                all_science_frames.append(frame)
+            model_templates_used.append((os.path.basename(str(group_template[0].filepath)), group_sptype))
+
     sci_dataset = data.Dataset(all_science_frames)
 
     history_msg = "wavelength zeropoint values added to header"
+    if len(model_templates_used) > 0:
+        history_msg += ("; frames without matching narrowband frames were registered against the broadband "
+                        "template(s) {0}, and the CFAM filter-wedge offset was not applied for those".format(
+                            ", ".join("{0} of spectral type {1}".format(name, sptype)
+                                      for name, sptype in dict.fromkeys(model_templates_used))))
     sci_dataset.update_after_processing_step(history_msg)
     return sci_dataset
 
@@ -1284,36 +1477,112 @@ def find_spec_star(input_dataset, r_lamD=3, phi_deg=0):
     dataset.update_after_processing_step(history_msg)
     return dataset
 
-def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = False):
+def extract_spec(input_dataset, halfwidth = 2, halfheight = None, apply_weights = False,
+                 redheight = None, blueheight = None):
     """
-    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around 
+    extract an optionally error weighted 1D - spectrum and wavelength information of a point source from a box around
     the wavelength zero point with units photoelectron/s/bin.
-    
+
     Args:
-        input_dataset (corgidrp.data.Dataset): 
+        input_dataset (corgidrp.data.Dataset):
         halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels across dispersion
-        halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels along dispersion.
+        halfheight (int or None): The height of the fitting region is 2 * halfheight + 1 pixels along
+            dispersion. Default None: with no height keywords at all the extents are taken from the
+            DPAMNAME-keyed table corgidrp.spec.DEFAULT_SPEC_EXTRACT_HEIGHTS (PRISM2: redheight 10,
+            blueheight 28; PRISM3: redheight 13, blueheight 37), which span the band 3 bandpass about
+            the wavelength zero point. Passing halfheight forces a symmetric box and suppresses those
+            defaults.
         apply_weights (boolean): if true a weighted sum is calculated using 1/error^2 as weights.
-        
+        redheight (int or None): the box extends this many pixels from the zeropoint toward longer
+            wavelength (red), overriding the DPAMNAME default. If only one of
+            redheight/blueheight is given, the other is filled from the DPAMNAME default.
+        blueheight (int or None): extent from the zeropoint toward shorter wavelength (blue), px.
+
     Returns:
         corgidrp.data.Dataset: dataset containing the spectral 1D data, error and corresponding wavelengths
     """
     dataset = input_dataset.copy()
-    
+    clipped_filenames = []
+    first_frame_history = None
+    heights_seen = set()
+
     for image in dataset:
+        # Resolve this frame's along-dispersion extents. Precedence, highest first: explicit
+        # redheight/blueheight; explicit halfheight (symmetric box); the DPAMNAME-keyed defaults
+        # in corgidrp.spec.DEFAULT_SPEC_EXTRACT_HEIGHTS.
+        if halfheight is not None and redheight is None and blueheight is None:
+            redheight_frame, blueheight_frame, halfheight_frame = None, None, int(halfheight)
+            height_source = "user-specified halfheight"
+        else:
+            dpamname = image.ext_hdr['DPAMNAME']
+            key = str(dpamname).strip().upper()
+            if key not in DEFAULT_SPEC_EXTRACT_HEIGHTS:
+                raise AttributeError("PRISM2 and PRISM3 are the only valid DPAM settings for prism "
+                                     "spectroscopy, not " + str(dpamname))
+            default_red, default_blue = DEFAULT_SPEC_EXTRACT_HEIGHTS[key]
+            halfheight_frame = None
+            if redheight is None and blueheight is None:
+                redheight_frame, blueheight_frame = int(default_red), int(default_blue)
+                height_source = "DPAMNAME {0} default".format(dpamname)
+            else:
+                # fill the missing side from the prism default rather than silently falling back
+                # to a symmetric box
+                redheight_frame = default_red if redheight is None else redheight
+                blueheight_frame = default_blue if blueheight is None else blueheight
+                if redheight is None or blueheight is None:
+                    warnings.warn("extract_spec received only one of redheight/blueheight, extracting "
+                                  "with redheight {0} and blueheight {1} pixels".format(
+                                      redheight_frame, blueheight_frame))
+                redheight_frame, blueheight_frame = int(redheight_frame), int(blueheight_frame)
+                height_source = "user-specified"
+        asymmetric = redheight_frame is not None
+
         xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
-        image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
+        wave_map = image.hdu_list["WAVE"].data
+        if asymmetric:
+            # Read which along-dispersion (+/-Y) direction is red (longer wavelength) from the
+            # WAVE map, then set an asymmetric box: redheight toward red, blueheight toward blue.
+            wave_above = wave_map[min(ycent_round + 1, wave_map.shape[0] - 1), xcent_round]
+            wave_below = wave_map[max(ycent_round - 1, 0), xcent_round]
+            if wave_above > wave_below:
+                ylo, yhi = ycent_round - blueheight_frame, ycent_round + redheight_frame
+            else:
+                ylo, yhi = ycent_round - redheight_frame, ycent_round + blueheight_frame
+        else:
+            ylo, yhi = ycent_round - halfheight_frame, ycent_round + halfheight_frame
+
+        # clip to the array: an unclipped negative ylo silently yields an empty cutout
+        nrows = image.data.shape[-2]
+        ylo_req, yhi_req = ylo, yhi
+        ylo, yhi = int(np.clip(ylo_req, 0, nrows - 1)), int(np.clip(yhi_req, 0, nrows - 1))
+        if yhi <= ylo:
+            raise ValueError("the extraction box of {0} does not overlap the frame: WV0_Y {1}, "
+                             "requested rows {2}:{3}, frame has {4} rows".format(
+                                 image.filename, ycent_round, ylo_req, yhi_req, nrows))
+        if (ylo, yhi) != (ylo_req, yhi_req):
+            warnings.warn("the requested extraction rows {0}:{1} of {2} do not fit the {3} row frame, "
+                          "clipping to rows {4}:{5} ({6} of {7} requested bins)".format(
+                              ylo_req, yhi_req, image.filename, nrows, ylo, yhi,
+                              yhi - ylo + 1, yhi_req - ylo_req + 1))
+            clipped_filenames.append(image.filename)
+        heights_seen.add((redheight_frame, blueheight_frame, halfheight_frame))
+        if first_frame_history is None:
+            first_frame_history = (height_source, redheight_frame, blueheight_frame, halfheight_frame,
+                                   ylo_req, yhi_req, ylo, yhi)
+
+        image_cutout = image.data[ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
+        dq_cutout = image.dq[ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+        wave_cal_map_cutout = wave_map[ylo:yhi + 1,
                                                           xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+        wave_err_cutout = image.hdu_list["WAVE_ERR"].data[ylo:yhi + 1,
                                                           xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        err_cutout = image.err[:,ycent_round - halfheight:ycent_round + halfheight + 1,
+        err_cutout = image.err[:,ylo:yhi + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
         if "ALGO_THRU" in image.hdu_list:
-            algo_thru_cutout = image.hdu_list["ALGO_THRU"].data[ycent_round - halfheight:ycent_round + halfheight + 1]
+            # ALGO_THRU is always one value per frame row (l3_to_l4.py:2164), so it aligns with ylo:yhi
+            algo_thru_cutout = np.asarray(image.hdu_list["ALGO_THRU"].data)[ylo:yhi + 1]
         else:
             algo_thru_cutout = np.ones(image_cutout.shape[0])
         bad_ind = np.where(dq_cutout > 0)
@@ -1350,7 +1619,23 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
         # update algo_thru extension to match the extracted spectrum, if it exists
         if "ALGO_THRU" in image.hdu_list:
             image.hdu_list["ALGO_THRU"].data = algo_thru_spec
-    history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
+    if len(heights_seen) > 1:
+        warnings.warn("the frames of this dataset were extracted with different box heights, most "
+                      "likely because of mixed DPAMNAME values, so the SPEC extensions have "
+                      "different lengths")
+    # the boxes are homogeneous apart from the warning above, so report the first frame
+    height_source, redheight_frame, blueheight_frame, halfheight_frame, ylo_req, yhi_req, ylo, yhi = first_frame_history
+    if redheight_frame is not None:
+        history_msg = ("spectral extraction within a box of half width of {0}, redheight {1}, blueheight {2} "
+                       "({3}), rows {4}:{5}, and with ".format(
+                           halfwidth, redheight_frame, blueheight_frame, height_source, ylo, yhi) + weight_str)
+    else:
+        history_msg = ("spectral extraction within a box of half width of {0}, half height of {1} "
+                       "({2}), rows {3}:{4}, and with ".format(
+                           halfwidth, halfheight_frame, height_source, ylo, yhi) + weight_str)
+    if clipped_filenames:
+        history_msg += (", the box was clipped from the requested rows {0}:{1} to the array bounds "
+                        "for {2} frame(s)".format(ylo_req, yhi_req, len(clipped_filenames)))
     dataset.update_after_processing_step(history_msg)
     return dataset
 
@@ -1455,9 +1740,7 @@ def align_polarimetry_frames(input_dataset):
 def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_mueller_matrix_cal):
     """
     Takes in polarimetric L3 images and their unocculted polarimetric observations,
-    computes and subtracts off the stellar polarization component from each image
-    TODO: make issue about error propagation, need to check that it is done correctly
-          and make changes if necessary to ensure the errors are accurate
+    computes and subtracts off the stellar polarization component from each image.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of L3 images, must include unocculted observations
@@ -1562,9 +1845,15 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
                          [0, 0, U_nd_var, 0],
                          [0, 0, 0, v_nd_var]])
         # solve for covariance matrix of input stokes vector
-        # C_in = pinv(M) * C_nd * pinv(M)^T
-        #TODO: incoporate the error terms of the nd mueller matrix into this calculation if necessary 
+        # C_in = pinv(M) * C_nd * pinv(M)^T, plus first-order contribution from ND MM uncertainty
+        # For S_in = M^{-1} @ S_nd, the MM error contribution per output component i is:
+        # sum_{j,k} (M^{-1}_{ij})^2 * sigma^2_{M_{jk}} * S_in[k]^2
+        # NOTE: same unrotated-S_in caveat as the forward-propagation step below (ND transform is M_nd @ R).
         C_in = system_nd_inv @ C_nd @ system_nd_inv.T
+        nd_mm_var = np.nan_to_num(nd_mueller_matrix_cal.err[0]**2, nan=0.0)
+        S_in_sq_for_nd = S_in**2
+        for i in range(4):
+            C_in[i, i] += np.sum((system_nd_inv[i, :]**2)[:, np.newaxis] * nd_mm_var * S_in_sq_for_nd[np.newaxis, :])
         # contract back to just the variance
         S_in_var = np.array([
             C_in[0,0],
@@ -1587,9 +1876,13 @@ def subtract_stellar_polarization(input_dataset, system_mueller_matrix_cal, nd_m
             I_135_star = (S_out[0] - S_out[2]) / 2
 
             # propagate errors back to the new intensity terms for the unocculted star, assuming independence
-            # σS_out^2 = (σM^2)(I_in^2) + (M^2)(σI_in^2)
-            #TODO: double check if this is valid/invalid, change if necessary
-            system_mm_var = (system_mueller_matrix_cal.err[0])**2
+            # First-order propagation for S_out = M @ S_in:
+            # Var(S_out[i]) = sum_j [ Var(M[i,j]) * S_in[j]^2 + M[i,j]^2 * Var(S_in[j]) ]
+            # nan_to_num handles fixed MM elements (NaN errors -> zero contribution, correct by definition)
+            # NOTE: variance uses the unrotated S_in, but the true transform is M_sys @ R(PA_APER) @ S_in,
+            # so Q/U variance is slightly misattributed for strongly-polarized targets (MC: <1% error in
+            # this function's <1%-polarization regime, ~14-17% at 50%). Refinement: propagate against R @ S_in.
+            system_mm_var = np.nan_to_num(system_mueller_matrix_cal.err[0]**2, nan=0.0)
             system_mm_sq = (system_mueller_matrix_cal.data)**2
             S_in_sq = S_in**2
             S_out_var = (system_mm_var @ S_in_sq) + (system_mm_sq @ S_in_var)

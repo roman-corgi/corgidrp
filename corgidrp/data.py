@@ -44,8 +44,9 @@ typical_cal_invalid_keywords = [
                     'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
                     'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
                     'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME',
                 ]
+
 
 class Dataset():
     """
@@ -58,7 +59,7 @@ class Dataset():
         all_data (np.array): an array with all the data combined together. First dimension is always number of images
         frames (np.array): list of data objects (probably corgidrp.data.Image)
     """
-    def __init__(self, frames_or_filepaths, no_data=False, no_err=False, no_dq=False):
+    def __init__(self, frames_or_filepaths, no_data=False, no_err=False, no_dq=False, allow_inhomogeneous_frames=False):
         """
         Args:
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
@@ -66,6 +67,7 @@ class Dataset():
                 each frame will have the default loaded in (arrays of zeros).  Defaults to False.
             no_err (bool): If True, no err arrays are loaded in.  This overrides the condition concerning err in the no_data description above.  Defaults to False.
             no_dq (bool): If True, no dq arrays are loaded in.  This overrides the condition concerning dq in the no_data description above.  Defaults to False.
+            allow_inhomogeneous_frames (bool): If True, disables the creation of all_data/all_err/all_dq datacubes so the dataset can contain frames of differing dimensions. Defaults to False.
         """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
@@ -102,16 +104,25 @@ class Dataset():
         if isinstance(self.frames, list):
             self.frames = np.array(self.frames) # list of objects
 
-        # create 3-D cube of all the data
-        self.all_data = np.array([frame.data for frame in self.frames])
-        self.all_err = np.array([frame.err for frame in self.frames])
-        self.all_dq = np.array([frame.dq for frame in self.frames])
-        # do a clever thing to point all the individual frames to the data in this cube
-        # this way editing a single frame will also edit the entire datacube
-        for i, frame in enumerate(self.frames):
-            frame.data = self.all_data[i]
-            frame.err = self.all_err[i]
-            frame.dq = self.all_dq[i]
+        if allow_inhomogeneous_frames:
+            # set all_data, all_err, and all_dq to None
+            self.all_data = None
+            self.all_err = None
+            self.all_dq = None
+        else:
+            # create 3-D cube of all the data
+            self.all_data = np.array([frame.data for frame in self.frames])
+            self.all_err = np.array([frame.err for frame in self.frames])
+            self.all_dq = np.array([frame.dq for frame in self.frames])
+            # do a clever thing to point all the individual frames to the data in this cube
+            # this way editing a single frame will also edit the entire datacube
+            for i, frame in enumerate(self.frames):
+                frame.data = self.all_data[i]
+                frame.err = self.all_err[i]
+                frame.dq = self.all_dq[i]
+
+        # keep track of this to guard against calling all_data/all_err/all_dq in other places when it's none
+        self.contain_inhomogeneous_frames = allow_inhomogeneous_frames
 
     def __iter__(self):
         return self.frames.__iter__()
@@ -166,7 +177,7 @@ class Dataset():
             frame.pri_hdr['FILENAME'] = frame.filename
             frame.save(filename=filename, filedir=filedir)
 
-        if not ram_heavy_save:
+        if not ram_heavy_save and not self.contain_inhomogeneous_frames:
             # relink frames with all_data
             self.all_data = np.array([frame.data for frame in self.frames])
             self.all_err = np.array([frame.err for frame in self.frames])
@@ -285,7 +296,7 @@ class Dataset():
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
 
-    def split_dataset(self, prihdr_keywords=None, exthdr_keywords=None):
+    def split_dataset(self, prihdr_keywords=None, exthdr_keywords=None, tolerances=None):
         """
         Splits up this dataset into multiple smaller datasets that have the same set of header keywords
         The code uses all keywords together to determine an unique group
@@ -293,6 +304,14 @@ class Dataset():
         Args:
             prihdr_keywords (list of str): list of primary header keywords to split
             exthdr_keywords (list of str): list of 1st extension header keywords to split on
+            tolerances (dict of str: float): optional map of keyword to an absolute tolerance.
+                Frames whose values for that keyword lie within the tolerance of each other are
+                grouped together instead of having to match exactly, which is what you want for
+                a keyword that drifts. Passing {'FSMX': 5., 'FSMY': 5.} groups frames taken at
+                the same commanded dither even if the reported FSM position wandered a few mas.
+                Any keyword not listed here is still matched exactly. The frames themselves are
+                never modified, but the unique values returned for a keyword given a tolerance
+                are the mean of each group rather than any one frame's value.
 
         Returns:
             list of datasets: list of sub datasets
@@ -316,6 +335,28 @@ class Dataset():
 
                 col_names.append(key)
                 col_vals.append(dataset_vals)
+
+        # Stand in a shared representative for the values of any keyword given a tolerance, so
+        # that the grouping below can stay a simple test for identical values
+        if tolerances is not None:
+            unknown_keywords = [key for key in tolerances if key not in col_names]
+            if unknown_keywords:
+                raise ValueError("Cannot apply a tolerance to keyword(s) {0} that the dataset is "
+                                 "not being split on: {1}".format(unknown_keywords, col_names))
+            for i, key in enumerate(col_names):
+                if key in tolerances:
+                    values = np.asarray(col_vals[i], dtype=float)
+                    if not np.all(np.isfinite(values)):
+                        raise ValueError("Cannot cluster values that are not all finite: {0}".format(values))
+                    order = np.argsort(values)
+                    representatives = np.zeros(len(values))
+                    start = 0
+                    for j in range(1, len(order) + 1):
+                        if j == len(order) or values[order[j]] - values[order[j - 1]] > tolerances[key]:
+                            members = order[start:j]
+                            representatives[members] = np.mean(values[members])
+                            start = j
+                    col_vals[i] = representatives
 
         all_data = np.array(col_vals).T
 
@@ -550,6 +591,20 @@ class Image():
         self.pri_hdr = adjusted_pri_hdr
         self.ext_hdr = adjusted_img_hdr
 
+        # insert/update header keywords that might not be there in outdated data
+        # this should only apply to outdated simulated data
+        
+        if not 'RA_BORE' in self.pri_hdr:
+            self.pri_hdr.set('RA_BORE', self.pri_hdr.get('RA', 0), 'Boresight RA')
+        if not 'DEC_BORE' in self.pri_hdr:
+            self.pri_hdr.set('DEC_BORE', self.pri_hdr.get('DEC', 0), 'Boresight Dec')
+        if not 'RA_APER' in self.pri_hdr:
+            self.pri_hdr.set('RA_APER', self.pri_hdr.get('RA', 0), 'CGI Aperture RA')
+        if not 'DEC_APER' in self.pri_hdr:
+            self.pri_hdr.set('DEC_APER', self.pri_hdr.get('DEC', 0), 'CGI Aperture Dec')
+        if ('SATSPOTS' in self.ext_hdr) and (not isinstance(self.ext_hdr['SATSPOTS'], bool)):
+            self.ext_hdr['SATSPOTS'] = bool(self.ext_hdr['SATSPOTS'])
+
     # create this field dynamically
     @property
     def filepath(self):
@@ -590,10 +645,13 @@ class Image():
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
 
-        # Cast data in additional HDUs to the configured dtype before appending
+        # Cast data in additional HDUs to the configured dtype before appending, excluding binary tables etc.
         for hdu in self.hdu_list:
-            if hdu.data is not None:
-                hdu.data = hdu.data.astype(corgidrp.image_dtype, copy=False)
+            if hdu.data is not None and type(hdu.data) == np.ndarray:
+                if hdu.name == "SPEC_DQ":
+                    hdu.data = hdu.data.astype(corgidrp.dq_dtype, copy=False)
+                else:
+                    hdu.data = hdu.data.astype(corgidrp.image_dtype, copy=False)
             hdulist.append(hdu)
 
         with warnings.catch_warnings():
@@ -1443,38 +1501,39 @@ class NonLinearityCalibration(Image):
      - Row headers (dn counts) must be monotonically increasing
      - Column headers (EM gains) must be monotonically increasing
      - Data columns (relative gain curves) must straddle 1
-     - The first row will provide the the Gain axis values (accesssed via 
-        gain_ax = non_lin_correction.data[0, 1:])
-     - The first column will provide the "count" axis value (accessed via 
-        count_ax = non_lin_correction.data[1:, 0])
-     - The rest of the array will be the calibration data (accessed via 
-     relgains = non_lin_correction.data[1:, 1:])
+     - The first row will provide the the Gain axis values (accesssed via
+       gain_ax = non_lin_correction.data[0, 1:])
+     - The first column will provide the "count" axis value (accessed via
+       count_ax = non_lin_correction.data[1:, 0])
+     - The rest of the array will be the calibration data (accessed via
+       relgains = non_lin_correction.data[1:, 1:])
 
-    For example:
-    [
-        [nan,  1,     10,    100,   1000 ], <- gain axis
-        [1,    0.900, 0.950, 0.989, 1.000],
-        [1000, 0.910, 0.960, 0.990, 1.010],
-        [2000, 0.950, 1.000, 1.010, 1.050],
-        [3000, 1.000, 1.001, 1.011, 1.060],
-         ^
-         count axis
-    ],
+    For example::
+
+        [
+            [nan,  1,     10,    100,   1000 ], <- gain axis
+            [1,    0.900, 0.950, 0.989, 1.000],
+            [1000, 0.910, 0.960, 0.990, 1.010],
+            [2000, 0.950, 1.000, 1.010, 1.050],
+            [3000, 1.000, 1.001, 1.011, 1.060],
+             ^
+             count axis
+        ],
 
     where the row headers [1, 1000, 2000, 3000] are dn counts, the column
     headers [1, 10, 100, 1000] are EM gains, and the first data column
     [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
 
-     Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file 
-        to read in OR the 2D calibration data. See above for the required format.
-        pri_hdr (astropy.io.fits.Header): the primary header (required only if 
-        raw 2D data is passed in)
-        ext_hdr (astropy.io.fits.Header): the image extension header (required 
-        only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined 
-        together to make this NonLinearityCalibration file (required only if 
-        raw 2D data is passed in)
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file
+            to read in OR the 2D calibration data. See above for the required format.
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if
+            raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required
+            only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined
+            together to make this NonLinearityCalibration file (required only if
+            raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, 
                  input_dataset=None):
@@ -2572,14 +2631,15 @@ class SlitTransmission(Image):
     """
     Contains the slit transmission map of a defined slit. This consists of an
     2D array with:
-        1/ Slit transmission map derived at different locations by interpolation.
-        2/ Corresponding locations along EXCAM +X direction with respect to the
-          zero-point in (fractional) EXCAM pixels where the slit transmission has
-          been derived.
-        3/ Corresponding locations along EXCAM +Y direction with respect to the
-          zero-point in (fractional) EXCAM pixels where the slit transmission has
-          been derived.
-  
+
+    1. Slit transmission map derived at different locations by interpolation.
+    2. Corresponding locations along EXCAM +X direction with respect to the
+       zero-point in (fractional) EXCAM pixels where the slit transmission has
+       been derived.
+    3. Corresponding locations along EXCAM +Y direction with respect to the
+       zero-point in (fractional) EXCAM pixels where the slit transmission has
+       been derived.
+
     Args:
         data_or_filepath (str or np.array): either a filepath string corresponding to an
                                         existing SlitTransmission file saved to disk or an
@@ -3239,12 +3299,12 @@ class CoreThroughputCalibration(Image):
               FpamFsamCal class. That is, a FpamFsamCal calibration file.
           method (str): Interpolation method that will be used:
               'polar-nearest': Given an (x,y) position wrt FPM's center, the
-               associated PSF is the one in the CT calibration dataset whose
-               radial distance to the FPM's center is the closest to
-               sqrt(x**2+y**2). If there is more than one CT PSF at the same
-               radial distance, choose the one whose angular distance to the
-               (x,y) location is the smallest.
-              
+              associated PSF is the one in the CT calibration dataset whose
+              radial distance to the FPM's center is the closest to
+              sqrt(x**2+y**2). If there is more than one CT PSF at the same
+              radial distance, choose the one whose angular distance to the
+              (x,y) location is the smallest.
+
         Returns:
           psf_interp_list (array): Array of interpolated PSFs for the valid
               target locations.
@@ -3903,7 +3963,8 @@ class NDFilterSweetSpotDataset(Image):
     """
     Class for an ND filter sweet spot dataset product.
     Typically stores an N×3 array of data:
-      [OD, x_center, y_center] for each measurement.
+    [OD, x_center, y_center] for each measurement.
+
     Args:
         data_or_filepath (str or np.array): Either the filepath to the FITS file 
             to read in OR the 2D array of ND filter sweet-spot data (N×3).
@@ -4062,8 +4123,9 @@ class NDSpectroscopy(Image):
     """
     Class for an ND spectroscopy sweet spot dataset product.
     Typically stores data arrays for a given set of calibrations.
-    Data (HDU0) is a N×N_wave×4 array of [wave, OD, x, y], err (HDU1) is a 
+    Data (HDU0) is a N×N_wave×4 array of [wave, OD, x, y], err (HDU1) is a
     1×N×N_wave×4 array of [wave_err, OD_err, x_err, y_err].
+
     Args:
         data_or_filepath (str or np.array): Either the filepath to the FITS file 
             to read in OR the 2D array of ND spectroscopy sweet-spot data (N×N_wave×4).
@@ -4124,7 +4186,7 @@ class NDSpectroscopy(Image):
                     'DATETIME', 'FTIMEUTC', 'DATATYPE',
                     'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
                     'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
-                    'WAVELEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR'
+                    'WAVLEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR'
                 ],
             )
         else:
@@ -4294,6 +4356,12 @@ class MuellerMatrix(Image):
                 'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
                 'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ],
+            # the star positions are per-frame measurements, used to pick out the stokes vectors
+            # whose stars share a resolution element. They say nothing about the instrument, so
+            # they are dropped rather than carried onto the combined calibration product.
+            deleted_keywords=corgidrp.check.deleted_keywords_default + [
+                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2', 'STARPRSM',
             ]
         )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
@@ -4375,6 +4443,12 @@ class NDMuellerMatrix(Image):
                 'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
                 'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ],
+            # the star positions are per-frame measurements, used to pick out the stokes vectors
+            # whose stars share a resolution element. They say nothing about the instrument, so
+            # they are dropped rather than carried onto the combined calibration product.
+            deleted_keywords=corgidrp.check.deleted_keywords_default + [
+                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2', 'STARPRSM',
             ]
         )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
@@ -4598,7 +4672,7 @@ def get_flag_to_bit_map():
         "full_well_saturated_pixel": 5,
         "non_linear_pixel": 6,
         "pixel_affected_by_cosmic_ray": 7,
-        "TBD": 8,
+        "too_bright_for_pc": 8,
     }
 
 def get_flag_to_value_map():
