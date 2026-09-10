@@ -42,7 +42,7 @@ def add_mock_astrometric_calibration(this_caldb, output_dir):
 def test_l1_to_nd_polcal_e2e(e2edata_path, e2eoutput_path):
     # grab input L1 data, consisting of unocculted unpolarized and polarized stars using ND225 
     l1_input_data_dir = os.path.join(e2edata_path, "mueller_matrix_sims", "L1_ND")
-    l1_input_data_list = glob.glob(os.path.join(l1_input_data_dir, "*_l1_*.fits"))
+    l1_input_data_list = sorted(glob.glob(os.path.join(l1_input_data_dir, "*_l1_*.fits")))
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -112,7 +112,7 @@ def test_l1_to_nd_polcal_e2e(e2edata_path, e2eoutput_path):
 def test_l1_to_polcal_e2e(e2edata_path, e2eoutput_path):
     # grab input L1 data, consisting of unocculted unpolarized and polarized stars using ND225 
     l1_input_data_dir = os.path.join(e2edata_path, "mueller_matrix_sims", "L1_non_ND")
-    l1_input_data_list = glob.glob(os.path.join(l1_input_data_dir, "*_l1_*.fits"))
+    l1_input_data_list = sorted(glob.glob(os.path.join(l1_input_data_dir, "*_l1_*.fits")))
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')

@@ -90,7 +90,7 @@ def calc_stokes_unocculted(input_dataset,
             at different dithers are always kept apart, since the Mueller matrix calibration needs the
             star on the same resolution element and averaging over dithers would defeat that. The
             tolerance is there because the reported FSM position drifts a little even when the mirror
-            is not commanded to move. Default is 1.0.
+            is not commanded to move. Default is 4.0
 
     Returns:
         Image:
@@ -170,7 +170,7 @@ def calc_stokes_unocculted(input_dataset,
     stokes_vectors = []
 
     for dataset in datasets:
-        fluxes, flux_errs, thetas = [], [], []
+        fluxes, flux_errs, thetas, xys = [], [], [], []
         # --- Photometry loop ---
         for ds in dataset:
             prism = ds.ext_hdr.get('DPAMNAME')
@@ -180,6 +180,7 @@ def calc_stokes_unocculted(input_dataset,
             flux, flux_err, xy = aper_phot_pol(ds, phot_kwargs, return_xy = True)
             fluxes.append(flux)
             flux_errs.append(flux_err)
+            xys.append(xy)
             
             for phi in prism_map[prism]:
                 thetas.append(np.radians(phi))
@@ -187,6 +188,7 @@ def calc_stokes_unocculted(input_dataset,
         fluxes = np.array(fluxes)
         flux_errs = np.array(flux_errs)
         thetas = np.array(thetas)
+        xys = np.array(xys)
 
         # Prevent division by zero
         if np.any(flux_errs == 0):
@@ -253,11 +255,21 @@ def calc_stokes_unocculted(input_dataset,
         )
         stokes_vector.filename = os.path.basename(dataset[0].filename).replace("l3", "stokes")
 
-        #Update header with xys position, for the two beams
-        stokes_vector.ext_hdr['STAR_X1'] = xy[0][0]
-        stokes_vector.ext_hdr['STAR_Y1'] = xy[0][1]
-        stokes_vector.ext_hdr['STAR_X2'] = xy[1][0]
-        stokes_vector.ext_hdr['STAR_Y2'] = xy[1][1]
+        #Update header with the star position for this pointing, for the two beams.
+        #The two prisms' beam cutouts are placed with independently rounded pixel offsets, so the
+        #same star sits at different cutout coordinates in a POL0 and a POL45 frame. Measure the
+        #position in one prism only, POL0 when it was observed and POL45 otherwise, so positions
+        #compared between stokes vectors later were all measured in the same cutout frame. Average
+        #over the frames of that prism so the result does not depend on the order they came in.
+        prisms = np.array([ds.ext_hdr.get('DPAMNAME') for ds in dataset])
+        position_prism = 'POL0' if np.any(prisms == 'POL0') else 'POL45'
+        xy = np.mean(xys[prisms == position_prism], axis=0)
+
+        stokes_vector.ext_hdr['STARPRSM'] = (position_prism, "Prism whose frames STAR_X/Y were measured in")
+        stokes_vector.ext_hdr['STAR_X1'] = (xy[0][0], "Mean star x position (pix) in beam 1")
+        stokes_vector.ext_hdr['STAR_Y1'] = (xy[0][1], "Mean star y position (pix) in beam 1")
+        stokes_vector.ext_hdr['STAR_X2'] = (xy[1][0], "Mean star x position (pix) in beam 2")
+        stokes_vector.ext_hdr['STAR_Y2'] = (xy[1][1], "Mean star y position (pix) in beam 2")
 
         stokes_vectors.append(stokes_vector)
 
