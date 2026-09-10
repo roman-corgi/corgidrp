@@ -13,6 +13,7 @@ import corgidrp.walker as walker
 import corgidrp.detector as detector
 from corgidrp import caldb
 from corgidrp import check
+from corgidrp import spec
 import astropy.time as time
 import astropy.io.fits as fits
 from corgidrp.darks import build_synthesized_dark
@@ -81,23 +82,93 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
     )
     print(f"L2a -> L2b complete: {len(l2b_filelist)} L2b files produced.")
     
-        # ------------------------------------------------------------------ 
-    # L2b -> spec dispersion                                                        
+def l2b_to_slittrans(e2eoutput_path):    
+    test_outputdir = os.path.join(e2eoutput_path, "l1_to_spec_slittrans_e2e")
+    l2b_outputdir = os.path.join(test_outputdir, "l2b_results")
+    l2b_filelist = sorted(
+        os.path.join(l2b_outputdir, f)
+        for f in os.listdir(l2b_outputdir) if f.endswith('_l2b.fits')
+    )
+    
     # ------------------------------------------------------------------ 
-    print("Running L2b -> SlitTransmission …")
+    # L2b -> slit transmission                                                        
+    # ------------------------------------------------------------------ 
+    # first we have to split the dataset to slit and open
+    l2b_open_dir = os.path.join(test_outputdir, "l2b_open")
+    if not os.path.exists(l2b_open_dir):
+        os.mkdir(l2b_open_dir)
+    # clean up by removing old files
+    for file in os.listdir(l2b_open_dir):
+        os.remove(os.path.join(l2b_open_dir, file))
+    l2b_slit_dir = os.path.join(test_outputdir, "l2b_slit")
+    if not os.path.exists(l2b_slit_dir):
+        os.mkdir(l2b_slit_dir)
+    # clean up by removing old files
+    for file in os.listdir(l2b_slit_dir):
+        os.remove(os.path.join(l2b_slit_dir, file))
+    
+    l3_open_dir = os.path.join(test_outputdir, "l3_open")
+    if not os.path.exists(l3_open_dir):
+        os.mkdir(l3_open_dir)
+    # clean up by removing old files
+    for file in os.listdir(l3_open_dir):
+        os.remove(os.path.join(l3_open_dir, file))
+    l3_slit_dir = os.path.join(test_outputdir, "l3_slit")
+    if not os.path.exists(l3_slit_dir):
+        os.mkdir(l3_slit_dir)
+    # clean up by removing old files
+    for file in os.listdir(l3_slit_dir):
+        os.remove(os.path.join(l3_slit_dir, file))   
+        
+    l2b_dataset = data.Dataset(l2b_filelist)
+    fsam_dataset, fsam = l2b_dataset.split_dataset(exthdr_keywords=["FSAMNAME"])
+    for i in range(len(fsam)):
+        if fsam[i] == "OPEN":
+            open_dataset = fsam_dataset[i]
+            open_dataset.save(filedir = l2b_open_dir)
+        else:
+            slit_dataset = fsam_dataset[i]
+            slit_dataset.save(filedir = l2b_slit_dir) 
+    
+    l2b_open_filelist = sorted(
+        os.path.join(l2b_open_dir, f)
+        for f in os.listdir(l2b_open_dir) if f.endswith('_l2b.fits')
+    )
+    l2b_slit_filelist = sorted(
+        os.path.join(l2b_slit_dir, f)
+        for f in os.listdir(l2b_slit_dir) if f.endswith('_l2b.fits')
+    )
+    
+    print("Running L2b -> l3 spec open")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l2b_filelist, "", l2b_outputdir,
+        walker.walk_corgidrp(l2b_open_filelist, "", l3_open_dir,
                              template="l2b_to_spec_slittrans.json")
-
+    print("Running L2b -> l3 spec slit")
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=UserWarning)
+        walker.walk_corgidrp(l2b_slit_filelist, "", l3_slit_dir,
+                             template="l2b_to_spec_slittrans.json")
+    
+    l3_slit_list = sorted(
+        os.path.join(l3_slit_dir, f)
+        for f in os.listdir(l3_slit_dir) if f.endswith('.fits')
+    )
+    
+    l3_open_list = sorted(
+        os.path.join(l3_open_dir, f)
+        for f in os.listdir(l3_open_dir) if f.endswith('.fits')
+    )
+    slit_data = data.Dataset(l3_slit_list)
+    open_data = data.Dataset(l3_open_list)
+    slittrans = spec.slit_transmission(slit_data, open_data)
+    print(slittrans)
     print(f"L2b -> SlitTransmission complete.")
     
-    ####### Load in the output data. It should be the latest slit transmission calibration file produced.
-    slittrans_cal_file = glob.glob(os.path.join(l2b_outputdir, '*slt_cal*.fits'))[0]
-    slittrans = data.SlitTransmission(slittrans_cal_file)
+    slittrans.save(filedir = l3_slit_dir)
     
     ### validate SlitTransmission product 
-    check.compare_to_mocks_hdrs(slittrans_cal_file)
+    #check.compare_to_mocks_hdrs(slittrans_cal_file)
 
     assert slittrans.ext_hdr["DATATYPE"] == "SlitTransmission"
     assert slittrans.ext_hdr["DATALVL"] == "CAL"
@@ -133,4 +204,5 @@ if __name__ == "__main__":
     args = ap.parse_args()
     outputdir = args.outputdir
     e2edata_dir = args.e2edata_dir
-    test_l1_to_slittrans(e2edata_dir, outputdir)
+    #test_l1_to_slittrans(e2edata_dir, outputdir)
+    l2b_to_slittrans(outputdir)

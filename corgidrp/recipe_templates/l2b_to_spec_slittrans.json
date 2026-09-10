@@ -30,9 +30,6 @@
         "name": "extract_spec"
       },
       {
-        "name": "slit_transmission"
-      },
-      {
         "name": "save"
       }
     ]

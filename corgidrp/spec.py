@@ -1435,7 +1435,7 @@ def slit_transmission(
         raise ValueError(f'DPAMNAME should be {dpam_name}')
     # FPAM
     fpam_name = dataset_slit[0].ext_hdr['FPAMNAME'].upper()
-    if (fpam_name != 'OPEN' and fpam_name != 'ND225' and fpam_name != 'ND475'):
+    if (not fpam_name.startswith('OPEN') and fpam_name != 'ND225' and fpam_name != 'ND475'):
         raise ValueError('FPAMNAME should be either OPEN, ND225 or ND475')
     # SPAM
     spam_name = dataset_slit[0].ext_hdr['SPAMNAME'].upper()
@@ -1509,12 +1509,21 @@ def slit_transmission(
     if not (len(slit_pos_x) == len(slit_pos_y) == len(slit_trans_fsm)):
         raise ValueError('The lengths of distinct FSM positions and averaged spectra is different.')
 
-    # If there's only one position, there's no interpolation
-    if len(np.unique(slit_pos_y)) == len(np.unique(slit_pos_x)) == 1:
-        print('Only one unique position in the data. Returning slit transmission at that position.')
-        return (slit_trans_fsm,
-            slit_pos_x,
-            slit_pos_y)
+    pri_hdr, ext_hdr, _, _ = corgidrp.check.merge_headers(
+        dataset_slit,
+        any_true_keywords=['DESMEAR', 'CTI_CORR'],
+        invalid_keywords=[
+                    'FRMTYPE',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR',
+                    'FWC_PP_E', 'FWC_EM_E', 'WV0_X', 'WV0_Y'
+                ]
+        )
+    input_dataset = Dataset([frame for frame in dataset_slit] + [frame for frame in dataset_open])
 
     # If no target pixels are provided, create a series
     if target_pix == None:
@@ -1530,7 +1539,12 @@ def slit_transmission(
             x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
             y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
         target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
-
+    
+    # If there's only one position, there's no interpolation
+    if len(np.unique(slit_pos_y)) == len(np.unique(slit_pos_x)) == 1:
+        print('Only one unique position in the data. Returning slit transmission at that position.')
+        return SlitTransmission(slit_trans_fsm, pri_hdr = pri_hdr, ext_hdr = ext_hdr, x_offset = target_pix[0], y_offset = target_pix[1], input_dataset = input_dataset) 
+    
     # Derive slit transmission at desired locations 
     # 1-d cases: The positions along one of the slit dimensions is constant.
     # P.S. scipy takes care of raising exceptions if there's any extrapolation
@@ -1562,21 +1576,6 @@ def slit_transmission(
         raise ValueError('There are no valid target positions within the ' +
             'range of input PSF locations')
     
-    pri_hdr, ext_hdr, _, _ = corgidrp.check.merge_headers(
-        dataset_slit,
-        any_true_keywords=['DESMEAR', 'CTI_CORR'],
-        invalid_keywords=[
-                    'FRMTYPE',
-                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-                    'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR',
-                    'FWC_PP_E', 'FWC_EM_E', 'WV0_X', 'WV0_Y'
-                ]
-        )
-    input_dataset = Dataset([frame for frame in dataset_slit] + [frame for frame in dataset_open])
     slit_trans =  SlitTransmission(slit_trans_interp, pri_hdr = pri_hdr, ext_hdr = ext_hdr, x_offset = target_pix[0], y_offset = target_pix[1], input_dataset = input_dataset) 
     return slit_trans
 
