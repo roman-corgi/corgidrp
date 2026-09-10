@@ -32,10 +32,25 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt .; fi
         pip install -r requirements_e2etests.txt corgidrp
     - name: Download E2E test data
+      env:
+        # Primary source: Zenodo. Fallback: Azure blob storage.
+        # AZURE_E2E_DATA_URL is a repository secret holding the full Azure SAS URL.
+        ZENODO_URL: "https://zenodo.org/records/22681036/files/E2E_Test_Data.tar.xz?download=1"
+        AZURE_URL: ${{ secrets.AZURE_E2E_DATA_URL }}
       run: |
         mkdir e2e_test_data
-        # download file
-        wget -O E2E_Test_Data.tar.xz https://zenodo.org/records/20634613/files/E2E_Test_Data.tar.xz?download=1
+
+        # Try each source in turn; accept the first that yields a valid tar archive.
+        for source in "Zenodo:$ZENODO_URL" "Azure:$AZURE_URL"; do
+          name=${source%%:*}
+          url=${source#*:}
+          [ -n "$url" ] || continue
+          echo "Downloading E2E test data from $name"
+          wget --tries=3 --timeout=120 -O E2E_Test_Data.tar.xz "$url" \
+            && tar -tf E2E_Test_Data.tar.xz > /dev/null 2>&1 && break
+          echo "Download from $name failed or was not a valid archive."
+        done
+
         tar -xvf E2E_Test_Data.tar.xz -C e2e_test_data
     - name: Test with pytest
       run: |

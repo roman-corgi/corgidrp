@@ -44,8 +44,9 @@ typical_cal_invalid_keywords = [
                     'FSAM_H', 'FSAM_V', 'FSAMNAME', 'FSAMSP_H', 'FSAMSP_V',
                     'CFAM_H', 'CFAM_V', 'CFAMNAME', 'CFAMSP_H', 'CFAMSP_V',
                     'DPAM_H', 'DPAM_V', 'DPAMNAME', 'DPAMSP_H', 'DPAMSP_V',
-                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME', 
+                    'FTIMEUTC', 'DATATYPE', 'FWC_PP_E', 'FWC_EM_E', 'SAT_DN', 'DATETIME',
                 ]
+
 
 class Dataset():
     """
@@ -295,7 +296,7 @@ class Dataset():
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
 
-    def split_dataset(self, prihdr_keywords=None, exthdr_keywords=None):
+    def split_dataset(self, prihdr_keywords=None, exthdr_keywords=None, tolerances=None):
         """
         Splits up this dataset into multiple smaller datasets that have the same set of header keywords
         The code uses all keywords together to determine an unique group
@@ -303,6 +304,14 @@ class Dataset():
         Args:
             prihdr_keywords (list of str): list of primary header keywords to split
             exthdr_keywords (list of str): list of 1st extension header keywords to split on
+            tolerances (dict of str: float): optional map of keyword to an absolute tolerance.
+                Frames whose values for that keyword lie within the tolerance of each other are
+                grouped together instead of having to match exactly, which is what you want for
+                a keyword that drifts. Passing {'FSMX': 5., 'FSMY': 5.} groups frames taken at
+                the same commanded dither even if the reported FSM position wandered a few mas.
+                Any keyword not listed here is still matched exactly. The frames themselves are
+                never modified, but the unique values returned for a keyword given a tolerance
+                are the mean of each group rather than any one frame's value.
 
         Returns:
             list of datasets: list of sub datasets
@@ -326,6 +335,28 @@ class Dataset():
 
                 col_names.append(key)
                 col_vals.append(dataset_vals)
+
+        # Stand in a shared representative for the values of any keyword given a tolerance, so
+        # that the grouping below can stay a simple test for identical values
+        if tolerances is not None:
+            unknown_keywords = [key for key in tolerances if key not in col_names]
+            if unknown_keywords:
+                raise ValueError("Cannot apply a tolerance to keyword(s) {0} that the dataset is "
+                                 "not being split on: {1}".format(unknown_keywords, col_names))
+            for i, key in enumerate(col_names):
+                if key in tolerances:
+                    values = np.asarray(col_vals[i], dtype=float)
+                    if not np.all(np.isfinite(values)):
+                        raise ValueError("Cannot cluster values that are not all finite: {0}".format(values))
+                    order = np.argsort(values)
+                    representatives = np.zeros(len(values))
+                    start = 0
+                    for j in range(1, len(order) + 1):
+                        if j == len(order) or values[order[j]] - values[order[j - 1]] > tolerances[key]:
+                            members = order[start:j]
+                            representatives[members] = np.mean(values[members])
+                            start = j
+                    col_vals[i] = representatives
 
         all_data = np.array(col_vals).T
 
@@ -4155,7 +4186,7 @@ class NDSpectroscopy(Image):
                     'DATETIME', 'FTIMEUTC', 'DATATYPE',
                     'FWC_PP_E', 'FWC_EM_E', 'SAT_DN',
                     'CRPIX1', 'CRPIX2', 'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
-                    'WAVELEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR'
+                    'WAVLEN0','WV0_X','WV0_Y','WV0_XERR','WV0_YERR'
                 ],
             )
         else:
@@ -4325,6 +4356,12 @@ class MuellerMatrix(Image):
                 'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
                 'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ],
+            # the star positions are per-frame measurements, used to pick out the stokes vectors
+            # whose stars share a resolution element. They say nothing about the instrument, so
+            # they are dropped rather than carried onto the combined calibration product.
+            deleted_keywords=corgidrp.check.deleted_keywords_default + [
+                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2', 'STARPRSM',
             ]
         )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
@@ -4406,6 +4443,12 @@ class NDMuellerMatrix(Image):
                 'DATETIME', 'FTIMEUTC','MJDSRT','MJDEND', 'DESMEAR','CTI_CORR','IS_BAD','FWC_PP_E','MWC_EM_E','SAT_DN',
                 'FRMSEL01','FRMSEL02','FRMSEL03','FRMSEL04','FRMSEL05','FRMSEL06','KGAIN_ER','RN','RN_ERR', 
                 'DPAMNAME','DPAMSP_H','DPAMSP_V',
+            ],
+            # the star positions are per-frame measurements, used to pick out the stokes vectors
+            # whose stars share a resolution element. They say nothing about the instrument, so
+            # they are dropped rather than carried onto the combined calibration product.
+            deleted_keywords=corgidrp.check.deleted_keywords_default + [
+                'STAR_X1', 'STAR_Y1', 'STAR_X2', 'STAR_Y2', 'STARPRSM',
             ]
         )
             super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr, dq_hdr=dq_hdr)
