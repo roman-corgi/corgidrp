@@ -489,11 +489,14 @@ class CalDB:
             dtype = data.FluxcalFactor
 
         elif dtype_label in ['SpecFluxCal']:
-            # filter by color filter, DPAM (prism), and SPAM (slit)
+            # filter by color filter and DPAM (prism). Do NOT filter by SPAM (slit):
+            # flux calibrations are taken with the slit in (SPAMNAME='SPEC') but pair
+            # with science data taken without a slit (SPAMNAME='OPEN') by design, so
+            # requiring a SPAMNAME match rejects legitimate real calibration pairings
+            # (confirmed against real TVAC-style data in spec_l3_to_l4_noncoron_e2e).
             cfam_value = self._normalize_spec_cfam(frame_dict['CFAMNAME'])
             options = self.filter_calib(calibdf, "CFAMNAME", cfam_value, err_if_none=True)
             options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
-            options = self.filter_calib(options, "SPAMNAME", frame_dict['SPAMNAME'], err_if_none=True)
 
             # sort by closest in time
             options_sorted = options.iloc[np.argsort(np.abs(options["MJD"] - frame_dict["MJD"]))]

@@ -363,12 +363,18 @@ def autogen_recipe(filelist, outputdir, template=None):
     if not filelist:
         print("Input filelist is empty, using default handling to create recipe.")
         first_frame = None
+        calib_lookup_target = None
     else:
         # load the data to check what kind of recipe it is
         dataset0 = data.Dataset([filelist[0]])
         first_frame = dataset0[0]
         # don't need the actual data, especially if it would take up a lot of RAM just to hold it in cache
         dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
+        # pass the full dataset (rather than just its first frame) so get_calib() can
+        # correctly resolve calibration types whose datasets intentionally mix frames
+        # with different PAM configurations, e.g. ND filter products that mix
+        # ND-filter-in and ND-filter-out frames. See CalDB._select_reference_frame.
+        calib_lookup_target = dataset
 
     # if user didn't pass in template
     if template is None:
@@ -474,9 +480,9 @@ def autogen_recipe(filelist, outputdir, template=None):
                 # by default, identify all the calibration files needed, unless jit setting is turned on
                 # two cases where we should be identifying the calibration recipes now
                 if "jit_calib_id" in recipe['drpconfig'] and (not recipe['drpconfig']["jit_calib_id"]):
-                    _fill_in_calib_files(step, this_caldb, first_frame)
+                    _fill_in_calib_files(step, this_caldb, calib_lookup_target)
                 elif ("jit_calib_id" not in recipe['drpconfig']) and (not corgidrp.jit_calib_id):
-                    _fill_in_calib_files(step, this_caldb, first_frame)
+                    _fill_in_calib_files(step, this_caldb, calib_lookup_target)
 
                 if step["name"].lower() == "dark_subtraction":
                     if step["keywords"]["outputdir"].upper() == "AUTOMATIC":

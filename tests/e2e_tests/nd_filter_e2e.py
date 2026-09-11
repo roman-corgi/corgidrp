@@ -32,8 +32,12 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     od_truth = 2.0                   # optical density to recover
     attenuated_flux = true_flux_bright / (10 ** od_truth)
 
-    fsm_positions = [(0.0, 0.0),                     
-                     (1.0, -1.0)]                   
+    # offsets must exceed walker._fsm_positions_differ's tolerance (4.0 mas) for the
+    # walker to recognize this as a dithered ND-filter acquisition rather than a
+    # plain flux calibration (see acadd6e1, which set that tolerance to the smallest
+    # dither pattern expected from CAR activities)
+    fsm_positions = [(0.0, 0.0),
+                     (10.0, -10.0)]
 
     bright_frames = []
     for fsm_x, fsm_y in fsm_positions:
