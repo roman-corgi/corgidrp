@@ -1520,7 +1520,7 @@ def slit_transmission(
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES',
                     'Z2VAR', 'Z3VAR',
-                    'FWC_PP_E', 'FWC_EM_E', 'WV0_X', 'WV0_Y'
+                    'FWC_PP_E', 'FWC_EM_E', 'WV0_X', 'WV0_Y', 'WV0_XERR', 'WV0_YERR'
                 ]
         )
     input_dataset = Dataset([frame for frame in dataset_slit] + [frame for frame in dataset_open])
@@ -1539,7 +1539,7 @@ def slit_transmission(
             x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
             y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
         target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
-    
+    print (target_pix)
     # If there's only one position, there's no interpolation
     if len(np.unique(slit_pos_y)) == len(np.unique(slit_pos_x)) == 1:
         print('Only one unique position in the data. Returning slit transmission at that position.')
@@ -1561,9 +1561,12 @@ def slit_transmission(
                 raise ValueError('Only linear interpolation is available for',
                     'two dimensional scattered data.')
             else:
+                print(slit_pos_x)
+                print(slit_pos_y)
                 interpolator = LinearNDInterpolator(np.c_[slit_pos_x, slit_pos_y],
                     slit_trans_fsm)
                 slit_trans_interp = interpolator(target_pix[0], target_pix[1])
+                print(slit_trans_interp)
             # If there's some extrapolation, redefine target points to be within limits
             if np.sum(np.isnan(slit_trans_interp) == True):
                 raise ValueError('Some target points require extrapolation.'

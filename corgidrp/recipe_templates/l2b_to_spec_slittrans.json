@@ -15,10 +15,10 @@
         "name": "determine_wave_zeropoint",
         "calibs": {
           "SpecFilterOffset": "AUTOMATIC"
-        },
-        "keywords" : {
-          "subtract_no_offset_frames": false
-        }
+		  },
+         "keywords": {
+			"additional_frame_sep_extkeys": ["FSMX", "FSMY"]
+		  }
       },
       {
         "name": "add_wavelength_map",

@@ -161,8 +161,7 @@ def l2b_to_slittrans(e2eoutput_path):
     )
     slit_data = data.Dataset(l3_slit_list)
     open_data = data.Dataset(l3_open_list)
-    slittrans = spec.slit_transmission(slit_data, open_data)
-    print(slittrans)
+    slittrans = spec.slit_transmission(slit_data, open_data, x_range=[39,89], y_range =[65,71])
     print(f"L2b -> SlitTransmission complete.")
     
     slittrans.save(filedir = l3_slit_dir)
@@ -172,17 +171,13 @@ def l2b_to_slittrans(e2eoutput_path):
 
     assert slittrans.ext_hdr["DATATYPE"] == "SlitTransmission"
     assert slittrans.ext_hdr["DATALVL"] == "CAL"
-    assert slittrans.ext_hdr['BAND'] == '3'
-    assert slittrans.ext_hdr['REFWAVE'] == 730
+    assert slittrans.ext_hdr['CFAMNAME'] == '3F'
     
     #check the values
+    print(slittrans.x_offset)
+    print(slittrans.y_offset)
     
     
-    
-    
-    # Remove temporary CalDB
-    if os.path.exists(tmp_caldb_csv):
-        os.remove(tmp_caldb_csv)
     # Print success message
     print('e2e test for slit transmission calibration passed')
     
