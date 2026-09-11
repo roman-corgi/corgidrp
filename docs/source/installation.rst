@@ -23,6 +23,22 @@ Then you can import ``corgidrp`` like any other Python package!
 The installation will create a configuration folder in your home directory called ``.corgidrp``.
 That configuration directory will be used to locate things on your computer such as the location of the calibration database and the pipeline configuration file. The configuration file stores settings such as whether to track each individual error term added to the noise.
 
+Overriding Bundled Auxiliary Data
+----------------------------------
+Some reference data shipped inside the package can be revised without modifying your
+``corgidrp`` checkout, by placing a file with the same name in the configuration folder.
+The pipeline checks the configuration folder first and falls back to the bundled copy.
+
+* ``~/.corgidrp/stellar_polarization_database.csv`` — polarization reference standards.
+* ``~/.corgidrp/spectroscopy/standard_star_sptypes.csv`` — spectral types of the anticipated
+  spectroscopy target stars, used to pick a model template for the wavelength zero point.
+* ``~/.corgidrp/spectroscopy/templates/`` — noiseless prism template images. These are matched
+  per file rather than per directory: a file here replaces the bundled template of the same
+  name, and a name that does not exist in the package is added to the set. That lets you both
+  revise a template and supply a spectral type that does not ship with the package.
+
+Recipe templates follow the same idea in a separate directory; see :doc:`walker_and_recipes`.
+
 For Developers
 ---------------
 Large binary files (used in tests) are stored in Git LFS. Install Git LFS if it isn't already installed. 

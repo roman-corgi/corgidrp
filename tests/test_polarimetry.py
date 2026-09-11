@@ -573,6 +573,74 @@ def test_align_frames():
     assert all(location == starloc_pol0 for location in starloc), \
         "All frames should have the same star location."
                 
+def test_mueller_matrix_cal_keeps_all_rolls():
+    '''
+    Tests which stokes vectors the Mueller Matrix calibration keeps when it restricts itself to
+    stars measured on the same resolution element. It should settle on a single dither position
+    but keep every roll angle observed there, since a different roll rotates the reference Q and
+    U and so constrains the Mueller Matrix differently, whereas the dithers of one target at one
+    roll are alternatives to choose between.
+    '''
+    current_file_path = os.path.dirname(os.path.abspath(__file__))
+    path_to_pol_ref_file = os.path.join(current_file_path, "test_data", "stellar_polarization_database.csv")
+    n_targets = len(pd.read_csv(path_to_pol_ref_file, skipinitialspace=True))
+
+    rolls = [0., 55.]
+    # +/-50 mas is +/-2.3 pix, so the two dither positions are 6.5 pix apart, comfortably beyond
+    # the lambda/D of 2.3 pix that the calibration matches within
+    dithers = [(-50., 50.), (50., -50.)]
+
+    def build_stokes_dataset(roll_dither_pairs):
+        """
+        Mock stokes vectors from frames at each of the given (roll, dither) combinations.
+
+        Args:
+            roll_dither_pairs (list): (roll, (fsmx, fsmy)) pairs to generate frames for, where
+                the roll is in degrees and the FSM dither position is in milliarcseconds
+
+        Returns:
+            corgidrp.data.Dataset: the stokes vectors measured from those frames
+        """
+        frames = []
+        for roll, (fsmx, fsmy) in roll_dither_pairs:
+            mock_dataset = mocks.generate_mock_polcal_dataset(path_to_pol_ref_file, fsmx=fsmx,
+                                                              fsmy=fsmy, pa_apers=roll)
+            frames += list(mock_dataset.frames)
+        # give every frame its own filename, so that DRPNFILE on the calibration product counts
+        # the stokes vectors that were actually used
+        for i, frame in enumerate(frames):
+            frame.filename = "cgi_0200001001001001001_20250101t{:07d}_l3_.fits".format(i)
+        mock_dataset = l2b_to_l3.divide_by_exptime(Dataset(frames))
+        mock_dataset = l2b_to_l3.split_image_by_polarization_state(mock_dataset)
+        return pol.calc_stokes_unocculted(mock_dataset)
+
+    # Every roll observed at every dither, as a real dither sequence would be
+    stokes_dataset = build_stokes_dataset([(roll, dither) for roll in rolls for dither in dithers])
+    # the dithers are held apart rather than averaged together, so there is one stokes vector for
+    # each combination of target, roll and dither
+    assert len(stokes_dataset) == n_targets * len(rolls) * len(dithers)
+    assert len(set(frame.filename for frame in stokes_dataset)) == len(stokes_dataset)
+
+    # One dither position is chosen and every roll observed there is kept
+    mueller_matrix = pol.generate_mueller_matrix_cal(stokes_dataset,
+                                                     path_to_pol_ref_file=path_to_pol_ref_file)
+    assert mueller_matrix.ext_hdr["DRPNFILE"] == n_targets * len(rolls)
+
+    # Grouping on the target alone, which is what a tolerance wide enough to merge every roll
+    # amounts to, keeps only one stokes vector per target and discards the other rolls
+    collapsed_matrix = pol.generate_mueller_matrix_cal(stokes_dataset, pa_tolerance=360.,
+                                                       path_to_pol_ref_file=path_to_pol_ref_file)
+    assert collapsed_matrix.ext_hdr["DRPNFILE"] == n_targets
+
+    # With each roll observed at only one dither, no single resolution element covers them all,
+    # so the calibration should refuse rather than mix the dither positions together
+    stokes_dataset = build_stokes_dataset([(rolls[0], dithers[0]), (rolls[1], dithers[1])])
+    assert len(stokes_dataset) == n_targets * len(rolls)
+    with pytest.raises(ValueError, match="resolution element"):
+        pol.generate_mueller_matrix_cal(stokes_dataset,
+                                        path_to_pol_ref_file=path_to_pol_ref_file)
+
+
 def test_mueller_matrix_cal():
     '''
     Tests the creation of a Mueller Matrix calibration file from a mock dataset.
@@ -1710,6 +1778,7 @@ if __name__ == "__main__":
     test_image_splitting()
     test_calc_pol_p_and_pa_image()
     test_subtract_stellar_polarization()
+    test_mueller_matrix_cal_keeps_all_rolls()
     test_mueller_matrix_cal()
     test_combine_polarization_states()
     test_align_frames()

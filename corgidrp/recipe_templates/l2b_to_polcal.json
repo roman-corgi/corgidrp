@@ -8,6 +8,12 @@
     "outputdir" : "",
     "steps" : [
         {
+            "name": "create_wcs",
+            "calibs": {
+                "AstrometricCalibration": "AUTOMATIC"
+            }
+        },
+        {
             "name": "divide_by_exptime"
         },
         {
