@@ -161,23 +161,36 @@ def l2b_to_slittrans(e2eoutput_path):
     )
     slit_data = data.Dataset(l3_slit_list)
     open_data = data.Dataset(l3_open_list)
-    slittrans = spec.slit_transmission(slit_data, open_data, x_range=[39,89], y_range =[65,71])
-    print(f"L2b -> SlitTransmission complete.")
+    x_range=[39,89]
+    y_range =[65,71]
+    slittrans = spec.slit_transmission(slit_data, open_data, x_range=x_range, y_range =y_range)
     
     slittrans.save(filedir = l3_slit_dir)
+    print(f"L2b -> SlitTransmission complete.")
+    
+    filename = os.path.join(l3_slit_dir, slittrans.filename)
+    slittrans_load = data.SlitTransmission(filename)
     
     ### validate SlitTransmission product 
-    #check.compare_to_mocks_hdrs(slittrans_cal_file)
+    check.compare_to_mocks_hdrs(filename)
 
     assert slittrans.ext_hdr["DATATYPE"] == "SlitTransmission"
     assert slittrans.ext_hdr["DATALVL"] == "CAL"
     assert slittrans.ext_hdr['CFAMNAME'] == '3F'
+    assert slittrans.slitname == "R1C2"
     
     #check the values
-    print(slittrans.x_offset)
-    print(slittrans.y_offset)
-    
-    
+    assert len(slittrans.x_offset) == 100
+    assert len(slittrans.y_offset) == 100
+    assert x_range[0] <= np.min(slittrans.x_offset) 
+    assert x_range[1] >= np.max(slittrans.x_offset)
+    assert y_range[0] <= np.min(slittrans.y_offset) 
+    assert y_range[1] >= np.max(slittrans.y_offset)
+    assert np.shape(slittrans.data) == (100, 51)
+    print("mean value of the slit transmission",np.mean(slittrans.data))
+    #the values at the edge of the slit should be smaller than around the center
+    assert np.mean(slittrans.data[0:10,25]) < np.mean(slittrans.data[40:50,25])
+    assert np.mean(slittrans.data[90:100,25]) < np.mean(slittrans.data[40:50,25])
     # Print success message
     print('e2e test for slit transmission calibration passed')
     
