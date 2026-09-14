@@ -80,15 +80,7 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
         os.path.join(l2b_outputdir, f)
         for f in os.listdir(l2b_outputdir) if f.endswith('_l2b.fits')
     )
-    print(f"L2a -> L2b complete: {len(l2b_filelist)} L2b files produced.")
-    
-def l2b_to_slittrans(e2eoutput_path):    
-    test_outputdir = os.path.join(e2eoutput_path, "l1_to_spec_slittrans_e2e")
-    l2b_outputdir = os.path.join(test_outputdir, "l2b_results")
-    l2b_filelist = sorted(
-        os.path.join(l2b_outputdir, f)
-        for f in os.listdir(l2b_outputdir) if f.endswith('_l2b.fits')
-    )
+    print(f"L2a -> L2b complete: {len(l2b_filelist)} L2b files produced.") 
     
     # ------------------------------------------------------------------ 
     # L2b -> slit transmission                                                        
@@ -170,6 +162,9 @@ def l2b_to_slittrans(e2eoutput_path):
     
     filename = os.path.join(l3_slit_dir, slittrans.filename)
     slittrans_load = data.SlitTransmission(filename)
+    # Remove temporary CalDB
+    if os.path.exists(tmp_caldb_csv):
+        os.remove(tmp_caldb_csv)
     
     ### validate SlitTransmission product 
     check.compare_to_mocks_hdrs(filename)
@@ -187,10 +182,24 @@ def l2b_to_slittrans(e2eoutput_path):
     assert y_range[0] <= np.min(slittrans.y_offset) 
     assert y_range[1] >= np.max(slittrans.y_offset)
     assert np.shape(slittrans.data) == (100, 51)
-    print("mean value of the slit transmission",np.mean(slittrans.data))
+    print("mean value of the slit transmission:",np.mean(slittrans.data))
+    
     #the values at the edge of the slit should be smaller than around the center
     assert np.mean(slittrans.data[0:10,25]) < np.mean(slittrans.data[40:50,25])
     assert np.mean(slittrans.data[90:100,25]) < np.mean(slittrans.data[40:50,25])
+    
+    slit_test = slit_data[24]
+    slit_open_test = open_data[24]
+    im_slit = slit_test.data
+    im_open = slit_open_test.data
+    x_max_slit = int(np.median(np.argmax(im_slit[60:80,:], axis = 1)))
+    x_max_open = int(np.median(np.argmax(im_open[60:80,:], axis = 1)))
+    #estimate the throughput of the slit due to the slit width of about 6 pixels in band 3 using a slitless measurement
+    est_trans_open = np.sum(im_open[60:80,x_max_open -3:x_max_open+3])/np.sum(im_open[60:80,x_max_open -30:x_max_open+30])
+    assert np.mean(slittrans.data[40:50, 25]) == pytest.approx(est_trans_open, abs = 0.08)
+    #estimate the ratio of a corresponding slit and slitless measurement at the same position
+    est_trans_slit = np.sum(im_slit[60:80,x_max_slit -15:x_max_slit+15])/np.sum(im_open[60:80,x_max_open -15:x_max_open+15])
+    assert np.mean(slittrans.data[40:50, 25]) == pytest.approx(est_trans_slit, abs = 0.05)
     # Print success message
     print('e2e test for slit transmission calibration passed')
     
@@ -212,5 +221,4 @@ if __name__ == "__main__":
     args = ap.parse_args()
     outputdir = args.outputdir
     e2edata_dir = args.e2edata_dir
-    #test_l1_to_slittrans(e2edata_dir, outputdir)
-    l2b_to_slittrans(outputdir)
+    test_l1_to_slittrans(e2edata_dir, outputdir)
