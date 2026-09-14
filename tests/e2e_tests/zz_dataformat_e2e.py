@@ -1722,7 +1722,6 @@ if __name__ == "__main__":
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
     test_header_crossreference_e2e(e2edata_dir, outputdir)
-    """
     test_astrom_dataformat_e2e(e2edata_dir, outputdir)
     test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
     test_ct_dataformat_e2e(e2edata_dir, outputdir)
@@ -1752,7 +1751,6 @@ if __name__ == "__main__":
     test_nd_mueller_dataformat_e2e(e2edata_dir, outputdir)
     test_spec_linespread_dataformat_e2e(e2edata_dir, outputdir)
     test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
-    """
     test_spec_slittransmission_dataformat_e2e(e2edata_dir, outputdir)
-    #test_dark_dataformat_e2e(e2edata_dir, outputdir)
-    #test_tpump_dataformat_e2e(e2edata_dir, outputdir)
+    test_dark_dataformat_e2e(e2edata_dir, outputdir)
+    test_tpump_dataformat_e2e(e2edata_dir, outputdir)
