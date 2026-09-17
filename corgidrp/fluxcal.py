@@ -27,13 +27,13 @@ calspec_names= {
 # dim standards
 'tyc 4433-1800-1': '1808347_stiswfc_006.fits',
 'tyc 4205-1677-1': '1812095_stisnic_008.fits',
-'tyc 4212-455-1': '1757132_stiswfc_006.fits',
+'tyc 4212-455-1': '1757132_stiswfc_007.fits',
 'tyc 4209-1396-1': '1805292_stisnic_008.fits',
 'tyc 4413-304-1': 'p041c_stisnic_010.fits',
 'ucac3 313-62260': 'kf08t3_stisnic_005.fits',
-'bps bs 17447-0067': '1802271_stiswfcnic_006.fits',
+'bps bs 17447-0067': '1802271_stiswfcnic_007.fits',
 'tyc 4424-1286-1': '1732526_stisnic_009.fits',
-'gsc 02581-02323': 'p330e_stiswfcnic_007.fits',
+'gsc 02581-02323': 'p330e_stiswfcnic_008.fits',
 'tyc 4207-219-1': '1740346_stisnic_005.fits',
 'tyc 7056-1141-1': 'hd37962_stis_011.fits'
 }
