@@ -579,7 +579,8 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
                                image_center_x=512,
                                image_center_y=512,
                                separation_diameter_arcsec=7.5, 
-                               alignment_angle=None,
+                               alignment_angle_WP1=0,
+                               alignment_angle_WP2=45,
                                calspec_file = None,
                                flux_or_irr = 'flux',
                                phot_kwargs=None):
@@ -627,8 +628,10 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
             centered around
         separation_diameter_arcsec (optional, float): Distance between the centers of the two polarized images on the detector in arcsec, 
             default for Roman CGI is 7.5"
-        alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
-            defaults to 0 for WP1 and 45 for WP2
+        alignment_angle_WP1 (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
+            defaults to 0 for WP1.
+        alignment_angle_WP2 (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
+            defaults to 45 for WP2.
         calspec_file (str, optional): file path to the calspec fits file of the observed star
         flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
             be used.
@@ -643,77 +646,95 @@ def calibrate_pol_fluxcal_aper(dataset_or_image,
     if isinstance(d_or_i, corgidrp.data.Dataset):
         uni, uni_list = corgidrp.check.check_uniq_keyword(d_or_i, "VISITID")
         if uni:
-            #take the median of images in the dataset
-            image = combine_subexposures(d_or_i, collapse = "median", num_frames_scaling=False)[0]
+            #split dataset based on DPAM position and median combine each split datasets
+            dpam_datasets, _ = d_or_i.split_dataset(exthdr_keywords=["DPAMNAME"])
+            images = []
+            for ds in dpam_datasets:
+                images.append(combine_subexposures(ds, collapse = "median", num_frames_scaling=False)[0])
             dataset = d_or_i
         else:
             raise AttributeError("dataset of different VISITIDs {0} cannot be medianed".format(uni_list))
     else:
-        image = d_or_i
-        dataset = corgidrp.data.Dataset([image])
-    if image.ext_hdr['BUNIT'] != "photoelectron/s":
-        raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
-    #estimate the centers of the wollaston spots based on relative position from image center
-    #polarized images separated 7.5" or 344 pix on the detector by default (1"=0.0218 pix)
-    #WP1 output is aligned horizontally across the image center by default
-    #WP2 output is algined diagonally across the image center by default
-    image_center = (image_center_x, image_center_y)
-    dpamname = image.ext_hdr['DPAMNAME']
-    if dpamname not in ['POL0', 'POL45']:
-        raise ValueError('input dataset must be a polarimetric observation')
-    if alignment_angle is None:
+        images = [d_or_i]
+        dataset = corgidrp.data.Dataset([d_or_i])
+
+    # aperture photometry on each median combined image (should only loop twice at most with both POL0 and POL45 data)
+    phot_results_b1 = []
+    phot_results_b2 = []
+    for image in images:
+        if image.ext_hdr['BUNIT'] != "photoelectron/s":
+            raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
+        #estimate the centers of the wollaston spots based on relative position from image center
+        #polarized images separated 7.5" or 344 pix on the detector by default (1"=0.0218 pix)
+        #WP1 output is aligned horizontally across the image center by default
+        #WP2 output is algined diagonally across the image center by default
+        image_center = (image_center_x, image_center_y)
+        dpamname = image.ext_hdr['DPAMNAME']
+        if dpamname not in ['POL0', 'POL45']:
+            raise ValueError('input dataset must be a polarimetric observation')
         if dpamname == 'POL0':
-            alignment_angle = 0
+            alignment_angle = alignment_angle_WP1
         else:
-            alignment_angle = 45
-    angle_rad = alignment_angle * (np.pi / 180)
-    displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
-    displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
-    #estimate where the centers are based on alignment angle and separation
-    centering_initial_guess_beam_1 = (image_center[0] - displacement_x, image_center[1] + displacement_y)
-    centering_initial_guess_beam_2 = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+            alignment_angle = alignment_angle_WP2
+        angle_rad = alignment_angle * (np.pi / 180)
+        displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
+        displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
+        #estimate where the centers are based on alignment angle and separation
+        centering_initial_guess_beam_1 = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+        centering_initial_guess_beam_2 = (image_center[0] + displacement_x, image_center[1] - displacement_y)
 
-    #ensure xy centering method is used with estimated centers for aperture photometry
-    if phot_kwargs is None:
-        phot_kwargs = {
-            'encircled_radius': 5,
-            'frac_enc_energy': 1.0,
-            'method': 'subpixel',
-            'subpixels': 5,
-            'background_sub': False,
-            'r_in': 5,
-            'r_out': 10,
-            'centroid_roi_radius': 5,
-        }
-    #update parameters to ensure centering is performed correctly
-    phot_kwargs_beam_1 = phot_kwargs.copy()
-    phot_kwargs_beam_2 = phot_kwargs.copy()
-    phot_kwargs_beam_1.update({
-        'centering_method': 'xy',
-        'centering_initial_guess': centering_initial_guess_beam_1
-    })
-    phot_kwargs_beam_2.update({
-        'centering_method': 'xy',
-        'centering_initial_guess': centering_initial_guess_beam_2
-    })
+        #ensure xy centering method is used with estimated centers for aperture photometry
+        if phot_kwargs is None:
+            phot_kwargs = {
+                'encircled_radius': 5,
+                'frac_enc_energy': 1.0,
+                'method': 'subpixel',
+                'subpixels': 5,
+                'background_sub': False,
+                'r_in': 5,
+                'r_out': 10,
+                'centroid_roi_radius': 5,
+            }
+        #update parameters to ensure centering is performed correctly
+        phot_kwargs_beam_1 = phot_kwargs.copy()
+        phot_kwargs_beam_2 = phot_kwargs.copy()
+        phot_kwargs_beam_1.update({
+            'centering_method': 'xy',
+            'centering_initial_guess': centering_initial_guess_beam_1
+        })
+        phot_kwargs_beam_2.update({
+            'centering_method': 'xy',
+            'centering_initial_guess': centering_initial_guess_beam_2
+        })
     
-    result_beam_1, result_beam_2 = measure_aper_flux_pol(
-        image,
-        image_center_x=image_center_x,
-        image_center_y=image_center_y,
-        separation_diameter_arcsec=separation_diameter_arcsec,
-        alignment_angle=alignment_angle,
-        phot_kwargs=phot_kwargs
-    )
+        result_beam_1, result_beam_2 = measure_aper_flux_pol(
+            image,
+            image_center_x=image_center_x,
+            image_center_y=image_center_y,
+            separation_diameter_arcsec=separation_diameter_arcsec,
+            alignment_angle=alignment_angle,
+            phot_kwargs=phot_kwargs
+        )
+        phot_results_b1.append(np.array(result_beam_1))
+        phot_results_b2.append(np.array(result_beam_2))
     
-    #Optionally subtract a local background 
+    #Average and optionally subtract a local background 
+    phot_results_b1 = np.array(phot_results_b1)
+    phot_results_b2 = np.array(phot_results_b2)
     if phot_kwargs.get('background_sub', False):
-        ap_sum_beam_1, ap_sum_err_beam_1, back_beam_1 = result_beam_1
-        ap_sum_beam_2, ap_sum_err_beam_2, back_beam_2 = result_beam_2
+        ap_sum_beam_1 = np.nanmean(phot_results_b1[:,0])
+        ap_sum_err_beam_1 = np.sqrt(np.nansum(phot_results_b1[:,1]**2)) / len(phot_results_b1[:,1]) # make sure errors are added in quadruture
+        back_beam_1 = np.nanmean(phot_results_b1[:,2])
+        ap_sum_beam_2 = np.nanmean(phot_results_b2[:,0])
+        ap_sum_err_beam_2 = np.sqrt(np.nansum(phot_results_b2[:,1]**2)) / len(phot_results_b2[:,1])
+        back_beam_2 = np.nanmean(phot_results_b2[:,2])
     else:
-        ap_sum_beam_1, ap_sum_err_beam_1 = result_beam_1
-        ap_sum_beam_2, ap_sum_err_beam_2 = result_beam_2
+        ap_sum_beam_1 = np.nanmean(phot_results_b1[:,0])
+        ap_sum_err_beam_1 = np.sqrt(np.nansum(phot_results_b1[:,1]**2)) / len(phot_results_b1[:,1])
+        ap_sum_beam_2 = np.nanmean(phot_results_b2[:,0])
+        ap_sum_err_beam_2 = np.sqrt(np.nansum(phot_results_b2[:,1]**2)) / len(phot_results_b2[:,1])
 
+    image = images[0]
     filter_file = get_filter_name(image)
     
     # Read filter and CALSPEC data.

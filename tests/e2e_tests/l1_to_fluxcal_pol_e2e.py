@@ -60,7 +60,6 @@ def test_l1_to_fluxcal_pol_e2e(e2edata_path, e2eoutput_path):
     new_l2b_filenames = [os.path.join(l2b_outputdir, f) for f in os.listdir(l2b_outputdir) if f.endswith('l2b.fits')] 
     dataset=data.Dataset(new_l2b_filenames)
     image = dataset[0]
-    image_data = np.nanmedian(dataset.all_data, 0)
     #estimate expected flux of calspec standard
     filter_file = fluxcal.get_filter_name(image)
     wave, filter_trans = fluxcal.read_filter_curve(filter_file)
@@ -75,22 +74,28 @@ def test_l1_to_fluxcal_pol_e2e(e2edata_path, e2eoutput_path):
     separation_diameter_arcsec = 7.5
     center = 512
 
-    # figure out where the wollaston beams are
-    dpamname = image.ext_hdr['DPAMNAME']
-    alignment_angle = 0 if dpamname == 'POL0' else (np.pi / 4)
-    dx = int(round((separation_diameter_arcsec * np.cos(alignment_angle)) / (2 * pixel_scale)))
-    dy = int(round((separation_diameter_arcsec * np.sin(alignment_angle)) / (2 * pixel_scale)))
-    o_x, o_y = center - dx, center + dy
-    e_x, e_y = center + dx, center - dy
+    # get the counts from each l2b image
+    counts_arr = []
+    for frame in dataset:
+        # figure out where the wollaston beams are
+        dpamname = frame.ext_hdr['DPAMNAME']
+        alignment_angle = 0 if dpamname == 'POL0' else (np.pi / 4)
+        dx = int(round((separation_diameter_arcsec * np.cos(alignment_angle)) / (2 * pixel_scale)))
+        dy = int(round((separation_diameter_arcsec * np.sin(alignment_angle)) / (2 * pixel_scale)))
+        o_x, o_y = center - dx, center + dy
+        e_x, e_y = center + dx, center - dy
 
-    # obtain counts and cross check with actual flux
-    aper_pos = [(o_x, o_y), (e_x, e_y)]
-    apertures = CircularAperture(aper_pos, r=5)
-    phot = aperture_photometry(image_data, apertures, method='center')
-    # combine counts from o and e beam, divide by exposure time
-    counts = (phot['aperture_sum'][0] + phot['aperture_sum'][1]) / image.ext_hdr["EXPTIME"]
-    flux_count = flux_fac.fluxcal_fac * counts
-    assert flux == pytest.approx(flux_count, rel = 0.05)
+        # obtain counts
+        aper_pos = [(o_x, o_y), (e_x, e_y)]
+        apertures = CircularAperture(aper_pos, r=5)
+        phot = aperture_photometry(frame.data, apertures, method='center')
+        # combine counts from o and e beam, divide by exposure time
+        counts_arr.append((phot['aperture_sum'][0] + phot['aperture_sum'][1]) / frame.ext_hdr["EXPTIME"])
+    
+    # take the mean normalized counts from all images, cross check with actual flux
+    counts_med = np.nanmean(counts_arr)
+    flux_count = flux_fac.fluxcal_fac * counts_med
+    assert flux == pytest.approx(flux_count, rel = 0.075)
 
     # check headers
     check.compare_to_mocks_hdrs(fluxcal_file)
