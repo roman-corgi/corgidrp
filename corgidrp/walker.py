@@ -363,12 +363,18 @@ def autogen_recipe(filelist, outputdir, template=None):
     if not filelist:
         print("Input filelist is empty, using default handling to create recipe.")
         first_frame = None
+        calib_lookup_target = None
     else:
         # load the data to check what kind of recipe it is
         dataset0 = data.Dataset([filelist[0]])
         first_frame = dataset0[0]
         # don't need the actual data, especially if it would take up a lot of RAM just to hold it in cache
         dataset = data.Dataset(filelist, no_data=True, no_err=True, no_dq=True)
+        # pass the full dataset (rather than just its first frame) so get_calib() can
+        # correctly resolve calibration types whose datasets intentionally mix frames
+        # with different PAM configurations, e.g. ND filter products that mix
+        # ND-filter-in and ND-filter-out frames. See CalDB._select_reference_frame.
+        calib_lookup_target = dataset
 
     # if user didn't pass in template
     if template is None:
@@ -474,9 +480,9 @@ def autogen_recipe(filelist, outputdir, template=None):
                 # by default, identify all the calibration files needed, unless jit setting is turned on
                 # two cases where we should be identifying the calibration recipes now
                 if "jit_calib_id" in recipe['drpconfig'] and (not recipe['drpconfig']["jit_calib_id"]):
-                    _fill_in_calib_files(step, this_caldb, first_frame)
+                    _fill_in_calib_files(step, this_caldb, calib_lookup_target)
                 elif ("jit_calib_id" not in recipe['drpconfig']) and (not corgidrp.jit_calib_id):
-                    _fill_in_calib_files(step, this_caldb, first_frame)
+                    _fill_in_calib_files(step, this_caldb, calib_lookup_target)
 
                 if step["name"].lower() == "dark_subtraction":
                     if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
@@ -538,7 +544,11 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
     Args:
         step (dict): the portion of a recipe for this step
         this_caldb (corgidrp.CalDB): calibration database conection
-        ref_frame (corgidrp.Image): a reference frame to use to determine the optimal calibration
+        ref_frame (corgidrp.data.Image or corgidrp.data.Dataset): a reference frame, or
+            the full dataset being processed, used to determine the optimal calibration.
+            Passing the full Dataset (when available) gives correct results for
+            calibration types whose datasets intentionally mix frames with different PAM
+            configurations -- see CalDB.get_calib and CalDB._select_reference_frame.
 
     Returns:
         dict: the step, but with calibration files filled in
@@ -1006,14 +1016,19 @@ def run_recipe(recipe, save_recipe_file=True, prev_recipes=None):
                             this_caldb = caldb.CalDB()
                             # dataset may have turned into a single image. handle this case.
                             if isinstance(curr_dataset, data.Dataset):
-                                ref_image = curr_dataset[0]
+                                # pass the full dataset (rather than just its first frame) so
+                                # get_calib() can correctly resolve calibration types whose
+                                # datasets intentionally mix frames with different PAM
+                                # configurations, e.g. ND filter products that mix ND-filter-in
+                                # and ND-filter-out frames. See CalDB._select_reference_frame.
+                                # If a frame's data wasn't loaded (RAM-heavy mode), get_calib()
+                                # reloads it from disk itself as needed.
+                                calib_lookup_target = curr_dataset
                                 list_of_frames = curr_dataset
                             else:
-                                ref_image = curr_dataset
+                                calib_lookup_target = curr_dataset
                                 list_of_frames = [curr_dataset]
-                            if ram_heavy_bool:
-                                ref_image = data.Image(ref_image.filepath) #load in data for calibration matching
-                            _fill_in_calib_files(step, this_caldb, ref_image)
+                            _fill_in_calib_files(step, this_caldb, calib_lookup_target)
 
                             # also update the recipe headers now that calibs are resolved
                             lof = list(list_of_frames)
