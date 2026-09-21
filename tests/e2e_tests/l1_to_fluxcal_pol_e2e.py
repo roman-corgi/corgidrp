@@ -9,6 +9,7 @@ import corgidrp.fluxcal as fluxcal
 import corgidrp.walker as walker
 from corgidrp import caldb, check
 from photutils.aperture import CircularAperture, aperture_photometry
+from corgidrp.combine import combine_subexposures
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -74,7 +75,12 @@ def test_l1_to_fluxcal_pol_e2e(e2edata_path, e2eoutput_path):
     separation_diameter_arcsec = 7.5
     center = 512
 
-    # get the counts from each l2b image
+    # split based on wollaston prism and median combine the L2b data
+    #pol_datasets, _ = dataset.split_dataset(exthdr_keywords=['DPAMNAME'])
+    #pol_frames = []
+    #for ds in pol_datasets:
+    #    pol_frames.append(combine_subexposures(ds, collapse = "median", num_frames_scaling=False)[0])
+    # get the counts from each median-combined l2b image
     counts_arr = []
     for frame in dataset:
         # figure out where the wollaston beams are
@@ -88,14 +94,14 @@ def test_l1_to_fluxcal_pol_e2e(e2edata_path, e2eoutput_path):
         # obtain counts
         aper_pos = [(o_x, o_y), (e_x, e_y)]
         apertures = CircularAperture(aper_pos, r=5)
-        phot = aperture_photometry(frame.data, apertures, method='center')
+        phot = aperture_photometry(frame.data, apertures, method='subpixel')
         # combine counts from o and e beam, divide by exposure time
         counts_arr.append((phot['aperture_sum'][0] + phot['aperture_sum'][1]) / frame.ext_hdr["EXPTIME"])
     
     # take the mean normalized counts from all images, cross check with actual flux
-    counts_med = np.nanmean(counts_arr)
+    counts_med = np.nanmedian(counts_arr)
     flux_count = flux_fac.fluxcal_fac * counts_med
-    assert flux == pytest.approx(flux_count, rel = 0.075)
+    assert flux == pytest.approx(flux_count, rel = 0.05)
 
     # check headers
     check.compare_to_mocks_hdrs(fluxcal_file)
