@@ -104,7 +104,7 @@ def create_mock_calibrations(calibrations_dir):
     
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder,'tmp_pc_wfov_band1_caldb.csv')
-    corgidrp.caldb_filepath = temp_caldb_csv
+    corgidrp.caldb_filepath = tmp_caldb_csv
     
     # Remove any existing caldb file so that CalDB() creates a new one
     if os.path.exists(corgidrp.caldb_filepath):
