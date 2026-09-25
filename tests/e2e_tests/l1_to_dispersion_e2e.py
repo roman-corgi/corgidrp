@@ -46,7 +46,7 @@ def setup_caldb(l1_datadir, processed_cal_path, calibrations_dir):
             If True, a PC dark is built later from L2a frames rather than here.
     """
     # Use a temporary CSV to avoid issues with real CalDB
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_linespread_e2e_caldb.csv')
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_dispersion_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
     if os.path.exists(tmp_caldb_csv):
         os.remove(tmp_caldb_csv)
@@ -240,11 +240,11 @@ def test_l1_to_dispersion(e2edata_path, e2eoutput_path):
 
     print(f"L2b -> DispersionModel complete.")
     
-    ####### Load in the output data. It should be the latest line spread calibration file produced.
+    ####### Load in the output data. It should be the latest dispersion calibration file produced.
     dispersion_cal_file = glob.glob(os.path.join(l2b_outputdir, '*dpm_cal*.fits'))[0]
     dispersion = data.DispersionModel(dispersion_cal_file)
     
-    ### validate LineSpread product 
+    ### validate DispersionModel product 
     check.compare_to_mocks_hdrs(dispersion_cal_file)
 
     assert dispersion.ext_hdr["DATATYPE"] == "DispersionModel"

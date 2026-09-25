@@ -1453,6 +1453,36 @@ def test_spec_prism_disp_dataformat_e2e(e2edata_path, e2eoutput_path):
         compare_docs(ref_doc_contents, doc_contents, data_product_name="Spectroscopy Prism Dispersion", skip_hdu_structure_check=True)
 
 @pytest.mark.e2e
+def test_spec_slittransmission_dataformat_e2e(e2edata_path, e2eoutput_path):
+    print("\n=== Testing Spectroscopy Slit Transmission Function ===")
+    spec_slittrans_data_files = glob.glob(os.path.join(e2eoutput_path, "l1_to_spec_slittrans_e2e", "l3_slit", "*_slt_cal.fits"))
+    spec_slittrans_data_file = max(spec_slittrans_data_files, key=os.path.getmtime)
+    
+    validate_cgi_filename(spec_slittrans_data_file, 'slt_cal')
+    
+    generate_fits_excel_documentation(spec_slittrans_data_file, os.path.join(e2eoutput_path, "l1_to_spec_slittrans_e2e", "l3_slit", "slt_cal_documentation.xlsx"))
+    
+    doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+    with fits.open(spec_slittrans_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "slt_cal.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "slt_cal.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # diff the two outputs
+        compare_docs(ref_doc_contents, doc_contents, data_product_name="Spectroscopy Slit Transmission")
+
+
+@pytest.mark.e2e
 def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
     """
     Create a cross-reference Excel file showing which headers appear in which data products.
@@ -1515,6 +1545,7 @@ def test_header_crossreference_e2e(e2edata_path, e2eoutput_path):
         'TrapPump': glob.glob(os.path.join(e2eoutput_path, "trap_pump_cal_e2e", "*_tpu_cal.fits")),
         'SpecLineSpread': glob.glob(os.path.join(e2eoutput_path, "l1_to_linespread_e2e", "l2b_results", "*_lsf_cal.fits")),
         'SpecPrismDisp': glob.glob(os.path.join(e2eoutput_path, "l1_to_dispersion_e2e", "l2b_results", "*_dpm_cal.fits")),
+        'SlitTransmission': glob.glob(os.path.join(e2eoutput_path, "l1_to_spec_slittrans_e2e", "l3_slit", "*_slt_cal.fits")),
     }
     
     # Get the most recent file for each data product
@@ -1678,7 +1709,8 @@ if __name__ == "__main__":
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
     # e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2' #'/Users/kevinludwick/Documents/ssc_tvac_test/'
-    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    #e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
+    e2edata_dir = '/home/schreiber/DataCopy/E2E_Test_Data/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
@@ -1689,7 +1721,6 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    
     test_header_crossreference_e2e(e2edata_dir, outputdir)
     test_astrom_dataformat_e2e(e2edata_dir, outputdir)
     test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
@@ -1720,5 +1751,6 @@ if __name__ == "__main__":
     test_nd_mueller_dataformat_e2e(e2edata_dir, outputdir)
     test_spec_linespread_dataformat_e2e(e2edata_dir, outputdir)
     test_spec_prism_disp_dataformat_e2e(e2edata_dir, outputdir)
+    test_spec_slittransmission_dataformat_e2e(e2edata_dir, outputdir)
     test_dark_dataformat_e2e(e2edata_dir, outputdir)
     test_tpump_dataformat_e2e(e2edata_dir, outputdir)

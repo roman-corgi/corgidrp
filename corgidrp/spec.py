@@ -1362,7 +1362,7 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
 
 def slit_transmission(
     dataset_slit,
-    dataset_open,
+    dataset_open=None,
     target_pix=None,
     x_range=[40.,42],
     y_range=[32.,34],
@@ -1385,9 +1385,10 @@ def slit_transmission(
       dataset_slit (Dataset): Dataset containing a set of extracted spectra for
         some set of FSM positions with the FSAM slit in its position. There can
         be a different number of frames for each FSM position.
-      dataset_open (Dataset): Dataset containing a set of extracted spectra for
+      dataset_open (Dataset) (optional): Dataset containing a set of extracted spectra for
         some set of FSM positions with the FSAM slit in OPEN position. There can
-        be a different number of frames for each FSM position.
+        be a different number of frames for each FSM position. Default is None.
+        If None, dataset_slit must contain at least one FSAM slit OPEN frame.
       target_pix (array) (optional): a user-defined Mx2 array containing the
         pixel positions for M target pixels where the slit transmission will be
         derived by interpolation. The target pixels are measured with respect
@@ -1430,12 +1431,22 @@ def slit_transmission(
         # fsam_name = []
     else:
         raise ValueError(f'{cfam_name} is not a spectroscopy filter')
+    
+    # if dataset_open is None, split dataset_slit and find slitless frames
+    if dataset_open == None:
+        dataset_split, uniqfsam = dataset_slit.split_dataset(exthdr_keywords=['FSAMNAME'])
+        if "OPEN" in uniqfsam:
+            dataset_open = dataset_split[uniqfsam == "OPEN"]
+            dataset_slit = dataset_split[uniqfsam != "OPEN"]       
+        else:
+            raise ValueError('There is no slitless observation in the input dataset.')
+    
     # DPAM
     if dataset_slit[0].ext_hdr['DPAMNAME'] != dpam_name:
         raise ValueError(f'DPAMNAME should be {dpam_name}')
     # FPAM
     fpam_name = dataset_slit[0].ext_hdr['FPAMNAME'].upper()
-    if (fpam_name != 'OPEN' and fpam_name != 'ND225' and fpam_name != 'ND475'):
+    if (not fpam_name.startswith('OPEN') and fpam_name != 'ND225' and fpam_name != 'ND475'):
         raise ValueError('FPAMNAME should be either OPEN, ND225 or ND475')
     # SPAM
     spam_name = dataset_slit[0].ext_hdr['SPAMNAME'].upper()
@@ -1447,8 +1458,8 @@ def slit_transmission(
         raise ValueError('LSAMNAME should be SPEC')
     # FSAM: slit in
     fsam_name = dataset_slit[0].ext_hdr['FSAMNAME'].upper()
-    if (fsam_name != 'R1C2' and fsam_name != 'R6C5' and fsam_name != 'R3C1'):
-        raise ValueError('FSAMNAME with the slit in must be either R1C2, R6C5 or R3C1')
+    if (fsam_name != 'R1C2' and fsam_name != 'R6C5' and fsam_name != 'R3C1' and fsam_name != 'R2C2'):
+        raise ValueError('FSAMNAME with the slit in must be either R1C2, R6C5, R2C2 or R3C1')
     # FSAM: slitless
     if dataset_open[0].ext_hdr['FSAMNAME'] != 'OPEN':
         raise ValueError('FSAMNAME must be OPEN for slitless observations.')
@@ -1509,12 +1520,21 @@ def slit_transmission(
     if not (len(slit_pos_x) == len(slit_pos_y) == len(slit_trans_fsm)):
         raise ValueError('The lengths of distinct FSM positions and averaged spectra is different.')
 
-    # If there's only one position, there's no interpolation
-    if len(np.unique(slit_pos_y)) == len(np.unique(slit_pos_x)) == 1:
-        print('Only one unique position in the data. Returning slit transmission at that position.')
-        return (slit_trans_fsm,
-            slit_pos_x,
-            slit_pos_y)
+    pri_hdr, ext_hdr, _, _ = corgidrp.check.merge_headers(
+        dataset_slit,
+        any_true_keywords=['DESMEAR', 'CTI_CORR'],
+        invalid_keywords=[
+                    'FRMTYPE',
+                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
+                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
+                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
+                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
+                    'Z10RES', 'Z11RES',
+                    'Z2VAR', 'Z3VAR', 'DATETIME', 'FTIMEUTC',
+                    'FWC_PP_E', 'FWC_EM_E', 'WV0_X', 'WV0_Y', 'WV0_XERR', 'WV0_YERR'
+                ]
+        )
+    input_dataset = Dataset([frame for frame in dataset_slit] + [frame for frame in dataset_open])
 
     # If no target pixels are provided, create a series
     if target_pix == None:
@@ -1530,7 +1550,11 @@ def slit_transmission(
             x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
             y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
         target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
-
+    # If there's only one position, there's no interpolation
+    if len(np.unique(slit_pos_y)) == len(np.unique(slit_pos_x)) == 1:
+        print('Only one unique position in the data. Returning slit transmission at that position.')
+        return SlitTransmission(slit_trans_fsm, pri_hdr = pri_hdr, ext_hdr = ext_hdr, x_offset = target_pix[0], y_offset = target_pix[1], input_dataset = input_dataset) 
+    
     # Derive slit transmission at desired locations 
     # 1-d cases: The positions along one of the slit dimensions is constant.
     # P.S. scipy takes care of raising exceptions if there's any extrapolation
@@ -1562,21 +1586,6 @@ def slit_transmission(
         raise ValueError('There are no valid target positions within the ' +
             'range of input PSF locations')
     
-    pri_hdr, ext_hdr, _, _ = corgidrp.check.merge_headers(
-        dataset_slit,
-        any_true_keywords=['DESMEAR', 'CTI_CORR'],
-        invalid_keywords=[
-                    'FRMTYPE',
-                    'EACQ_ROW', 'EACQ_COL', 'SB_FP_DX', 'SB_FP_DY', 'SB_FS_DX', 'SB_FS_DY',
-                    'Z2AVG', 'Z3AVG', 'Z4AVG', 'Z5AVG', 'Z6AVG', 'Z7AVG', 'Z8AVG', 'Z9AVG',
-                    'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
-                    'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
-                    'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR',
-                    'FWC_PP_E', 'FWC_EM_E', 'WV0_X', 'WV0_Y'
-                ]
-        )
-    input_dataset = Dataset([frame for frame in dataset_slit] + [frame for frame in dataset_open])
     slit_trans =  SlitTransmission(slit_trans_interp, pri_hdr = pri_hdr, ext_hdr = ext_hdr, x_offset = target_pix[0], y_offset = target_pix[1], input_dataset = input_dataset) 
     return slit_trans
 

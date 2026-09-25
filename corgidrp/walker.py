@@ -91,7 +91,8 @@ all_steps = {
     "subtract_stellar_polarization": corgidrp.l3_to_l4.subtract_stellar_polarization,
     "align_2d_frames": corgidrp.l3_to_l4.align_2d_frames,
     "combine_spec": corgidrp.l3_to_l4.combine_spec,
-    "spec_fluxcal": corgidrp.spec.spec_fluxcal
+    "spec_fluxcal": corgidrp.spec.spec_fluxcal,
+    "slit_transmission": corgidrp.spec.slit_transmission
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
