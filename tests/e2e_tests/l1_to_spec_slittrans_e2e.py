@@ -85,89 +85,31 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
     # ------------------------------------------------------------------ 
     # L2b -> slit transmission                                                        
     # ------------------------------------------------------------------ 
-    # first we have to split the dataset to slit and open
-    l2b_open_dir = os.path.join(test_outputdir, "l2b_open")
-    if not os.path.exists(l2b_open_dir):
-        os.mkdir(l2b_open_dir)
-    # clean up by removing old files
-    for file in os.listdir(l2b_open_dir):
-        os.remove(os.path.join(l2b_open_dir, file))
-    l2b_slit_dir = os.path.join(test_outputdir, "l2b_slit")
-    if not os.path.exists(l2b_slit_dir):
-        os.mkdir(l2b_slit_dir)
-    # clean up by removing old files
-    for file in os.listdir(l2b_slit_dir):
-        os.remove(os.path.join(l2b_slit_dir, file))
     
-    l3_open_dir = os.path.join(test_outputdir, "l3_open")
-    if not os.path.exists(l3_open_dir):
-        os.mkdir(l3_open_dir)
+    l3_out_dir = os.path.join(test_outputdir, "l3_out")
+    if not os.path.exists(l3_out_dir):
+        os.mkdir(l3_out_dir)
     # clean up by removing old files
-    for file in os.listdir(l3_open_dir):
-        os.remove(os.path.join(l3_open_dir, file))
-    l3_slit_dir = os.path.join(test_outputdir, "l3_slit")
-    if not os.path.exists(l3_slit_dir):
-        os.mkdir(l3_slit_dir)
-    # clean up by removing old files
-    for file in os.listdir(l3_slit_dir):
-        os.remove(os.path.join(l3_slit_dir, file))   
+    for file in os.listdir(l3_out_dir):
+        os.remove(os.path.join(l3_out_dir, file))
         
     l2b_dataset = data.Dataset(l2b_filelist)
-    fsam_dataset, fsam = l2b_dataset.split_dataset(exthdr_keywords=["FSAMNAME"])
-    for i in range(len(fsam)):
-        if fsam[i] == "OPEN":
-            open_dataset = fsam_dataset[i]
-            open_dataset.save(filedir = l2b_open_dir)
-        else:
-            slit_dataset = fsam_dataset[i]
-            slit_dataset.save(filedir = l2b_slit_dir) 
     
-    l2b_open_filelist = sorted(
-        os.path.join(l2b_open_dir, f)
-        for f in os.listdir(l2b_open_dir) if f.endswith('_l2b.fits')
-    )
-    l2b_slit_filelist = sorted(
-        os.path.join(l2b_slit_dir, f)
-        for f in os.listdir(l2b_slit_dir) if f.endswith('_l2b.fits')
-    )
-    
-    print("Running L2b -> l3 spec open")
+    print("Running L2b -> slit transmission")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l2b_open_filelist, "", l3_open_dir,
-                             template="l2b_to_spec_slittrans.json")
-    print("Running L2b -> l3 spec slit")
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l2b_slit_filelist, "", l3_slit_dir,
+        walker.walk_corgidrp(l2b_filelist, "", l3_out_dir,
                              template="l2b_to_spec_slittrans.json")
     
-    l3_slit_list = sorted(
-        os.path.join(l3_slit_dir, f)
-        for f in os.listdir(l3_slit_dir) if f.endswith('.fits')
-    )
-    
-    l3_open_list = sorted(
-        os.path.join(l3_open_dir, f)
-        for f in os.listdir(l3_open_dir) if f.endswith('.fits')
-    )
-    slit_data = data.Dataset(l3_slit_list)
-    open_data = data.Dataset(l3_open_list)
-    x_range=[39,89]
-    y_range =[65,71]
-    slittrans = spec.slit_transmission(slit_data, open_data, x_range=x_range, y_range =y_range)
-    
-    slittrans.save(filedir = l3_slit_dir)
-    print(f"L2b -> SlitTransmission complete.")
-    
-    filename = os.path.join(l3_slit_dir, slittrans.filename)
-    slittrans_load = data.SlitTransmission(filename)
+    ####### Load in the output data. It should be the latest slit transmission calibration file produced.
+    slittrans_file = glob.glob(os.path.join(l3_out_dir, '*slt_cal*.fits'))[0]
+    slittrans = data.SlitTransmission(slittrans_file)
     # Remove temporary CalDB
     if os.path.exists(tmp_caldb_csv):
         os.remove(tmp_caldb_csv)
     
     ### validate SlitTransmission product 
-    check.compare_to_mocks_hdrs(filename)
+    check.compare_to_mocks_hdrs(slittrans_file)
 
     assert slittrans.ext_hdr["DATATYPE"] == "SlitTransmission"
     assert slittrans.ext_hdr["DATALVL"] == "CAL"
@@ -177,21 +119,24 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
     #check the values
     assert len(slittrans.x_offset) == 100
     assert len(slittrans.y_offset) == 100
-    assert x_range[0] <= np.min(slittrans.x_offset) 
-    assert x_range[1] >= np.max(slittrans.x_offset)
-    assert y_range[0] <= np.min(slittrans.y_offset) 
-    assert y_range[1] >= np.max(slittrans.y_offset)
+    assert 39 <= np.min(slittrans.x_offset) 
+    assert 89 >= np.max(slittrans.x_offset)
+    assert 65 <= np.min(slittrans.y_offset) 
+    assert 71 >= np.max(slittrans.y_offset)
     assert np.shape(slittrans.data) == (100, 51)
     print("mean value of the slit transmission:",np.mean(slittrans.data))
     
     #the values at the edge of the slit should be smaller than around the center
     assert np.mean(slittrans.data[0:10,25]) < np.mean(slittrans.data[40:50,25])
     assert np.mean(slittrans.data[90:100,25]) < np.mean(slittrans.data[40:50,25])
+    l3_list = sorted(
+        os.path.join(l3_out_dir, f)
+        for f in os.listdir(l3_out_dir) if f.endswith('.fits')
+    )
     
-    slit_test = slit_data[24]
-    slit_open_test = open_data[24]
-    im_slit = slit_test.data
-    im_open = slit_open_test.data
+    im_slit = data.Image(l3_list[0]).data
+    im_open = data.Image(l3_list[-1]).data
+    
     x_max_slit = int(np.median(np.argmax(im_slit[60:80,:], axis = 1)))
     x_max_open = int(np.median(np.argmax(im_open[60:80,:], axis = 1)))
     #estimate the throughput of the slit due to the slit width of about 6 pixels in band 3 using a slitless measurement

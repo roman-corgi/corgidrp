@@ -1362,7 +1362,7 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
 
 def slit_transmission(
     dataset_slit,
-    dataset_open,
+    dataset_open=None,
     target_pix=None,
     x_range=[40.,42],
     y_range=[32.,34],
@@ -1385,9 +1385,10 @@ def slit_transmission(
       dataset_slit (Dataset): Dataset containing a set of extracted spectra for
         some set of FSM positions with the FSAM slit in its position. There can
         be a different number of frames for each FSM position.
-      dataset_open (Dataset): Dataset containing a set of extracted spectra for
+      dataset_open (Dataset) (optional): Dataset containing a set of extracted spectra for
         some set of FSM positions with the FSAM slit in OPEN position. There can
-        be a different number of frames for each FSM position.
+        be a different number of frames for each FSM position. Default is None.
+        If None, dataset_slit must contain at least one FSAM slit OPEN frame.
       target_pix (array) (optional): a user-defined Mx2 array containing the
         pixel positions for M target pixels where the slit transmission will be
         derived by interpolation. The target pixels are measured with respect
@@ -1430,6 +1431,16 @@ def slit_transmission(
         # fsam_name = []
     else:
         raise ValueError(f'{cfam_name} is not a spectroscopy filter')
+    
+    # if dataset_open is None, split dataset_slit and find slitless frames
+    if dataset_open == None:
+        dataset_split, uniqfsam = dataset_slit.split_dataset(exthdr_keywords=['FSAMNAME'])
+        if "OPEN" in uniqfsam:
+            dataset_open = dataset_split[uniqfsam == "OPEN"]
+            dataset_slit = dataset_split[uniqfsam != "OPEN"]       
+        else:
+            raise ValueError('There is no slitless observation in the input dataset.')
+    
     # DPAM
     if dataset_slit[0].ext_hdr['DPAMNAME'] != dpam_name:
         raise ValueError(f'DPAMNAME should be {dpam_name}')
@@ -1447,8 +1458,8 @@ def slit_transmission(
         raise ValueError('LSAMNAME should be SPEC')
     # FSAM: slit in
     fsam_name = dataset_slit[0].ext_hdr['FSAMNAME'].upper()
-    if (fsam_name != 'R1C2' and fsam_name != 'R6C5' and fsam_name != 'R3C1'):
-        raise ValueError('FSAMNAME with the slit in must be either R1C2, R6C5 or R3C1')
+    if (fsam_name != 'R1C2' and fsam_name != 'R6C5' and fsam_name != 'R3C1' and fsam_name != 'R2C2'):
+        raise ValueError('FSAMNAME with the slit in must be either R1C2, R6C5, R2C2 or R3C1')
     # FSAM: slitless
     if dataset_open[0].ext_hdr['FSAMNAME'] != 'OPEN':
         raise ValueError('FSAMNAME must be OPEN for slitless observations.')
@@ -1519,7 +1530,7 @@ def slit_transmission(
                     'Z10AVG', 'Z11AVG', 'Z12AVG', 'Z13AVG', 'Z14AVG',
                     'Z2RES', 'Z3RES', 'Z4RES', 'Z5RES', 'Z6RES', 'Z7RES', 'Z8RES', 'Z9RES',
                     'Z10RES', 'Z11RES',
-                    'Z2VAR', 'Z3VAR',
+                    'Z2VAR', 'Z3VAR', 'DATETIME', 'FTIMEUTC',
                     'FWC_PP_E', 'FWC_EM_E', 'WV0_X', 'WV0_Y', 'WV0_XERR', 'WV0_YERR'
                 ]
         )
