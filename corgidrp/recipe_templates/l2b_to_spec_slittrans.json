@@ -17,7 +17,8 @@
           "SpecFilterOffset": "AUTOMATIC"
 		  },
          "keywords": {
-			"additional_frame_sep_extkeys": ["FSMX", "FSMY"]
+			"subtract_no_offset_frames": false,
+			"additional_frame_sep_extkeys": ["FSAMNAME", "FSMX", "FSMY"]
 		  }
       },
       {
@@ -29,7 +30,17 @@
       {
         "name": "extract_spec"
       },
+	  {
+	    "name": "save"
+	  },	  
       {
+		"name": "slit_transmission",
+		"keywords": {
+			"x_range": [39, 89],
+			"y_range": [65, 71]
+		}
+	  },
+	  {
         "name": "save"
       }
     ]
