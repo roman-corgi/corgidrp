@@ -17,6 +17,7 @@ import corgidrp.astrom as astrom
 from corgidrp import corethroughput
 from astropy.io import fits
 import os
+from pathlib import Path
 import pytest
 import argparse
 import time
@@ -302,7 +303,7 @@ def test_l1_to_l4_pc_SPCWFOV_band1_e2e(e2edata_path,outputdir):
     # Processing from L3 to L4
     
     # Now all of the files must be processed together.
-    l3_filelist = [os.path.join(l3_outputdir,f) for f in os.listdir(l3_outputdir) if f.endswith('l3.fits')]
+    l3_filelist = [os.path.join(l3_outputdir,f) for f in os.listdir(l3_outputdir) if f.endswith('l3_.fits')]
     walker.walk_corgidrp(l3_filelist,'',l4_outputdir)
     print('completed processing from L3 to L4')
     
