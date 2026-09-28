@@ -30,14 +30,6 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
         shutil.rmtree(test_outputdir)
     os.makedirs(test_outputdir)
 
-    l2b_outputdir = os.path.join(test_outputdir, "l2b_results")
-    if not os.path.exists(l2b_outputdir):
-        os.mkdir(l2b_outputdir)
-
-    # clean up by removing old files
-    for file in os.listdir(l2b_outputdir):
-        os.remove(os.path.join(l2b_outputdir, file))
-    
     # Use a temporary CSV to avoid issues with real CalDB
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_slittrans_e2e_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
@@ -58,12 +50,12 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
     print("Running L1 -> L2a …")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l1_data_filelist, "", l2b_outputdir,
+        walker.walk_corgidrp(l1_data_filelist, "", test_outputdir,
                              template="l1_to_l2a_basic.json")
 
     l2a_filelist = sorted(
-        os.path.join(l2b_outputdir, f)
-        for f in os.listdir(l2b_outputdir) if f.endswith('_l2a.fits')
+        os.path.join(test_outputdir, f)
+        for f in os.listdir(test_outputdir) if f.endswith('_l2a.fits')
     )
     print(f"L1 -> L2a complete: {len(l2a_filelist)} L2a files produced.")
     
@@ -73,12 +65,12 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
     print("Running L2a -> L2b …")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l2a_filelist, "", l2b_outputdir,
+        walker.walk_corgidrp(l2a_filelist, "", test_outputdir,
                              template="l2a_to_l2b_spec.json")
 
     l2b_filelist = sorted(
-        os.path.join(l2b_outputdir, f)
-        for f in os.listdir(l2b_outputdir) if f.endswith('_l2b.fits')
+        os.path.join(test_outputdir, f)
+        for f in os.listdir(test_outputdir) if f.endswith('_l2b.fits')
     )
     print(f"L2a -> L2b complete: {len(l2b_filelist)} L2b files produced.") 
     
@@ -86,23 +78,16 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
     # L2b -> slit transmission                                                        
     # ------------------------------------------------------------------ 
     
-    l3_out_dir = os.path.join(test_outputdir, "l3_out")
-    if not os.path.exists(l3_out_dir):
-        os.mkdir(l3_out_dir)
-    # clean up by removing old files
-    for file in os.listdir(l3_out_dir):
-        os.remove(os.path.join(l3_out_dir, file))
-        
     l2b_dataset = data.Dataset(l2b_filelist)
     
     print("Running L2b -> slit transmission")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
-        walker.walk_corgidrp(l2b_filelist, "", l3_out_dir,
+        walker.walk_corgidrp(l2b_filelist, "", test_outputdir,
                              template="l2b_to_spec_slittrans.json")
     
     ####### Load in the output data. It should be the latest slit transmission calibration file produced.
-    slittrans_file = glob.glob(os.path.join(l3_out_dir, '*slt_cal*.fits'))[0]
+    slittrans_file = glob.glob(os.path.join(test_outputdir, '*slt_cal*.fits'))[0]
     slittrans = data.SlitTransmission(slittrans_file)
     # Remove temporary CalDB
     if os.path.exists(tmp_caldb_csv):
@@ -124,27 +109,29 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
     assert 65 <= np.min(slittrans.y_offset) 
     assert 71 >= np.max(slittrans.y_offset)
     assert np.shape(slittrans.data) == (100, 51)
-    print("mean value of the slit transmission:",np.mean(slittrans.data))
+    mean_trans = np.mean(slittrans.data)
+    print("mean value of the slit transmission:", mean_trans)
     
     #the values at the edge of the slit should be smaller than around the center
     assert np.mean(slittrans.data[0:10,25]) < np.mean(slittrans.data[40:50,25])
     assert np.mean(slittrans.data[90:100,25]) < np.mean(slittrans.data[40:50,25])
     l3_list = sorted(
-        os.path.join(l3_out_dir, f)
-        for f in os.listdir(l3_out_dir) if f.endswith('.fits')
+        os.path.join(test_outputdir, f)
+        for f in os.listdir(test_outputdir) if f.endswith('_l2b.fits')
     )
     
-    im_slit = data.Image(l3_list[0]).data
-    im_open = data.Image(l3_list[-1]).data
+    im_slit = data.Image(l3_list[25]).data
+    im_open = data.Image(l3_list[-25]).data
     
-    x_max_slit = int(np.median(np.argmax(im_slit[60:80,:], axis = 1)))
-    x_max_open = int(np.median(np.argmax(im_open[60:80,:], axis = 1)))
-    #estimate the throughput of the slit due to the slit width of about 6 pixels in band 3 using a slitless measurement
-    est_trans_open = np.sum(im_open[60:80,x_max_open -3:x_max_open+3])/np.sum(im_open[60:80,x_max_open -30:x_max_open+30])
-    assert np.mean(slittrans.data[40:50, 25]) == pytest.approx(est_trans_open, abs = 0.08)
-    #estimate the ratio of a corresponding slit and slitless measurement at the same position
-    est_trans_slit = np.sum(im_slit[60:80,x_max_slit -15:x_max_slit+15])/np.sum(im_open[60:80,x_max_open -15:x_max_open+15])
-    assert np.mean(slittrans.data[40:50, 25]) == pytest.approx(est_trans_slit, abs = 0.05)
+    x_max_slit = int(np.median(np.argmax(im_slit[60:90,:], axis = 1)))
+    x_max_open = int(np.median(np.argmax(im_open[60:90,:], axis = 1)))
+    #estimate the throughput of the slit due to the slit width of about 5.x pixels in band 3 using a slitless measurement,
+    #so cutting out the 6 pixels around the maximum and calculate the ratio to the complete flux. 
+    est_trans_open = np.sum(im_open[60:90,x_max_open -2:x_max_open+3])/np.sum(im_open[60:90,x_max_open -30:x_max_open+30])
+    assert mean_trans == pytest.approx(est_trans_open, abs = 0.05)
+    #estimate the ratio of summed flux of a corresponding slit and slitless measurement at the same position around the slit
+    est_trans_slit = np.sum(im_slit[60:90,x_max_slit -15:x_max_slit+15])/np.sum(im_open[60:90,x_max_open -15:x_max_open+15])
+    assert mean_trans == pytest.approx(est_trans_slit, abs = 0.05)
     # Print success message
     print('e2e test for slit transmission calibration passed')
     
