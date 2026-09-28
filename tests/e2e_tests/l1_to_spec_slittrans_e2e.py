@@ -77,9 +77,6 @@ def test_l1_to_slittrans(e2edata_path, e2eoutput_path):
     # ------------------------------------------------------------------ 
     # L2b -> slit transmission                                                        
     # ------------------------------------------------------------------ 
-    
-    l2b_dataset = data.Dataset(l2b_filelist)
-    
     print("Running L2b -> slit transmission")
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
@@ -147,7 +144,7 @@ if __name__ == "__main__":
 
     ap = argparse.ArgumentParser(description="run the l1-> Slit Transmission end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
-                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
+                    help="Path to CGI E2E Test Data simulations [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
