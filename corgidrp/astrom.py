@@ -869,19 +869,13 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     true_center_x, true_center_y = 512.- boresight_x, 512.-boresight_y
 
     # convert back to skycoord
-    true_center_coord = astropy.wcs.utils.pixel_to_skycoord(true_center_x, true_center_y, wcs=w)
-    true_center_ra, true_center_dec = true_center_coord.ra.value, true_center_coord.dec.value
-    boresight_ra, boresight_dec = target_coordinate[0] - true_center_ra, target_coordinate[1] - true_center_dec
+    true_center_coord = astropy.wcs.utils.pixel_to_skycoord(true_center_x, true_center_y, wcs=w, origin=1)
+    # true_center_ra, true_center_dec = true_center_coord.ra.value, true_center_coord.dec.value
+    # boresight_ra, boresight_dec = target_coordinate[0] - true_center_ra, target_coordinate[1] - true_center_dec
+    target_skycoord = SkyCoord(target_coordinate[0], target_coordinate[1], unit='deg')
+    boresight_ra, boresight_dec = true_center_coord.spherical_offsets_to(target_skycoord)
 
-    # convert back to corrected RA, DEC of target
-    # image_center_RA = target_coordinate[0] - ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
-    # image_center_DEC = target_coordinate[1] - ((boresight_y * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
-
-    # report the offsets instead of the new RA/DEC
-    # boresight_ra = ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
-    # boresight_dec = ((boresight_y * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
-
-    return boresight_ra, boresight_dec
+    return boresight_ra.deg, boresight_dec.deg
 
 def format_distortion_inputs(input_dataset, source_matches, position_error=None):
     ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
