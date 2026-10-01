@@ -7,6 +7,8 @@ import warnings
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+from astropy.coordinates import SkyCoord
+
 import corgidrp
 import corgidrp.check as check
 import corgidrp.data as data
@@ -247,7 +249,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
 
     with warnings.catch_warnings():  
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-        walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir)
+        walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir, template='l1_to_boresight.json')
     
     # Organize output files into subdirectories
     subdirs = {
@@ -305,14 +307,17 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
     assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
-
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
     # check that the center is correct within 3 [mas]
     # the simulated image should have no shift from the target
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
-    assert ra == pytest.approx(target[0], abs=8.333e-7)
-    assert dec == pytest.approx(target[1], abs=8.333e-7)
+    ###*** Use SkyCoord here to translate position difference correctly/ ***###
+    actual_boresight_skycoord = SkyCoord(ra=ra, dec=dec, unit='deg')
+    true_boresight_skycoord = SkyCoord(ra=target[0], dec=target[1], unit='deg')
+    ra_error, dec_error = actual_boresight_skycoord.spherical_offsets_to(true_boresight_skycoord)
+    assert ra_error.deg == pytest.approx(0, abs=8.333e-7)
+    assert dec_error.deg == pytest.approx(0, abs=8.333e-7)
 
     check.compare_to_mocks_hdrs(astrom_cal_files[0])
     
