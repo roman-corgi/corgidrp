@@ -110,6 +110,7 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     outputdir = thisfile_dir
     e2edata_path = '/home/eshen12345/dev/E2E_Test_Data'
+    # e2edata_path = '/Users/macuser/Roman/car91/flight_917/E2E_data_v2'
 
     ap = argparse.ArgumentParser(description='run the l1 to astrometric calibration end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,
