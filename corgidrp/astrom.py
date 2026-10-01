@@ -873,7 +873,7 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     # true_center_ra, true_center_dec = true_center_coord.ra.value, true_center_coord.dec.value
     # boresight_ra, boresight_dec = target_coordinate[0] - true_center_ra, target_coordinate[1] - true_center_dec
     target_skycoord = SkyCoord(target_coordinate[0], target_coordinate[1], unit='deg')
-    boresight_ra, boresight_dec = true_center_coord.spherical_offsets_to(target_skycoord)
+    boresight_ra, boresight_dec = target_skycoord.spherical_offsets_to(true_center_coord)
 
     return boresight_ra.deg, boresight_dec.deg
 
