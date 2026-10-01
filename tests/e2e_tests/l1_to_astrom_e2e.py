@@ -67,11 +67,27 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     # expected values from simulation input
     expected_platescale = 21.8 # mas/pixel
     expected_north_angle = -45
-    # compute the expected ra and dec offset due to detector placement at (532, 505) instead of (512, 512)
-    dx_pix, dy_pix = 533 - 512, 506 - 512 
-    # get expected offsets in ra and dec, units of mas
-    expected_ra_offset  = dx_pix * expected_platescale
-    expected_dec_offset = dy_pix* expected_platescale
+    # compute the expected ra and dec offset due to detector placement at (532, 505) instead of (512, 512) using an astropy wcs from the true platescale and northangle
+    vert_ang = np.radians(expected_north_angle)
+    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+    cdmatrix = pc * (expected_platescale * 0.001) / 3600.
+    new_hdr = {}
+    new_hdr['CD1_1'] = cdmatrix[0,0]
+    new_hdr['CD1_2'] = cdmatrix[0,1]
+    new_hdr['CD2_1'] = cdmatrix[1,0]
+    new_hdr['CD2_2'] = cdmatrix[1,1]
+    new_hdr['CRPIX1'] = 533.    # true pixel value at the target pointing
+    new_hdr['CRPIX2'] = 506.
+    new_hdr['CTYPE1'] = 'RA---TAN'
+    new_hdr['CTYPE2'] = 'DEC--TAN'
+    new_hdr['CDELT1'] = (expected_platescale * 0.001) / 3600.
+    new_hdr['CDELT2'] = (expected_platescale * 0.001) / 3600.
+    new_hdr['CRVAL1'] = expected_pointing[0]    # true target pointing
+    new_hdr['CRVAL2'] = expected_pointing[1]
+    w = astropy.wcs.WCS(new_hdr)
+
+    # use astropy wcs to find the true coordinate value of detector center (512., 512.)
+    expected_center_skycoord = astropy.wcs.utils.pixel_to_skycoord(512., 512., wcs=w, origin=1)
 
     # check that the recovered platescale, north angle, and offsets match up
     astrom_cal_file = glob.glob(os.path.join(l2b_outputdir, '*_ast_cal.fits'))[0]
