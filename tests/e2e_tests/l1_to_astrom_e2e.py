@@ -94,12 +94,13 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     astrom_cal = data.AstrometricCalibration(astrom_cal_file)
     actual_platescale = astrom_cal.platescale
     actual_north_angle = astrom_cal.northangle
-    actual_ra_offset  = astrom_cal.avg_offset[0] * 3.6e6 # convert from deg to mas
-    actual_dec_offset = astrom_cal.avg_offset[1] * 3.6e6
-    assert expected_platescale == pytest.approx(astrom_cal.platescale, rel=0.05)
+    assert expected_platescale == pytest.approx(actual_platescale, rel=0.05)
     assert expected_north_angle == pytest.approx(actual_north_angle, abs=0.05)
-    assert expected_ra_offset == pytest.approx(actual_ra_offset, abs=10)
-    assert expected_dec_offset == pytest.approx(actual_dec_offset, abs=10)
+    # measure how well we recover the center coordinate
+    actual_center_skycoord = SkyCoord(ra=astrom_cal.boresight[0], dec=astrom_cal.boresight[1], unit='deg')
+    error_ra, error_dec = actual_center_skycoord.spherical_offsets_to(expected_center_skycoord)
+    assert error_ra.mas == pytest.approx(0, abs=10)    # make sure we are in [mas]
+    assert error_dec.mas == pytest.approx(0, abs=10)
 
     # check headers
     check.compare_to_mocks_hdrs(astrom_cal_file)
