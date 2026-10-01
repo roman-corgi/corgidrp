@@ -325,7 +325,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
-    #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
+    # e2edata_dir = "/Users/macuser/Roman/car91/flight_917/E2E_data_v2"
     e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#
     outputdir = thisfile_dir
 
