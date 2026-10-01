@@ -1147,6 +1147,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
+        target_skycoord = SkyCoord(ra=target_coordinate[0], dec=target_coordinate[1], unit='deg')
 
         # compute the calibration properties
         found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
@@ -1156,8 +1157,9 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
-        # calculate the corrected target position based on ra, dec offsets
-        corr_ra, corr_dec = target_coordinate[0] - ra, target_coordinate[1] - dec
+        # calculate the corrected target position based on ra, dec offsets using skycoord to account for spherical coord system
+        corrected_center_coord = target_skycoord.spherical_offsets_by(ra * astropy.units.deg, dec * astropy.units.deg)
+        corr_ra, corr_dec = corrected_center_coord.ra.value, corrected_center_coord.dec.value
         corrected_positions_boresight.append([corr_ra, corr_dec])
 
         # return a single AstrometricCalibration data file
