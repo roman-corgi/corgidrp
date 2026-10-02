@@ -8,7 +8,7 @@ import corgidrp.astrom as astrom
 import corgidrp.data as data
 import astropy.io.ascii as ascii
 from termcolor import cprint
-
+from astropy.coordinates import SkyCoord
 
 def print_fail():
     cprint(' FAIL ', "black", "on_red")
@@ -60,9 +60,13 @@ def test_astrom():
     # check that the center is correct within 3 [mas]
     # the simulated image should have zero offset
     target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
+    true_boresight_skycoord = SkyCoord(ra=target[0], dec=target[1], unit='deg')
     ra, dec = astrom_cal.boresight
-    assert ra == pytest.approx(target[0], abs=8.333e-7)     # reported as ra offset
-    assert dec == pytest.approx(target[1], abs=8.333e-7)
+    actual_boresight_skycoord = SkyCoord(ra=ra, dec=dec, unit='deg')
+
+    ra_error, dec_error = actual_boresight_skycoord.spherical_offsets_to(true_boresight_skycoord)
+    assert ra_error.deg == pytest.approx(0, abs=8.333e-7)     # reported as ra offset
+    assert dec_error.deg == pytest.approx(0, abs=8.333e-7)
 
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(astrom_cal)

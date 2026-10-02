@@ -5,6 +5,8 @@ import pytest
 import warnings
 import numpy as np
 from astropy.io import fits
+import astropy
+from astropy.coordinates import SkyCoord
 
 import corgidrp
 import corgidrp.data as data
@@ -55,28 +57,50 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     with warnings.catch_warnings():
         # suppress warnings about the three input field having different EM gain configurations
         warnings.simplefilter("ignore", category=RuntimeWarning)
-        walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
+        walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir, template='l1_to_boresight.json')
+
+    # load in an l2b to get the target RA, Dec values from the header
+    l2b_filenames = glob.glob(l2b_outputdir+'/*_l2b.fits')
+    l2b_dataset = data.Dataset(l2b_filenames)
+    expected_pointing = l2b_dataset[0].pri_hdr['RA'], l2b_dataset[0].pri_hdr['DEC']
 
     # expected values from simulation input
     expected_platescale = 21.8 # mas/pixel
     expected_north_angle = -45
-    # compute the expected ra and dec offset due to detector placement at (532, 505) instead of (512, 512)
-    dx_pix, dy_pix = 533 - 512, 506 - 512 
-    # get expected offsets in ra and dec, units of mas
-    expected_ra_offset  = dx_pix * expected_platescale
-    expected_dec_offset = dy_pix* expected_platescale
+    # compute the expected ra and dec offset due to detector placement at (532, 505) instead of (512, 512) using an astropy wcs from the true platescale and northangle
+    vert_ang = np.radians(expected_north_angle)
+    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+    cdmatrix = pc * (expected_platescale * 0.001) / 3600.
+    new_hdr = {}
+    new_hdr['CD1_1'] = cdmatrix[0,0]
+    new_hdr['CD1_2'] = cdmatrix[0,1]
+    new_hdr['CD2_1'] = cdmatrix[1,0]
+    new_hdr['CD2_2'] = cdmatrix[1,1]
+    new_hdr['CRPIX1'] = 533.    # true pixel value at the target pointing
+    new_hdr['CRPIX2'] = 506.
+    new_hdr['CTYPE1'] = 'RA---TAN'
+    new_hdr['CTYPE2'] = 'DEC--TAN'
+    new_hdr['CDELT1'] = (expected_platescale * 0.001) / 3600.
+    new_hdr['CDELT2'] = (expected_platescale * 0.001) / 3600.
+    new_hdr['CRVAL1'] = expected_pointing[0]    # true target pointing
+    new_hdr['CRVAL2'] = expected_pointing[1]
+    w = astropy.wcs.WCS(new_hdr)
+
+    # use astropy wcs to find the true coordinate value of detector center (512., 512.)
+    expected_center_skycoord = astropy.wcs.utils.pixel_to_skycoord(512., 512., wcs=w, origin=1)
 
     # check that the recovered platescale, north angle, and offsets match up
     astrom_cal_file = glob.glob(os.path.join(l2b_outputdir, '*_ast_cal.fits'))[0]
     astrom_cal = data.AstrometricCalibration(astrom_cal_file)
     actual_platescale = astrom_cal.platescale
     actual_north_angle = astrom_cal.northangle
-    actual_ra_offset  = astrom_cal.avg_offset[0] * 3.6e6 # convert from deg to mas
-    actual_dec_offset = astrom_cal.avg_offset[1] * 3.6e6
-    assert expected_platescale == pytest.approx(astrom_cal.platescale, rel=0.05)
+    assert expected_platescale == pytest.approx(actual_platescale, rel=0.05)
     assert expected_north_angle == pytest.approx(actual_north_angle, abs=0.05)
-    assert expected_ra_offset == pytest.approx(actual_ra_offset, abs=10)
-    assert expected_dec_offset == pytest.approx(actual_dec_offset, abs=10)
+    # measure how well we recover the center coordinate
+    actual_center_skycoord = SkyCoord(ra=astrom_cal.boresight[0], dec=astrom_cal.boresight[1], unit='deg')
+    error_ra, error_dec = actual_center_skycoord.spherical_offsets_to(expected_center_skycoord)
+    assert error_ra.mas == pytest.approx(0, abs=10)    # make sure we are in [mas]
+    assert error_dec.mas == pytest.approx(0, abs=10)
 
     # check headers
     check.compare_to_mocks_hdrs(astrom_cal_file)
@@ -86,6 +110,7 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
 if __name__ == "__main__":
     outputdir = thisfile_dir
     e2edata_path = '/home/eshen12345/dev/E2E_Test_Data'
+    # e2edata_path = '/Users/macuser/Roman/car91/flight_917/E2E_data_v2'
 
     ap = argparse.ArgumentParser(description='run the l1 to astrometric calibration end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,
