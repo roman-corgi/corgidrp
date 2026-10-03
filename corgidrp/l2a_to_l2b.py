@@ -6,8 +6,12 @@ import copy
 import warnings
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
+from corgidrp.pump_trap_calibration import rebuild_dict
 from corgidrp.detector import detector_areas, ENF, slice_section
-
+try:
+    import arcticpy as cti
+except ImportError:
+    cti = None
 
 def add_shot_noise_to_err(input_dataset, kgain, detector_params):
     """
@@ -474,22 +478,71 @@ def em_gain_division(input_dataset):
 
     return emgain_dataset
 
-def cti_correction(input_dataset, pump_trap_cal):
+def cti_correction(input_dataset, pump_trap_cal, detector_params, skip=False):
     """
 
     Apply the CTI correction to the dataset.
 
-    Currently a no-op step function. 
-
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
         pump_trap_cal (corgidrp.data.TrapCalibration): Pump trap calibration file
-
+        detector_params (corgidrp.data.DetectorParams): detector parameters calibration object
+        skip (bool): if True, skip the CTI correction and return the input dataset as is
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the CTI correction applied
     """
-    # also remember to update CTI_CORR ext header keyword
-    return input_dataset.copy()
+    if skip or cti is None: #if user specified to skip this step OR if arcticpy not installed
+        return input_dataset.copy()
+
+    output_dataset = input_dataset.copy()
+    e2e_trap_dict = rebuild_dict(pump_trap_cal.data)
+
+    rowreadtime_sec = detector_params.params['ROWREADT']
+    roe = cti.ROE(
+        dwell_times=[rowreadtime_sec],  
+        empty_traps_between_columns=True,
+        empty_traps_for_first_transfers=False,
+        force_release_away_from_readout=True,
+        use_integer_express_matrix=False,
+    )
+    ccd = cti.CCD(
+        phases=[
+            cti.CCDPhase(full_well_depth=1e3, well_notch_depth=0.0, well_fill_power=1.0)
+        ],
+        fraction_of_traps_per_phase=[1.0],
+    )
+    # one trap per list entry; if too slow, then bin together traps of similar release time constants and treat them as the same type of trap
+    #XXX if capture probability was probed with tpu_cal, use TrapSlowCaptureContinuum; if not, use TrapInstantCaptureContinuum; for both, you can input a sigma for the time release constant
+    #XXX call remove_cti twice, once for all traps that are forward-spilling (force_release_away_from_readout=True) and another time for the rest of the traps
+    traps = [cti.TrapInstantCapture(density=10.0, release_timescale=-1.0 / np.log(0.5))]
+    express = 0
+    offset = 0
+    start = 0
+    stop = -1
+
+    image_post_cti = cti.add_cti(
+        image=image_pre_cti,
+        parallel_roe=roe,
+        parallel_ccd=ccd,
+        parallel_traps=traps,
+        parallel_express=express,
+        #parallel_offset=offset,
+        parallel_window_start=start,
+        parallel_window_stop=stop,
+        # serial_roe=roe,
+        # serial_ccd=ccd,
+        # serial_traps=traps,
+        # serial_express=express,
+        # #serial_offset=offset,
+        # serial_window_start=start,
+        # serial_window_stop=stop,
+        verbosity=1,
+        trap_density_map=trap_density_map
+    )
+    
+    # update CTI_CORR ext header keyword
+    output_dataset.ext_hdr["CTI_CORR"] = True
+    return output_dataset
 
 
 def correct_bad_pixels(input_dataset, bp_mask):
