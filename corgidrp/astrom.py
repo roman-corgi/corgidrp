@@ -803,8 +803,8 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
             (float): North angle
 
     Returns:
-        image_center_RA (float): RA coordinate of the center pixel
-        image_center_DEC (float): Dec coordinate of the center pixel
+        ra_offset (float): the offset in RA [deg] *from the target pointing RA *to the true RA of the center coord
+        dec_offset (float): the offset in Dec [deg] *from the target pointing Dec *to the true Dec of the center coord
     
     """
     if type(image) != np.ndarray:
@@ -877,9 +877,9 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     # true_center_ra, true_center_dec = true_center_coord.ra.value, true_center_coord.dec.value
     # boresight_ra, boresight_dec = target_coordinate[0] - true_center_ra, target_coordinate[1] - true_center_dec
     target_skycoord = SkyCoord(target_coordinate[0], target_coordinate[1], unit='deg')
-    boresight_ra, boresight_dec = target_skycoord.spherical_offsets_to(true_center_coord)
+    ra_offset, dec_offset = target_skycoord.spherical_offsets_to(true_center_coord)
 
-    return boresight_ra.deg, boresight_dec.deg
+    return ra_offset.deg, dec_offset.deg
 
 def format_distortion_inputs(input_dataset, source_matches, position_error=None):
     ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
@@ -1165,14 +1165,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         hold_matches.append(matched_sources)
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
-        ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
+        ra_off, dec_off = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
         # calculate the corrected target position based on ra, dec offsets using skycoord to account for spherical coord system
-        corrected_center_coord = target_skycoord.spherical_offsets_by(ra * astropy.units.deg, dec * astropy.units.deg)
+        corrected_center_coord = target_skycoord.spherical_offsets_by(ra_off * astropy.units.deg, dec_off * astropy.units.deg)
         corr_ra, corr_dec = corrected_center_coord.ra.value, corrected_center_coord.dec.value
         corrected_positions_boresight.append([corr_ra, corr_dec])
 
         # return a single AstrometricCalibration data file
-        astrom_data = np.array([corr_ra, corr_dec, cal_properties[0], cal_properties[1], ra, dec, np.inf, np.inf])
+        astrom_data = np.array([corr_ra, corr_dec, cal_properties[0], cal_properties[1], ra_off, dec_off, np.inf, np.inf])
         astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[i].pri_hdr, ext_hdr=dataset[i].ext_hdr, input_dataset=in_dataset)
         # change the filename here since the astrom_cals will be averaged later and arent individually saved ('_ast_cal' will be added to filename twice otherwise)
         astrom_cal.filename = astrom_cal.filename.split("_ast_cal")[0] + '.fits'
