@@ -57,7 +57,7 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     with warnings.catch_warnings():
         # suppress warnings about the three input field having different EM gain configurations
         warnings.simplefilter("ignore", category=RuntimeWarning)
-        walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir, template='l1_to_boresight.json')
+        walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
 
     # load in an l2b to get the target RA, Dec values from the header
     l2b_filenames = sorted(glob.glob(l2b_outputdir+'/*_l2b.fits'))
