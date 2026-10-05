@@ -60,7 +60,7 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
         walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir, template='l1_to_boresight.json')
 
     # load in an l2b to get the target RA, Dec values from the header
-    l2b_filenames = glob.glob(l2b_outputdir+'/*_l2b.fits')
+    l2b_filenames = sorted(glob.glob(l2b_outputdir+'/*_l2b.fits'))
     l2b_dataset = data.Dataset(l2b_filenames)
     expected_pointing = l2b_dataset[0].pri_hdr['RA'], l2b_dataset[0].pri_hdr['DEC']
 
