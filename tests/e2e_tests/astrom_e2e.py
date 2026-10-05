@@ -249,7 +249,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
 
     with warnings.catch_warnings():  
         warnings.filterwarnings('ignore', category=UserWarning)# prevent UserWarning: Number of frames which made the DetectorNoiseMaps product is less than the number of frames in input_dataset
-        walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir, template='l1_to_boresight.json')
+        walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir)
     
     # Organize output files into subdirectories
     subdirs = {
