@@ -1167,8 +1167,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties, reference_pixel=reference_pixel)
         # add the reference pixel to the image header
-        dataset[i].pri_hdr['REF_PIX_X'] = reference_pixel[0]
-        dataset[i].pri_hdr['REF_PIX_Y'] = reference_pixel[1]
+        dataset[i].pri_hdr['REFPIX_X'] = reference_pixel[0]
+        dataset[i].pri_hdr['REFPIX_Y'] = reference_pixel[1]
         # calculate the corrected target position based on ra, dec offsets
         corr_ra, corr_dec = target_coordinate[0] - ra, target_coordinate[1] - dec
         corrected_positions_boresight.append([corr_ra, corr_dec])
