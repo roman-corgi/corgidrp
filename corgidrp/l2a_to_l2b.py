@@ -513,7 +513,11 @@ def cti_correction(input_dataset, pump_trap_cal, detector_params, skip=False):
     )
     # one trap per list entry; if too slow, then bin together traps of similar release time constants and treat them as the same type of trap
     #XXX if capture probability was probed with tpu_cal, use TrapSlowCaptureContinuum; if not, use TrapInstantCaptureContinuum; for both, you can input a sigma for the time release constant
-    #XXX call remove_cti twice, once for all traps that are forward-spilling (force_release_away_from_readout=True) and another time for the rest of the traps
+    #XXX actually, use TrapSlowCaptureContinuum for all, and set capture time to 0 if no capture probability
+    #XXX density for each needs to be equal to the the inverse of the number of rows left until readout (or first row)
+    #XXX input read noise (into ROE class)
+    #XXX specify phase with ROE class ROEStepPhase; should handle forward and backward spilling traps; otherwise, would have to call remove_cti twice, once for forward and once for backward, which would ignore charge overlaps that happen in real time among them
+    #XXX make sure toward readout is row 0
     traps = [cti.TrapInstantCapture(density=10.0, release_timescale=-1.0 / np.log(0.5))]
     express = 0
     offset = 0
