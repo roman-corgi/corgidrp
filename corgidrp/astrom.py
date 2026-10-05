@@ -865,8 +865,12 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
         image_centerings[i,:] = [xi_center, yi_center]
 
     # average all offsets in x,y directions [pix]
-    boresight_x, boresight_y = np.median(boresights[:,0]), np.median(boresights[:,1])
-    true_center_x, true_center_y = 512.- boresight_x, 512.-boresight_y
+    # boresight_x,y is the average offset from a star's predicted image location to its actual position given platescale and northangle alone
+    # such that x_predict [predicted pixel location] + offset [pixel] = x_center [image pixel location]
+    boresight_x, boresight_y = np.median(boresights[:,0]), np.median(boresights[:,1]) 
+    # we want to know what the ~actual (512, 512) pixels location would be in the 'predicted' frame so we have
+    # predicted_x + offset = 512.   OR      predicted_x = 512. - offset
+    true_center_x, true_center_y = 512.- boresight_x, 512.- boresight_y
 
     # convert back to skycoord
     true_center_coord = astropy.wcs.utils.pixel_to_skycoord(true_center_x, true_center_y, wcs=w, origin=1)
