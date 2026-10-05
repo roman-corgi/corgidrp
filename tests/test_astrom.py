@@ -356,6 +356,67 @@ def test_transform_coeff_to_distortion_map():
     assert np.all(z_xdiff == 0)
     assert np.all(z_ydiff == 0)
 
+@pytest.mark.parametrize("num_pointings", [1, 2, 3])
+@pytest.mark.parametrize("position_angles", [(0., 0., 0.), (0., 90., 0.)])
+@pytest.mark.filterwarnings("ignore:Keyword (RA_APER|PA_APER) not identical across frames:RuntimeWarning")
+def test_boresight_combining_preserves_pointing_order(monkeypatch, num_pointings,
+                                                    position_angles):
+    """Keep the first input pointing as the boresight after header grouping.
+
+    Args:
+        monkeypatch (pytest.MonkeyPatch): Fixture for isolating source measurements.
+        num_pointings (int): Number of distinct pointings to combine.
+        position_angles (tuple): Position angle for each pointing.
+    """
+    frames = []
+    targets = ["Z reference", "A dither", "M dither"]
+    base_primary_header, base_extension_header, _, _, _ = mocks.create_default_L2b_headers()
+    for repeat in range(2):
+        for pointing in range(num_pointings):
+            primary_header = base_primary_header.copy()
+            extension_header = base_extension_header.copy()
+            primary_header["TARGET"] = targets[pointing]
+            primary_header["RA"] = 80. + pointing * 0.01
+            primary_header["DEC"] = -69.
+            primary_header["RA_APER"] = primary_header["RA"]
+            primary_header["DEC_APER"] = primary_header["DEC"]
+            primary_header["PA_APER"] = position_angles[pointing]
+            frame = data.Image(np.full((4, 4), pointing + 10 * repeat, dtype=float),
+                               pri_hdr=primary_header, ext_hdr=extension_header)
+            frame.filename = f"pointing_{pointing}_repeat_{repeat}.fits"
+            frames.append(frame)
+    dataset = data.Dataset(frames)
+
+    measured_images = []
+
+    def find_sources(image, **keywords):
+        """Record the combined image used for each measurement.
+
+        Args:
+            image (numpy.ndarray): Combined image.
+            keywords (dict): Source-finding parameters.
+
+        Returns:
+            None: Placeholder for the isolated source matching.
+        """
+        measured_images.append(image.copy())
+        return None
+
+    monkeypatch.setattr(astrom, "find_source_locations", find_sources)
+    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: None)
+    monkeypatch.setattr(astrom, "compute_platescale_and_northangle",
+                        lambda *args, **kwargs: (21.8, -45.))
+    monkeypatch.setattr(astrom, "compute_boresight", lambda *args, **kwargs: (0., 0.))
+
+    calibration = astrom.boresight_calibration(dataset, frames_to_combine=True)
+
+    np.testing.assert_allclose(calibration.boresight, [80., -69.])
+    for pointing, image in enumerate(measured_images):
+        np.testing.assert_array_equal(image, np.full((4, 4), pointing + 5.))
+        assert calibration.ext_hdr[f"F{pointing}POS"] == pytest.approx(80. + pointing * 0.01)
+    assert len(measured_images) == num_pointings
+
+
 if __name__ == "__main__":
     test_astrom()
     test_astrom_vignette()

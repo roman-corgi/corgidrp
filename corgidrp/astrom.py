@@ -1121,6 +1121,11 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
             # add to the final grouping
             grouped_datasets.extend(dither_datasets)
 
+        # Header grouping sorts the pointings, but the boresight must refer to
+        # the first input pointing. Restore the order in which groups appeared.
+        frame_indices = {id(frame): index for index, frame in enumerate(dataset)}
+        grouped_datasets.sort(key=lambda group: frame_indices[id(group[0])])
+
     # median combine each grouped dataset into one frame for calibration processing
     if len(grouped_datasets) > 0:
         image_objects = []
