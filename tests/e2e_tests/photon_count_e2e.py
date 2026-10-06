@@ -372,6 +372,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     recipe = walker.autogen_recipe(l2a_files, output_dir)
     ### Modify they keywords of some of the steps
     for step in recipe[0]['steps']:
+        if step['name'] == "detect_cosmic_rays":
+            step['keywords'] = {'dataset_copy': step['keywords']['dataset_copy']}
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = trad_dark_cal.filepath # to find traditional dark
     with warnings.catch_warnings():
