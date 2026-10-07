@@ -356,7 +356,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     
     # this will add the traditional dark to the caldb
-    walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir, template="build_trad_dark_image.json")
+    recipe = walker.autogen_recipe(l1_data_dark_filelist, output_dir, template="build_trad_dark_image.json")
+    for step in recipe['steps']:
+        if step['name'] == "detect_cosmic_rays":
+            step['keywords'] = {'dataset_copy': step['keywords']['dataset_copy']}
+    output_filepaths = walker.run_recipe(recipe, save_recipe_file=True)
     for f in os.listdir(output_dir):
         if f.endswith('_drk_cal.fits'):
             trad_dark_filepath = os.path.join(output_dir, f)
@@ -372,8 +376,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     recipe = walker.autogen_recipe(l2a_files, output_dir)
     ### Modify they keywords of some of the steps
     for step in recipe[0]['steps']:
-        if step['name'] == "detect_cosmic_rays":
-            step['keywords'] = {'dataset_copy': step['keywords']['dataset_copy']}
         if step['name'] == "dark_subtraction":
             step['calibs']['Dark'] = trad_dark_cal.filepath # to find traditional dark
     with warnings.catch_warnings():
