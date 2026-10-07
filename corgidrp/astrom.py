@@ -842,8 +842,8 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties,refe
     new_hdr['CD1_2'] = cdmatrix[0,1]
     new_hdr['CD2_1'] = cdmatrix[1,0]
     new_hdr['CD2_2'] = cdmatrix[1,1]
-    new_hdr['CRPIX1'] = np.shape(image)[1] // 2
-    new_hdr['CRPIX2'] = np.shape(image)[0] // 2
+    new_hdr['CRPIX1'] = reference_pixel[0]
+    new_hdr['CRPIX2'] = reference_pixel[1]
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
     new_hdr['CDELT1'] = (cal_properties[0] * 0.001) / 3600.
@@ -852,13 +852,10 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties,refe
     new_hdr['CRVAL2'] = target_coordinate[1]
     w = astropy.wcs.WCS(new_hdr)
 
-    # Convert x and y from sky coordinates to pixels, assuming the two coordinate systems share the same origin point
+    # Convert x and y from sky coordinates to pixels, assuming the wcs is centered
+    # at (CRPIX1,CRPIX2).
     x_sky_to_pix, y_sky_to_pix = astropy.wcs.utils.skycoord_to_pixel(skycoords, wcs=w)
-    # To allow for cases where the origins are in different locations, calculate the offset.
-    # This offset is the location of (the origin of the sky coordinate system) in pixels.
-    # Note that the center pixel is (512,512).
-    origin_offset = (reference_pixel[0]-512,reference_pixel[1]-512)
-    x_predict, y_predict = x_sky_to_pix[center_source_inds]+origin_offset[0], y_sky_to_pix[center_source_inds]+origin_offset[0]
+    x_predict, y_predict = x_sky_to_pix[center_source_inds], y_sky_to_pix[center_source_inds]
 
     # find offset between measured centers and predicted positions    
     image_centerings = np.zeros((len(quad_guesses), 2))
@@ -877,10 +874,10 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties,refe
     # boresight_x,y is the average offset from a star's predicted image location to its actual position given platescale and northangle alone
     # such that x_predict [predicted pixel location] + offset [pixel] = x_center [image pixel location]
     boresight_x, boresight_y = np.median(boresights[:,0]), np.median(boresights[:,1]) 
-    # we want to know what the ~actual (512, 512) pixels location would be in the 'predicted' frame so we have
-    # predicted_x + offset = 512.   OR      predicted_x = 512. - offset
-    true_center_x, true_center_y = 512.- boresight_x, 512.- boresight_y
-
+    # we want to know what the ~actual reference pixel location would be in the 'predicted' frame so we have
+    # predicted_x + offset = ref_pix_x   OR      predicted_x = ref_pix_x - offset
+    true_center_x, true_center_y = reference_pixel[0]- boresight_x, reference_pixel[1]- boresight_y 
+    
     # convert back to skycoord
     true_center_coord = astropy.wcs.utils.pixel_to_skycoord(true_center_x, true_center_y, wcs=w, origin=1)
     # true_center_ra, true_center_dec = true_center_coord.ra.value, true_center_coord.dec.value
