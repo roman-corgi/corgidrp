@@ -205,7 +205,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     this_caldb.create_entry(bp_map)
 
     # Create mock astrometric calibration
-    field_path = os.path.join(os.path.dirname(__file__), "..", "test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
     astrom_input_dir = os.path.join(l4_outputdir, 'astrom_cal_input')
     if not os.path.exists(astrom_input_dir):
         os.makedirs(astrom_input_dir)

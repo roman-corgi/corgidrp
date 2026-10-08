@@ -11,7 +11,7 @@ def test_create_wcs():
 
     # create mock dataset (arbitrary northangle)
     # Use 1 dither pointing instead of 2 for faster testing (WCS creation doesn't require multiple pointings)
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
     mock_dataset = mocks.create_astrom_data(field_path, platescale=21.8, rotation=20, dither_pointings=1)
 
     # run the boresight calibration to get an AstrometricCalibration file

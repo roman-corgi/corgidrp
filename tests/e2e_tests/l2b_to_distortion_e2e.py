@@ -51,7 +51,7 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     #### Generate a mock dataset ####
     #################################
 
-    field_path = os.path.join(os.path.dirname(__file__),"..","test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__),"..","test_data", "distortion_expected_coeffs.csv")
 
     #Create the mock dataset

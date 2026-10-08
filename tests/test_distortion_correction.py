@@ -16,8 +16,7 @@ def test_distortion_correction():
     bpixmap = np.zeros(datashape) # Assuming bad pixels have been corrected before this step.
 
     # create an undistorted dataset
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
-
+    field_path = astrom.default_field_path
     no_distortion_dataset = mocks.create_astrom_data(field_path, bpix_map=bpixmap, sim_err_map=True)
     
     # add distortion to the dataset
@@ -52,7 +51,7 @@ def test_distortion_correction_pol():
     bpixmap = np.zeros(datashape)
 
     ## CREATE UNDISTORTED POL DATASET
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
     no_distortion_dataset_base = mocks.create_astrom_data(field_path, bpix_map=bpixmap[0], sim_err_map=True)
 
     # Stack to create (2, 1024, 1024)

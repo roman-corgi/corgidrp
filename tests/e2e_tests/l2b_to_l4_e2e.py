@@ -164,8 +164,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     # create a simulated image with source guesses and true positions
     # check that the simulated image folder exists and create if not
 
-    field_path = os.path.join(os.path.dirname(__file__),"..","test_data", "JWST_CALFIELD2020.csv")
-
+    field_path = astrom.default_field_path
     # Create separate directory for astrometric calibration input (L1 data)
     astrom_input_dir = os.path.join(main_output_dir, 'astrom_cal_input')
     if not os.path.exists(astrom_input_dir):
@@ -465,8 +464,7 @@ def test_l3_to_l4(e2eoutput_path):
     # create a simulated image with source guesses and true positions
     # check that the simulated image folder exists and create if not
 
-    field_path = os.path.join(os.path.dirname(__file__),"..","test_data", "JWST_CALFIELD2020.csv")
-    
+    field_path = astrom.default_field_path
     # Create separate directory for astrometric calibration input (L1 data)
     astrom_input_dir = os.path.join(main_output_dir, 'astrom_cal_input')
     if not os.path.exists(astrom_input_dir):

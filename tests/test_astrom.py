@@ -29,8 +29,7 @@ def test_astrom():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
-    
+    field_path = astrom.default_field_path
     # create a dataset with dithers
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, dither_pointings=4, vignette_radius=None)
 
@@ -89,8 +88,7 @@ def test_astrom_vignette(vignette_radius=3_460):
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
-    
+    field_path = astrom.default_field_path
     # create a dataset with dithers
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, dither_pointings=4, vignette_radius=vignette_radius)
 
@@ -150,7 +148,7 @@ def test_distortion():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__), "test_data", "distortion_expected_coeffs.csv")
     expected_coeffs = np.genfromtxt(distortion_coeffs_path)
 
@@ -351,6 +349,37 @@ def test_transform_coeff_to_distortion_map():
     # Check that the computed distortion map is zero everywhere
     assert np.all(z_xdiff == 0)
     assert np.all(z_ydiff == 0)
+
+def test_read_field_catalog_default_has_required_columns():
+    """The packaged catalogue loads through the reader with RA, DEC and MAG."""
+    field = astrom.read_field_catalog(astrom.default_field_path)
+    for name in ("RA", "DEC", "MAG"):
+        assert name in field.colnames
+
+
+def test_read_field_catalog_accepts_legacy_vmag_file(tmp_path):
+    """Old-style user catalogues (VMAG, RA, DEC) still work; MAG is filled from VMAG."""
+    path = tmp_path / "legacy.csv"
+    path.write_text("VMAG,RA,DEC\n22.188,80.4897385279,-69.559173174\n19.5,80.49,-69.55\n")
+    field = astrom.read_field_catalog(str(path))
+    assert list(field["MAG"]) == [22.188, 19.5]
+
+
+def test_read_field_catalog_rejects_missing_columns(tmp_path):
+    """A catalogue without RA/DEC or any magnitude column fails with a clear message."""
+    path = tmp_path / "bad.csv"
+    path.write_text("RA,DEC\n80.49,-69.55\n")
+    with pytest.raises(ValueError, match="MAG"):
+        astrom.read_field_catalog(str(path))
+
+
+def test_read_field_catalog_explains_lfs_pointer(tmp_path):
+    """An un-pulled Git LFS pointer gives an actionable error, not a parse error."""
+    path = tmp_path / "pointer.ecsv"
+    path.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 8200000\n")
+    with pytest.raises(OSError, match="git lfs pull"):
+        astrom.read_field_catalog(str(path))
+
 
 if __name__ == "__main__":
     test_astrom()

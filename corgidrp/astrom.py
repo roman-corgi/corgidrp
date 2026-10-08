@@ -16,6 +16,42 @@ from scipy.optimize import OptimizeWarning
 from scipy.ndimage import median_filter
 from astropy.convolution import convolve, Gaussian2DKernel
 
+# LMC astrometric reference catalogue shipped with corgidrp (built by tools/build_lmc_astrom_catalog.py)
+default_field_path = os.path.join(os.path.dirname(__file__), "data", "lmc_astrometric_reference.ecsv")
+
+
+def read_field_catalog(field_path):
+    """
+    Read an astrometric reference catalogue of the calibration field.
+
+    Accepts the packaged ECSV catalogue and older user-supplied tables with columns
+    VMAG, RA, DEC. The magnitude used for brightness ranking is returned as MAG.
+
+    Args:
+        field_path (str): path to the catalogue file
+
+    Returns:
+        astropy.table.Table: the catalogue, with at least the columns RA, DEC [deg] and MAG
+
+    Raises:
+        OSError: if the file is a Git LFS pointer that was never downloaded
+        ValueError: if RA, DEC or a magnitude column is missing
+    """
+    with open(field_path, "rb") as catalog_file:
+        start = catalog_file.read(64)
+    if start.startswith(b"version https://git-lfs"):
+        raise OSError("{0} is a Git LFS pointer, not the catalogue. Run `git lfs pull` in the "
+                      "corgidrp repository to download it.".format(field_path))
+
+    field = ascii.read(field_path)
+    if "MAG" not in field.colnames and "VMAG" in field.colnames:
+        field["MAG"] = field["VMAG"]
+    missing = [name for name in ("RA", "DEC", "MAG") if name not in field.colnames]
+    if missing:
+        raise ValueError("field catalogue {0} is missing column(s) {1} (a magnitude column may be "
+                         "called MAG or VMAG)".format(field_path, missing))
+    return field
+
 def centroid(frame):
     """
     Finds the center coordinates for a given frame.
@@ -435,7 +471,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     Args:
         image (corgidrp.data.Image): Image data as a corgidrp Image object
         sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations of sources to match
-        field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
+        field_path (str): Full path to the reference catalogue (see read_field_catalog)
         comparison_threshold (int): How many stars in the field to consider for the initial match
         rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
         platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
@@ -445,10 +481,8 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
         
     '''
-    # ensure the search field data has the proper column names
-    field = ascii.read(field_path)
-    if 'RA' and 'DEC' and 'VMAG' not in field.colnames:
-        raise ValueError('field data must have column names [\'RA\',\'DEC\', \'VMAG\']')
+    # load the reference catalogue (checks for RA, DEC and a magnitude column)
+    field = read_field_catalog(field_path)
 
     # gather the pixel locations for the (3) brightest sources in the image
     source1, source2, source3 = sources[0], sources[1], sources[2]
@@ -470,14 +504,13 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     l1, l2, l3 = np.sort([l12, l23, l31])
     a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
 
-    # define a search field and load in RA, DEC, Vmag
-    field = ascii.read(field_path)
+    # define a search field around the commanded pointing
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - (rad*(np.cos(np.radians(target[1]))))) & (field['DEC'] <= target[1] + (rad*np.cos(np.radians(target[1])))))]
 
     bright_order_subfield = subfield.copy()
-    bright_order_subfield.sort(keys='VMAG')
+    bright_order_subfield.sort(keys='MAG')
     brightest_field = bright_order_subfield[:comparison_threshold]
 
     # create all combinations of triangles with the brightest field sources
@@ -984,7 +1017,7 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
     return (distortion_coeffs, fitorder)
   
   
-def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
+def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.ecsv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
                           pa_tolerance=0.1, keywords_to_split_dataset_by=None):
@@ -993,7 +1026,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
-        field_path (str): Full path to file with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
+        field_path (str): Full path to the reference catalogue, or the default 'lmc_astrometric_reference.ecsv' for the catalogue shipped with corgidrp (default: 'lmc_astrometric_reference.ecsv')
         field_matches (list of str or astropy.table.Table): List of full paths to files or astropy tables with calibration field matches for each image in the dataset (x, y, ra, dec), if single str the same filepath used for all frames,nif None, automated source matching is used (default: None)
         find_threshold (int): Number of stars to find (default 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
@@ -1041,9 +1074,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
                         matched_sources_multiframe = field_matches
 
     # load in field data to refer to
-    if field_path == 'JWST_CALFIELD2020.csv':
-        full_field_path = os.path.join(os.path.dirname(__file__), "data", field_path)
-        field_path = full_field_path
+    if field_path == 'lmc_astrometric_reference.ecsv':
+        field_path = default_field_path
 
     # combine data frames if requested
     grouped_datasets = []
