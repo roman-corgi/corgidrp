@@ -1,6 +1,18 @@
 Change Log
 ==========
 
+v5.1.1
+------
+
+Bug fixes:
+
+* Boresight RA/Dec offsets computed and applied with spherical offsets and properly accounts for the North angle; pointing order preserved when grouping frames (@manduhmia, @semaphoreP)
+* Polarized flux calibration processes POL0 and POL45 data separately before averaging; ``alignment_angle`` replaced by ``alignment_angle_WP1`` and ``alignment_angle_WP2`` (@everlastingEric)
+* Missing stars added to the JWST calibration field catalog (@manduhmia)
+* Boresight recipe defaults updated (@manduhmia)
+* Updated cosmic ray thresholds for traditional dark and noise map recipes (@kjl0025)
+
+
 v5.1
 ----
 
