@@ -5,6 +5,7 @@ import glob
 import pytest
 import warnings
 import numpy as np
+import astropy
 import astropy.time as time
 import astropy.io.fits as fits
 from astropy.coordinates import SkyCoord
@@ -310,12 +311,34 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
     # check that the center is correct within 3 [mas]
-    # the simulated image should have no shift from the target
-    ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     ###*** Use SkyCoord here to translate position difference correctly/ ***###
+    vert_ang = np.radians(expected_northangle)
+    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+    cdmatrix = pc * (expected_platescale * 0.001) / 3600.
+
+    new_hdr = {}
+    new_hdr['CD1_1'] = cdmatrix[0,0]
+    new_hdr['CD1_2'] = cdmatrix[0,1]
+    new_hdr['CD2_1'] = cdmatrix[1,0]
+    new_hdr['CD2_2'] = cdmatrix[1,1]
+    new_hdr['CRPIX1'] = 512.
+    new_hdr['CRPIX2'] = 512.
+    new_hdr['CTYPE1'] = 'RA---TAN'
+    new_hdr['CTYPE2'] = 'DEC--TAN'
+    new_hdr['CDELT1'] = (expected_platescale * 0.001) / 3600.
+    new_hdr['CDELT2'] = (expected_platescale * 0.001) / 3600.
+    new_hdr['CRVAL1'] = target[0]       # the simulated image should have no shift from the target
+    new_hdr['CRVAL2'] = target[1]
+    w = astropy.wcs.WCS(new_hdr)
+
+    # use astropy wcs to find the true coordinate value of the reference pixel
+    # assume an arbitrary reference pixel location [500., 450.] which is specified in the recipe
+    reference_pixel = (500., 450.)
+    expected_center_skycoord = astropy.wcs.utils.pixel_to_skycoord(reference_pixel[0], reference_pixel[1], wcs=w, origin=1)
+
+    ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     actual_boresight_skycoord = SkyCoord(ra=ra, dec=dec, unit='deg')
-    true_boresight_skycoord = SkyCoord(ra=target[0], dec=target[1], unit='deg')
-    ra_error, dec_error = actual_boresight_skycoord.spherical_offsets_to(true_boresight_skycoord)
+    ra_error, dec_error = actual_boresight_skycoord.spherical_offsets_to(expected_center_skycoord)
     assert ra_error.deg == pytest.approx(0, abs=8.333e-7)
     assert dec_error.deg == pytest.approx(0, abs=8.333e-7)
 
