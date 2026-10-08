@@ -12,7 +12,11 @@
             "keywords" : {
                 "frames_to_combine" : true,
                 "find_threshold" : 5,
-                "search_rad": 0.005
+                "search_rad": 0.005,
+                "reference_pixel": [
+                    500.0,
+                    450.0
+                ]
             }
         },
         {
