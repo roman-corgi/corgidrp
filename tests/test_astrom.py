@@ -6,6 +6,7 @@ import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
 import corgidrp.data as data
+import astropy
 import astropy.io.ascii as ascii
 from termcolor import cprint
 from astropy.coordinates import SkyCoord
@@ -81,6 +82,104 @@ def test_astrom():
     pickled = pickle.dumps(astrom_cal_2)
     pickled_astrom = pickle.loads(pickled)
     assert np.all((astrom_cal.data == pickled_astrom.data)) # check it is the same as the original
+
+def test_astrom_ref_pixel():
+    """ 
+    Generate a simulated image and test the astrometric calibration computation.
+    
+    """
+    # create a simulated image with source guesses and true positions
+    # check that the simulated image folder exists and create if not
+    datadir = os.path.join(os.path.dirname(__file__), "test_data", "simastrom")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+
+    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
+    
+    # create a dataset with dithers
+    dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, dither_pointings=4, vignette_radius=None)
+
+    # check the dataset format
+    assert len(dataset) == 5  # one pointing + 4 dithers
+    assert isinstance(dataset[0], data.Image)
+
+    # perform the astrometric calibration
+    # * with respect to a new reference pixel
+    reference_pixel = (500., 450.)
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=25, reference_pixel=reference_pixel)
+
+    # the data was generated to have the following image properties
+    expected_platescale = 21.8
+    atol_platescale = 0.5
+
+    # check orientation is correct within 0.05 [deg]
+    # and plate scale is correct within 0.5 [mas] (arbitrary)
+    expected_northangle = 20
+    atol_northangle = 0.05
+    test_result_platescale = (astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle))
+    print(f'\nPlate scale estimate from boresight_calibration() is accurate: {expected_platescale} +/- {atol_platescale}: ', end='')
+    print_pass() if test_result_platescale else print_fail()
+    assert test_result_platescale
+
+    test_result_northangle = (astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle))
+    assert test_result_northangle
+
+    # check that the center is correct within 3 [mas]
+    # the simulated image should have zero offset
+    target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
+    ###*** Use SkyCoord here to translate position difference correctly ***###
+    vert_ang = np.radians(expected_northangle)
+    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+    cdmatrix = pc * (expected_platescale * 0.001) / 3600.
+
+    new_hdr = {}
+    new_hdr['CD1_1'] = cdmatrix[0,0]
+    new_hdr['CD1_2'] = cdmatrix[0,1]
+    new_hdr['CD2_1'] = cdmatrix[1,0]
+    new_hdr['CD2_2'] = cdmatrix[1,1]
+    new_hdr['CRPIX1'] = 512.
+    new_hdr['CRPIX2'] = 512.
+    new_hdr['CTYPE1'] = 'RA---TAN'
+    new_hdr['CTYPE2'] = 'DEC--TAN'
+    new_hdr['CDELT1'] = (expected_platescale * 0.001) / 3600.
+    new_hdr['CDELT2'] = (expected_platescale * 0.001) / 3600.
+    new_hdr['CRVAL1'] = target[0]       # the simulated image should have no shift from the target at 512., 512.
+    new_hdr['CRVAL2'] = target[1]
+    w = astropy.wcs.WCS(new_hdr)
+
+    # use astropy wcs to find the true coordinate value of the reference pixel
+    # assume an arbitrary reference pixel location [500., 450.] which is specified in the recipe
+    expected_center_skycoord = astropy.wcs.utils.pixel_to_skycoord(reference_pixel[0], reference_pixel[1], wcs=w, origin=1)
+
+    ra, dec = astrom_cal.boresight
+    actual_boresight_skycoord = SkyCoord(ra=ra, dec=dec, unit='deg')
+    ra_error, dec_error = actual_boresight_skycoord.spherical_offsets_to(expected_center_skycoord)
+    
+    test_result_ra_error = (ra_error.deg == pytest.approx(0, abs=8.333e-7))
+    print(f'\nBoresight RA estimate from boresight_calibration() is accurate: {expected_center_skycoord.ra.value} +/- {8.333e-7 * (3_600_000):.4f} [mas]: ', end='')
+    print_pass() if test_result_ra_error else print_fail()
+    assert test_result_ra_error     # reported as ra offset
+
+    test_result_dec_error = (dec_error.deg == pytest.approx(0, abs=8.333e-7))
+    print(f'\nBoresight Dec estimate from boresight_calibration() is accurate: {expected_center_skycoord.dec.value} +/- {8.333e-7 * (3_600_000):.4f} [mas]: ', end='')
+    print_pass() if test_result_dec_error else print_fail()
+    assert test_result_dec_error    
+
+    # check they can be pickled (for CTC operations)
+    pickled = pickle.dumps(astrom_cal)
+    pickled_astrom = pickle.loads(pickled)
+    assert np.all((astrom_cal.data == pickled_astrom.data))
+
+    # save and check it can be pickled after save
+    astrom_cal.save(filedir=datadir, filename="astrom_cal_output.fits")
+    astrom_cal_2 = data.AstrometricCalibration(os.path.join(datadir, "astrom_cal_output.fits"))
+
+    # check they can be pickled (for CTC operations)
+    pickled = pickle.dumps(astrom_cal_2)
+    pickled_astrom = pickle.loads(pickled)
+    assert np.all((astrom_cal.data == pickled_astrom.data)) # check it is the same as the original
+
+
 
 def test_astrom_vignette(vignette_radius=3_460):
     """ 
@@ -419,6 +518,7 @@ def test_boresight_combining_preserves_pointing_order(monkeypatch, num_pointings
 
 if __name__ == "__main__":
     test_astrom()
+    test_astrom_ref_pixel()
     test_astrom_vignette()
     test_distortion()
     test_seppa2dxdy()
