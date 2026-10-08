@@ -823,8 +823,8 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties,refe
     if type(cal_properties) != tuple:
         raise TypeError('cal_properties must be tuple (platescale, north_angle)')
         
-    if type(reference_pixel) != tuple:
-        raise TypeError('reference_pixel must be tuple (x,y)')
+    # if type(reference_pixel) != tuple:
+    #     raise TypeError('reference_pixel must be tuple (x,y)')
 
     # use only center quadrant
     imageshape = np.shape(image)
