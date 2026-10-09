@@ -86,8 +86,9 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     new_hdr['CRVAL2'] = expected_pointing[1]
     w = astropy.wcs.WCS(new_hdr)
 
-    # use astropy wcs to find the true coordinate value of detector center (512., 512.)
-    expected_center_skycoord = astropy.wcs.utils.pixel_to_skycoord(512., 512., wcs=w, origin=1)
+    # use astropy wcs to find the true coordinate value of the reference pixel (default: (512., 512.))
+    reference_pixel = (512., 512.)
+    expected_center_skycoord = astropy.wcs.utils.pixel_to_skycoord(reference_pixel[0], reference_pixel[1], wcs=w, origin=1)
 
     # check that the recovered platescale, north angle, and offsets match up
     astrom_cal_file = glob.glob(os.path.join(l2b_outputdir, '*_ast_cal.fits'))[0]

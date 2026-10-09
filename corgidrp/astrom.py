@@ -788,7 +788,7 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1):
     
     return platescale, north_angle
 
-def compute_boresight(image, source_info, target_coordinate, cal_properties):
+def compute_boresight(image, source_info, target_coordinate, cal_properties,reference_pixel=(512,512)):
     """ 
     Used to find the offset between the target and the center of the image.
 
@@ -801,6 +801,7 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
         cal_properties (tuple):
             (float): Platescale
             (float): North angle
+        reference_pixel (tuple): Detector coordinate at which to report RA and Dec, in EXCAM pixels.
 
     Returns:
         ra_offset (float): the offset in RA [deg] *from the target pointing RA *to the true RA of the center coord
@@ -821,6 +822,9 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     if type(cal_properties) != tuple:
         raise TypeError('cal_properties must be tuple (platescale, north_angle)')
+        
+    if len(reference_pixel) != 2:
+        raise ValueError('reference_pixel tuple (x,y) must be length = 2')
 
     # use only center quadrant
     imageshape = np.shape(image)
@@ -838,8 +842,8 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     new_hdr['CD1_2'] = cdmatrix[0,1]
     new_hdr['CD2_1'] = cdmatrix[1,0]
     new_hdr['CD2_2'] = cdmatrix[1,1]
-    new_hdr['CRPIX1'] = np.shape(image)[1] // 2
-    new_hdr['CRPIX2'] = np.shape(image)[0] // 2
+    new_hdr['CRPIX1'] = reference_pixel[0]
+    new_hdr['CRPIX2'] = reference_pixel[1]
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
     new_hdr['CDELT1'] = (cal_properties[0] * 0.001) / 3600.
@@ -848,6 +852,8 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     new_hdr['CRVAL2'] = target_coordinate[1]
     w = astropy.wcs.WCS(new_hdr)
 
+    # Convert x and y from sky coordinates to pixels, assuming the wcs is centered
+    # at (CRPIX1,CRPIX2).
     x_sky_to_pix, y_sky_to_pix = astropy.wcs.utils.skycoord_to_pixel(skycoords, wcs=w)
     x_predict, y_predict = x_sky_to_pix[center_source_inds], y_sky_to_pix[center_source_inds]
 
@@ -868,10 +874,10 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     # boresight_x,y is the average offset from a star's predicted image location to its actual position given platescale and northangle alone
     # such that x_predict [predicted pixel location] + offset [pixel] = x_center [image pixel location]
     boresight_x, boresight_y = np.median(boresights[:,0]), np.median(boresights[:,1]) 
-    # we want to know what the ~actual (512, 512) pixels location would be in the 'predicted' frame so we have
-    # predicted_x + offset = 512.   OR      predicted_x = 512. - offset
-    true_center_x, true_center_y = 512.- boresight_x, 512.- boresight_y
-
+    # we want to know what the ~actual reference pixel location would be in the 'predicted' frame so we have
+    # predicted_x + offset = ref_pix_x   OR      predicted_x = ref_pix_x - offset
+    true_center_x, true_center_y = reference_pixel[0]- boresight_x, reference_pixel[1]- boresight_y 
+    
     # convert back to skycoord
     true_center_coord = astropy.wcs.utils.pixel_to_skycoord(true_center_x, true_center_y, wcs=w, origin=1)
     # true_center_ra, true_center_dec = true_center_coord.ra.value, true_center_coord.dec.value
@@ -991,7 +997,7 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
 def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
-                          pa_tolerance=0.1, keywords_to_split_dataset_by=None):
+                          pa_tolerance=0.1, keywords_to_split_dataset_by=None, reference_pixel=(512,512)):
     """
     Perform the boresight calibration of a dataset.
     
@@ -1015,6 +1021,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         initial_dist_guess (np.array): An initial guess of legendre coefficients used for fitting distortion, if None will use coeffs associated with no distortion (default: None)
         pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) to group frames together when frames_to_combine is True (Default: 0.1)
         keywords_to_split_dataset_by (list, optional): List of additional header keywords to split the input dataset by for frame combining in addition default keywords the function uses for target, roll, and dither (default: None)
+        reference_pixel (tuple): Reference pixel at which to report the RA and Dec, in EXCAM pixels (default: (512,512))
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -1165,7 +1172,10 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         hold_matches.append(matched_sources)
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
-        ra_off, dec_off = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
+        ra_off, dec_off = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties, reference_pixel=reference_pixel)
+        # add the reference pixel to the image header
+        dataset[i].pri_hdr['REFPIX_X'] = reference_pixel[0]
+        dataset[i].pri_hdr['REFPIX_Y'] = reference_pixel[1]
         # calculate the corrected target position based on ra, dec offsets using skycoord to account for spherical coord system
         corrected_center_coord = target_skycoord.spherical_offsets_by(ra_off * astropy.units.deg, dec_off * astropy.units.deg)
         corr_ra, corr_dec = corrected_center_coord.ra.value, corrected_center_coord.dec.value
