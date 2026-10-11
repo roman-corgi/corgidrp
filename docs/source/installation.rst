@@ -29,7 +29,8 @@ Some reference data shipped inside the package can be revised without modifying 
 ``corgidrp`` checkout, by placing a file with the same name in the configuration folder.
 The pipeline checks the configuration folder first and falls back to the bundled copy.
 
-* ``~/.corgidrp/stellar_polarization_database.csv`` — polarization reference standards.
+* ``~/.corgidrp/stellar_polarization_database_band1.csv`` — polarization reference standards for Band 1.
+* ``~/.corgidrp/stellar_polarization_database_band4.csv`` — polarization reference standards for Band 4.
 * ``~/.corgidrp/spectroscopy/standard_star_sptypes.csv`` — spectral types of the anticipated
   spectroscopy target stars, used to pick a model template for the wavelength zero point.
 * ``~/.corgidrp/spectroscopy/templates/`` — noiseless prism template images. These are matched

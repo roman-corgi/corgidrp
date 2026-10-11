@@ -303,11 +303,12 @@ def generate_mueller_matrix_cal(input_dataset,
         input_dataset (corgidrp.data.Dataset): A CorgiDRP dataset consisting of stokes vectors.
             This data should be either all ND datasets or all non-ND datasets.
         path_to_pol_ref_file (str, optional): The path to the polarization reference file.
-            If None (default), "stellar_polarization_database.csv" is looked for in the corgidrp
-            configuration directory (the directory holding corgidrp.config_filepath, normally
-            ~/.corgidrp), which allows the file to be overridden without modifying the installed
-            pipeline. If that file does not exist, the copy shipped with the pipeline in
-            ./data/stellar_polarization_database.csv is used.
+            If None (default), "stellar_polarization_database_band1.csv" or
+            "stellar_polarization_database_band4.csv" is selected based on CFAMNAME and looked
+            for in the corgidrp configuration directory (the directory holding
+            corgidrp.config_filepath, normally ~/.corgidrp), which allows the file to be overridden
+            without modifying the installed pipeline. If that file does not exist, the copy shipped
+            with the pipeline in ./data is used.
         svd_threshold (float, optional): The threshold for singular values in the SVD inversion. Defaults to 1e-5 (semi-arbitrary).
         mode (str, optional): The mode of operation. Defaults to "match_position".
             - "match_position": The function will calculate the Mueller Matrix using only input stokes vectors where
@@ -327,11 +328,17 @@ def generate_mueller_matrix_cal(input_dataset,
     dataset = input_dataset.copy()
 
     if path_to_pol_ref_file is None:
-        user_pol_ref_path = os.path.join(os.path.dirname(corgidrp.config_filepath), "stellar_polarization_database.csv")
+        cfam_name = dataset.frames[0].ext_hdr["CFAMNAME"].upper()
+        band_by_cfam = {"1F": 1, "4F": 4}
+        if cfam_name not in band_by_cfam:
+            raise ValueError(f"No stellar polarization database is defined for CFAMNAME={cfam_name}")
+
+        pol_ref_filename = f"stellar_polarization_database_band{band_by_cfam[cfam_name]}.csv"
+        user_pol_ref_path = os.path.join(os.path.dirname(corgidrp.config_filepath), pol_ref_filename)
         if os.path.isfile(user_pol_ref_path):
             path_to_pol_ref_file = user_pol_ref_path
         else:
-            path_to_pol_ref_file = os.path.join(os.path.dirname(__file__), "data", "stellar_polarization_database.csv")
+            path_to_pol_ref_file = os.path.join(os.path.dirname(__file__), "data", pol_ref_filename)
 
     # check that all the data in the dataset is either ND or non-ND, by looking for ND in the FPAMNAME keyword
     nd_flags = [("ND" in data.ext_hdr["FPAMNAME"]) for data in dataset]
