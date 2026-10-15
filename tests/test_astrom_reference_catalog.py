@@ -3,8 +3,10 @@ import numpy as np
 import astropy.units as u
 import corgidrp.astrom as astrom
 
-PR1057_KEPT_IDS = [4657987350779055232, 4657987346473687296, 4657987346506841344,
-                   4657987346439013120, 4657987350829299328, 4657987385189011456]
+# stars added by hand in PR #1057; its 4657987346473687296 (a two-parameter solution) is the
+# same star as an HST source 0.13 arcsec away and is covered by that HST row
+PR1057_KEPT_IDS = [4657987350779055232, 4657987346506841344, 4657987346439013120,
+                   4657987350829299328, 4657987385189011456]
 REQUIRED_COLUMNS = {"GAIA_ID": None, "RA": u.deg, "DEC": u.deg, "RA_ERR": u.mas, "DEC_ERR": u.mas,
                     "MAG": u.mag, "MAG_BAND": None, "GMAG": u.mag, "PMRA": u.mas / u.yr,
                     "PMDEC": u.mas / u.yr, "PMRA_ERR": u.mas / u.yr, "PMDEC_ERR": u.mas / u.yr,

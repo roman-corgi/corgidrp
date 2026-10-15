@@ -21,5 +21,4 @@ version = {attr = "corgidrp.__version__"}
 dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.packages]
-# tools/ holds developer build scripts (e.g. the astrometric catalogue builder), not package code
-find = {exclude = ["tools*"]}
+find = {}
