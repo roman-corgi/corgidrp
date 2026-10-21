@@ -362,6 +362,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     bpixmap = np.zeros(datashape)
 
     field_path = astrom.default_field_path
+
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__), "..","test_data", "distortion_expected_coeffs.csv")
     distortion_coeffs = np.genfromtxt(distortion_coeffs_path)
     distortion_dataset_base = mocks.create_astrom_data(field_path, distortion_coeffs_path=distortion_coeffs_path,

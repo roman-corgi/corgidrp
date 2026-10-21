@@ -307,6 +307,7 @@ def test_l1_to_l4_analog_HLC_band1_e2e(e2edata_path,e2eoutput_path):
     
     # Simulated image
     field_path = astrom.default_field_path
+    
     # Astrometric calibration input
     astrom_input_dir = os.path.join(calibrations_dir,'astrom_cal_input')
     create_and_clean_folder(astrom_input_dir)

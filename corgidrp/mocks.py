@@ -1601,7 +1601,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     ypix = ypix_full[pix_inds]
     ras = cal_SkyCoords[pix_inds]
     decs = cal_SkyCoords[pix_inds]
-    mags = subfield['MAG'][pix_inds]
+    mags = subfield['VMAG'][pix_inds]
     amplitudes = np.power(10, ((mags - 22.5) / (-2.5))) * 10
 
     frame_xpixels.append(np.array(xpix))    # add pixel locations to all frame list
@@ -1659,7 +1659,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         dypix = ypix_full[dither_inds]
         dras = cal_SkyCoords[dither_inds]
         ddecs = cal_SkyCoords[dither_inds]
-        dmags = subfield['MAG'][dither_inds]
+        dmags = subfield['VMAG'][dither_inds]
         damplitudes = np.power(10, ((dmags - 22.5) / (-2.5))) * 10
 
         frame_xpixels.append(np.array(dxpix))
@@ -1839,7 +1839,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
             guess['y'] = frame_ypixels[i]
             guess['RA'] = frame_ras[i].ra
             guess['DEC'] = frame_decs[i].dec
-            guess['MAG'] = frame_mags[i]
+            guess['VMAG'] = frame_mags[i]
             # guessname = "guesses.csv"
             ascii.write(guess, filedir+'/guesses'+str(i)+'.csv', overwrite=True)
 

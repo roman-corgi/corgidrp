@@ -30,6 +30,7 @@ def test_astrom():
         os.mkdir(datadir)
 
     field_path = astrom.default_field_path
+    
     # create a dataset with dithers
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, dither_pointings=4, vignette_radius=None)
 
@@ -93,6 +94,7 @@ def test_astrom_vignette(vignette_radius=3_460):
         os.mkdir(datadir)
 
     field_path = astrom.default_field_path
+    
     # create a dataset with dithers
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, dither_pointings=4, vignette_radius=vignette_radius)
 
@@ -359,25 +361,25 @@ def test_transform_coeff_to_distortion_map():
     assert np.all(z_ydiff == 0)
 
 def test_read_field_catalog_default_has_required_columns():
-    """The packaged catalogue loads through the reader with RA, DEC and MAG."""
+    """The packaged catalogue loads through the reader with RA, DEC and VMAG."""
     field = astrom.read_field_catalog(astrom.default_field_path)
-    for name in ("RA", "DEC", "MAG"):
+    for name in ("RA", "DEC", "VMAG"):
         assert name in field.colnames
 
 
-def test_read_field_catalog_accepts_legacy_vmag_file(tmp_path):
-    """Old-style user catalogues (VMAG, RA, DEC) still work; MAG is filled from VMAG."""
+def test_read_field_catalog_accepts_user_csv(tmp_path):
+    """User-supplied CSV catalogues with VMAG, RA, DEC work as before."""
     path = tmp_path / "legacy.csv"
     path.write_text("VMAG,RA,DEC\n22.188,80.4897385279,-69.559173174\n19.5,80.49,-69.55\n")
     field = astrom.read_field_catalog(str(path))
-    assert list(field["MAG"]) == [22.188, 19.5]
+    assert list(field["VMAG"]) == [22.188, 19.5]
 
 
 def test_read_field_catalog_rejects_missing_columns(tmp_path):
-    """A catalogue without RA/DEC or any magnitude column fails with a clear message."""
+    """A catalogue without RA, DEC or VMAG fails with a clear message."""
     path = tmp_path / "bad.csv"
     path.write_text("RA,DEC\n80.49,-69.55\n")
-    with pytest.raises(ValueError, match="MAG"):
+    with pytest.raises(ValueError, match="VMAG"):
         astrom.read_field_catalog(str(path))
 
 

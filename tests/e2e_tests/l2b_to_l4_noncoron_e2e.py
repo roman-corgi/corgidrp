@@ -72,6 +72,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     # check that the simulated image folder exists and create if not
 
     field_path = astrom.default_field_path
+
     #Create the mock dataset (without saving to disk to avoid simcal_astrom.fits)
     mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
 
@@ -231,6 +232,7 @@ def test_l3_to_l4(e2eoutput_path):
     # check that the simulated image folder exists and create if not
 
     field_path = astrom.default_field_path
+
     #Create the mock dataset (without saving to disk to avoid simcal_astrom.fits)
     mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=None)
 

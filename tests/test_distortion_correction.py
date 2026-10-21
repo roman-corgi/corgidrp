@@ -17,6 +17,7 @@ def test_distortion_correction():
 
     # create an undistorted dataset
     field_path = astrom.default_field_path
+
     no_distortion_dataset = mocks.create_astrom_data(field_path, bpix_map=bpixmap, sim_err_map=True)
     
     # add distortion to the dataset

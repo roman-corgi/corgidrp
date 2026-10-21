@@ -185,6 +185,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     bpixmap = np.zeros(datashape)
 
     field_path = astrom.default_field_path
+
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__), "..","test_data", "distortion_expected_coeffs.csv")
     distortion_coeffs = np.genfromtxt(distortion_coeffs_path)
     distortion_dataset_base = mocks.create_astrom_data(field_path, distortion_coeffs_path=distortion_coeffs_path,
