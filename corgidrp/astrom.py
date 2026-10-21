@@ -7,6 +7,9 @@ import corgidrp.data
 import astropy
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
+from astropy.time import Time
+import astropy.units as u
+from erfa import ErfaWarning
 
 import pyklip.fakes as fakes
 
@@ -47,6 +50,43 @@ def read_field_catalog(field_path):
     missing = [name for name in ("RA", "DEC", "VMAG") if name not in field.colnames]
     if missing:
         raise ValueError("field catalogue {0} is missing column(s) {1}".format(field_path, missing))
+    return field
+
+
+def catalog_at_epoch(field, mjd):
+    """
+    Move the catalogue positions from the catalogue epoch to the time of observation.
+
+    Uses the proper motions PMRA (mu_alpha*) and PMDEC and the epoch recorded in the catalogue
+    metadata. Parallax is ignored (0.02 mas at the LMC). Catalogues without proper motions or
+    epoch (e.g. user-supplied CSV tables) are returned unchanged, with a warning.
+
+    Args:
+        field (astropy.table.Table): catalogue from read_field_catalog
+        mjd (float): time of observation (MJD, UTC), e.g. the MJDSRT of the frame
+
+    Returns:
+        astropy.table.Table: a copy of the catalogue with RA and DEC at the time of observation;
+        its meta["propagated_to_mjd"] is mjd, or None if the positions were not propagated
+    """
+    field = field.copy()
+    field.meta["propagated_to_mjd"] = None
+    if not {"PMRA", "PMDEC"} <= set(field.colnames) or "epoch" not in field.meta:
+        warnings.warn("reference catalogue has no proper motions or epoch; using its positions "
+                      "without propagating them to the time of observation")
+        return field
+
+    epoch = Time(field.meta["epoch"], format=field.meta["epoch_format"], scale=field.meta["epoch_scale"])
+    stars = SkyCoord(ra=np.asarray(field["RA"], float) * u.deg, dec=np.asarray(field["DEC"], float) * u.deg,
+                     pm_ra_cosdec=np.asarray(field["PMRA"], float) * u.mas / u.yr,
+                     pm_dec=np.asarray(field["PMDEC"], float) * u.mas / u.yr, obstime=epoch, frame="icrs")
+    with warnings.catch_warnings():
+        # without distances ERFA treats the stars as very distant and says so
+        warnings.simplefilter("ignore", category=ErfaWarning)
+        moved = stars.apply_space_motion(new_obstime=Time(mjd, format="mjd", scale="utc"))
+    field["RA"][:] = moved.ra.deg   # in place, so units and descriptions are kept
+    field["DEC"][:] = moved.dec.deg
+    field.meta["propagated_to_mjd"] = float(mjd)
     return field
 
 
@@ -477,6 +517,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
     Returns:
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
+            at the time of observation (MJDSRT); meta['catalog_mjd'] is that MJD, or None if the catalogue has no proper motions
         
     '''
     # load the reference catalogue (checks for the columns RA, DEC and VMAG)
@@ -506,6 +547,8 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - (rad*(np.cos(np.radians(target[1]))))) & (field['DEC'] <= target[1] + (rad*np.cos(np.radians(target[1])))))]
+    # move the reference stars from the catalogue epoch to the time of observation
+    subfield = catalog_at_epoch(subfield, image.ext_hdr['MJDSRT'])
 
     bright_order_subfield = subfield.copy()
     bright_order_subfield.sort(keys='VMAG')
@@ -616,6 +659,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     matched_image_to_field['y'] = sources['y']
     matched_image_to_field['RA'] = matched_ra
     matched_image_to_field['DEC'] = matched_dec
+    matched_image_to_field.meta['catalog_mjd'] = subfield.meta['propagated_to_mjd']
 
     # append each x,y,RA,DEC string to the fits ext_hdr to save the source matches for reference
     for source in np.arange(len(matched_image_to_field)):
@@ -1239,6 +1283,10 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         
     # update the history
     history_msg = "Boresight calibration completed"
+    catalog_mjds = [getattr(matches, 'meta', {}).get('catalog_mjd') for matches in hold_matches]
+    if catalog_mjds and None not in catalog_mjds:
+        history_msg += ("; reference catalogue positions propagated with proper motions to the MJDSRT "
+                        "of each frame (MJD {0:.4f} to {1:.4f})".format(min(catalog_mjds), max(catalog_mjds)))
     astrom_cal_dataset = corgidrp.data.Dataset([avg_cal])
     astrom_cal_dataset.update_after_processing_step(history_msg)
     ## history message should be added to the input dataset(?)
