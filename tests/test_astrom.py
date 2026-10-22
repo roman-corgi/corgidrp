@@ -439,7 +439,7 @@ def test_boresight_combining_preserves_pointing_order(monkeypatch, num_pointings
         return None
 
     monkeypatch.setattr(astrom, "find_source_locations", find_sources)
-    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: None)
+    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: Table())
     monkeypatch.setattr(astrom, "compute_platescale_and_northangle",
                         lambda *args, **kwargs: (21.8, -45.))
     monkeypatch.setattr(astrom, "compute_boresight", lambda *args, **kwargs: (0., 0.))
@@ -504,6 +504,38 @@ def test_catalog_at_epoch_without_proper_motions_warns_and_keeps_positions():
     with pytest.warns(UserWarning, match="proper motion"):
         moved = astrom.catalog_at_epoch(field, MJD_2026)
     np.testing.assert_array_equal(moved["DEC"], field["DEC"])
+    assert moved.meta["propagated_to_mjd"] is None
+
+
+def test_catalog_at_epoch_without_epoch_details_or_date_warns_and_keeps_positions():
+    """An epoch without format and scale, or a frame without MJDSRT, is not propagated."""
+    field = _moving_star_catalog(meta=False)
+    field.meta["epoch"] = 2015.5
+    with pytest.warns(UserWarning, match="proper motion"):
+        moved = astrom.catalog_at_epoch(field, MJD_2026)
+    np.testing.assert_array_equal(moved["RA"], field["RA"])
+    with pytest.warns(UserWarning, match="time of observation"):
+        moved = astrom.catalog_at_epoch(_moving_star_catalog(), None)
+    np.testing.assert_array_equal(moved["RA"], _moving_star_catalog()["RA"])
+    assert moved.meta["propagated_to_mjd"] is None
+
+
+def test_boresight_with_catalog_without_proper_motions_does_not_claim_propagation(tmp_path):
+    """With a user CSV catalogue (no proper motions) HISTORY does not say the positions were propagated."""
+    catalog = astrom.read_field_catalog(astrom.default_field_path)
+    near = (np.abs(catalog["RA"] - 80.553) < 0.03) & (np.abs(catalog["DEC"] + 69.514) < 0.03)
+    csv_path = str(tmp_path / "field.csv")
+    catalog[near]["VMAG", "RA", "DEC"].write(csv_path, format="ascii.csv")
+    # rendered at the catalogue epoch, so the unpropagated CSV positions are the true ones
+    dataset = mocks.create_astrom_data(field_path=astrom.default_field_path, rotation=20, vignette_radius=None,
+                                       mjd=CATALOG_EPOCH.utc.mjd)
+    with pytest.warns(UserWarning, match="proper motion"):
+        astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=csv_path, find_threshold=25)
+    east, north = _boresight_error_mas(astrom_cal, dataset)
+    assert east == pytest.approx(0, abs=3) and north == pytest.approx(0, abs=3)
+    history = "".join(str(card) for card in astrom_cal.ext_hdr["HISTORY"])
+    assert "Boresight calibration completed" in history
+    assert "propagated" not in history
 
 
 def _boresight_error_mas(astrom_cal, dataset):

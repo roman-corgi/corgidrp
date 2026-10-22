@@ -57,13 +57,14 @@ def catalog_at_epoch(field, mjd):
     """
     Move the catalogue positions from the catalogue epoch to the time of observation.
 
-    Uses the proper motions PMRA (mu_alpha*) and PMDEC and the epoch recorded in the catalogue
-    metadata. Parallax is ignored (0.02 mas at the LMC). Catalogues without proper motions or
-    epoch (e.g. user-supplied CSV tables) are returned unchanged, with a warning.
+    Uses the proper motions PMRA (mu_alpha*) and PMDEC, which must be finite, and the epoch
+    recorded in the catalogue metadata (epoch, epoch_format, epoch_scale). Parallax is ignored
+    (0.02 mas at the LMC). Catalogues without proper motions or epoch (e.g. user-supplied CSV
+    tables), or a missing time of observation, leave the positions unchanged, with a warning.
 
     Args:
         field (astropy.table.Table): catalogue from read_field_catalog
-        mjd (float): time of observation (MJD, UTC), e.g. the MJDSRT of the frame
+        mjd (float): time of observation (MJD, UTC), e.g. the MJDSRT of the frame, or None
 
     Returns:
         astropy.table.Table: a copy of the catalogue with RA and DEC at the time of observation;
@@ -71,9 +72,13 @@ def catalog_at_epoch(field, mjd):
     """
     field = field.copy()
     field.meta["propagated_to_mjd"] = None
-    if not {"PMRA", "PMDEC"} <= set(field.colnames) or "epoch" not in field.meta:
+    if not {"PMRA", "PMDEC"} <= set(field.colnames) or not {"epoch", "epoch_format", "epoch_scale"} <= set(field.meta):
         warnings.warn("reference catalogue has no proper motions or epoch; using its positions "
                       "without propagating them to the time of observation")
+        return field
+    if mjd is None:
+        warnings.warn("no time of observation (MJDSRT); using the reference catalogue positions at "
+                      "the catalogue epoch")
         return field
 
     epoch = Time(field.meta["epoch"], format=field.meta["epoch_format"], scale=field.meta["epoch_scale"])
@@ -517,7 +522,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
     Returns:
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
-            at the time of observation (MJDSRT); meta['catalog_mjd'] is that MJD, or None if the catalogue has no proper motions
+            at the time of observation (MJDSRT); meta['propagated_to_mjd'] is that MJD, or None if they were not propagated
         
     '''
     # load the reference catalogue (checks for the columns RA, DEC and VMAG)
@@ -548,7 +553,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - (rad*(np.cos(np.radians(target[1]))))) & (field['DEC'] <= target[1] + (rad*np.cos(np.radians(target[1])))))]
     # move the reference stars from the catalogue epoch to the time of observation
-    subfield = catalog_at_epoch(subfield, image.ext_hdr['MJDSRT'])
+    subfield = catalog_at_epoch(subfield, image.ext_hdr.get('MJDSRT'))
 
     bright_order_subfield = subfield.copy()
     bright_order_subfield.sort(keys='VMAG')
@@ -659,7 +664,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     matched_image_to_field['y'] = sources['y']
     matched_image_to_field['RA'] = matched_ra
     matched_image_to_field['DEC'] = matched_dec
-    matched_image_to_field.meta['catalog_mjd'] = subfield.meta['propagated_to_mjd']
+    matched_image_to_field.meta['propagated_to_mjd'] = subfield.meta['propagated_to_mjd']
 
     # append each x,y,RA,DEC string to the fits ext_hdr to save the source matches for reference
     for source in np.arange(len(matched_image_to_field)):
@@ -1283,10 +1288,10 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         
     # update the history
     history_msg = "Boresight calibration completed"
-    catalog_mjds = [getattr(matches, 'meta', {}).get('catalog_mjd') for matches in hold_matches]
-    if catalog_mjds and None not in catalog_mjds:
+    catalog_mjds = [matches.meta.get('propagated_to_mjd') for matches in hold_matches]
+    if None not in catalog_mjds:
         history_msg += ("; reference catalogue positions propagated with proper motions to the MJDSRT "
-                        "of each frame (MJD {0:.4f} to {1:.4f})".format(min(catalog_mjds), max(catalog_mjds)))
+                        "of each measured (combined) frame (MJD {0:.4f} to {1:.4f})".format(min(catalog_mjds), max(catalog_mjds)))
     astrom_cal_dataset = corgidrp.data.Dataset([avg_cal])
     astrom_cal_dataset.update_after_processing_step(history_msg)
     ## history message should be added to the input dataset(?)
