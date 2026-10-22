@@ -1530,7 +1530,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         bpix_map (np.array): 2D bad pixel map to apply to simulated data (default: None)
         sim_err_map (boolean): If True, simulates an error map (default: False) 
         vignette_radius (float): (Optional) The radius (from [0,0]) at which to simulate vignetting edge in [mas] (default: 3460 mas (~ 160 pixels)). No vignetting can be invoked by setting =None
-        mjd (float): (Optional) Observation time (MJD, UTC): the stars are placed at their positions at this time and it is written to MJDSRT (default: None, the current time)
+        mjd (float): (Optional) Observation time (MJD, UTC): the stars are placed at their positions at this time and it is written to MJDSRT and MJDEND; the other date keywords keep the current time (default: None, the current time)
 
     Returns:
         corgidrp.data.Dataset:
