@@ -61,6 +61,7 @@ def catalog_at_epoch(field, mjd):
     recorded in the catalogue metadata (epoch, epoch_format, epoch_scale). Parallax is ignored
     (0.02 mas at the LMC). Catalogues without proper motions or epoch (e.g. user-supplied CSV
     tables), or a missing time of observation, leave the positions unchanged, with a warning.
+    The input positions must be at the catalogue epoch, i.e. not already propagated.
 
     Args:
         field (astropy.table.Table): catalogue from read_field_catalog
@@ -89,7 +90,7 @@ def catalog_at_epoch(field, mjd):
         # without distances ERFA treats the stars as very distant and says so
         warnings.simplefilter("ignore", category=ErfaWarning)
         moved = stars.apply_space_motion(new_obstime=Time(mjd, format="mjd", scale="utc"))
-    field["RA"][:] = moved.ra.deg   # in place, so units and descriptions are kept
+    field["RA"][:] = moved.ra.deg   # in place, so the units are kept
     field["DEC"][:] = moved.dec.deg
     field.meta["propagated_to_mjd"] = float(mjd)
     return field
@@ -1077,7 +1078,7 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
     
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
-        field_path (str): Full path to the reference catalogue, or the default 'lmc_astrometric_reference.ecsv' for the catalogue shipped with corgidrp (default: 'lmc_astrometric_reference.ecsv')
+        field_path (str): Full path to the reference catalogue, or the default 'lmc_astrometric_reference.ecsv' for the catalogue shipped with corgidrp (default: 'lmc_astrometric_reference.ecsv'). If the catalogue has PMRA/PMDEC and epoch metadata, its positions are propagated to the MJDSRT of each frame (see catalog_at_epoch)
         field_matches (list of str or astropy.table.Table): List of full paths to files or astropy tables with calibration field matches for each image in the dataset (x, y, ra, dec), if single str the same filepath used for all frames,nif None, automated source matching is used (default: None)
         find_threshold (int): Number of stars to find (default 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
@@ -1290,8 +1291,11 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
     history_msg = "Boresight calibration completed"
     catalog_mjds = [matches.meta.get('propagated_to_mjd') for matches in hold_matches]
     if None not in catalog_mjds:
+        mjd_range = "{0:.4f}".format(min(catalog_mjds))
+        if max(catalog_mjds) > min(catalog_mjds):
+            mjd_range += " to {0:.4f}".format(max(catalog_mjds))
         history_msg += ("; reference catalogue positions propagated with proper motions to the MJDSRT "
-                        "of each measured (combined) frame (MJD {0:.4f} to {1:.4f})".format(min(catalog_mjds), max(catalog_mjds)))
+                        "of each measured (combined) frame (MJD {0})".format(mjd_range))
     astrom_cal_dataset = corgidrp.data.Dataset([avg_cal])
     astrom_cal_dataset.update_after_processing_step(history_msg)
     ## history message should be added to the input dataset(?)
