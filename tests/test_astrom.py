@@ -9,6 +9,8 @@ import corgidrp.data as data
 import astropy.io.ascii as ascii
 from termcolor import cprint
 from astropy.coordinates import SkyCoord
+from astropy.table import Table
+from astropy.time import Time
 
 def print_fail():
     cprint(' FAIL ', "black", "on_red")
@@ -437,7 +439,7 @@ def test_boresight_combining_preserves_pointing_order(monkeypatch, num_pointings
         return None
 
     monkeypatch.setattr(astrom, "find_source_locations", find_sources)
-    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: None)
+    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: Table())
     monkeypatch.setattr(astrom, "compute_platescale_and_northangle",
                         lambda *args, **kwargs: (21.8, -45.))
     monkeypatch.setattr(astrom, "compute_boresight", lambda *args, **kwargs: (0., 0.))
@@ -449,6 +451,138 @@ def test_boresight_combining_preserves_pointing_order(monkeypatch, num_pointings
         np.testing.assert_array_equal(image, np.full((4, 4), pointing + 5.))
         assert calibration.ext_hdr[f"F{pointing}POS"] == pytest.approx(80. + pointing * 0.01)
     assert len(measured_images) == num_pointings
+
+
+CATALOG_EPOCH = Time(2015.5, format="jyear", scale="tcb")
+MJD_2026 = Time("2026-07-01T00:00:00", scale="utc").mjd
+
+
+def _moving_star_catalog(meta=True):
+    """One star at the LMC field with a large proper motion, epoch J2015.5.
+
+    Args:
+        meta (bool): whether to record the catalogue epoch in the table metadata
+
+    Returns:
+        astropy.table.Table: the catalogue
+    """
+    table = Table({"RA": [80.55], "DEC": [-69.51], "VMAG": [18.0], "PMRA": [100.0], "PMDEC": [-50.0]})
+    if meta:
+        table.meta.update({"epoch": 2015.5, "epoch_format": "jyear", "epoch_scale": "tcb"})
+    return table
+
+
+def test_catalog_at_epoch_leaves_positions_at_catalog_epoch():
+    """At the catalogue epoch nothing moves."""
+    field = _moving_star_catalog()
+    moved = astrom.catalog_at_epoch(field, CATALOG_EPOCH.utc.mjd)
+    np.testing.assert_allclose(moved["RA"], field["RA"], rtol=0, atol=1e-12)
+    np.testing.assert_allclose(moved["DEC"], field["DEC"], rtol=0, atol=1e-12)
+
+
+def test_catalog_at_epoch_moves_stars_by_proper_motion():
+    """After ten years a star has moved by pmra and pmdec times ten years on the sky."""
+    field = _moving_star_catalog()
+    later = Time(2025.5, format="jyear", scale="tcb").utc.mjd
+    moved = astrom.catalog_at_epoch(field, later)
+    start = SkyCoord(field["RA"][0], field["DEC"][0], unit="deg")
+    end = SkyCoord(moved["RA"][0], moved["DEC"][0], unit="deg")
+    east, north = start.spherical_offsets_to(end)
+    assert east.to_value("mas") == pytest.approx(1000.0, abs=0.01)
+    assert north.to_value("mas") == pytest.approx(-500.0, abs=0.01)
+    assert field["RA"][0] == 80.55  # the input table is not changed
+
+
+def test_catalog_at_epoch_without_proper_motions_warns_and_keeps_positions():
+    """User catalogues without proper motions or epoch are used as they are, with a warning."""
+    field = _moving_star_catalog(meta=False)
+    with pytest.warns(UserWarning, match="proper motion"):
+        moved = astrom.catalog_at_epoch(field, MJD_2026)
+    np.testing.assert_array_equal(moved["RA"], field["RA"])
+    field.remove_columns(["PMRA", "PMDEC"])
+    field.meta.update({"epoch": 2015.5, "epoch_format": "jyear", "epoch_scale": "tcb"})
+    with pytest.warns(UserWarning, match="proper motion"):
+        moved = astrom.catalog_at_epoch(field, MJD_2026)
+    np.testing.assert_array_equal(moved["DEC"], field["DEC"])
+    assert moved.meta["propagated_to_mjd"] is None
+
+
+def test_catalog_at_epoch_without_epoch_details_or_date_warns_and_keeps_positions():
+    """An epoch without format and scale, or a frame without MJDSRT, is not propagated."""
+    field = _moving_star_catalog(meta=False)
+    field.meta["epoch"] = 2015.5
+    with pytest.warns(UserWarning, match="proper motion"):
+        moved = astrom.catalog_at_epoch(field, MJD_2026)
+    np.testing.assert_array_equal(moved["RA"], field["RA"])
+    with pytest.warns(UserWarning, match="time of observation"):
+        moved = astrom.catalog_at_epoch(_moving_star_catalog(), None)
+    np.testing.assert_array_equal(moved["RA"], _moving_star_catalog()["RA"])
+    assert moved.meta["propagated_to_mjd"] is None
+
+
+def test_boresight_with_catalog_without_proper_motions_does_not_claim_propagation(tmp_path):
+    """With a user CSV catalogue (no proper motions) HISTORY does not say the positions were propagated."""
+    catalog = astrom.read_field_catalog(astrom.default_field_path)
+    near = (np.abs(catalog["RA"] - 80.553) < 0.03) & (np.abs(catalog["DEC"] + 69.514) < 0.03)
+    csv_path = str(tmp_path / "field.csv")
+    catalog[near]["VMAG", "RA", "DEC"].write(csv_path, format="ascii.csv")
+    # rendered at the catalogue epoch, so the unpropagated CSV positions are the true ones
+    dataset = mocks.create_astrom_data(field_path=astrom.default_field_path, rotation=20, vignette_radius=None,
+                                       mjd=CATALOG_EPOCH.utc.mjd)
+    with pytest.warns(UserWarning, match="proper motion"):
+        astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=csv_path, find_threshold=25)
+    east, north = _boresight_error_mas(astrom_cal, dataset)
+    assert east == pytest.approx(0, abs=3) and north == pytest.approx(0, abs=3)
+    history = "".join(str(card) for card in astrom_cal.ext_hdr["HISTORY"])
+    assert "Boresight calibration completed" in history
+    assert "propagated" not in history
+
+
+def _boresight_error_mas(astrom_cal, dataset):
+    """Offset of the measured boresight from the mock's true pointing.
+
+    Args:
+        astrom_cal (corgidrp.data.AstrometricCalibration): the calibration
+        dataset (corgidrp.data.Dataset): the mock data it was measured on
+
+    Returns:
+        tuple: east and north offset of the measured boresight [mas]
+    """
+    truth = SkyCoord(dataset[0].pri_hdr["RA"], dataset[0].pri_hdr["DEC"], unit="deg")
+    measured = SkyCoord(*astrom_cal.boresight, unit="deg")
+    east, north = truth.spherical_offsets_to(measured)
+    return east.to_value("mas"), north.to_value("mas")
+
+
+def test_boresight_with_proper_motions():
+    """Mock data observed in 2026 are calibrated correctly only if the catalogue is propagated.
+
+    The same frames labelled with the catalogue epoch are not propagated, so the boresight is off
+    by the proper motion of the field, i.e. the LMC bulk motion recorded in the catalogue.
+    """
+    field_path = astrom.default_field_path
+    dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, vignette_radius=None, mjd=MJD_2026)
+    assert dataset[0].ext_hdr["MJDSRT"] == MJD_2026
+
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=25)
+    east, north = _boresight_error_mas(astrom_cal, dataset)
+    assert east == pytest.approx(0, abs=3)
+    assert north == pytest.approx(0, abs=3)
+    history = "".join(str(card) for card in astrom_cal.ext_hdr["HISTORY"])  # long entries span cards
+    assert "propagated with proper motions to the MJDSRT" in history
+
+    unpropagated = dataset.copy()
+    for frame in unpropagated:
+        frame.ext_hdr["MJDSRT"] = CATALOG_EPOCH.utc.mjd
+    astrom_cal_unpropagated = astrom.boresight_calibration(input_dataset=unpropagated, field_path=field_path,
+                                                           find_threshold=25)
+    east_u, north_u = _boresight_error_mas(astrom_cal_unpropagated, unpropagated)
+
+    # stars that moved by +d look like a pointing error of -d when the motion is ignored
+    bulk = astrom.read_field_catalog(field_path).meta["proper_motions"]["bulk"]
+    years = (Time(MJD_2026, format="mjd") - CATALOG_EPOCH).to_value("yr")
+    assert east_u - east == pytest.approx(-bulk["pmra"] * years, abs=2)
+    assert north_u - north == pytest.approx(-bulk["pmdec"] * years, abs=2)
 
 
 if __name__ == "__main__":

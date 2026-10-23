@@ -135,6 +135,9 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
                 if ext_key == "HISTORY":
                     for item in image_sources[0].ext_hdr[ext_key]:
                         hdulist[1].header.add_history(item)
+                elif ext_key in ["MJDSRT", "MJDEND"]:
+                    # the stars were rendered at the mock's date, so the frames must carry it
+                    hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
                 elif ext_key not in hdulist[1].header:
                     hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
             

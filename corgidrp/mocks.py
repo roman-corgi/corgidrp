@@ -30,7 +30,7 @@ from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 from pyklip.instruments.utils.wcsgen import generate_wcs
 from corgidrp import measure_companions, corethroughput
-from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy, read_field_catalog
+from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy, read_field_catalog, catalog_at_epoch
 import datetime
 import glob
 import shutil
@@ -1511,7 +1511,7 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     return image
 
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
-                       distortion_coeffs_path=None, dither_pointings=0, bpix_map=None, sim_err_map=False, vignette_radius=3460):
+                       distortion_coeffs_path=None, dither_pointings=0, bpix_map=None, sim_err_map=False, vignette_radius=3460, mjd=None):
     """
     Create simulated data for astrometric calibration.
 
@@ -1530,6 +1530,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         bpix_map (np.array): 2D bad pixel map to apply to simulated data (default: None)
         sim_err_map (boolean): If True, simulates an error map (default: False) 
         vignette_radius (float): (Optional) The radius (from [0,0]) at which to simulate vignetting edge in [mas] (default: 3460 mas (~ 160 pixels)). No vignetting can be invoked by setting =None
+        mjd (float): (Optional) Observation time (MJD, UTC): the stars are placed at their positions at this time and it is written to MJDSRT and MJDEND; the other date keywords keep the current time (default: None, the current time)
 
     Returns:
         corgidrp.data.Dataset:
@@ -1552,6 +1553,10 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     # load in the field data and restrict to 0.02 [deg] radius around target
     cal_field = read_field_catalog(field_path)
     subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - (subfield_radius*(np.cos(np.radians(target[1]))))) & (cal_field['DEC'] <= target[1] + (subfield_radius*np.cos(np.radians(target[1])))))]
+    # place the stars where they are at the time of observation, as the pipeline expects them
+    if mjd is None:
+        mjd = Time.now().mjd
+    subfield = catalog_at_epoch(subfield, mjd)
     cal_SkyCoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg', frame='icrs')  # save these subfield skycoords somewhere
 
     # create the simulated image header
@@ -1816,6 +1821,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         # TO DO: Determine what level this image should be
         prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
         prihdr['VISTYPE'] = 'CGIVST_CAL_BORESIGHT'
+        exthdr['MJDSRT'] = mjd
+        exthdr['MJDEND'] = mjd + exthdr['EXPTIME'] / 86400.0
         prihdr['RA'] = np.array(frame_targs).T[0][i]  # assume we will know something about the dither RA/DEC pointing
         prihdr['DEC'] = np.array(frame_targs).T[1][i]
         # Use PA_APER (on-sky position angle east of north) for rotation angle in mocks.
