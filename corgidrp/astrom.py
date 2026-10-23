@@ -991,7 +991,7 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
 def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
-                          pa_tolerance=0.1, keywords_to_split_dataset_by=None):
+                          pa_tolerance=0.1, keywords_to_split_dataset_by=None, pointing_tolerance=0.5, fsm_tolerance=5.):
     """
     Perform the boresight calibration of a dataset.
     
@@ -1015,6 +1015,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         initial_dist_guess (np.array): An initial guess of legendre coefficients used for fitting distortion, if None will use coeffs associated with no distortion (default: None)
         pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) to group frames together when frames_to_combine is True (Default: 0.1)
         keywords_to_split_dataset_by (list, optional): List of additional header keywords to split the input dataset by for frame combining in addition default keywords the function uses for target, roll, and dither (default: None)
+        pointing_tolerance (float, optional): Maximum gap [arcsec on the sky] between RA_APER/DEC_APER values that are still grouped together when frames_to_combine is True; these keywords scatter with telemetry noise (Default: 0.5)
+        fsm_tolerance (float, optional): Maximum gap [mas] between FSMX/FSMY values that are still grouped together when frames_to_combine is True (Default: 5)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -1114,10 +1116,19 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
             elif keyword in exthdr:
                 exthdr_keyword_list.append(keyword)
 
+        # RA_APER/DEC_APER and FSMX/FSMY are telemetry and scatter from frame to frame, so group
+        # values within a tolerance rather than exactly. RA_APER differences are coordinate degrees;
+        # dividing by cos(DEC_APER) makes the tolerance an on-sky distance
+        tolerances = {'RA_APER': pointing_tolerance / 3600 / np.cos(np.radians(dataset.frames[0].pri_hdr.get('DEC_APER', 0.))),
+                      'DEC_APER': pointing_tolerance / 3600, 'FSMX': fsm_tolerance, 'FSMY': fsm_tolerance}
+        tolerances = {key: value for key, value in tolerances.items()
+                      if key in prihdr_keyword_list + exthdr_keyword_list}
+
         # split pa_dataset one more time by the constructed keyword list
         for cluster in clusters:
             pa_dataset = corgidrp.data.Dataset(cluster["frames"])
-            dither_datasets, _ = pa_dataset.split_dataset(prihdr_keywords=prihdr_keyword_list, exthdr_keywords=exthdr_keyword_list)
+            dither_datasets, _ = pa_dataset.split_dataset(prihdr_keywords=prihdr_keyword_list, exthdr_keywords=exthdr_keyword_list,
+                                                          tolerances=tolerances)
             # add to the final grouping
             grouped_datasets.extend(dither_datasets)
 
