@@ -8,7 +8,7 @@ import corgidrp.astrom as astrom
 import corgidrp.data as data
 import astropy.io.ascii as ascii
 from termcolor import cprint
-
+from astropy.coordinates import SkyCoord
 
 def print_fail():
     cprint(' FAIL ', "black", "on_red")
@@ -29,7 +29,7 @@ def test_astrom():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
     
     # create a dataset with dithers
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, dither_pointings=4, vignette_radius=None)
@@ -60,9 +60,13 @@ def test_astrom():
     # check that the center is correct within 3 [mas]
     # the simulated image should have zero offset
     target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
+    true_boresight_skycoord = SkyCoord(ra=target[0], dec=target[1], unit='deg')
     ra, dec = astrom_cal.boresight
-    assert ra == pytest.approx(target[0], abs=8.333e-7)     # reported as ra offset
-    assert dec == pytest.approx(target[1], abs=8.333e-7)
+    actual_boresight_skycoord = SkyCoord(ra=ra, dec=dec, unit='deg')
+
+    ra_error, dec_error = actual_boresight_skycoord.spherical_offsets_to(true_boresight_skycoord)
+    assert ra_error.deg == pytest.approx(0, abs=8.333e-7)     # reported as ra offset
+    assert dec_error.deg == pytest.approx(0, abs=8.333e-7)
 
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(astrom_cal)
@@ -89,7 +93,7 @@ def test_astrom_vignette(vignette_radius=3_460):
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
     
     # create a dataset with dithers
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, dither_pointings=4, vignette_radius=vignette_radius)
@@ -120,9 +124,13 @@ def test_astrom_vignette(vignette_radius=3_460):
     # check that the center is correct within 3 [mas]
     # the simulated image should have zero offset
     target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
+    true_boresight_skycoord = SkyCoord(ra=target[0], dec=target[1], unit='deg')
     ra, dec = astrom_cal.boresight
-    assert ra == pytest.approx(target[0], abs=8.333e-7)     # reported as ra offset
-    assert dec == pytest.approx(target[1], abs=8.333e-7)
+    actual_boresight_skycoord = SkyCoord(ra=ra, dec=dec, unit='deg')
+
+    ra_error, dec_error = actual_boresight_skycoord.spherical_offsets_to(true_boresight_skycoord)
+    assert ra_error.deg == pytest.approx(0, abs=8.333e-7)     # reported as ra offset
+    assert dec_error.deg == pytest.approx(0, abs=8.333e-7)
 
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(astrom_cal)
@@ -150,7 +158,7 @@ def test_distortion():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__), "test_data", "distortion_expected_coeffs.csv")
     expected_coeffs = np.genfromtxt(distortion_coeffs_path)
 
@@ -351,6 +359,97 @@ def test_transform_coeff_to_distortion_map():
     # Check that the computed distortion map is zero everywhere
     assert np.all(z_xdiff == 0)
     assert np.all(z_ydiff == 0)
+
+def test_read_field_catalog_default_has_required_columns():
+    """The packaged catalogue loads through the reader with RA, DEC and VMAG."""
+    field = astrom.read_field_catalog(astrom.default_field_path)
+    for name in ("RA", "DEC", "VMAG"):
+        assert name in field.colnames
+
+
+def test_read_field_catalog_accepts_user_csv(tmp_path):
+    """User-supplied CSV catalogues with VMAG, RA, DEC work as before."""
+    path = tmp_path / "legacy.csv"
+    path.write_text("VMAG,RA,DEC\n22.188,80.4897385279,-69.559173174\n19.5,80.49,-69.55\n")
+    field = astrom.read_field_catalog(str(path))
+    assert list(field["VMAG"]) == [22.188, 19.5]
+
+
+def test_read_field_catalog_rejects_missing_columns(tmp_path):
+    """A catalogue without RA, DEC or VMAG fails with a clear message."""
+    path = tmp_path / "bad.csv"
+    path.write_text("RA,DEC\n80.49,-69.55\n")
+    with pytest.raises(ValueError, match="VMAG"):
+        astrom.read_field_catalog(str(path))
+
+
+def test_read_field_catalog_explains_lfs_pointer(tmp_path):
+    """An un-pulled Git LFS pointer gives an actionable error, not a parse error."""
+    path = tmp_path / "pointer.ecsv"
+    path.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 8200000\n")
+    with pytest.raises(OSError, match="git lfs pull"):
+        astrom.read_field_catalog(str(path))
+
+@pytest.mark.parametrize("num_pointings", [1, 2, 3])
+@pytest.mark.parametrize("position_angles", [(0., 0., 0.), (0., 90., 0.)])
+@pytest.mark.filterwarnings("ignore:Keyword (RA_APER|PA_APER) not identical across frames:RuntimeWarning")
+def test_boresight_combining_preserves_pointing_order(monkeypatch, num_pointings,
+                                                    position_angles):
+    """Keep the first input pointing as the boresight after header grouping.
+
+    Args:
+        monkeypatch (pytest.MonkeyPatch): Fixture for isolating source measurements.
+        num_pointings (int): Number of distinct pointings to combine.
+        position_angles (tuple): Position angle for each pointing.
+    """
+    frames = []
+    targets = ["Z reference", "A dither", "M dither"]
+    base_primary_header, base_extension_header, _, _, _ = mocks.create_default_L2b_headers()
+    for repeat in range(2):
+        for pointing in range(num_pointings):
+            primary_header = base_primary_header.copy()
+            extension_header = base_extension_header.copy()
+            primary_header["TARGET"] = targets[pointing]
+            primary_header["RA"] = 80. + pointing * 0.01
+            primary_header["DEC"] = -69.
+            primary_header["RA_APER"] = primary_header["RA"]
+            primary_header["DEC_APER"] = primary_header["DEC"]
+            primary_header["PA_APER"] = position_angles[pointing]
+            frame = data.Image(np.full((4, 4), pointing + 10 * repeat, dtype=float),
+                               pri_hdr=primary_header, ext_hdr=extension_header)
+            frame.filename = f"pointing_{pointing}_repeat_{repeat}.fits"
+            frames.append(frame)
+    dataset = data.Dataset(frames)
+
+    measured_images = []
+
+    def find_sources(image, **keywords):
+        """Record the combined image used for each measurement.
+
+        Args:
+            image (numpy.ndarray): Combined image.
+            keywords (dict): Source-finding parameters.
+
+        Returns:
+            None: Placeholder for the isolated source matching.
+        """
+        measured_images.append(image.copy())
+        return None
+
+    monkeypatch.setattr(astrom, "find_source_locations", find_sources)
+    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: None)
+    monkeypatch.setattr(astrom, "compute_platescale_and_northangle",
+                        lambda *args, **kwargs: (21.8, -45.))
+    monkeypatch.setattr(astrom, "compute_boresight", lambda *args, **kwargs: (0., 0.))
+
+    calibration = astrom.boresight_calibration(dataset, frames_to_combine=True)
+
+    np.testing.assert_allclose(calibration.boresight, [80., -69.])
+    for pointing, image in enumerate(measured_images):
+        np.testing.assert_array_equal(image, np.full((4, 4), pointing + 5.))
+        assert calibration.ext_hdr[f"F{pointing}POS"] == pytest.approx(80. + pointing * 0.01)
+    assert len(measured_images) == num_pointings
+
 
 if __name__ == "__main__":
     test_astrom()

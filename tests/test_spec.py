@@ -1473,6 +1473,26 @@ def test_slit_trans():
         slit_pos_y = slit_trans.y_offset
         #test SlitTransmission class
         assert slit_trans.slitname == fsam_expected
+        
+        # check if it works with no dataset_open input.
+        all_frames = []
+        for frame in spec_slit_ds:
+            all_frames.append(frame)
+        for frame in spec_open_ds:
+            all_frames.append(frame) 
+        all_dataset = Dataset(all_frames)   
+            
+        slit_trans_without = steps.slit_transmission(
+            all_dataset,
+            x_range=[xrange0, xrange1],
+            y_range=[yrange0, yrange1],
+        )
+        assert slit_trans_without.slitname == fsam_expected
+        assert np.array_equal (slit_trans.data, slit_trans_without.data)
+        assert np.array_equal (slit_trans.x_offset, slit_trans_without.x_offset)
+        assert np.array_equal (slit_trans.y_offset, slit_trans_without.y_offset)
+        
+        #check if saving and loading doesn't loose anything
         slit_trans.save(filedir = output_dir, filename = "slit_trans_test.fits")
         slit_trans_load = SlitTransmission(os.path.join(output_dir, "slit_trans_test.fits"))
         assert np.array_equal(slit_trans_load.data, slit_trans.data)

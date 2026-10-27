@@ -1,0 +1,47 @@
+{
+    "name": "l2b_spec_slittrans",
+    "template": true,
+    "drpconfig": { "track_individual_errors": false },
+    "inputs": [],
+    "outputdir": "",
+    "steps": [
+      {
+        "name": "divide_by_exptime"
+      },
+      {
+          "name": "crop"
+      },
+      {
+        "name": "determine_wave_zeropoint",
+        "calibs": {
+          "SpecFilterOffset": "AUTOMATIC"
+		  },
+         "keywords": {
+			"subtract_no_offset_frames": false,
+			"additional_frame_sep_extkeys": ["FSAMNAME", "FSMX", "FSMY"]
+		  }
+      },
+      {
+        "name": "add_wavelength_map",
+        "calibs": {
+          "DispersionModel": "AUTOMATIC"
+        }
+      },
+      {
+        "name": "extract_spec"
+      },
+	  {
+	    "name": "save"
+	  },	  
+      {
+		"name": "slit_transmission",
+		"keywords": {
+			"x_range": [39, 89],
+			"y_range": [65, 71]
+		}
+	  },
+	  {
+        "name": "save"
+      }
+    ]
+  }

@@ -16,6 +16,40 @@ from scipy.optimize import OptimizeWarning
 from scipy.ndimage import median_filter
 from astropy.convolution import convolve, Gaussian2DKernel
 
+# LMC astrometric reference catalogue shipped with corgidrp (built by data/build_lmc_reference_catalog.py)
+default_field_path = os.path.join(os.path.dirname(__file__), "data", "lmc_astrometric_reference.ecsv")
+
+
+def read_field_catalog(field_path):
+    """
+    Read an astrometric reference catalogue of the calibration field.
+
+    Accepts the packaged ECSV catalogue and user-supplied tables (e.g. CSV) with at least
+    the columns RA, DEC and VMAG, the magnitude used for brightness ranking.
+
+    Args:
+        field_path (str): path to the catalogue file
+
+    Returns:
+        astropy.table.Table: the catalogue, with at least the columns RA, DEC [deg] and VMAG
+
+    Raises:
+        OSError: if the file is a Git LFS pointer that was never downloaded
+        ValueError: if RA, DEC or VMAG is missing
+    """
+    with open(field_path, "rb") as catalog_file:
+        start = catalog_file.read(64)
+    if start.startswith(b"version https://git-lfs"):
+        raise OSError("{0} is a Git LFS pointer, not the catalogue. Run `git lfs pull` in the "
+                      "corgidrp repository to download it.".format(field_path))
+
+    field = ascii.read(field_path)
+    missing = [name for name in ("RA", "DEC", "VMAG") if name not in field.colnames]
+    if missing:
+        raise ValueError("field catalogue {0} is missing column(s) {1}".format(field_path, missing))
+    return field
+
+
 def centroid(frame):
     """
     Finds the center coordinates for a given frame.
@@ -435,7 +469,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     Args:
         image (corgidrp.data.Image): Image data as a corgidrp Image object
         sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations of sources to match
-        field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
+        field_path (str): Full path to the reference catalogue (see read_field_catalog)
         comparison_threshold (int): How many stars in the field to consider for the initial match
         rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
         platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
@@ -445,10 +479,8 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
         
     '''
-    # ensure the search field data has the proper column names
-    field = ascii.read(field_path)
-    if 'RA' and 'DEC' and 'VMAG' not in field.colnames:
-        raise ValueError('field data must have column names [\'RA\',\'DEC\', \'VMAG\']')
+    # load the reference catalogue (checks for the columns RA, DEC and VMAG)
+    field = read_field_catalog(field_path)
 
     # gather the pixel locations for the (3) brightest sources in the image
     source1, source2, source3 = sources[0], sources[1], sources[2]
@@ -470,8 +502,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     l1, l2, l3 = np.sort([l12, l23, l31])
     a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
 
-    # define a search field and load in RA, DEC, Vmag
-    field = ascii.read(field_path)
+    # define a search field around the commanded pointing
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - (rad*(np.cos(np.radians(target[1]))))) & (field['DEC'] <= target[1] + (rad*np.cos(np.radians(target[1])))))]
@@ -803,8 +834,8 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
             (float): North angle
 
     Returns:
-        image_center_RA (float): RA coordinate of the center pixel
-        image_center_DEC (float): Dec coordinate of the center pixel
+        ra_offset (float): the offset in RA [deg] *from the target pointing RA *to the true RA of the center coord
+        dec_offset (float): the offset in Dec [deg] *from the target pointing Dec *to the true Dec of the center coord
     
     """
     if type(image) != np.ndarray:
@@ -865,17 +896,21 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
         image_centerings[i,:] = [xi_center, yi_center]
 
     # average all offsets in x,y directions [pix]
-    boresight_x, boresight_y = np.median(boresights[:,0]), np.median(boresights[:,1])
+    # boresight_x,y is the average offset from a star's predicted image location to its actual position given platescale and northangle alone
+    # such that x_predict [predicted pixel location] + offset [pixel] = x_center [image pixel location]
+    boresight_x, boresight_y = np.median(boresights[:,0]), np.median(boresights[:,1]) 
+    # we want to know what the ~actual (512, 512) pixels location would be in the 'predicted' frame so we have
+    # predicted_x + offset = 512.   OR      predicted_x = 512. - offset
+    true_center_x, true_center_y = 512.- boresight_x, 512.- boresight_y
 
-    # convert back to corrected RA, DEC of target
-    # image_center_RA = target_coordinate[0] - ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
-    # image_center_DEC = target_coordinate[1] - ((boresight_y * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
+    # convert back to skycoord
+    true_center_coord = astropy.wcs.utils.pixel_to_skycoord(true_center_x, true_center_y, wcs=w, origin=1)
+    # true_center_ra, true_center_dec = true_center_coord.ra.value, true_center_coord.dec.value
+    # boresight_ra, boresight_dec = target_coordinate[0] - true_center_ra, target_coordinate[1] - true_center_dec
+    target_skycoord = SkyCoord(target_coordinate[0], target_coordinate[1], unit='deg')
+    ra_offset, dec_offset = target_skycoord.spherical_offsets_to(true_center_coord)
 
-    # report the offsets instead of the new RA/DEC
-    boresight_ra = ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
-    boresight_dec = ((boresight_y * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
-
-    return boresight_ra, boresight_dec
+    return ra_offset.deg, dec_offset.deg
 
 def format_distortion_inputs(input_dataset, source_matches, position_error=None):
     ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
@@ -984,7 +1019,7 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
     return (distortion_coeffs, fitorder)
   
   
-def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
+def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.ecsv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
                           pa_tolerance=0.1, keywords_to_split_dataset_by=None):
@@ -993,7 +1028,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
-        field_path (str): Full path to file with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
+        field_path (str): Full path to the reference catalogue, or the default 'lmc_astrometric_reference.ecsv' for the catalogue shipped with corgidrp (default: 'lmc_astrometric_reference.ecsv')
         field_matches (list of str or astropy.table.Table): List of full paths to files or astropy tables with calibration field matches for each image in the dataset (x, y, ra, dec), if single str the same filepath used for all frames,nif None, automated source matching is used (default: None)
         find_threshold (int): Number of stars to find (default 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
@@ -1041,9 +1076,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
                         matched_sources_multiframe = field_matches
 
     # load in field data to refer to
-    if field_path == 'JWST_CALFIELD2020.csv':
-        full_field_path = os.path.join(os.path.dirname(__file__), "data", field_path)
-        field_path = full_field_path
+    if field_path == 'lmc_astrometric_reference.ecsv':
+        field_path = default_field_path
 
     # combine data frames if requested
     grouped_datasets = []
@@ -1117,6 +1151,11 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
             # add to the final grouping
             grouped_datasets.extend(dither_datasets)
 
+        # Header grouping sorts the pointings, but the boresight must refer to
+        # the first input pointing. Restore the order in which groups appeared.
+        frame_indices = {id(frame): index for index, frame in enumerate(dataset)}
+        grouped_datasets.sort(key=lambda group: frame_indices[id(group[0])])
+
     # median combine each grouped dataset into one frame for calibration processing
     if len(grouped_datasets) > 0:
         image_objects = []
@@ -1147,6 +1186,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
+        target_skycoord = SkyCoord(ra=target_coordinate[0], dec=target_coordinate[1], unit='deg')
 
         # compute the calibration properties
         found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
@@ -1155,13 +1195,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         hold_matches.append(matched_sources)
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
-        ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
-        # calculate the corrected target position based on ra, dec offsets
-        corr_ra, corr_dec = target_coordinate[0] - ra, target_coordinate[1] - dec
+        ra_off, dec_off = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
+        # calculate the corrected target position based on ra, dec offsets using skycoord to account for spherical coord system
+        corrected_center_coord = target_skycoord.spherical_offsets_by(ra_off * astropy.units.deg, dec_off * astropy.units.deg)
+        corr_ra, corr_dec = corrected_center_coord.ra.value, corrected_center_coord.dec.value
         corrected_positions_boresight.append([corr_ra, corr_dec])
 
         # return a single AstrometricCalibration data file
-        astrom_data = np.array([corr_ra, corr_dec, cal_properties[0], cal_properties[1], ra, dec, np.inf, np.inf])
+        astrom_data = np.array([corr_ra, corr_dec, cal_properties[0], cal_properties[1], ra_off, dec_off, np.inf, np.inf])
         astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[i].pri_hdr, ext_hdr=dataset[i].ext_hdr, input_dataset=in_dataset)
         # change the filename here since the astrom_cals will be averaged later and arent individually saved ('_ast_cal' will be added to filename twice otherwise)
         astrom_cal.filename = astrom_cal.filename.split("_ast_cal")[0] + '.fits'

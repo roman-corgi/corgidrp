@@ -5,12 +5,16 @@ import glob
 import pytest
 import warnings
 import numpy as np
+import scipy.ndimage as ndi
 import astropy.time as time
 import astropy.io.fits as fits
+from astropy.coordinates import SkyCoord
+
 import corgidrp
 import corgidrp.check as check
 import corgidrp.data as data
 import corgidrp.mocks as mocks
+import corgidrp.astrom as astrom
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
@@ -79,7 +83,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
     # create raw data that includes injected stars with gaussian psfs
-    jwst_calfield_path = os.path.join(os.path.dirname(thisfile_dir), "test_data", "JWST_CALFIELD2020.csv")
+    jwst_calfield_path = astrom.default_field_path
     image_sources = mocks.create_astrom_data(jwst_calfield_path, add_gauss_noise=False)
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     # create a directory in the output dir to hold the simulated data files
@@ -103,14 +107,20 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_std = np.std(noise_datacube, axis=0)
     noise_rms = np.mean(noise_std)
 
+    # arbitrary flux scale: the second brightest star in the scene lands at ~250 sigma. Not the
+    # brightest, because that is the G = 14.6 Gaia star the HST-only catalogue lacked; it is
+    # about five times brighter and would push the fainter stars into the noise
+    scene = image_sources[0].data
+    star_peaks = np.sort(scene[(scene == ndi.maximum_filter(scene, size=9)) & (scene > 0)])
+    reference_peak_flux = star_peaks[-2]
+
     for dark in os.listdir(noise_characterization_path):
         if not dark.lower().endswith('.fits'):
                 continue
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             hdulist[0].header['VISTYPE'] = "CGIVST_CAL_BORESIGHT"
-            # setting SNR to ~250 (arbitrary SNR)
-            scaled_image = ((250 * noise_rms) / np.max(image_sources[0].data)) * image_sources[0].data
+            scaled_image = ((250 * noise_rms) / reference_peak_flux) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))
             hdulist[1].data[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += scaled_image
             # update headers
@@ -305,14 +315,17 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
     assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
-
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
     # check that the center is correct within 3 [mas]
     # the simulated image should have no shift from the target
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
-    assert ra == pytest.approx(target[0], abs=8.333e-7)
-    assert dec == pytest.approx(target[1], abs=8.333e-7)
+    ###*** Use SkyCoord here to translate position difference correctly/ ***###
+    actual_boresight_skycoord = SkyCoord(ra=ra, dec=dec, unit='deg')
+    true_boresight_skycoord = SkyCoord(ra=target[0], dec=target[1], unit='deg')
+    ra_error, dec_error = actual_boresight_skycoord.spherical_offsets_to(true_boresight_skycoord)
+    assert ra_error.deg == pytest.approx(0, abs=8.333e-7)
+    assert dec_error.deg == pytest.approx(0, abs=8.333e-7)
 
     check.compare_to_mocks_hdrs(astrom_cal_files[0])
     
@@ -320,7 +333,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
-    #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
+    # e2edata_dir = "/Users/macuser/Roman/car91/flight_917/E2E_data_v2"
     e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#
     outputdir = thisfile_dir
 

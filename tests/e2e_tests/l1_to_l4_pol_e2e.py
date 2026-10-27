@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
+import corgidrp.astrom as astrom
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.check as check
@@ -360,7 +361,7 @@ def run_l1_to_l4_e2e_test(l1_datadir, l4_outputdir, processed_cal_path, logger):
     datashape = (2, 1024, 1024)  # pol data shape
     bpixmap = np.zeros(datashape)
 
-    field_path = os.path.join(os.path.dirname(__file__), "..","test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
 
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__), "..","test_data", "distortion_expected_coeffs.csv")
     distortion_coeffs = np.genfromtxt(distortion_coeffs_path)

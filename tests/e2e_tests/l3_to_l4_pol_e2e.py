@@ -8,6 +8,7 @@ import glob
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
+import corgidrp.astrom as astrom
 import corgidrp.caldb as caldb
 import corgidrp.pol as pol
 from corgidrp import l2b_to_l3
@@ -183,7 +184,7 @@ def test_l3_to_l4_pol_e2e(e2edata_path, e2eoutput_path):
     datashape = (2, 1024, 1024)  # pol data shape
     bpixmap = np.zeros(datashape)
 
-    field_path = os.path.join(os.path.dirname(__file__), "..","test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
 
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__), "..","test_data", "distortion_expected_coeffs.csv")
     distortion_coeffs = np.genfromtxt(distortion_coeffs_path)
