@@ -691,7 +691,8 @@ def test_mueller_matrix_cal():
 
         band_mueller_matrix = pol.generate_mueller_matrix_cal(band_dataset)
         expected_filename = f"stellar_polarization_database_band{band}.csv"
-        assert expected_filename in str(band_mueller_matrix.ext_hdr["HISTORY"])
+        history = "".join(band_mueller_matrix.ext_hdr["HISTORY"])
+        assert expected_filename in history
 
     #Put in the ND filter and make sure the type is correct. 
     for framm in stokes_dataset.frames:
