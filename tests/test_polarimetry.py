@@ -683,6 +683,16 @@ def test_mueller_matrix_cal():
     #Check that the type of mueller_matrix is correct
     assert isinstance(mueller_matrix, pol.MuellerMatrix)
 
+    # Check that the stellar polarization database is automatically selected by CFAMNAME.
+    for cfam_name, band in (("1F", 1), ("4F", 4)):
+        band_dataset = stokes_dataset.copy()
+        for frame in band_dataset:
+            frame.ext_hdr["CFAMNAME"] = cfam_name
+
+        band_mueller_matrix = pol.generate_mueller_matrix_cal(band_dataset)
+        expected_filename = f"stellar_polarization_database_band{band}.csv"
+        assert expected_filename in str(band_mueller_matrix.ext_hdr["HISTORY"])
+
     #Put in the ND filter and make sure the type is correct. 
     for framm in stokes_dataset.frames:
         framm.ext_hdr["FPAMNAME"] = "ND225"
