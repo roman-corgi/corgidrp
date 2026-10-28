@@ -1116,21 +1116,27 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
             elif keyword in exthdr:
                 exthdr_keyword_list.append(keyword)
 
-        # RA_APER/DEC_APER and FSMX/FSMY are telemetry and scatter from frame to frame, so group
-        # values within a tolerance rather than exactly. RA_APER differences are coordinate degrees;
-        # dividing by cos(DEC_APER) makes the tolerance an on-sky distance
-        tolerances = {'RA_APER': pointing_tolerance / 3600 / np.cos(np.radians(dataset.frames[0].pri_hdr.get('DEC_APER', 0.))),
-                      'DEC_APER': pointing_tolerance / 3600, 'FSMX': fsm_tolerance, 'FSMY': fsm_tolerance}
-        tolerances = {key: value for key, value in tolerances.items()
-                      if key in prihdr_keyword_list + exthdr_keyword_list}
-
         # split pa_dataset one more time by the constructed keyword list
         for cluster in clusters:
             pa_dataset = corgidrp.data.Dataset(cluster["frames"])
-            dither_datasets, _ = pa_dataset.split_dataset(prihdr_keywords=prihdr_keyword_list, exthdr_keywords=exthdr_keyword_list,
-                                                          tolerances=tolerances)
-            # add to the final grouping
-            grouped_datasets.extend(dither_datasets)
+            # split by target first, so that the RA tolerance below is computed at the declination of each field
+            if 'TARGET' in prihdr_keyword_list:
+                target_datasets, _ = pa_dataset.split_dataset(prihdr_keywords=['TARGET'])
+            else:
+                target_datasets = [pa_dataset]
+            for target_dataset in target_datasets:
+                # RA_APER/DEC_APER and FSMX/FSMY are telemetry and scatter from frame to frame, so group
+                # values within a tolerance rather than exactly. RA_APER differences are coordinate degrees;
+                # dividing by cos(DEC_APER) makes the tolerance an on-sky distance
+                dec_aper = np.median([frame.pri_hdr.get('DEC_APER', 0.) for frame in target_dataset])
+                tolerances = {'RA_APER': pointing_tolerance / 3600 / np.cos(np.radians(dec_aper)),
+                              'DEC_APER': pointing_tolerance / 3600, 'FSMX': fsm_tolerance, 'FSMY': fsm_tolerance}
+                tolerances = {key: value for key, value in tolerances.items()
+                              if key in prihdr_keyword_list + exthdr_keyword_list}
+                dither_datasets, _ = target_dataset.split_dataset(prihdr_keywords=prihdr_keyword_list,
+                                                                  exthdr_keywords=exthdr_keyword_list, tolerances=tolerances)
+                # add to the final grouping
+                grouped_datasets.extend(dither_datasets)
 
         # Header grouping sorts the pointings, but the boresight must refer to
         # the first input pointing. Restore the order in which groups appeared.
@@ -1219,7 +1225,15 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         avg_cal.ext_hdr[name] = tuple(corr)
         
     # update the history
-    history_msg = "Boresight calibration completed"
+    if int(frames_to_combine) == 1:
+        grouping = "grouped by header keywords"
+    elif int(frames_to_combine) > 1:
+        grouping = "grouped in sets of up to {0} consecutive frames".format(int(frames_to_combine))
+    else:
+        grouping = "not combined"
+    group_sizes = [len(group) for group in grouped_datasets] if len(grouped_datasets) > 0 else [1] * len(dataset)
+    history_msg = ("Boresight calibration completed from {0} frames ({1}) combined into {2} groups of {3} frames"
+                   .format(len(input_dataset), grouping, len(group_sizes), ", ".join(str(size) for size in group_sizes)))
     astrom_cal_dataset = corgidrp.data.Dataset([avg_cal])
     astrom_cal_dataset.update_after_processing_step(history_msg)
     ## history message should be added to the input dataset(?)

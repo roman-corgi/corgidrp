@@ -421,7 +421,7 @@ def test_boresight_combining_preserves_pointing_order(monkeypatch, num_pointings
     assert len(measured_images) == num_pointings
 
 
-def _noisy_pointings(pointing_offsets, repeats=3, aper_noise=0.3, fsm_noise=0.02, seed=1):
+def _noisy_pointings(pointing_offsets, repeats=3, aper_noise=0.3, fsm_noise=0.02, seed=1, dec0=-69.5, target="LMC"):
     """Frames at several pointings whose RA_APER/DEC_APER and FSMX/FSMY scatter like telemetry.
 
     Args:
@@ -431,6 +431,8 @@ def _noisy_pointings(pointing_offsets, repeats=3, aper_noise=0.3, fsm_noise=0.02
         aper_noise (float): maximum scatter of RA_APER/DEC_APER [arcsec on the sky]
         fsm_noise (float): maximum scatter of FSMX/FSMY [mas]
         seed (int): random seed
+        dec0 (float): DEC_APER of the undithered pointing [deg]
+        target (str): TARGET of all frames
 
     Returns:
         corgidrp.data.Dataset: frames in the order pointing 0, 1, ..., repeated; each frame's
@@ -438,12 +440,12 @@ def _noisy_pointings(pointing_offsets, repeats=3, aper_noise=0.3, fsm_noise=0.02
     """
     rng = np.random.default_rng(seed)
     base_primary_header, base_extension_header, _, _, _ = mocks.create_default_L2b_headers()
-    dec0 = -69.5
     frames = []
     for repeat in range(repeats):
         for pointing, ((east, north), (fsmx, fsmy)) in enumerate(pointing_offsets):
             primary_header = base_primary_header.copy()
             extension_header = base_extension_header.copy()
+            primary_header["TARGET"] = target
             east_noise, north_noise = rng.uniform(-aper_noise, aper_noise, 2)
             primary_header["RA_APER"] = 80.5 + (east + east_noise) / 3600 / np.cos(np.radians(dec0))
             primary_header["DEC_APER"] = dec0 + (north + north_noise) / 3600
@@ -464,6 +466,7 @@ def _measured_groups(monkeypatch, dataset, **keywords):
 
     Returns:
         list of numpy.ndarray: one combined image per group, in measurement order
+        corgidrp.data.AstrometricCalibration: the calibration product
     """
     measured_images = []
     monkeypatch.setattr(astrom, "find_source_locations",
@@ -471,15 +474,15 @@ def _measured_groups(monkeypatch, dataset, **keywords):
     monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: None)
     monkeypatch.setattr(astrom, "compute_platescale_and_northangle", lambda *args, **kwargs: (21.8, -45.))
     monkeypatch.setattr(astrom, "compute_boresight", lambda *args, **kwargs: (0., 0.))
-    astrom.boresight_calibration(dataset, frames_to_combine=True, **keywords)
-    return measured_images
+    astrom_cal = astrom.boresight_calibration(dataset, frames_to_combine=True, **keywords)
+    return measured_images, astrom_cal
 
 
 @pytest.mark.filterwarnings("ignore:Keyword (RA_APER|DEC_APER) not identical across frames:RuntimeWarning")
 def test_dither_grouping_tolerates_telemetry_noise(monkeypatch):
     """Frames at the same pointing are combined although RA_APER/DEC_APER and FSMX/FSMY scatter."""
     dataset = _noisy_pointings([((0., 0.), (0., 0.)), ((3., 2.), (0., 0.))])
-    groups = _measured_groups(monkeypatch, dataset)
+    groups, _ = _measured_groups(monkeypatch, dataset)
     assert len(groups) == 2
     for pointing, image in enumerate(groups):   # first input pointing first, and no mixing
         np.testing.assert_array_equal(image, np.full((4, 4), float(pointing)))
@@ -490,7 +493,7 @@ def test_dither_grouping_keeps_small_dithers_apart(monkeypatch):
     """A 1 arcsec telescope dither in Dec and a 22 mas (1 pixel) FSM dither are separate groups."""
     dataset = _noisy_pointings([((0., 0.), (0., 0.)), ((0., 1.), (0., 0.)), ((0., 0.), (22., 0.))],
                                aper_noise=0.2)
-    groups = _measured_groups(monkeypatch, dataset)
+    groups, _ = _measured_groups(monkeypatch, dataset)
     assert len(groups) == 3
     for pointing, image in enumerate(groups):
         np.testing.assert_array_equal(image, np.full((4, 4), float(pointing)))
@@ -500,8 +503,32 @@ def test_dither_grouping_keeps_small_dithers_apart(monkeypatch):
 def test_dither_grouping_with_zero_tolerance_matches_exactly(monkeypatch):
     """With both tolerances set to zero every noisy frame is its own group, as before."""
     dataset = _noisy_pointings([((0., 0.), (0., 0.))], repeats=4)
-    groups = _measured_groups(monkeypatch, dataset, pointing_tolerance=0., fsm_tolerance=0.)
+    groups, _ = _measured_groups(monkeypatch, dataset, pointing_tolerance=0., fsm_tolerance=0.)
     assert len(groups) == 4
+
+
+@pytest.mark.filterwarnings("ignore:Keyword (RA_APER|DEC_APER|TARGET) not identical across frames:RuntimeWarning")
+def test_dither_grouping_uses_declination_of_each_field(monkeypatch):
+    """A 1 arcsec RA dither on an equatorial field stays separate when an LMC field comes first in the dataset."""
+    lmc_dataset = _noisy_pointings([((0., 0.), (0., 0.))], aper_noise=0.2, target="LMC")
+    equatorial_dataset = _noisy_pointings([((0., 0.), (0., 0.)), ((1., 0.), (0., 0.))], aper_noise=0.2,
+                                          dec0=0., target="EQUATORIAL")
+    for frame in equatorial_dataset:
+        frame.data += 1
+    dataset = data.Dataset(list(lmc_dataset) + list(equatorial_dataset))
+    groups, _ = _measured_groups(monkeypatch, dataset)
+    assert len(groups) == 3
+    for pointing, image in enumerate(groups):
+        np.testing.assert_array_equal(image, np.full((4, 4), float(pointing)))
+
+
+@pytest.mark.filterwarnings("ignore:Keyword (RA_APER|DEC_APER) not identical across frames:RuntimeWarning")
+def test_boresight_history_reports_groups(monkeypatch):
+    """The history of the calibration product states how many frames were combined into how many groups."""
+    dataset = _noisy_pointings([((0., 0.), (0., 0.)), ((3., 2.), (0., 0.))])
+    _, astrom_cal = _measured_groups(monkeypatch, dataset)
+    history = "".join(astrom_cal.ext_hdr["HISTORY"])
+    assert "from 6 frames (grouped by header keywords) combined into 2 groups of 3, 3 frames" in history
 
 
 if __name__ == "__main__":
