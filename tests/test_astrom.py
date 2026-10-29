@@ -451,6 +451,68 @@ def test_boresight_combining_preserves_pointing_order(monkeypatch, num_pointings
     assert len(measured_images) == num_pointings
 
 
+def test_platescale_pairs_reproducible(monkeypatch):
+    """Use every star pair up to max_pairs and a seeded subset beyond it, without the global random state.
+
+    Args:
+        monkeypatch (pytest.MonkeyPatch): Fixture for replacing the pair offset fit.
+    """
+    from astropy.table import Table
+    from astropy.wcs import WCS
+
+    rng = np.random.default_rng(1)
+    num_stars = 40
+    num_pairs = num_stars * (num_stars - 1) // 2
+    x, y = rng.uniform(100, 900, num_stars), rng.uniform(100, 900, num_stars)
+    wcs = WCS(naxis=2)
+    wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN']
+    wcs.wcs.crval = [80.5, -69.5]
+    wcs.wcs.crpix = [512, 512]
+    wcs.wcs.cdelt = [-21.8 / 3.6e6, 21.8 / 3.6e6]
+    sky = wcs.pixel_to_world(x, y)
+    # measured positions scatter around the true ones, so that different subsets of pairs give different results
+    sources = Table({'x': x + rng.normal(0, 0.1, num_stars), 'y': y + rng.normal(0, 0.1, num_stars),
+                     'RA': sky.ra.deg, 'DEC': sky.dec.deg})
+    image = np.zeros((1024, 1024))
+
+    fitted_pairs = []
+
+    def offset_from_guess(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess, **kwargs):
+        """Return the guessed offset instead of fitting it, and record the pair.
+
+        Args:
+            frame (numpy.ndarray): Image, unused.
+            xstar_guess (float): x of the first star.
+            ystar_guess (float): y of the first star.
+            xoffset_guess (float): x offset to the second star.
+            yoffset_guess (float): y offset to the second star.
+            kwargs (dict): Further keywords of measure_offset, unused.
+
+        Returns:
+            tuple: ((x offset, y offset), None)
+        """
+        fitted_pairs.append((xstar_guess, ystar_guess, xoffset_guess, yoffset_guess))
+        return (xoffset_guess, yoffset_guess), None
+
+    monkeypatch.setattr(astrom, "measure_offset", offset_from_guess)
+
+    astrom.compute_platescale_and_northangle(image, sources, max_pairs=num_pairs)
+    assert len(set(fitted_pairs)) == len(fitted_pairs) == num_pairs
+
+    fitted_pairs.clear()
+    np.random.seed(0)
+    first = astrom.compute_platescale_and_northangle(image, sources, max_pairs=200)
+    assert len(set(fitted_pairs)) == len(fitted_pairs) == 200
+    state_after_call = np.random.get_state()[1]
+    np.random.seed(0)
+    assert np.array_equal(state_after_call, np.random.get_state()[1])
+
+    np.random.seed(5)
+    assert astrom.compute_platescale_and_northangle(image, sources, max_pairs=200) == first
+    assert astrom.compute_platescale_and_northangle(image, sources, max_pairs=200, seed=1) != first
+    assert first[0] == pytest.approx(21.8, abs=0.05)
+
+
 if __name__ == "__main__":
     test_astrom()
     test_astrom_vignette()
