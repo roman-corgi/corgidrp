@@ -6,6 +6,7 @@ import corgidrp.data
 
 import astropy
 import astropy.io.ascii as ascii
+import astropy.wcs
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as u
@@ -17,6 +18,7 @@ import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.optimize import OptimizeWarning
 from scipy.ndimage import median_filter
+from scipy.spatial import cKDTree
 from astropy.convolution import convolve, Gaussian2DKernel
 
 # LMC astrometric reference catalogue shipped with corgidrp (built by data/build_lmc_reference_catalog.py)
@@ -526,29 +528,128 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     
     return found_sources
 
-def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012, platescale_guess=21.8, platescale_tol=0.1):
-    ''' 
-    Function to find the corresponding RA/Dec positions to image sources, given a particular field.
+def project_to_pixels(skycoords, crval, crpix, platescale, northangle):
+    '''
+    Projects sky positions to pixels with a gnomonic projection of a given plate scale and north angle.
 
     Args:
-        image (corgidrp.data.Image): Image data as a corgidrp Image object
-        sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations of sources to match
-        field_path (str): Full path to the reference catalogue (see read_field_catalog)
-        comparison_threshold (int): How many stars in the field to consider for the initial match
-        rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
-        platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
-        platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.5)
+        skycoords (astropy.coordinates.SkyCoord): Sky positions to project
+        crval (astropy.coordinates.SkyCoord): Sky position at the reference pixel
+        crpix (tuple): (x, y) of the reference pixel [0-based]
+        platescale (float): Plate scale [mas/ pixel]
+        northangle (float): North angle [deg], as measured by compute_platescale_and_northangle
 
     Returns:
-        matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
-            at the time of observation (MJDSRT); meta['propagated_to_mjd'] is that MJD, or None if they were not propagated
-        
+        pixels (np.ndarray): Array of shape (N, 2) with the x, y pixel positions
     '''
-    # load the reference catalogue (checks for the columns RA, DEC and VMAG) and move the whole
-    # catalogue to the time of observation, so that stars near the edge of the subfield are cut
-    # at their current positions
-    field = catalog_at_epoch(read_field_catalog(field_path), image.ext_hdr.get('MJDSRT'))
+    vert_ang = np.radians(northangle)
+    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+    w = astropy.wcs.WCS(naxis=2)
+    w.wcs.ctype = ['RA---TAN', 'DEC--TAN']
+    w.wcs.crval = [crval.ra.deg, crval.dec.deg]
+    w.wcs.crpix = [crpix[0] + 1, crpix[1] + 1]
+    w.wcs.cd = pc * (platescale * 0.001) / 3600.
+    x, y = astropy.wcs.utils.skycoord_to_pixel(skycoords, wcs=w, origin=0)
+    return np.array([x, y]).T
 
+def find_common_shift(detections, predicted, max_shift, radius):
+    '''
+    Finds the shift that brings the most detections within a radius of a predicted position.
+
+    Every offset between a detection and a predicted position shorter than max_shift is a candidate.
+
+    Args:
+        detections (np.ndarray): Array of shape (N, 2) with the detected x, y positions [pixels]
+        predicted (np.ndarray): Array of shape (M, 2) with the predicted x, y positions [pixels]
+        max_shift (float): Largest shift to consider [pixels]
+        radius (float): Distance within which a detection counts as matched [pixels]
+
+    Returns:
+        shift (np.ndarray): (dx, dy) to add to the predicted positions [pixels], or None if no candidate was found
+    '''
+    offsets = (detections[:, None, :] - predicted[None, :, :]).reshape(-1, 2)
+    offsets = offsets[np.hypot(offsets[:, 0], offsets[:, 1]) <= max_shift]
+    if len(offsets) == 0:
+        return None
+    tree = cKDTree(predicted)
+    scores = [np.sum(np.isfinite(tree.query(detections - offset, distance_upper_bound=radius)[0])) for offset in offsets]
+    return offsets[np.argmax(scores)]
+
+def refine_matches(detections, predicted, match_radius):
+    '''
+    Matches detections to predicted positions, refining an affine transformation between them.
+
+    The transformation is fitted to the pairs within 4, 2 and finally 1 times match_radius, so that it absorbs
+    errors in the predicted plate scale, rotation and shift. Each predicted position is then assigned at most one
+    detection, the closest one within match_radius, so repeated detections of one star are dropped.
+
+    Args:
+        detections (np.ndarray): Array of shape (N, 2) with the detected x, y positions [pixels]
+        predicted (np.ndarray): Array of shape (M, 2) with the predicted x, y positions [pixels]
+        match_radius (float): Largest distance between a detection and its matched position [pixels]
+
+    Returns:
+        det_ind (np.ndarray): Indices of the matched detections, in their original order
+        pred_ind (np.ndarray): Indices of the matched predicted positions
+    '''
+    empty = np.array([], dtype=int), np.array([], dtype=int)
+    if len(detections) < 3 or len(predicted) < 3:
+        return empty
+    transformed = predicted
+    for radius in (4 * match_radius, 2 * match_radius, match_radius):
+        dist, ind = cKDTree(transformed).query(detections, distance_upper_bound=radius)
+        matched = np.isfinite(dist)
+        if np.sum(matched) < 3:
+            return empty
+        design = np.column_stack([predicted[ind[matched]], np.ones(np.sum(matched))])
+        affine = np.linalg.lstsq(design, detections[matched], rcond=None)[0]
+        transformed = np.column_stack([predicted, np.ones(len(predicted))]) @ affine
+
+    dist, ind = cKDTree(transformed).query(detections, distance_upper_bound=match_radius)
+    det_ind = []
+    for i in np.where(np.isfinite(dist))[0]:
+        others = np.where(ind == ind[i])[0]
+        if dist[i] == np.min(dist[others]):
+            det_ind.append(i)
+    det_ind = np.array(det_ind, dtype=int)
+    return det_ind, ind[det_ind]
+
+def matched_platescale_and_northangle(positions, skycoords):
+    '''
+    Median plate scale and north angle over all pairs of matched stars, as a check of a match.
+
+    Args:
+        positions (np.ndarray): Array of shape (N, 2) with the x, y positions [pixels]
+        skycoords (astropy.coordinates.SkyCoord): The matched sky positions
+
+    Returns:
+        platescale (float): Plate scale [mas/ pixel]
+        northangle (float): North angle [deg], in the convention of compute_platescale_and_northangle
+    '''
+    i, j = np.triu_indices(len(positions), k=1)
+    sep_pix = np.hypot(*(positions[j] - positions[i]).T)
+    platescale = np.median(skycoords[i].separation(skycoords[j]).mas / sep_pix)
+    dtheta = skycoords[i].position_angle(skycoords[j]).deg - angle_between(positions[i].T, positions[j].T)
+    northangle = np.degrees(np.median(np.arctan2(np.sin(np.radians(dtheta)), np.cos(np.radians(dtheta)))))
+    return platescale, northangle
+
+def triangle_solutions(sources, brightest_field, platescale_guess, platescale_tol):
+    '''
+    Plate scale, north angle and anchor of the catalogue triangles that match the triangle of the three
+    brightest sources, best match first.
+
+    Args:
+        sources (astropy.table.Table): Astropy table with columns 'x', 'y', brightest source first
+        brightest_field (astropy.table.Table): The catalogue stars to form triangles from
+        platescale_guess (float): An initial guess for the platescale value [mas/ pixel]
+        platescale_tol (float): Fractional tolerance on platescale_guess
+
+    Yields:
+        platescale (float): Plate scale implied by the triangle [mas/ pixel]
+        northangle (float): North angle implied by the triangle [deg]
+        anchor_pix (tuple): (x, y) of the source that anchors the triangle [pixels]
+        anchor_coord (astropy.coordinates.SkyCoord): Sky position of the matching catalogue star
+    '''
     # gather the pixel locations for the (3) brightest sources in the image
     source1, source2, source3 = sources[0], sources[1], sources[2]
 
@@ -569,121 +670,158 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     l1, l2, l3 = np.sort([l12, l23, l31])
     a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
 
-    # define a search field around the commanded pointing
-    target = image.pri_hdr['RA'], image.pri_hdr['DEC']
-    
-    subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - (rad*(np.cos(np.radians(target[1]))))) & (field['DEC'] <= target[1] + (rad*np.cos(np.radians(target[1])))))]
-
-    bright_order_subfield = subfield.copy()
-    bright_order_subfield.sort(keys='VMAG')
-    brightest_field = bright_order_subfield[:comparison_threshold]
-
     # create all combinations of triangles with the brightest field sources
     combos = list(compute_combinations(range(len(brightest_field)), r=3))
 
     skycoords = SkyCoord(ra= brightest_field['RA'], dec= brightest_field['DEC'], unit='deg')
     field_side_lengths = np.empty((len(combos), 3))
-    best_sky_ind = np.nan
-    smallest_lsq = 1e10
-    best_ind = np.nan
+    lstsqs = np.full(len(combos), np.inf)
 
     for i, ind in enumerate(combos):
         j, k, l = ind
         s1, s2, s3 = skycoords[j], skycoords[k], skycoords[l]
 
         len1, len2, len3 = np.sort([s1.separation(s2).mas, s2.separation(s3).mas, s3.separation(s1).mas])
-
         field_side_lengths[i] = np.array([len1, len2, len3])
         perimeter = len1 + len2 + len3
         ap, bp, cp = len1/perimeter, len2/perimeter, len3/perimeter
 
         # make sure plate scale is within tolerance of the guess or else discard this possibility
-        if ((len1 / l1) > platescale_guess* (1 + platescale_tol)) or ((len2 / l2) > platescale_guess* (1 + platescale_tol)) or ((len3 / l3) > platescale_guess* (1 + platescale_tol)):
-            ap, bp, cp = -np.inf, -np.inf, -np.inf
-        if ((len1 / l1) < platescale_guess* (1 - platescale_tol)) or ((len2 / l2) < platescale_guess* (1 - platescale_tol)) or ((len3 / l3) < platescale_guess* (1 - platescale_tol)):
-            ap, bp, cp = -np.inf, -np.inf, -np.inf
+        ratios = np.array([len1 / l1, len2 / l2, len3 / l3])
+        if np.any(ratios > platescale_guess * (1 + platescale_tol)) or np.any(ratios < platescale_guess * (1 - platescale_tol)):
+            continue
 
-        # find the best fit to the brightest image triangle
-        lstsq = (a - ap)**2 + (b - bp)**2 + (c - cp)**2
-        if lstsq < smallest_lsq:
-            smallest_lsq = lstsq
-            best_ind = i
-            best_sky_ind = ind
+        lstsqs[i] = (a - ap)**2 + (b - bp)**2 + (c - cp)**2
 
-    # keep track of which best fit skycoord is the farthest from the other two
-    j, k, l = best_sky_ind
-    coord1, coord2, coord3 = skycoords[j], skycoords[k], skycoords[l]
+    for best_ind in np.argsort(lstsqs):
+        if not np.isfinite(lstsqs[best_ind]):
+            return
+        # keep track of which best fit skycoord is the farthest from the other two
+        j, k, l = combos[best_ind]
+        coord1, coord2, coord3 = skycoords[j], skycoords[k], skycoords[l]
 
-    dcoord1 = coord1.separation(coord2).mas + coord1.separation(coord3).mas
-    dcoord2 = coord2.separation(coord3).mas + coord2.separation(coord1).mas
-    dcoord3 = coord3.separation(coord1).mas + coord3.separation(coord2).mas
+        dcoord1 = coord1.separation(coord2).mas + coord1.separation(coord3).mas
+        dcoord2 = coord2.separation(coord3).mas + coord2.separation(coord1).mas
+        dcoord3 = coord3.separation(coord1).mas + coord3.separation(coord2).mas
 
-    tri_dist_coords = [(dcoord1, coord1), (dcoord2, coord2), (dcoord3, coord3)]
-    tri_dist_coords.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
-    short_coord, mid_coord, long_coord = tri_dist_coords[0][1], tri_dist_coords[1][1], tri_dist_coords[2][1]
-    
-    # now use the side length to separations with best fit triangle to define a pseudo plate scale
-    best_l1, best_l2, best_l3 = field_side_lengths[best_ind]
-    initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))  # [deg/mas]
+        tri_dist_coords = [(dcoord1, coord1), (dcoord2, coord2), (dcoord3, coord3)]
+        tri_dist_coords.sort(key=lambda a: a[0])  # sort the stars based on their distances to the other two
+        short_coord, mid_coord, long_coord = tri_dist_coords[0][1], tri_dist_coords[1][1], tri_dist_coords[2][1]
 
-    # find the angle between the `target` star and the other two, in the image and in the field
-    rot_image = np.array([angle_between((short_star['x'], short_star['y']), (s['x'], s['y'])) for s in [mid_star, long_star]])
-    rot_field = np.array([short_coord.position_angle(t).deg for t in [mid_coord, long_coord]])
-    # use arctan2 to handle angle wrapping when calculating the difference between the reference field angle and the image
-    dtheta1 = np.arctan2(np.sin(np.radians(rot_field[0] - rot_image[0])), np.cos(np.radians(rot_field[0] - rot_image[0])))
-    dtheta2 = np.arctan2(np.sin(np.radians(rot_field[1] - rot_image[1])), np.cos(np.radians(rot_field[1] - rot_image[1])))
-    initial_northangle = np.mean([dtheta1, dtheta2])
+        # now use the side length to separations with best fit triangle to define a pseudo plate scale
+        best_l1, best_l2, best_l3 = field_side_lengths[best_ind]
+        initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))
 
-    # make a new image header with the pseudo platescale and north angle to find matchings
-    # allow for some error window and assign the closest star to each source
-    vert_ang = initial_northangle   # this is in radians
-    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
-    cdmatrix = pc * (initial_platescale * 0.001) / 3600.
+        # find the angle between the `target` star and the other two, in the image and in the field
+        rot_image = np.array([angle_between((short_star['x'], short_star['y']), (s['x'], s['y'])) for s in [mid_star, long_star]])
+        rot_field = np.array([short_coord.position_angle(t).deg for t in [mid_coord, long_coord]])
+        # use arctan2 to handle angle wrapping when calculating the difference between the reference field angle and the image
+        dtheta1 = np.arctan2(np.sin(np.radians(rot_field[0] - rot_image[0])), np.cos(np.radians(rot_field[0] - rot_image[0])))
+        dtheta2 = np.arctan2(np.sin(np.radians(rot_field[1] - rot_image[1])), np.cos(np.radians(rot_field[1] - rot_image[1])))
+        initial_northangle = np.degrees(np.mean([dtheta1, dtheta2]))
 
-    new_hdr = {}
-    new_hdr['CD1_1'] = cdmatrix[0,0]
-    new_hdr['CD1_2'] = cdmatrix[0,1]
-    new_hdr['CD2_1'] = cdmatrix[1,0]
-    new_hdr['CD2_2'] = cdmatrix[1,1]
-    new_hdr['CRPIX1'] = short_star['x']
-    new_hdr['CRPIX2'] = short_star['y']
-    new_hdr['CTYPE1'] = 'RA---TAN'
-    new_hdr['CTYPE2'] = 'DEC--TAN'
-    new_hdr['CDELT1'] = (initial_platescale * 0.001) / 3600.
-    new_hdr['CDELT2'] = (initial_platescale * 0.001) / 3600.
-    new_hdr['CRVAL1'] = short_coord.ra.value
-    new_hdr['CRVAL2'] = short_coord.dec.value
-    w = astropy.wcs.WCS(new_hdr)
+        yield initial_platescale, initial_northangle, (short_star['x'], short_star['y']), short_coord
 
-    # transform the subfield skycoords to pixel locations
-    subfield_skycoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg')
-    x_sky_to_pix, y_sky_to_pix = astropy.wcs.utils.skycoord_to_pixel(subfield_skycoords, wcs=w)
-    # restrict to only the sources that fall within 1024 x 1024 pixels
-    image_inds = ((x_sky_to_pix >= 0) & (x_sky_to_pix <= 1024) & (y_sky_to_pix >= 0) & (y_sky_to_pix <= 1024))
-    x_predict = x_sky_to_pix[image_inds]
-    y_predict = y_sky_to_pix[image_inds]
-    subfield_skycoords_in_image = subfield_skycoords[image_inds]
+def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012, platescale_guess=21.8, platescale_tol=0.1,
+                  match_radius=2., max_pointing_offset=3., northangle_tol=2., min_matches=4):
+    '''
+    Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
-    # for each source in the image, find the closest x, y predicted position and record the corresponding RA, DEC in the table
-    matched_ra, matched_dec = np.empty(len(sources)), np.empty(len(sources))
+    The catalogue positions are first predicted from the header: the pointing RA/DEC, PA_APER as north angle and
+    platescale_guess. The shift between these predictions and the sources is found by counting matches, within
+    max_pointing_offset of the header pointing. If this does not give a valid match, or the header has no
+    PA_APER, the triangle of the three brightest sources is matched to the catalogue instead, trying candidate
+    triangles from the best match on. Either way the match is refined with an affine fit, and every catalogue
+    star is matched to at most one source within match_radius. A match is valid if it has at least min_matches
+    stars, a plate scale within platescale_tol of platescale_guess, and a north angle within northangle_tol of
+    PA_APER.
 
-    for i, (x, y)in enumerate(zip(sources['x'], sources['y'])):
-        lst = 1e6
-        i_match = np.nan
-        for ii, (xp, yp) in enumerate(zip(x_predict, y_predict)):
-            sq = (x - xp)**2 + (y - yp)**2
-            if sq < lst:
-                lst = sq
-                i_match = ii
-        matched_ra[i] = subfield_skycoords_in_image[i_match].ra.value
-        matched_dec[i] = subfield_skycoords_in_image[i_match].dec.value
-    
+    Args:
+        image (corgidrp.data.Image): Image data as a corgidrp Image object
+        sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations of sources to match, brightest first
+        field_path (str): Full path to the reference catalogue (see read_field_catalog)
+        comparison_threshold (int): How many stars in the field to consider for the triangle match
+        rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
+        platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
+        platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
+        match_radius (float): Largest distance between a source and the matched catalogue position (default: 2 [pixels])
+        max_pointing_offset (float): Largest offset of the stars from their positions predicted by the header (default: 3 [arcsec])
+        northangle_tol (float): Largest difference between the north angle of a match and PA_APER (default: 2 [deg])
+        min_matches (int): Smallest number of matched stars for a valid match (default: 4)
+
+    Returns:
+        matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations of the matched sources
+            and corresponding sky positons at the time of observation (MJDSRT); meta['propagated_to_mjd'] is that MJD, or None if they
+            were not propagated, and meta['match_method'] is 'header' or 'triangle'
+
+    '''
+    # load the reference catalogue (checks for the columns RA, DEC and VMAG) and move the whole
+    # catalogue to the time of observation, so that stars near the edge of the subfield are cut
+    # at their current positions
+    field = catalog_at_epoch(read_field_catalog(field_path), image.ext_hdr.get('MJDSRT'))
+
+    # define a search field around the commanded pointing
+    target = SkyCoord(ra=image.pri_hdr['RA'], dec=image.pri_hdr['DEC'], unit='deg')
+    field_skycoords = SkyCoord(ra=field['RA'], dec=field['DEC'], unit='deg')
+    subfield = field[field_skycoords.separation(target).deg <= rad]
+    subfield_skycoords = SkyCoord(ra=subfield['RA'], dec=subfield['DEC'], unit='deg')
+
+    detections = np.array([sources['x'], sources['y']], dtype=float).T
+    pa_aper = image.pri_hdr.get('PA_APER')
+
+    def valid(det_ind, pred_ind):
+        if len(det_ind) < min_matches:
+            return False
+        platescale, northangle = matched_platescale_and_northangle(detections[det_ind], subfield_skycoords[pred_ind])
+        if abs(platescale / platescale_guess - 1) > platescale_tol:
+            return False
+        if pa_aper is not None:
+            dangle = np.degrees(np.arctan2(np.sin(np.radians(northangle - pa_aper)), np.cos(np.radians(northangle - pa_aper))))
+            if abs(dangle) > northangle_tol:
+                return False
+        return True
+
+    match_method = None
+    if pa_aper is not None:
+        crpix = (np.shape(image.data)[1] // 2, np.shape(image.data)[0] // 2)
+        predicted = project_to_pixels(subfield_skycoords, target, crpix, platescale_guess, pa_aper)
+        shift = find_common_shift(detections, predicted, max_shift=max_pointing_offset * 1000 / platescale_guess,
+                                  radius=2 * match_radius)
+        if shift is not None:
+            det_ind, pred_ind = refine_matches(detections, predicted + shift, match_radius)
+            if valid(det_ind, pred_ind):
+                match_method = 'header'
+
+    if match_method is None and len(sources) >= 3:
+        bright_order_subfield = subfield.copy()
+        bright_order_subfield.sort(keys='VMAG')
+        brightest_field = bright_order_subfield[:comparison_threshold]
+        for platescale, northangle, anchor_pix, anchor_coord in triangle_solutions(sources, brightest_field, platescale_guess, platescale_tol):
+            if pa_aper is not None:
+                dangle = np.degrees(np.arctan2(np.sin(np.radians(northangle - pa_aper)), np.cos(np.radians(northangle - pa_aper))))
+                if abs(dangle) > northangle_tol:
+                    continue
+            predicted = project_to_pixels(subfield_skycoords, anchor_coord, anchor_pix, platescale, northangle)
+            det_ind, pred_ind = refine_matches(detections, predicted, match_radius)
+            if valid(det_ind, pred_ind):
+                match_method = 'triangle'
+                warnings.warn("match_sources: the stars could not be matched from the header pointing and PA_APER, "
+                              "the triangle search was used instead")
+                break
+
+    if match_method is None:
+        raise ValueError("match_sources found no match between the {0} sources and the catalogue: neither the header pointing "
+                         "(RA/DEC, PA_APER {1}) nor the triangle search gave at least {2} stars within {3} pixels with a plate scale "
+                         "within {4:.0%} of {5} mas/pixel and a north angle within {6} deg of PA_APER"
+                         .format(len(sources), pa_aper, min_matches, match_radius, platescale_tol, platescale_guess, northangle_tol))
+
     matched_image_to_field = astropy.table.Table()
-    matched_image_to_field['x'] = sources['x']
-    matched_image_to_field['y'] = sources['y']
-    matched_image_to_field['RA'] = matched_ra
-    matched_image_to_field['DEC'] = matched_dec
+    matched_image_to_field['x'] = np.asarray(sources['x'])[det_ind]
+    matched_image_to_field['y'] = np.asarray(sources['y'])[det_ind]
+    matched_image_to_field['RA'] = subfield_skycoords[pred_ind].ra.value
+    matched_image_to_field['DEC'] = subfield_skycoords[pred_ind].dec.value
     matched_image_to_field.meta['propagated_to_mjd'] = field.meta['propagated_to_mjd']
+    matched_image_to_field.meta['match_method'] = match_method
 
     # append each x,y,RA,DEC string to the fits ext_hdr to save the source matches for reference
     for source in np.arange(len(matched_image_to_field)):
@@ -1090,7 +1228,8 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
 def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.ecsv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
-                          pa_tolerance=0.1, keywords_to_split_dataset_by=None, pointing_tolerance=0.5, fsm_tolerance=5.):
+                          pa_tolerance=0.1, keywords_to_split_dataset_by=None, pointing_tolerance=0.5, fsm_tolerance=5.,
+                          match_radius=2., max_pointing_offset=3., northangle_tol=2.):
     """
     Perform the boresight calibration of a dataset.
     
@@ -1101,8 +1240,8 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         find_threshold (int): Number of stars to find (default 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
-        comparison_threshold (int): How many stars in the field to consider for the initial match (default: 50)
-        search_rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
+        comparison_threshold (int): How many stars in the field to consider for the triangle match, which is only used if the match from the header pointing and PA_APER fails (default: 50)
+        search_rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to; it only needs to cover the illuminated field plus max_pointing_offset
         platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
         platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
         center_radius (float): Percent of the image to compute plate scale and north angle from, centered around the image center (default: 0.9 -- ie: 90% of the image is used)
@@ -1116,6 +1255,9 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         keywords_to_split_dataset_by (list, optional): List of additional header keywords to split the input dataset by for frame combining in addition default keywords the function uses for target, roll, and dither (default: None)
         pointing_tolerance (float, optional): Maximum gap [arcsec on the sky] between RA_APER/DEC_APER values that are still grouped together when frames_to_combine is True; these keywords scatter with telemetry noise (Default: 0.5)
         fsm_tolerance (float, optional): Maximum gap [mas] between FSMX/FSMY values that are still grouped together when frames_to_combine is True (Default: 5)
+        match_radius (float, optional): Largest distance between a detected source and the matched catalogue star [pixels] (Default: 2)
+        max_pointing_offset (float, optional): Largest offset of the stars from their positions predicted by the header pointing [arcsec] (Default: 3)
+        northangle_tol (float, optional): Largest difference between the north angle of a match and PA_APER [deg] (Default: 2)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -1275,7 +1417,8 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
 
         # compute the calibration properties
         found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
-        matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
+        matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol,
+                                        match_radius=match_radius, max_pointing_offset=max_pointing_offset, northangle_tol=northangle_tol)
         # if len(hold_matches) < 1:
         hold_matches.append(matched_sources)
 

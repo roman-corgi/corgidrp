@@ -764,6 +764,70 @@ def test_boresight_with_proper_motions():
     assert north_u - north == pytest.approx(-bulk["pmdec"] * years, abs=2)
 
 
+@pytest.fixture(scope="module")
+def offset_frame():
+    """One mock frame whose stars are offset from the header pointing by (1.5", -1") and the brightest 25 sources in it."""
+    offset = (1.5 / 3600 / np.cos(np.radians(-69.514)), -1. / 3600)
+    frame = mocks.create_astrom_data(field_path=astrom.default_field_path, rotation=20, vignette_radius=None, offset=offset)[0]
+    sources = astrom.find_source_locations(frame.data, threshold=25)
+    return frame, sources
+
+
+def _match(frame, sources, **keywords):
+    """match_sources on a copy of the frame, so that the STAR keywords it writes do not leak between tests."""
+    return astrom.match_sources(frame.copy(), sources, astrom.default_field_path, rad=0.012, **keywords)
+
+
+def test_match_sources_from_header_finds_offset_pointing(offset_frame):
+    """The stars are matched from the header pointing and PA_APER although they are 1.8" from where it predicts them."""
+    frame, sources = offset_frame
+    matches = _match(frame, sources)
+    assert matches.meta["match_method"] == "header"
+    assert len(matches) >= 20
+    platescale, northangle = astrom.matched_platescale_and_northangle(
+        np.array([matches["x"], matches["y"]]).T, SkyCoord(matches["RA"], matches["DEC"], unit="deg"))
+    assert platescale == pytest.approx(21.8, rel=1e-3)
+    assert northangle == pytest.approx(20, abs=0.05)
+
+
+def test_match_sources_drops_repeated_and_spurious_detections(offset_frame):
+    """A second detection of a star and a detection without a star are not matched."""
+    frame, sources = offset_frame
+    extra = sources.copy()
+    extra.add_row([sources["x"][0] + 1.5, sources["y"][0]])  # the same star again, 1.5 px away
+    extra.add_row([sources["x"][0] + 60., sources["y"][0] + 60.])  # no star here
+    matches = _match(frame, extra)
+    assert len(np.unique(matches["RA"])) == len(matches)
+    assert sources["x"][0] in matches["x"] and sources["x"][0] + 1.5 not in matches["x"]
+    assert sources["x"][0] + 60. not in matches["x"]
+
+
+def test_match_sources_without_pa_aper_uses_triangle_search(offset_frame):
+    """Without PA_APER the triangle search is used, with a warning, and gives the same matches."""
+    frame, sources = offset_frame
+    no_pa = frame.copy()
+    del no_pa.pri_hdr["PA_APER"]
+    with pytest.warns(UserWarning, match="triangle search"):
+        matches = _match(no_pa, sources, comparison_threshold=20)
+    assert matches.meta["match_method"] == "triangle"
+    header_matches = _match(frame, sources)
+    assert list(matches["RA"]) == list(header_matches["RA"])
+
+
+def test_match_sources_rejects_north_angle_contradicting_pa_aper(offset_frame):
+    """A match is not accepted if its north angle disagrees with PA_APER; nothing matching is an error, not a crash."""
+    frame, sources = offset_frame
+    wrong_pa = frame.copy()
+    wrong_pa.pri_hdr["PA_APER"] = 50.
+    with pytest.raises(ValueError, match="found no match"):
+        _match(wrong_pa, sources, comparison_threshold=20)
+
+    rng = np.random.default_rng(3)
+    random_sources = Table({"x": rng.uniform(100, 900, 25), "y": rng.uniform(100, 900, 25)})
+    with pytest.raises(ValueError, match="found no match"):
+        _match(frame, random_sources, comparison_threshold=10)
+
+
 if __name__ == "__main__":
     test_astrom()
     test_astrom_vignette()

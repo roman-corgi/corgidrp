@@ -1830,8 +1830,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         exthdr['FTIMEUTC'] = frame_start.isot
         prihdr['RA'] = np.array(frame_targs).T[0][i]  # assume we will know something about the dither RA/DEC pointing
         prihdr['DEC'] = np.array(frame_targs).T[1][i]
-        # Use PA_APER (on-sky position angle east of north) for rotation angle in mocks.
-        prihdr['PA_APER'] = 0
+        # PA_APER is the north angle the stars were rendered with, as boresight_calibration expects
+        prihdr['PA_APER'] = rotation
 
         ## save as an Image object
         err_map = None if not sim_err_map else err_map
