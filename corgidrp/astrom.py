@@ -872,8 +872,9 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
     binary_offsets = np.copy(meas_offset).T
     star1_pos = np.copy(pos1).T
     # center to center of detector
-    star1_pos[:,0] -= 511.        # because leg coeffs are defined around (0,0)
-    star1_pos[:,1] -= 511.        # make a new param in the function to pass in detector shape?
+    # the legendre polynomials are centred on pixel 512, as in transform_coeff_to_map and l3_to_l4.distortion_correction
+    star1_pos[:,0] -= 512.
+    star1_pos[:,1] -= 512.
 
     # derive star2 position
     star2_pos = star1_pos + binary_offsets
@@ -1182,6 +1183,16 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
                 xerrs = np.append(xerrs, position_error)
                 yerrs = np.append(yerrs, position_error)
    
+    # measure_offset can return infinite (or zero) errors, which would remove those pairs from the fit or let them dominate it
+    if position_error is None:
+        bad = ~(np.isfinite(xerrs) & np.isfinite(yerrs) & (xerrs > 0) & (yerrs > 0))
+        if np.all(bad):
+            warnings.warn("measure_offset gave no usable errors for any star pair, so the distortion is fitted with "
+                          "uniform weights; set position_error to choose them")
+            xerrs, yerrs = np.ones_like(xerrs), np.ones_like(yerrs)
+        elif np.any(bad):
+            xerrs[bad], yerrs[bad] = np.median(xerrs[~bad]), np.median(yerrs[~bad])
+
     # join arrays and reshape to (1, 2, N)
     offsets = np.array([dxs, dys])
     first_stars = np.array([firstxs, firstys])
@@ -1190,7 +1201,7 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
 
     return first_stars, offsets, true_offsets, errs
 
-def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, northangle, fitorder=3, initial_guess=None):
+def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, northangle, fitorder=3, initial_guess=None, clip_sigma=5.):
     ''' 
     Function that computes the legendre polynomial coefficients that describe the image distortion map * must run format_disotrtio_inputs() first *
 
@@ -1203,6 +1214,8 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
         northangle (float): Northangle value to use in computing distortion 
         fitorder (int): The order of legendre polynomial to fit to the image distortion (default: 3)
         initial_guess (np.array): Initial guess of fitting parameters (legendre coefficients) length based on fitorder (2 * (fitorder+1)**2), (default: None)
+        clip_sigma (float): Star pairs whose residual exceeds clip_sigma times the robust scatter of the residuals are rejected and the fit is
+            repeated until no more pairs are rejected; None keeps all pairs (default: 5)
 
     Returns:
         distortion_coeffs (tuple): The legendre coefficients (np.array) and polynomial order used for the fit (int)
@@ -1215,12 +1228,30 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
     if initial_guess is None:
         initial_guess = [0 for _ in range(fitorder+1)] + [500,] + [0 for _ in range(fitparams - fitorder - 2)] + [0,500] + [0 for _ in range(fitparams-2)]
     
-    ## OPTIMIZE 
-    # first_stars_, offsets_, true_offsets_, errs_ = first_stars, offsets, true_offsets, errs
-    (distortion_coeffs, _) = optimize.leastsq(fit_distortion_solution, initial_guess, 
-                                              args=(fitorder, platescale, 
-                                                northangle, pos1, meas_offset, 
-                                                sky_offset, meas_errs))
+    pos1, meas_offset, sky_offset, meas_errs = np.asarray(pos1), np.asarray(meas_offset), np.asarray(sky_offset), np.asarray(meas_errs)
+    npairs = pos1.shape[1]
+    keep = np.ones(npairs, dtype=bool)
+    distortion_coeffs = np.array(initial_guess, dtype=float)
+    for _ in range(10):
+        (distortion_coeffs, _, _, message, ier) = optimize.leastsq(fit_distortion_solution, distortion_coeffs,
+                                                                     args=(fitorder, platescale, northangle, pos1[:, keep],
+                                                                           meas_offset[:, keep], sky_offset[:, keep], meas_errs[:, keep]),
+                                                                     full_output=True)
+        if ier not in (1, 2, 3, 4):
+            warnings.warn("The distortion fit did not converge: " + message)
+        if clip_sigma is None:
+            break
+        residuals = fit_distortion_solution(distortion_coeffs, fitorder, platescale, northangle, pos1, meas_offset, sky_offset, meas_errs)
+        pair_residuals = np.hypot(residuals[:npairs], residuals[npairs:])
+        # for 2D gaussian residuals the median of their length is 1.1774 sigma
+        scatter = np.median(pair_residuals[keep]) / 1.1774
+        new_keep = pair_residuals <= clip_sigma * scatter
+        if np.array_equal(new_keep, keep) or np.sum(new_keep) < len(distortion_coeffs):
+            break
+        keep = new_keep
+
+    if np.allclose(distortion_coeffs, initial_guess):
+        warnings.warn("The distortion fit returned its initial guess; check the star pairs and their errors")
 
     return (distortion_coeffs, fitorder)
   
@@ -1268,6 +1299,8 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
 
     # load in the source matches if automated source finder is not being used
     matched_sources_multiframe = []
+    if isinstance(field_matches, (str, astropy.table.Table)):
+        field_matches = [field_matches]
     if field_matches is not None:
         if len(field_matches) == 1: # single str or astropy.table case
             for i in range(len(dataset)):
@@ -1399,6 +1432,12 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         # rebuild the input dataset from the grouped and median combined frames
         dataset = corgidrp.data.Dataset(image_objects)
 
+    if len(matched_sources_multiframe) not in (0, len(dataset)):
+        if len(field_matches) > 1:
+            raise ValueError('field_matches has one table per input frame, but the frames were combined into {0} frames; '
+                             'give a single table or set frames_to_combine=False'.format(len(dataset)))
+        matched_sources_multiframe = matched_sources_multiframe[:1] * len(dataset)
+
     # create a place to store all the calibration measurements
     astroms = []
     hold_matches = []   # place to hold the auto-found source matches for each frame
@@ -1416,10 +1455,12 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         target_skycoord = SkyCoord(ra=target_coordinate[0], dec=target_coordinate[1], unit='deg')
 
         # compute the calibration properties
-        found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
-        matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol,
-                                        match_radius=match_radius, max_pointing_offset=max_pointing_offset, northangle_tol=northangle_tol)
-        # if len(hold_matches) < 1:
+        if len(matched_sources_multiframe) > 0:
+            matched_sources = matched_sources_multiframe[i]
+        else:
+            found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
+            matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol,
+                                            match_radius=match_radius, max_pointing_offset=max_pointing_offset, northangle_tol=northangle_tol)
         hold_matches.append(matched_sources)
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
@@ -1445,7 +1486,8 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
     # compute the distortion map coeffs
     if find_distortion:
         # use the found matches for distortion
-        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, source_matches=hold_matches, position_error=position_error)
+        # the matches belong to the (combined) frames in dataset
+        first_stars, offsets, true_offsets, errs = format_distortion_inputs(dataset, source_matches=hold_matches, position_error=position_error)
         distortion_coeffs, order = compute_distortion(first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
         # set default coeffs to produce zero distortion
