@@ -728,7 +728,7 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
 
     return residuals
 
-def compute_platescale_and_northangle(image, source_info, center_radius=1):
+def compute_platescale_and_northangle(image, source_info, center_radius=1, max_pairs=500, seed=0):
     """
     Used to find the platescale and north angle of the image. Calculates the platescale for each pair of stars in the image
     and returns the averged platescale. Calculates the north angle for pairs of stars with the center target
@@ -741,6 +741,8 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1):
         #     (float): RA coordinate of the target pointing
         #     (float): Dec coordinate of the target pointing
         center_radius (float): Percent of the image radius used to crop the image and compute plate scale and north angle from (default: 1 -- ie: the full image is used)
+        max_pairs (int): Maximum number of star pairs to use. All pairs are used if there are no more than this, otherwise a random subset of this size, drawn without replacement (default: 500)
+        seed (int): Seed for drawing the subset of pairs, so that the same input always gives the same result (default: 0)
 
     Returns:
         platescale (float): Platescale [mas/pixel]
@@ -766,13 +768,13 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1):
     sub_skycoords = skycoords[center_source_inds]
 
     # PLATESCALE
-    # create random combinations of stars
-    all_combinations = list(compute_combinations(sub_guesses))
-    if len(all_combinations) > 200:
-        rand_inds = np.random.randint(low=0, high=len(all_combinations), size=200)
-        combo_list = np.array(all_combinations)[rand_inds]
+    # create combinations of stars; a seeded generator keeps the subset, and so the result, reproducible
+    all_combinations = np.array(list(compute_combinations(sub_guesses)))
+    if len(all_combinations) > max_pairs:
+        rand_inds = np.random.default_rng(seed).choice(len(all_combinations), size=max_pairs, replace=False)
+        combo_list = all_combinations[rand_inds]
     else:
-        combo_list = np.array(all_combinations)
+        combo_list = all_combinations
 
 
     length_diffs = np.empty(len(combo_list))
