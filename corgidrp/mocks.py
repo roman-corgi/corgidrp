@@ -30,7 +30,7 @@ from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 from pyklip.instruments.utils.wcsgen import generate_wcs
 from corgidrp import measure_companions, corethroughput
-from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy
+from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy, read_field_catalog
 import datetime
 import glob
 import shutil
@@ -1516,7 +1516,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     Create simulated data for astrometric calibration.
 
     Args:
-        field_path (str): Full path to directory with test field data (ra, dec, vmag, etc.)
+        field_path (str): Full path to the reference catalogue (see corgidrp.astrom.read_field_catalog)
         filedir (str): (Optional) Full path to directory to save to. (default: None)
         image_shape (tuple of ints): The desired shape of the image (num y pixels, num x pixels), (default: (1024, 1024))
         target (tuple): The original pointing target in RA/DEC [deg] (default: (80.553428801, -69.514096821))
@@ -1550,7 +1550,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     fwhm = 3
 
     # load in the field data and restrict to 0.02 [deg] radius around target
-    cal_field = ascii.read(field_path)
+    cal_field = read_field_catalog(field_path)
     subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - (subfield_radius*(np.cos(np.radians(target[1]))))) & (cal_field['DEC'] <= target[1] + (subfield_radius*np.cos(np.radians(target[1])))))]
     cal_SkyCoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg', frame='icrs')  # save these subfield skycoords somewhere
 

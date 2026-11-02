@@ -46,13 +46,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         yr = x_shifted * np.sin(ang) + y_shifted * np.cos(ang)
         return xr + xc, yr + yc
 
-    # read mock file
+    # output directory for comparison figures, reference catalogue shipped with corgidrp
     dirname = 'test_data/'
-    filename = 'JWST_CALFIELD2020.csv'
-
-    fieldpath = os.path.join(os.path.dirname(__file__), dirname, filename)
-    if not fieldpath:
-        raise FileNotFoundError(f"No filed data {filename} found")
+    fieldpath = astrom.default_field_path
 
     # running northup function
     ang_list = [0, 45, 90, 135, 180, 270]
@@ -405,12 +401,9 @@ def test_wcs_and_offset(save_mock_dataset=False):
         save_mock_dataset (optional): if you want to save the original mock files at the input directory, turn True
         
    """
-   # read mock file
+   # output directory for comparison figures, reference catalogue shipped with corgidrp
    dirname = 'test_data/'
-   filename = 'JWST_CALFIELD2020.csv'
-   fieldpath = os.path.join(os.path.dirname(__file__),dirname,filename)
-   if not fieldpath:
-      raise FileNotFoundError(f"No filed data {filename} found")
+   fieldpath = astrom.default_field_path
    # running northup function
    ang = 0
    north_angle = 30

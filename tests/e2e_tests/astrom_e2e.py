@@ -5,6 +5,7 @@ import glob
 import pytest
 import warnings
 import numpy as np
+import scipy.ndimage as ndi
 import astropy.time as time
 import astropy.io.fits as fits
 from astropy.coordinates import SkyCoord
@@ -13,6 +14,7 @@ import corgidrp
 import corgidrp.check as check
 import corgidrp.data as data
 import corgidrp.mocks as mocks
+import corgidrp.astrom as astrom
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
@@ -81,7 +83,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
     # create raw data that includes injected stars with gaussian psfs
-    jwst_calfield_path = os.path.join(os.path.dirname(thisfile_dir), "test_data", "JWST_CALFIELD2020.csv")
+    jwst_calfield_path = astrom.default_field_path
     image_sources = mocks.create_astrom_data(jwst_calfield_path, add_gauss_noise=False)
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     # create a directory in the output dir to hold the simulated data files
@@ -105,14 +107,20 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_std = np.std(noise_datacube, axis=0)
     noise_rms = np.mean(noise_std)
 
+    # arbitrary flux scale: the second brightest star in the scene lands at ~250 sigma. Not the
+    # brightest, because that is the G = 14.6 Gaia star the HST-only catalogue lacked; it is
+    # about five times brighter and would push the fainter stars into the noise
+    scene = image_sources[0].data
+    star_peaks = np.sort(scene[(scene == ndi.maximum_filter(scene, size=9)) & (scene > 0)])
+    reference_peak_flux = star_peaks[-2]
+
     for dark in os.listdir(noise_characterization_path):
         if not dark.lower().endswith('.fits'):
                 continue
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             hdulist[0].header['VISTYPE'] = "CGIVST_CAL_BORESIGHT"
-            # setting SNR to ~250 (arbitrary SNR)
-            scaled_image = ((250 * noise_rms) / np.max(image_sources[0].data)) * image_sources[0].data
+            scaled_image = ((250 * noise_rms) / reference_peak_flux) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))
             hdulist[1].data[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += scaled_image
             # update headers
