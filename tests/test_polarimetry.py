@@ -683,6 +683,17 @@ def test_mueller_matrix_cal():
     #Check that the type of mueller_matrix is correct
     assert isinstance(mueller_matrix, pol.MuellerMatrix)
 
+    # Check that the stellar polarization database is automatically selected by CFAMNAME.
+    for cfam_name, band in (("1F", 1), ("4F", 4)):
+        band_dataset = stokes_dataset.copy()
+        for frame in band_dataset:
+            frame.ext_hdr["CFAMNAME"] = cfam_name
+
+        band_mueller_matrix = pol.generate_mueller_matrix_cal(band_dataset)
+        expected_filename = f"stellar_polarization_database_band{band}.csv"
+        history = "".join(band_mueller_matrix.ext_hdr["HISTORY"])
+        assert expected_filename in history
+
     #Put in the ND filter and make sure the type is correct. 
     for framm in stokes_dataset.frames:
         framm.ext_hdr["FPAMNAME"] = "ND225"
@@ -781,16 +792,19 @@ def test_shipped_pol_ref_file_is_valid():
     path nor a user-supplied file in the corgidrp config directory is available, so it must stay
     readable even though nothing in the frozen environment can fix it.
     """
-    shipped_pol_ref_file = os.path.join(os.path.dirname(pol.__file__), "data",
-                                        "stellar_polarization_database.csv")
+    for band in (1, 4):
+        shipped_pol_ref_file = os.path.join(
+            os.path.dirname(pol.__file__), "data",
+            f"stellar_polarization_database_band{band}.csv"
+        )
 
-    assert os.path.isfile(shipped_pol_ref_file), \
-        f"shipped pol reference file is missing: {shipped_pol_ref_file}"
+        assert os.path.isfile(shipped_pol_ref_file), \
+            f"shipped pol reference file is missing: {shipped_pol_ref_file}"
 
-    shipped = pd.read_csv(shipped_pol_ref_file, skipinitialspace=True)
-    for column in ("TARGET", "P", "P_err", "PA", "PA_err"):
-        assert column in shipped.columns, \
-            f"shipped pol reference file is missing required column {column}"
+        shipped = pd.read_csv(shipped_pol_ref_file, skipinitialspace=True)
+        for column in ("TARGET", "P", "P_err", "PA", "PA_err"):
+            assert column in shipped.columns, \
+                f"shipped pol reference file is missing required column {column}"
 
 
 def test_subtract_stellar_polarization():
