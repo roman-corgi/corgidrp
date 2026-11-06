@@ -874,7 +874,8 @@ def test_star_spec_registration():
             list_of_best_fsm = steps.star_spec_registration(
                 dataset_fsm,
                 pathfiles_template,
-                slit_align_err=slit_align_err)
+                slit_align_err=slit_align_err,
+                tolerance = {"FSMY" : 0.5})
 
             # Collect all input files
             fsm_filenames = []
@@ -1467,6 +1468,7 @@ def test_slit_trans():
             spec_slit_ds, spec_open_ds,
             x_range=[xrange0, xrange1],
             y_range=[yrange0, yrange1],
+            tolerance = {'FSMX': 0.5, 'FSMY': 0.5}
         )
         slit_trans_out = slit_trans.data
         slit_pos_x = slit_trans.x_offset
@@ -1486,6 +1488,7 @@ def test_slit_trans():
             all_dataset,
             x_range=[xrange0, xrange1],
             y_range=[yrange0, yrange1],
+            tolerance = {'FSMX': 0.5, 'FSMY': 0.5}
         )
         assert slit_trans_without.slitname == fsam_expected
         assert np.array_equal (slit_trans.data, slit_trans_without.data)

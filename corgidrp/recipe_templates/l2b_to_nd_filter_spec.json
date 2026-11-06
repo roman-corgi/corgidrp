@@ -33,7 +33,8 @@
       {
         "name": "create_nd_filter_cal_spec",
         "keywords": {
-          "outputdir": "AUTOMATIC"
+          "outputdir": "AUTOMATIC",
+		  "tolerance": {"FSMX": 5, "FSMY":5}
         }
       },
       {
