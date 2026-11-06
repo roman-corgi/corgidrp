@@ -774,6 +774,79 @@ def test_mueller_matrix_cal_source_pol_errors_increase_mm_err():
             os.unlink(zero_err_path)
 
 
+def test_mueller_matrix_cal_ref_errors_shared_across_rolls(tmp_path, n_trials=300, seed=0):
+    """
+    Tests that the reference star part of the Mueller matrix errors matches a Monte Carlo when
+    each star is observed at several rolls. A star's P and PA errors belong to the star, so the
+    Monte Carlo draws them once per trial and every roll of that star sees the same draw. The
+    reported reference-only variance must then match the scatter of the fitted Mueller matrix.
+
+    Args:
+        tmp_path (pathlib.Path): pytest temporary directory for the perturbed reference files
+        n_trials (int): number of Monte Carlo draws of the reference star P and PA
+        seed (int): seed for the Monte Carlo draws
+    """
+    current_file_path = os.path.dirname(os.path.abspath(__file__))
+    path_to_pol_ref_file = os.path.join(current_file_path, "test_data",
+                                        "stellar_polarization_database.csv")
+    pol_ref = pd.read_csv(path_to_pol_ref_file, skipinitialspace=True)
+
+    # every target observed at the same four rolls
+    rolls = [0., 30., 60., 90.]
+    frames = []
+    for roll in rolls:
+        frames += list(mocks.generate_mock_polcal_dataset(path_to_pol_ref_file, pa_apers=roll).frames)
+    for i, frame in enumerate(frames):
+        frame.filename = "cgi_0200001001001001001_20250101t{:07d}_l3_.fits".format(i)
+    mock_dataset = l2b_to_l3.divide_by_exptime(Dataset(frames))
+    mock_dataset = l2b_to_l3.split_image_by_polarization_state(mock_dataset)
+    stokes_dataset = pol.calc_stokes_unocculted(mock_dataset)
+    assert len(stokes_dataset) == len(pol_ref) * len(rolls)
+
+    def fit_mueller_matrix(ref_table, name):
+        """
+        Fit the Mueller matrix to the fixed stokes vectors using the given reference values.
+
+        Args:
+            ref_table (pandas.DataFrame): reference P, P_err, PA, PA_err for each target
+            name (str): file name for the reference file written to tmp_path
+
+        Returns:
+            MuellerMatrix: the fitted Mueller matrix
+        """
+        ref_path = os.path.join(tmp_path, name)
+        ref_table.to_csv(ref_path, index=False)
+        return pol.generate_mueller_matrix_cal(stokes_dataset, path_to_pol_ref_file=ref_path)
+
+    elements = [(1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2)]
+
+    # The measurement variance does not depend on P_err or PA_err, so the difference between the
+    # reported variances with and without them is the reference-only variance
+    zero_err_ref = pol_ref.copy()
+    zero_err_ref["P_err"] = 0.
+    zero_err_ref["PA_err"] = 0.
+    err_with_ref = fit_mueller_matrix(pol_ref, "with_ref_err.csv").err[0]
+    err_without_ref = fit_mueller_matrix(zero_err_ref, "without_ref_err.csv").err[0]
+    reported_ref_var = np.array([err_with_ref[idx]**2 - err_without_ref[idx]**2 for idx in elements])
+
+    # The stokes vectors stay fixed, so all scatter in the fit comes from the reference draws.
+    # One row per target in the reference file means each draw is shared by all of its rolls.
+    rng = np.random.default_rng(seed)
+    fitted = np.zeros((n_trials, len(elements)))
+    for trial in range(n_trials):
+        perturbed_ref = pol_ref.copy()
+        perturbed_ref["P"] = rng.normal(pol_ref["P"], pol_ref["P_err"])
+        perturbed_ref["PA"] = rng.normal(pol_ref["PA"], pol_ref["PA_err"])
+        mueller_matrix = fit_mueller_matrix(perturbed_ref, "perturbed.csv")
+        fitted[trial] = [mueller_matrix.data[idx] for idx in elements]
+    empirical_ref_var = np.var(fitted, axis=0, ddof=1)
+
+    # the sample standard deviation is good to about 1/sqrt(2*n_trials), 4% here
+    sigma_ratio = np.sqrt(empirical_ref_var / reported_ref_var)
+    assert np.all(np.abs(sigma_ratio - 1.) < 0.15), \
+        f"empirical/reported reference sigma for MM elements {elements}: {np.round(sigma_ratio, 3)}"
+
+
 def test_shipped_pol_ref_file_is_valid():
     """
     Tests that the polarization reference file shipped with the pipeline parses and has the
