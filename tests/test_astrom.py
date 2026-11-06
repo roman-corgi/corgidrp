@@ -9,7 +9,8 @@ import corgidrp.data as data
 import astropy.io.ascii as ascii
 from termcolor import cprint
 from astropy.coordinates import SkyCoord
-from astropy.table import Table
+from astropy.table import Table, vstack
+import astropy.units as u
 from astropy.time import Time
 
 def print_fail():
@@ -650,13 +651,52 @@ def test_catalog_at_epoch_without_epoch_details_or_date_warns_and_keeps_position
     """An epoch without format and scale, or a frame without MJDSRT, is not propagated."""
     field = _moving_star_catalog(meta=False)
     field.meta["epoch"] = 2015.5
-    with pytest.warns(UserWarning, match="proper motion"):
+    with pytest.warns(UserWarning, match="lack epoch_format, epoch_scale"):
         moved = astrom.catalog_at_epoch(field, MJD_2026)
     np.testing.assert_array_equal(moved["RA"], field["RA"])
     with pytest.warns(UserWarning, match="time of observation"):
         moved = astrom.catalog_at_epoch(_moving_star_catalog(), None)
     np.testing.assert_array_equal(moved["RA"], _moving_star_catalog()["RA"])
     assert moved.meta["propagated_to_mjd"] is None
+
+
+def test_catalog_at_epoch_uses_proper_motion_column_units():
+    """A catalogue with proper motions in arcsec/yr moves the stars as far as the same motion in mas/yr."""
+    later = Time(2025.5, format="jyear", scale="tcb").utc.mjd
+    in_mas = _moving_star_catalog()
+    in_arcsec = _moving_star_catalog()
+    for name in ("PMRA", "PMDEC"):
+        in_mas[name].unit = u.mas / u.yr
+        in_arcsec[name] = in_arcsec[name] / 1000.
+        in_arcsec[name].unit = u.arcsec / u.yr
+    moved_mas = astrom.catalog_at_epoch(in_mas, later)
+    moved_arcsec = astrom.catalog_at_epoch(in_arcsec, later)
+    unitless = astrom.catalog_at_epoch(_moving_star_catalog(), later)
+    for name in ("RA", "DEC"):
+        np.testing.assert_allclose(moved_arcsec[name], moved_mas[name], rtol=0, atol=1e-12)
+        np.testing.assert_allclose(unitless[name], moved_mas[name], rtol=0, atol=1e-12)
+
+
+def test_catalog_at_epoch_keeps_stars_without_finite_proper_motion():
+    """A star with a NaN proper motion keeps its catalogue position instead of becoming NaN."""
+    field = vstack([_moving_star_catalog(), _moving_star_catalog()])
+    field["PMRA"][1] = np.nan
+    with pytest.warns(UserWarning, match="1 reference catalogue star"):
+        moved = astrom.catalog_at_epoch(field, MJD_2026)
+    assert moved["RA"][0] != field["RA"][0]
+    assert (moved["RA"][1], moved["DEC"][1]) == (field["RA"][1], field["DEC"][1])
+
+
+def test_boresight_history_counts_frames_with_propagated_catalogue():
+    """If one frame has no MJDSRT, HISTORY says how many measured frames were propagated."""
+    dataset = mocks.create_astrom_data(field_path=astrom.default_field_path, rotation=20, vignette_radius=None,
+                                       dither_pointings=1, mjd=MJD_2026)
+    del dataset[1].ext_hdr["MJDSRT"]
+    with pytest.warns(UserWarning, match="time of observation"):
+        astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=astrom.default_field_path,
+                                                  find_threshold=25)
+    history = "".join(str(card) for card in astrom_cal.ext_hdr["HISTORY"])
+    assert "to the MJDSRT of 1 of the 2 measured frames" in history
 
 
 def test_boresight_with_catalog_without_proper_motions_does_not_claim_propagation(tmp_path):

@@ -57,10 +57,14 @@ def catalog_at_epoch(field, mjd):
     """
     Move the catalogue positions from the catalogue epoch to the time of observation.
 
-    Uses the proper motions PMRA (mu_alpha*) and PMDEC, which must be finite, and the epoch
-    recorded in the catalogue metadata (epoch, epoch_format, epoch_scale). Parallax is ignored
-    (0.02 mas at the LMC). Catalogues without proper motions or epoch (e.g. user-supplied CSV
-    tables), or a missing time of observation, leave the positions unchanged, with a warning.
+    Uses the proper motions PMRA (mu_alpha*) and PMDEC, in their column units or mas/yr if the
+    columns have none, and the epoch recorded in the catalogue metadata (epoch, epoch_format,
+    epoch_scale). Stars with a non-finite proper motion keep their catalogue position, with a
+    warning. Parallax is ignored: it is ~0.02 mas for LMC members, and the few foreground stars
+    in the shipped catalogue with a significant parallax (up to 12 mas, i.e. 0.5 pixel) move by
+    at most that much over the year. Catalogues without proper motions or epoch (e.g.
+    user-supplied CSV tables), or a missing time of observation, leave the positions unchanged,
+    with a warning.
     The returned copy records the time of observation as its epoch, so propagating it again
     starts from there.
 
@@ -75,9 +79,14 @@ def catalog_at_epoch(field, mjd):
     """
     field = field.copy()
     field.meta["propagated_to_mjd"] = None
-    if not {"PMRA", "PMDEC"} <= set(field.colnames) or not {"epoch", "epoch_format", "epoch_scale"} <= set(field.meta):
-        warnings.warn("reference catalogue has no proper motions or epoch; using its positions "
+    if not {"PMRA", "PMDEC"} <= set(field.colnames):
+        warnings.warn("reference catalogue has no proper motions (PMRA, PMDEC); using its positions "
                       "without propagating them to the time of observation")
+        return field
+    missing_epoch = [key for key in ("epoch", "epoch_format", "epoch_scale") if key not in field.meta]
+    if missing_epoch:
+        warnings.warn("reference catalogue has proper motions but its metadata lack {0}; using its "
+                      "positions without propagating them to the time of observation".format(", ".join(missing_epoch)))
         return field
     if mjd is None:
         warnings.warn("no time of observation (MJDSRT); using the reference catalogue positions at "
@@ -85,9 +94,15 @@ def catalog_at_epoch(field, mjd):
         return field
 
     epoch = Time(field.meta["epoch"], format=field.meta["epoch_format"], scale=field.meta["epoch_scale"])
+    pmra, pmdec = (np.asarray(field[name].quantity.to_value(u.mas / u.yr) if field[name].unit is not None
+                              else field[name], float) for name in ("PMRA", "PMDEC"))
+    no_motion = ~(np.isfinite(pmra) & np.isfinite(pmdec))
+    if no_motion.any():
+        warnings.warn("{0} reference catalogue star(s) have no finite proper motion; they keep their "
+                      "catalogue positions".format(int(no_motion.sum())))
+        pmra, pmdec = np.where(no_motion, 0., pmra), np.where(no_motion, 0., pmdec)
     stars = SkyCoord(ra=np.asarray(field["RA"], float) * u.deg, dec=np.asarray(field["DEC"], float) * u.deg,
-                     pm_ra_cosdec=np.asarray(field["PMRA"], float) * u.mas / u.yr,
-                     pm_dec=np.asarray(field["PMDEC"], float) * u.mas / u.yr, obstime=epoch, frame="icrs")
+                     pm_ra_cosdec=pmra * u.mas / u.yr, pm_dec=pmdec * u.mas / u.yr, obstime=epoch, frame="icrs")
     with warnings.catch_warnings():
         # without distances ERFA treats the stars as very distant and says so
         warnings.simplefilter("ignore", category=ErfaWarning)
@@ -1318,12 +1333,15 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
     history_msg = ("Boresight calibration completed from {0} frames ({1}) combined into {2} groups of {3} frames"
                    .format(len(input_dataset), grouping, len(group_sizes), ", ".join(str(size) for size in group_sizes)))
     catalog_mjds = [matches.meta.get('propagated_to_mjd') for matches in hold_matches]
-    if None not in catalog_mjds:
-        mjd_range = "{0:.4f}".format(min(catalog_mjds))
-        if max(catalog_mjds) > min(catalog_mjds):
-            mjd_range += " to {0:.4f}".format(max(catalog_mjds))
+    propagated_mjds = [mjd for mjd in catalog_mjds if mjd is not None]
+    if len(propagated_mjds) > 0:
+        mjd_range = "{0:.4f}".format(min(propagated_mjds))
+        if max(propagated_mjds) > min(propagated_mjds):
+            mjd_range += " to {0:.4f}".format(max(propagated_mjds))
+        measured = ("each measured frame" if len(propagated_mjds) == len(catalog_mjds)
+                    else "{0} of the {1} measured frames".format(len(propagated_mjds), len(catalog_mjds)))
         history_msg += ("; reference catalogue positions propagated with proper motions to the MJDSRT "
-                        "of each measured (combined) frame (MJD {0})".format(mjd_range))
+                        "of {0} (MJD {1})".format(measured, mjd_range))
     astrom_cal_dataset = corgidrp.data.Dataset([avg_cal])
     astrom_cal_dataset.update_after_processing_step(history_msg)
     ## history message should be added to the input dataset(?)
