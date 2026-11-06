@@ -493,6 +493,35 @@ def test_catalog_at_epoch_moves_stars_by_proper_motion():
     assert field["RA"][0] == 80.55  # the input table is not changed
 
 
+def test_catalog_at_epoch_records_new_epoch_and_does_not_move_twice():
+    """The propagated copy carries the time of observation as its epoch, so a second call is harmless."""
+    later = Time(2025.5, format="jyear", scale="tcb").utc.mjd
+    moved = astrom.catalog_at_epoch(_moving_star_catalog(), later)
+    assert (moved.meta["epoch"], moved.meta["epoch_format"], moved.meta["epoch_scale"]) == (later, "mjd", "utc")
+    again = astrom.catalog_at_epoch(moved, later)
+    np.testing.assert_allclose(again["RA"], moved["RA"], rtol=0, atol=1e-12)
+    np.testing.assert_allclose(again["DEC"], moved["DEC"], rtol=0, atol=1e-12)
+
+
+def test_create_astrom_data_timestamps_follow_mjd():
+    """All time keywords and the filename of the mock frames come from the requested observation time."""
+    dataset = mocks.create_astrom_data(field_path=astrom.default_field_path, vignette_radius=None,
+                                       dither_pointings=2, mjd=MJD_2026)
+    starts = []
+    for frame in dataset:
+        hdr = frame.ext_hdr
+        start = Time(hdr["MJDSRT"], format="mjd", scale="utc")
+        for key in ("SCTSRT", "DATETIME", "FTIMEUTC"):
+            assert abs((Time(hdr[key], scale="utc") - start).to_value("s")) < 0.01, key
+        assert abs((Time(hdr["SCTEND"], scale="utc") - start).to_value("s") - hdr["EXPTIME"]) < 0.01
+        assert (hdr["MJDEND"] - hdr["MJDSRT"]) * 86400 == pytest.approx(hdr["EXPTIME"], abs=0.01)
+        assert data.format_ftimeutc(hdr["FTIMEUTC"]) in frame.filename
+        assert frame.pri_hdr["FILENAME"] == frame.filename
+        starts.append(hdr["MJDSRT"])
+    assert starts[0] == MJD_2026
+    assert len(set(frame.filename for frame in dataset)) == len(dataset)
+
+
 def test_catalog_at_epoch_without_proper_motions_warns_and_keeps_positions():
     """User catalogues without proper motions or epoch are used as they are, with a warning."""
     field = _moving_star_catalog(meta=False)

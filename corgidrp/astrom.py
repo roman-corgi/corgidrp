@@ -61,15 +61,17 @@ def catalog_at_epoch(field, mjd):
     recorded in the catalogue metadata (epoch, epoch_format, epoch_scale). Parallax is ignored
     (0.02 mas at the LMC). Catalogues without proper motions or epoch (e.g. user-supplied CSV
     tables), or a missing time of observation, leave the positions unchanged, with a warning.
-    The input positions must be at the catalogue epoch, i.e. not already propagated.
+    The returned copy records the time of observation as its epoch, so propagating it again
+    starts from there.
 
     Args:
         field (astropy.table.Table): catalogue from read_field_catalog
         mjd (float): time of observation (MJD, UTC), e.g. the MJDSRT of the frame, or None
 
     Returns:
-        astropy.table.Table: a copy of the catalogue with RA and DEC at the time of observation;
-        its meta["propagated_to_mjd"] is mjd, or None if the positions were not propagated
+        astropy.table.Table: a copy of the catalogue with RA and DEC at the time of observation and
+        that time as its epoch; its meta["propagated_to_mjd"] is mjd, or None if the positions were
+        not propagated
     """
     field = field.copy()
     field.meta["propagated_to_mjd"] = None
@@ -92,7 +94,8 @@ def catalog_at_epoch(field, mjd):
         moved = stars.apply_space_motion(new_obstime=Time(mjd, format="mjd", scale="utc"))
     field["RA"][:] = moved.ra.deg   # in place, so the units are kept
     field["DEC"][:] = moved.dec.deg
-    field.meta["propagated_to_mjd"] = float(mjd)
+    field.meta.update({"epoch": float(mjd), "epoch_format": "mjd", "epoch_scale": "utc",
+                       "propagated_to_mjd": float(mjd)})
     return field
 
 
@@ -526,8 +529,10 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
             at the time of observation (MJDSRT); meta['propagated_to_mjd'] is that MJD, or None if they were not propagated
         
     '''
-    # load the reference catalogue (checks for the columns RA, DEC and VMAG)
-    field = read_field_catalog(field_path)
+    # load the reference catalogue (checks for the columns RA, DEC and VMAG) and move the whole
+    # catalogue to the time of observation, so that stars near the edge of the subfield are cut
+    # at their current positions
+    field = catalog_at_epoch(read_field_catalog(field_path), image.ext_hdr.get('MJDSRT'))
 
     # gather the pixel locations for the (3) brightest sources in the image
     source1, source2, source3 = sources[0], sources[1], sources[2]
@@ -553,8 +558,6 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - (rad*(np.cos(np.radians(target[1]))))) & (field['DEC'] <= target[1] + (rad*np.cos(np.radians(target[1])))))]
-    # move the reference stars from the catalogue epoch to the time of observation
-    subfield = catalog_at_epoch(subfield, image.ext_hdr.get('MJDSRT'))
 
     bright_order_subfield = subfield.copy()
     bright_order_subfield.sort(keys='VMAG')
@@ -665,7 +668,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     matched_image_to_field['y'] = sources['y']
     matched_image_to_field['RA'] = matched_ra
     matched_image_to_field['DEC'] = matched_dec
-    matched_image_to_field.meta['propagated_to_mjd'] = subfield.meta['propagated_to_mjd']
+    matched_image_to_field.meta['propagated_to_mjd'] = field.meta['propagated_to_mjd']
 
     # append each x,y,RA,DEC string to the fits ext_hdr to save the source matches for reference
     for source in np.arange(len(matched_image_to_field)):

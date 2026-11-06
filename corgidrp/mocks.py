@@ -1530,7 +1530,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         bpix_map (np.array): 2D bad pixel map to apply to simulated data (default: None)
         sim_err_map (boolean): If True, simulates an error map (default: False) 
         vignette_radius (float): (Optional) The radius (from [0,0]) at which to simulate vignetting edge in [mas] (default: 3460 mas (~ 160 pixels)). No vignetting can be invoked by setting =None
-        mjd (float): (Optional) Observation time (MJD, UTC): the stars are placed at their positions at this time and it is written to MJDSRT and MJDEND; the other date keywords keep the current time (default: None, the current time)
+        mjd (float): (Optional) Observation time (MJD, UTC): the stars are placed at their positions at this time. It is the start of the first frame; the following frames start one EXPTIME apart. MJDSRT, MJDEND, SCTSRT, SCTEND, DATETIME, FTIMEUTC and the filename all follow these frame times (default: None, the current time)
 
     Returns:
         corgidrp.data.Dataset:
@@ -1551,12 +1551,11 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     fwhm = 3
 
     # load in the field data and restrict to 0.02 [deg] radius around target
-    cal_field = read_field_catalog(field_path)
-    subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - (subfield_radius*(np.cos(np.radians(target[1]))))) & (cal_field['DEC'] <= target[1] + (subfield_radius*np.cos(np.radians(target[1])))))]
     # place the stars where they are at the time of observation, as the pipeline expects them
     if mjd is None:
         mjd = Time.now().mjd
-    subfield = catalog_at_epoch(subfield, mjd)
+    cal_field = catalog_at_epoch(read_field_catalog(field_path), mjd)
+    subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - (subfield_radius*(np.cos(np.radians(target[1]))))) & (cal_field['DEC'] <= target[1] + (subfield_radius*np.cos(np.radians(target[1])))))]
     cal_SkyCoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg', frame='icrs')  # save these subfield skycoords somewhere
 
     # create the simulated image header
@@ -1821,8 +1820,14 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         # TO DO: Determine what level this image should be
         prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
         prihdr['VISTYPE'] = 'CGIVST_CAL_BORESIGHT'
-        exthdr['MJDSRT'] = mjd
-        exthdr['MJDEND'] = mjd + exthdr['EXPTIME'] / 86400.0
+        frame_start = Time(mjd + i * exthdr['EXPTIME'] / 86400.0, format='mjd', scale='utc')
+        frame_end = frame_start + exthdr['EXPTIME'] * u.s
+        exthdr['MJDSRT'] = frame_start.mjd
+        exthdr['MJDEND'] = frame_end.mjd
+        exthdr['SCTSRT'] = frame_start.isot
+        exthdr['SCTEND'] = frame_end.isot
+        exthdr['DATETIME'] = frame_start.isot
+        exthdr['FTIMEUTC'] = frame_start.isot
         prihdr['RA'] = np.array(frame_targs).T[0][i]  # assume we will know something about the dither RA/DEC pointing
         prihdr['DEC'] = np.array(frame_targs).T[1][i]
         # Use PA_APER (on-sky position angle east of north) for rotation angle in mocks.
@@ -1834,10 +1839,10 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr, err=err_map, dq=dq_map)
         # Generate unique, properly formatted filename
         visitid = prihdr["VISITID"]
-        base_time = datetime.datetime.now()
-        time_str = data.format_ftimeutc(base_time.isoformat())
+        time_str = data.format_ftimeutc(exthdr['FTIMEUTC'])
         filename = f"cgi_{visitid}_{time_str}_l2b.fits"
         frame.filename = filename
+        frame.pri_hdr['FILENAME'] = filename
 
         if filedir is not None:
             # save source SkyCoord locations and pixel location estimates
