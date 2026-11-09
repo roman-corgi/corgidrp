@@ -1172,7 +1172,7 @@ def _stamp_wave_zeropoint(frame, cen_wave, x0, x0err, y0, y0err, dimx, dimy):
     frame.ext_hdr["WV0_DIMX"] = dimx
     frame.ext_hdr["WV0_DIMY"] = dimy
 
-def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False, host_sptype = None, allow_template_fallback = True, zeropoint_halfheight = None):
+def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset = None, subtract_no_offset_frames=True, additional_frame_sep_prikeys = None, additional_frame_sep_extkeys = None, tolerance = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None, return_all = False, host_sptype = None, allow_template_fallback = True, zeropoint_halfheight = None):
     """
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -1194,6 +1194,7 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         three-group structure assumed. Defaults to True.
         additional_frame_sep_prikeys (list of str, optional): Additional primary header keywords (apart from VISITID) used to separate frames before zeropoint calculation. Default is None.
         additional_frame_sep_extkeys (list of str, optional): Extension header keywords used to separate frames before zeropoint calculation. Default is None.
+        tolerance (dict): if we split the dataset according to the FSMX/Y dithering, so tolerance = {'FSMX': x , FSMY': y } [mas]
         xcent_guess (float): initial x guess for the centroid fit for all frames
         ycent_guess (float): initial y guess for the centroid fit for all frames
         bb_nb_dx (float): horizontal image offset between the narrowband and broadband filters, in EXCAM pixels. 
@@ -1280,11 +1281,16 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     # Default is split satspot/science dataset according to VISITID
     pri_keys = ["VISITID"]
     ext_keys = additional_frame_sep_extkeys
+    #in case the dataset is split according to FSM values there should be a tolerance added
+    if ext_keys is not None and ('FSMX' in ext_keys or 'FSMY' in ext_keys):
+        if isinstance(tolerance, dict):
+            if tolerance.get("FSMX") is None and tolerance.get("FSMY") is None:
+                raise ValueError("tolerance must relate to FSMX/Y header keyword")
     if additional_frame_sep_prikeys is not None:
         pri_keys = ["VISITID"] + additional_frame_sep_prikeys
-    satspot_dataset, keywords_sat = sat_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
+    satspot_dataset, keywords_sat = sat_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys, tolerances = tolerance)
     if with_science:
-        science_dataset, keywords_sci = sci_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys)
+        science_dataset, keywords_sci = sci_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys, tolerances = tolerance)
 
     all_science_frames = []
     matched_sci_keywords = []

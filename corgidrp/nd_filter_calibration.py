@@ -671,7 +671,7 @@ def compute_od_spectrum_for_frame(frame, target, sf_cal, calspec_filepath, ref_f
 
     return od_spectrum, spec_wave, od_err
 
-def process_bright_target_spec(target, files, sf_cal, calspec_filepath, od_raster_threshold):
+def process_bright_target_spec(target, files, sf_cal, calspec_filepath, od_raster_threshold, tolerance = None):
     """
     Process bright star files for one target to compute optical density (OD)
     and (x, y) centroids for each dithered observation.
@@ -688,6 +688,7 @@ def process_bright_target_spec(target, files, sf_cal, calspec_filepath, od_raste
         calspec_filepath (str): Path to the CALSPEC SED FITS file for the bright
             star being observed through the ND filter.
         od_raster_threshold (float): Threshold for flagging OD variations.
+        tolerance (dict): we split the dataset according to the FSMX/Y dithering, so tolerance = {'FSMX': x [mas], 'FSMY': y [mas]}
     
     Returns:
         dict: A dictionary containing computed OD values, wavelengths, centroids, and other metadata.
@@ -704,7 +705,7 @@ def process_bright_target_spec(target, files, sf_cal, calspec_filepath, od_raste
     od_all_spectra, wave_grids, od_all_err, x_values, y_values, xerr_values, yerr_values = [], [], [], [], [], [], []
 
     target_dataset = Dataset(files)
-    grouped_dataset, fsmpos = target_dataset.split_dataset(exthdr_keywords=["FSMX","FSMY"])
+    grouped_dataset, fsmpos = target_dataset.split_dataset(exthdr_keywords=["FSMX","FSMY"], tolerances = tolerance)
 
     for fsm in fsmpos:
         matched_index = [i for i, key in enumerate(fsmpos) if key == fsm]
@@ -831,7 +832,7 @@ def create_nd_spectroscopy_dataset(aggregated_sweet_spot_data, common_metadata, 
 
     return ndspectroscopy_dataset
 
-def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, od_raster_threshold = 0.1, calspec_files=None, outputdir=None):
+def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, od_raster_threshold = 0.1, calspec_files=None, outputdir=None, tolerance = None):
     """
     Create the spectroscopy ND filter calibration product.
 
@@ -867,7 +868,8 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, od_raster_thresh
         outputdir (str, optional): Directory where the auto-generated SpecFluxCal
             is saved when it is computed from dim-star frames.  Defaults to the
             current directory.
-
+        tolerance (dict): we split the dataset according to the FSMX/Y dithering, so tolerance = {'FSMX': x [mas], 'FSMY': y [mas]}
+        
     Returns:
         corgidrp.data.NDSpectroscopy: OD(lambda) calibration product.
     """
@@ -890,7 +892,7 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, od_raster_thresh
             "No bright (ND-filter) frames found in the dataset. "
             "Frames with FPAMNAME (or FSAMNAME) starting with 'ND' are required."
         )
-
+    print("nd_filter_spec")
     bright_dataset = Dataset(bright_frames)
 
     # 2. Make sure that the images were taken in spectroscopy mode
@@ -943,7 +945,7 @@ def create_nd_filter_cal_spec(stars_dataset, spec_fluxcal=None, od_raster_thresh
             calspec_fp = calspec_files[target]
         
         star_data = process_bright_target_spec(target, files, sf_cal, calspec_fp,
-                                          od_raster_threshold)
+                                          od_raster_threshold, tolerance = tolerance)
         flux_results[target] = star_data
 
         od_var_flag = star_data['flag']
