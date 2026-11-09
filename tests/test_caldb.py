@@ -320,6 +320,115 @@ def test_dispersion_model_dpam_match():
     assert float(dm3.ext_hdr['REFWAVE']) == 730.
 
 
+def test_normalize_spec_cfam():
+    """
+    CalDB._normalize_spec_cfam should map spectroscopy CFAMNAME sub-bands to their
+    parent broadband value, and leave already-broadband or unrelated values unchanged.
+    """
+    cdb = caldb.CalDB()
+    assert cdb._normalize_spec_cfam('2A') == '2F'
+    assert cdb._normalize_spec_cfam('2C') == '2F'
+    assert cdb._normalize_spec_cfam('3D') == '3F'
+    assert cdb._normalize_spec_cfam('2F') == '2F'
+    assert cdb._normalize_spec_cfam('3F') == '3F'
+    assert cdb._normalize_spec_cfam('CLEAR') == 'CLEAR'
+
+
+def test_select_reference_frame_mixed_pam():
+    """
+    Per issue #820, get_calib() needs to correctly resolve a representative frame from
+    a Dataset that intentionally mixes frames with different PAM configurations.
+    CalDB._select_reference_frame should pick an ND-filter-in frame
+    (FPAMNAME starting with 'ND') for ND-based calibration types, even if it isn't the
+    first frame in the dataset, and should just use the first frame for every other
+    calibration type. A single frame (not a Dataset) should always be returned
+    unchanged, regardless of calibration type.
+    """
+    cdb = caldb.CalDB()
+
+    def make_frame(fpam, cfam='2F', dpam='PRISM2'):
+        prihdr, exthdr = mocks.create_default_L2b_headers()[:2]
+        exthdr['FPAMNAME'] = fpam
+        exthdr['CFAMNAME'] = cfam
+        exthdr['DPAMNAME'] = dpam
+        return data.Image(np.zeros((5, 5)), pri_hdr=prihdr, ext_hdr=exthdr)
+
+    non_nd_frame = make_frame('OPEN_12')
+    nd_frame = make_frame('ND225')
+    mixed_dataset = data.Dataset([non_nd_frame, nd_frame])
+
+    # ND-based calibration types should pick the ND-filter-in frame, even though
+    # it isn't first in the dataset
+    for dtype_label in caldb.CalDB._ND_FILTER_CAL_TYPES:
+        picked = cdb._select_reference_frame(mixed_dataset, dtype_label)
+        assert picked is nd_frame, "{0} should pick the ND-filter-in frame".format(dtype_label)
+
+    # every other calibration type should just use the first frame
+    assert cdb._select_reference_frame(mixed_dataset, 'Dark') is non_nd_frame
+
+    # a single frame (not a Dataset) is always returned unchanged
+    assert cdb._select_reference_frame(non_nd_frame, 'NDMuellerMatrix') is non_nd_frame
+    assert cdb._select_reference_frame(None, 'Dark') is None
+
+    # if no ND-filter-in frame exists in the dataset, falls back to the first frame
+    all_non_nd_dataset = data.Dataset([make_frame('OPEN_12'), make_frame('OPEN_34')])
+    picked = cdb._select_reference_frame(all_non_nd_dataset, 'NDMuellerMatrix')
+    assert picked is all_non_nd_dataset[0]
+
+
+def test_get_calib_ndfiltersweetspot_mixed_dataset():
+    """
+    get_calib() for NDFilterSweetSpot should correctly select a calibration entry when
+    given a full Dataset that mixes ND-filter-out and ND-filter-in frames (as happens in
+    real ND filter calibration processing, which uses dim-star frames with no ND filter
+    alongside bright-star frames observed through the ND filter). Using the first frame
+    in the dataset (which may not be the ND-filter-in one) would incorrectly filter by
+    the wrong FPAMNAME, or fail entirely.
+
+    Also exercises the CFAM sub-band fallback: the science frame uses a narrowband
+    CFAMNAME ('2A') while the calibration entry is tagged with the parent broadband
+    ('2F'); NDFilterSweetSpot's fallback-to-broadband logic should still match it.
+    """
+    cdb = caldb.CalDB()
+
+    # register an NDFilterSweetSpot calibration entry
+    prihdr, exthdr = mocks.create_default_L2b_headers()[:2]
+    exthdr['FPAMNAME'] = 'ND225'
+    exthdr['DPAMNAME'] = 'PRISM2'
+    exthdr['CFAMNAME'] = '2F'
+    exthdr['MJDSRT'] = 60000.0
+    nd_cal = data.NDFilterSweetSpotDataset(
+        np.array([[2.0, 10.0, 10.0]]), pri_hdr=prihdr, ext_hdr=exthdr
+    )
+    nd_cal_filepath = os.path.join(calibdir, "test_ndfiltersweetspot_cal.fits")
+    nd_cal.save(filedir=calibdir, filename="test_ndfiltersweetspot_cal.fits")
+    cdb.create_entry(nd_cal)
+
+    try:
+        # build a mixed dataset: a dim-star (ND-filter-out) frame first, then the
+        # bright-star (ND-filter-in) frame that should actually drive the lookup
+        dim_prihdr, dim_exthdr = mocks.create_default_L2b_headers()[:2]
+        dim_exthdr['FPAMNAME'] = 'OPEN_12'
+        dim_exthdr['DPAMNAME'] = 'PRISM2'
+        dim_exthdr['CFAMNAME'] = '2F'
+        dim_frame = data.Image(np.zeros((5, 5)), pri_hdr=dim_prihdr, ext_hdr=dim_exthdr)
+
+        bright_prihdr, bright_exthdr = mocks.create_default_L2b_headers()[:2]
+        bright_exthdr['FPAMNAME'] = 'ND225'
+        bright_exthdr['DPAMNAME'] = 'PRISM2'
+        bright_exthdr['CFAMNAME'] = '2A'  # narrowband sub-band of the registered 2F entry
+        bright_frame = data.Image(np.zeros((5, 5)), pri_hdr=bright_prihdr, ext_hdr=bright_exthdr)
+
+        mixed_dataset = data.Dataset([dim_frame, bright_frame])
+
+        result = cdb.get_calib(mixed_dataset, data.NDFilterSweetSpotDataset)
+        assert result.ext_hdr['FPAMNAME'] == 'ND225'
+        assert result.ext_hdr['CFAMNAME'] == '2F'
+    finally:
+        cdb.remove_entry(nd_cal)
+        os.remove(nd_cal_filepath)
+
+
 def test_caldb_filter():
     '''
     test that the filter function works correctly to select the best
@@ -379,4 +488,8 @@ if __name__ == "__main__":
     test_caldb_custom_filepath()
     test_caldb_insert_and_remove()
     test_caldb_scan()
+    test_dispersion_model_dpam_match()
+    test_normalize_spec_cfam()
+    test_select_reference_frame_mixed_pam()
+    test_get_calib_ndfiltersweetspot_mixed_dataset()
     test_caldb_filter()
