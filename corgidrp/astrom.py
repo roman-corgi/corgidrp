@@ -7,6 +7,9 @@ import corgidrp.data
 import astropy
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
+from astropy.time import Time
+import astropy.units as u
+from erfa import ErfaWarning
 
 import pyklip.fakes as fakes
 
@@ -15,6 +18,101 @@ import scipy.optimize as optimize
 from scipy.optimize import OptimizeWarning
 from scipy.ndimage import median_filter
 from astropy.convolution import convolve, Gaussian2DKernel
+
+# LMC astrometric reference catalogue shipped with corgidrp (built by data/build_lmc_reference_catalog.py)
+default_field_path = os.path.join(os.path.dirname(__file__), "data", "lmc_astrometric_reference.ecsv")
+
+
+def read_field_catalog(field_path):
+    """
+    Read an astrometric reference catalogue of the calibration field.
+
+    Accepts the packaged ECSV catalogue and user-supplied tables (e.g. CSV) with at least
+    the columns RA, DEC and VMAG, the magnitude used for brightness ranking.
+
+    Args:
+        field_path (str): path to the catalogue file
+
+    Returns:
+        astropy.table.Table: the catalogue, with at least the columns RA, DEC [deg] and VMAG
+
+    Raises:
+        OSError: if the file is a Git LFS pointer that was never downloaded
+        ValueError: if RA, DEC or VMAG is missing
+    """
+    with open(field_path, "rb") as catalog_file:
+        start = catalog_file.read(64)
+    if start.startswith(b"version https://git-lfs"):
+        raise OSError("{0} is a Git LFS pointer, not the catalogue. Run `git lfs pull` in the "
+                      "corgidrp repository to download it.".format(field_path))
+
+    field = ascii.read(field_path)
+    missing = [name for name in ("RA", "DEC", "VMAG") if name not in field.colnames]
+    if missing:
+        raise ValueError("field catalogue {0} is missing column(s) {1}".format(field_path, missing))
+    return field
+
+
+def catalog_at_epoch(field, mjd):
+    """
+    Move the catalogue positions from the catalogue epoch to the time of observation.
+
+    Uses the proper motions PMRA (mu_alpha*) and PMDEC, in their column units or mas/yr if the
+    columns have none, and the epoch recorded in the catalogue metadata (epoch, epoch_format,
+    epoch_scale). Stars with a non-finite proper motion keep their catalogue position, with a
+    warning. Parallax is ignored: it is ~0.02 mas for LMC members, and the few foreground stars
+    in the shipped catalogue with a significant parallax (up to 12 mas, i.e. 0.5 pixel) move by
+    at most that much over the year. Catalogues without proper motions or epoch (e.g.
+    user-supplied CSV tables), or a missing time of observation, leave the positions unchanged,
+    with a warning.
+    The returned copy records the time of observation as its epoch, so propagating it again
+    starts from there.
+
+    Args:
+        field (astropy.table.Table): catalogue from read_field_catalog
+        mjd (float): time of observation (MJD, UTC), e.g. the MJDSRT of the frame, or None
+
+    Returns:
+        astropy.table.Table: a copy of the catalogue with RA and DEC at the time of observation and
+        that time as its epoch; its meta["propagated_to_mjd"] is mjd, or None if the positions were
+        not propagated
+    """
+    field = field.copy()
+    field.meta["propagated_to_mjd"] = None
+    if not {"PMRA", "PMDEC"} <= set(field.colnames):
+        warnings.warn("reference catalogue has no proper motions (PMRA, PMDEC); using its positions "
+                      "without propagating them to the time of observation")
+        return field
+    missing_epoch = [key for key in ("epoch", "epoch_format", "epoch_scale") if key not in field.meta]
+    if missing_epoch:
+        warnings.warn("reference catalogue has proper motions but its metadata lack {0}; using its "
+                      "positions without propagating them to the time of observation".format(", ".join(missing_epoch)))
+        return field
+    if mjd is None:
+        warnings.warn("no time of observation (MJDSRT); using the reference catalogue positions at "
+                      "the catalogue epoch")
+        return field
+
+    epoch = Time(field.meta["epoch"], format=field.meta["epoch_format"], scale=field.meta["epoch_scale"])
+    pmra, pmdec = (np.asarray(field[name].quantity.to_value(u.mas / u.yr) if field[name].unit is not None
+                              else field[name], float) for name in ("PMRA", "PMDEC"))
+    no_motion = ~(np.isfinite(pmra) & np.isfinite(pmdec))
+    if no_motion.any():
+        warnings.warn("{0} reference catalogue star(s) have no finite proper motion; they keep their "
+                      "catalogue positions".format(int(no_motion.sum())))
+        pmra, pmdec = np.where(no_motion, 0., pmra), np.where(no_motion, 0., pmdec)
+    stars = SkyCoord(ra=np.asarray(field["RA"], float) * u.deg, dec=np.asarray(field["DEC"], float) * u.deg,
+                     pm_ra_cosdec=pmra * u.mas / u.yr, pm_dec=pmdec * u.mas / u.yr, obstime=epoch, frame="icrs")
+    with warnings.catch_warnings():
+        # without distances ERFA treats the stars as very distant and says so
+        warnings.simplefilter("ignore", category=ErfaWarning)
+        moved = stars.apply_space_motion(new_obstime=Time(mjd, format="mjd", scale="utc"))
+    field["RA"][:] = moved.ra.deg   # in place, so the units are kept
+    field["DEC"][:] = moved.dec.deg
+    field.meta.update({"epoch": float(mjd), "epoch_format": "mjd", "epoch_scale": "utc",
+                       "propagated_to_mjd": float(mjd)})
+    return field
+
 
 def centroid(frame):
     """
@@ -435,7 +533,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     Args:
         image (corgidrp.data.Image): Image data as a corgidrp Image object
         sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations of sources to match
-        field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
+        field_path (str): Full path to the reference catalogue (see read_field_catalog)
         comparison_threshold (int): How many stars in the field to consider for the initial match
         rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
         platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
@@ -443,12 +541,13 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
     Returns:
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
+            at the time of observation (MJDSRT); meta['propagated_to_mjd'] is that MJD, or None if they were not propagated
         
     '''
-    # ensure the search field data has the proper column names
-    field = ascii.read(field_path)
-    if 'RA' and 'DEC' and 'VMAG' not in field.colnames:
-        raise ValueError('field data must have column names [\'RA\',\'DEC\', \'VMAG\']')
+    # load the reference catalogue (checks for the columns RA, DEC and VMAG) and move the whole
+    # catalogue to the time of observation, so that stars near the edge of the subfield are cut
+    # at their current positions
+    field = catalog_at_epoch(read_field_catalog(field_path), image.ext_hdr.get('MJDSRT'))
 
     # gather the pixel locations for the (3) brightest sources in the image
     source1, source2, source3 = sources[0], sources[1], sources[2]
@@ -470,8 +569,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     l1, l2, l3 = np.sort([l12, l23, l31])
     a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
 
-    # define a search field and load in RA, DEC, Vmag
-    field = ascii.read(field_path)
+    # define a search field around the commanded pointing
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - (rad*(np.cos(np.radians(target[1]))))) & (field['DEC'] <= target[1] + (rad*np.cos(np.radians(target[1])))))]
@@ -585,6 +683,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     matched_image_to_field['y'] = sources['y']
     matched_image_to_field['RA'] = matched_ra
     matched_image_to_field['DEC'] = matched_dec
+    matched_image_to_field.meta['propagated_to_mjd'] = field.meta['propagated_to_mjd']
 
     # append each x,y,RA,DEC string to the fits ext_hdr to save the source matches for reference
     for source in np.arange(len(matched_image_to_field)):
@@ -990,16 +1089,16 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
     return (distortion_coeffs, fitorder)
   
   
-def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
+def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.ecsv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
-                          pa_tolerance=0.1, keywords_to_split_dataset_by=None):
+                          pa_tolerance=0.1, keywords_to_split_dataset_by=None, pointing_tolerance=0.5, fsm_tolerance=5.):
     """
     Perform the boresight calibration of a dataset.
     
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
-        field_path (str): Full path to file with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
+        field_path (str): Full path to the reference catalogue, or the default 'lmc_astrometric_reference.ecsv' for the catalogue shipped with corgidrp (default: 'lmc_astrometric_reference.ecsv'). If the catalogue has PMRA/PMDEC and epoch metadata, its positions are propagated to the MJDSRT of each frame (see catalog_at_epoch)
         field_matches (list of str or astropy.table.Table): List of full paths to files or astropy tables with calibration field matches for each image in the dataset (x, y, ra, dec), if single str the same filepath used for all frames,nif None, automated source matching is used (default: None)
         find_threshold (int): Number of stars to find (default 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
@@ -1017,6 +1116,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         initial_dist_guess (np.array): An initial guess of legendre coefficients used for fitting distortion, if None will use coeffs associated with no distortion (default: None)
         pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) to group frames together when frames_to_combine is True (Default: 0.1)
         keywords_to_split_dataset_by (list, optional): List of additional header keywords to split the input dataset by for frame combining in addition default keywords the function uses for target, roll, and dither (default: None)
+        pointing_tolerance (float, optional): Maximum gap [arcsec on the sky] between RA_APER/DEC_APER values that are still grouped together when frames_to_combine is True; these keywords scatter with telemetry noise (Default: 0.5)
+        fsm_tolerance (float, optional): Maximum gap [mas] between FSMX/FSMY values that are still grouped together when frames_to_combine is True (Default: 5)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -1047,9 +1148,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
                         matched_sources_multiframe = field_matches
 
     # load in field data to refer to
-    if field_path == 'JWST_CALFIELD2020.csv':
-        full_field_path = os.path.join(os.path.dirname(__file__), "data", field_path)
-        field_path = full_field_path
+    if field_path == 'lmc_astrometric_reference.ecsv':
+        field_path = default_field_path
 
     # combine data frames if requested
     grouped_datasets = []
@@ -1119,9 +1219,24 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         # split pa_dataset one more time by the constructed keyword list
         for cluster in clusters:
             pa_dataset = corgidrp.data.Dataset(cluster["frames"])
-            dither_datasets, _ = pa_dataset.split_dataset(prihdr_keywords=prihdr_keyword_list, exthdr_keywords=exthdr_keyword_list)
-            # add to the final grouping
-            grouped_datasets.extend(dither_datasets)
+            # split by target first, so that the RA tolerance below is computed at the declination of each field
+            if 'TARGET' in prihdr_keyword_list:
+                target_datasets, _ = pa_dataset.split_dataset(prihdr_keywords=['TARGET'])
+            else:
+                target_datasets = [pa_dataset]
+            for target_dataset in target_datasets:
+                # RA_APER/DEC_APER and FSMX/FSMY are telemetry and scatter from frame to frame, so group
+                # values within a tolerance rather than exactly. RA_APER differences are coordinate degrees;
+                # dividing by cos(DEC_APER) makes the tolerance an on-sky distance
+                dec_aper = np.median([frame.pri_hdr.get('DEC_APER', 0.) for frame in target_dataset])
+                tolerances = {'RA_APER': pointing_tolerance / 3600 / np.cos(np.radians(dec_aper)),
+                              'DEC_APER': pointing_tolerance / 3600, 'FSMX': fsm_tolerance, 'FSMY': fsm_tolerance}
+                tolerances = {key: value for key, value in tolerances.items()
+                              if key in prihdr_keyword_list + exthdr_keyword_list}
+                dither_datasets, _ = target_dataset.split_dataset(prihdr_keywords=prihdr_keyword_list,
+                                                                  exthdr_keywords=exthdr_keyword_list, tolerances=tolerances)
+                # add to the final grouping
+                grouped_datasets.extend(dither_datasets)
 
         # Header grouping sorts the pointings, but the boresight must refer to
         # the first input pointing. Restore the order in which groups appeared.
@@ -1210,7 +1325,25 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         avg_cal.ext_hdr[name] = tuple(corr)
         
     # update the history
-    history_msg = "Boresight calibration completed"
+    if int(frames_to_combine) == 1:
+        grouping = "grouped by header keywords"
+    elif int(frames_to_combine) > 1:
+        grouping = "grouped in sets of up to {0} consecutive frames".format(int(frames_to_combine))
+    else:
+        grouping = "not combined"
+    group_sizes = [len(group) for group in grouped_datasets] if len(grouped_datasets) > 0 else [1] * len(dataset)
+    history_msg = ("Boresight calibration completed from {0} frames ({1}) combined into {2} groups of {3} frames"
+                   .format(len(input_dataset), grouping, len(group_sizes), ", ".join(str(size) for size in group_sizes)))
+    catalog_mjds = [matches.meta.get('propagated_to_mjd') for matches in hold_matches]
+    propagated_mjds = [mjd for mjd in catalog_mjds if mjd is not None]
+    if len(propagated_mjds) > 0:
+        mjd_range = "{0:.4f}".format(min(propagated_mjds))
+        if max(propagated_mjds) > min(propagated_mjds):
+            mjd_range += " to {0:.4f}".format(max(propagated_mjds))
+        measured = ("each measured frame" if len(propagated_mjds) == len(catalog_mjds)
+                    else "{0} of the {1} measured frames".format(len(propagated_mjds), len(catalog_mjds)))
+        history_msg += ("; reference catalogue positions propagated with proper motions to the MJDSRT "
+                        "of {0} (MJD {1})".format(measured, mjd_range))
     astrom_cal_dataset = corgidrp.data.Dataset([avg_cal])
     astrom_cal_dataset.update_after_processing_step(history_msg)
     ## history message should be added to the input dataset(?)

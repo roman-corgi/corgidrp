@@ -271,7 +271,7 @@ def test_polcal_e2e(e2edata_path, e2eoutput_path,
     logger.info('Creating mock astrometric calibration...')
     calibrations_dir = os.path.join(output_dir, 'calibrations')
     os.makedirs(calibrations_dir)
-    field_path = os.path.join(os.path.dirname(__file__), "..", "test_data", "JWST_CALFIELD2020.csv")
+    field_path = astrom.default_field_path
     astrom_dataset = mocks.create_astrom_data(field_path=field_path)
     # create_wcs only needs the plate scale, the north angle and the boresight offset from this
     astrom_cal = astrom.boresight_calibration(input_dataset=astrom_dataset, field_path=field_path,
