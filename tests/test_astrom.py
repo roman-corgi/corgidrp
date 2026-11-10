@@ -828,6 +828,62 @@ def test_match_sources_rejects_north_angle_contradicting_pa_aper(offset_frame):
         _match(frame, random_sources, comparison_threshold=10)
 
 
+def test_match_sources_rejects_match_of_few_of_many_sources(offset_frame):
+    """A match that explains only a few of many sources is rejected, although it has min_matches stars.
+
+    With many sources some shift lines up a few of them with catalogue stars by chance, so a match must also
+    cover min_match_fraction of the brightest sources. Here 4 real stars are hidden among 26 positions at least 15 pixels
+    from any catalogue star, so the best match has the 4 real stars only.
+    """
+    frame, sources = offset_frame
+    # catalogue positions on the detector, through the affine transformation of the correct match
+    matches = _match(frame, sources)
+    field = astrom.catalog_at_epoch(astrom.read_field_catalog(astrom.default_field_path), frame.ext_hdr["MJDSRT"])
+    sky = SkyCoord(field["RA"], field["DEC"], unit="deg")
+    sky = sky[sky.separation(SkyCoord(frame.pri_hdr["RA"], frame.pri_hdr["DEC"], unit="deg")).deg <= 0.02]
+    matched_sky = SkyCoord(matches["RA"], matches["DEC"], unit="deg")
+    ideal = astrom.project_to_pixels(matched_sky, matched_sky[0], (0, 0), 21.8, 20.)
+    affine = np.linalg.lstsq(np.column_stack([ideal, np.ones(len(ideal))]), np.array([matches["x"], matches["y"]]).T,
+                             rcond=None)[0]
+    catalogue_pix = np.column_stack([astrom.project_to_pixels(sky, matched_sky[0], (0, 0), 21.8, 20.), np.ones(len(sky))]) @ affine
+    rng = np.random.default_rng(1)
+    candidates = rng.uniform(100, 900, (2000, 2))
+    distance = np.min(np.hypot(*(candidates[:, None, :] - catalogue_pix[None, :, :]).transpose(2, 0, 1)), axis=1)
+    empty = candidates[distance > 15][:26]
+    few = Table({"x": np.concatenate([sources["x"][:4], empty[:, 0]]), "y": np.concatenate([sources["y"][:4], empty[:, 1]])})
+
+    # the header vote finds no 4 stars that pass refinement here, so the triangle search makes the match
+    with pytest.warns(UserWarning, match="triangle search"):
+        assert len(_match(frame, few, comparison_threshold=20, min_match_fraction=0)) == 4
+    with pytest.raises(ValueError, match="8 of them among the brightest 30 sources"):
+        _match(frame, few, comparison_threshold=20)
+
+
+@pytest.fixture(scope="module")
+def far_offset_frame():
+    """One mock frame whose stars are 7" from where the header pointing predicts them, and its brightest 25 sources."""
+    offset = (0., 7. / 3600)
+    frame = mocks.create_astrom_data(field_path=astrom.default_field_path, rotation=20, vignette_radius=None, offset=offset)[0]
+    sources = astrom.find_source_locations(frame.data, threshold=25)
+    return frame, sources
+
+
+def test_match_sources_header_window_covers_larger_pointing_errors(far_offset_frame):
+    """The default max_pointing_offset (10") lets the header match find stars 7" from the predicted positions."""
+    frame, sources = far_offset_frame
+    matches = _match(frame, sources)
+    assert matches.meta["match_method"] == "header"
+    assert len(matches) >= 20
+    platescale, northangle = astrom.matched_platescale_and_northangle(
+        np.array([matches["x"], matches["y"]]).T, SkyCoord(matches["RA"], matches["DEC"], unit="deg"))
+    assert platescale == pytest.approx(21.8, rel=1e-3)
+    assert northangle == pytest.approx(20, abs=0.05)
+    with pytest.warns(UserWarning, match="triangle search"):
+        narrow = _match(frame, sources, comparison_threshold=20, max_pointing_offset=3)
+    assert narrow.meta["match_method"] == "triangle"
+    assert list(narrow["RA"]) == list(matches["RA"])
+
+
 if __name__ == "__main__":
     test_astrom()
     test_astrom_vignette()

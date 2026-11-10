@@ -723,7 +723,7 @@ def triangle_solutions(sources, brightest_field, platescale_guess, platescale_to
         yield initial_platescale, initial_northangle, (short_star['x'], short_star['y']), short_coord
 
 def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012, platescale_guess=21.8, platescale_tol=0.1,
-                  match_radius=2., max_pointing_offset=3., northangle_tol=2., min_matches=4):
+                  match_radius=2., max_pointing_offset=10., northangle_tol=2., min_matches=4, min_match_fraction=0.25):
     '''
     Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
@@ -733,8 +733,12 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     PA_APER, the triangle of the three brightest sources is matched to the catalogue instead, trying candidate
     triangles from the best match on. Either way the match is refined with an affine fit, and every catalogue
     star is matched to at most one source within match_radius. A match is valid if it has at least min_matches
-    stars, a plate scale within platescale_tol of platescale_guess, and a north angle within northangle_tol of
-    PA_APER.
+    stars, matches at least the fraction min_match_fraction of the brightest 30 sources (or of all sources, if
+    there are fewer), and has a plate scale within platescale_tol of platescale_guess and a north angle within
+    northangle_tol of PA_APER. The fraction matters when there are many sources: some shift always lines up a
+    few of them with catalogue stars by chance, and the affine refinement pulls these within match_radius, so a
+    number of stars alone does not reject such a match. It is taken of the brightest sources because the faintest
+    detections of a long source list are often noise.
 
     Args:
         image (corgidrp.data.Image): Image data as a corgidrp Image object
@@ -745,9 +749,11 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
         platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
         platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
         match_radius (float): Largest distance between a source and the matched catalogue position (default: 2 [pixels])
-        max_pointing_offset (float): Largest offset of the stars from their positions predicted by the header (default: 3 [arcsec])
+        max_pointing_offset (float): Largest offset of the stars from their positions predicted by the header (default: 10 [arcsec]);
+            rad must cover the illuminated field plus this offset
         northangle_tol (float): Largest difference between the north angle of a match and PA_APER (default: 2 [deg])
         min_matches (int): Smallest number of matched stars for a valid match (default: 4)
+        min_match_fraction (float): Smallest fraction of the brightest 30 sources that must be matched for a valid match (default: 0.25)
 
     Returns:
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations of the matched sources
@@ -769,8 +775,12 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     detections = np.array([sources['x'], sources['y']], dtype=float).T
     pa_aper = image.pri_hdr.get('PA_APER')
 
+    # sources are sorted brightest first; the fraction is counted among the brightest of them
+    n_bright = min(len(sources), 30)
+    needed_bright = int(np.ceil(min_match_fraction * n_bright))
+
     def valid(det_ind, pred_ind):
-        if len(det_ind) < min_matches:
+        if len(det_ind) < min_matches or np.sum(det_ind < n_bright) < needed_bright:
             return False
         platescale, northangle = matched_platescale_and_northangle(detections[det_ind], subfield_skycoords[pred_ind])
         if abs(platescale / platescale_guess - 1) > platescale_tol:
@@ -811,9 +821,10 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
     if match_method is None:
         raise ValueError("match_sources found no match between the {0} sources and the catalogue: neither the header pointing "
-                         "(RA/DEC, PA_APER {1}) nor the triangle search gave at least {2} stars within {3} pixels with a plate scale "
-                         "within {4:.0%} of {5} mas/pixel and a north angle within {6} deg of PA_APER"
-                         .format(len(sources), pa_aper, min_matches, match_radius, platescale_tol, platescale_guess, northangle_tol))
+                         "(RA/DEC, PA_APER {1}) nor the triangle search gave at least {2} stars, {3} of them among the brightest {4} sources, within {5} pixels "
+                         "with a plate scale within {6:.0%} of {7} mas/pixel and a north angle within {8} deg of PA_APER"
+                         .format(len(sources), pa_aper, min_matches, needed_bright, n_bright, match_radius, platescale_tol,
+                                 platescale_guess, northangle_tol))
 
     matched_image_to_field = astropy.table.Table()
     matched_image_to_field['x'] = np.asarray(sources['x'])[det_ind]
@@ -1229,7 +1240,7 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
                           pa_tolerance=0.1, keywords_to_split_dataset_by=None, pointing_tolerance=0.5, fsm_tolerance=5.,
-                          match_radius=2., max_pointing_offset=3., northangle_tol=2.):
+                          match_radius=2., max_pointing_offset=10., northangle_tol=2., min_match_fraction=0.25):
     """
     Perform the boresight calibration of a dataset.
     
@@ -1256,8 +1267,9 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         pointing_tolerance (float, optional): Maximum gap [arcsec on the sky] between RA_APER/DEC_APER values that are still grouped together when frames_to_combine is True; these keywords scatter with telemetry noise (Default: 0.5)
         fsm_tolerance (float, optional): Maximum gap [mas] between FSMX/FSMY values that are still grouped together when frames_to_combine is True (Default: 5)
         match_radius (float, optional): Largest distance between a detected source and the matched catalogue star [pixels] (Default: 2)
-        max_pointing_offset (float, optional): Largest offset of the stars from their positions predicted by the header pointing [arcsec] (Default: 3)
+        max_pointing_offset (float, optional): Largest offset of the stars from their positions predicted by the header pointing [arcsec]; search_rad must cover the illuminated field plus this offset (Default: 10)
         northangle_tol (float, optional): Largest difference between the north angle of a match and PA_APER [deg] (Default: 2)
+        min_match_fraction (float, optional): Smallest fraction of the brightest 30 detected sources that must be matched to catalogue stars for a valid match (Default: 0.25)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -1418,7 +1430,8 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         # compute the calibration properties
         found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
         matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol,
-                                        match_radius=match_radius, max_pointing_offset=max_pointing_offset, northangle_tol=northangle_tol)
+                                        match_radius=match_radius, max_pointing_offset=max_pointing_offset, northangle_tol=northangle_tol,
+                                        min_match_fraction=min_match_fraction)
         # if len(hold_matches) < 1:
         hold_matches.append(matched_sources)
 
