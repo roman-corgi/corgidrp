@@ -1267,7 +1267,7 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
     return (distortion_coeffs, fitorder)
   
   
-def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.ecsv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
+def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.ecsv', field_matches=None, find_threshold=30, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
                           pa_tolerance=0.1, keywords_to_split_dataset_by=None, pointing_tolerance=0.5, fsm_tolerance=5.,
@@ -1279,7 +1279,7 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
         field_path (str): Full path to the reference catalogue, or the default 'lmc_astrometric_reference.ecsv' for the catalogue shipped with corgidrp (default: 'lmc_astrometric_reference.ecsv'). If the catalogue has PMRA/PMDEC and epoch metadata, its positions are propagated to the MJDSRT of each frame (see catalog_at_epoch)
         field_matches (list of str or astropy.table.Table): List of full paths to files or astropy tables with calibration field matches for each image in the dataset (x, y, ra, dec), if single str the same filepath used for all frames,nif None, automated source matching is used (default: None)
-        find_threshold (int): Number of stars to find (default 10)
+        find_threshold (int): Number of sources to find, brightest first; about 30 covers the stars of the LMC field without adding noise detections (default 30)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
         comparison_threshold (int): How many stars in the field to consider for the triangle match, which is only used if the match from the header pointing and PA_APER fails (default: 50)
