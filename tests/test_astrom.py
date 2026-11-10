@@ -828,6 +828,60 @@ def test_match_sources_rejects_north_angle_contradicting_pa_aper(offset_frame):
         _match(frame, random_sources, comparison_threshold=10)
 
 
+def _identity_coeffs(order):
+    """Legendre coefficients of no distortion, as boresight_calibration writes them."""
+    n = (order + 1) ** 2
+    return np.array([0] * (order + 1) + [500] + [0] * (n - order - 2) + [0, 500] + [0] * (n - 2), float)
+
+
+def test_distortion_with_frames_to_combine(offset_frame):
+    """find_distortion works with frames_to_combine and recovers no distortion from undistorted mock frames."""
+    frame, _ = offset_frame
+    dataset = data.Dataset([frame.copy() for _ in range(3)])
+    astrom_cal = astrom.boresight_calibration(dataset, field_path=astrom.default_field_path, frames_to_combine=True,
+                                              find_threshold=15, find_distortion=True, fitorder=1)
+    np.testing.assert_allclose(astrom_cal.distortion_coeffs[:-1], _identity_coeffs(1), atol=0.5)
+
+
+def test_distortion_inputs_without_usable_errors_use_uniform_weights(offset_frame, monkeypatch):
+    """If measure_offset gives no finite errors, the pairs are weighted uniformly instead of all dropping out of the fit."""
+    frame, sources = offset_frame
+    matches = _match(frame, sources[:6])
+    monkeypatch.setattr(astrom, "measure_offset", lambda *args, **kwargs: ((0., 0.), (np.inf, np.inf, np.inf)))
+    with pytest.warns(UserWarning, match="no usable errors"):
+        _, _, _, errs = astrom.format_distortion_inputs([frame], [matches])
+    assert np.all(errs == 1)
+
+
+def test_distortion_fit_rejects_wrong_matches(offset_frame):
+    """Pairs with a star matched to the wrong catalogue position are rejected, so the fit stays close to no distortion."""
+    frame, sources = offset_frame
+    matches = _match(frame, sources)
+    first, offsets, true_offsets, errs = astrom.format_distortion_inputs([frame], [matches], position_error=0.1)
+    wrong = matches.copy()
+    wrong["RA"][3] += 0.3 / 3600  # 0.3" east, about 14 pixels
+    _, _, wrong_true_offsets, _ = astrom.format_distortion_inputs([frame], [wrong], position_error=0.1)
+    kwargs = dict(platescale=21.8, northangle=20., fitorder=1)
+    clipped, _ = astrom.compute_distortion(first, offsets, wrong_true_offsets, errs, **kwargs)
+    unclipped, _ = astrom.compute_distortion(first, offsets, wrong_true_offsets, errs, clip_sigma=None, **kwargs)
+    reference, _ = astrom.compute_distortion(first, offsets, true_offsets, errs, **kwargs)
+    np.testing.assert_allclose(clipped, reference, atol=0.05)
+    assert np.max(np.abs(unclipped - reference)) > 10 * np.max(np.abs(clipped - reference))
+
+
+def test_boresight_uses_field_matches(offset_frame, monkeypatch):
+    """Given field_matches, boresight_calibration uses them and does not search for sources itself."""
+    frame, sources = offset_frame
+    matches = _match(frame, sources)
+    automatic = astrom.boresight_calibration(data.Dataset([frame.copy()]), field_path=astrom.default_field_path,
+                                             find_threshold=25)
+    monkeypatch.setattr(astrom, "find_source_locations", lambda *args, **kwargs: pytest.fail("searched for sources"))
+    given = astrom.boresight_calibration(data.Dataset([frame.copy()]), field_path=astrom.default_field_path,
+                                         field_matches=matches)
+    assert given.platescale == pytest.approx(automatic.platescale, rel=1e-6)
+    assert given.northangle == pytest.approx(automatic.northangle, abs=1e-6)
+
+
 def test_match_sources_rejects_match_of_few_of_many_sources(offset_frame):
     """A match that explains only a few of many sources is rejected, although it has min_matches stars.
 
