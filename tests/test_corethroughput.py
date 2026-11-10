@@ -1043,7 +1043,8 @@ def test_ct_cal_order_independent():
 def test_combine_frames_fsm_tolerance():
     """Repeats of one dither whose reported FSM position scatters are combined into one PSF."""
     pupil_frames = [frame for frame in dataset_ct if frame.ext_hdr['DPAMNAME'] == 'PUPIL']
-    offaxis_frames = [frame for frame in dataset_ct if frame.ext_hdr['DPAMNAME'] != 'PUPIL']
+    # a few off-axis PSFs suffice and keep the memory use of the three CT calibrations low
+    offaxis_frames = [frame for frame in dataset_ct if frame.ext_hdr['DPAMNAME'] != 'PUPIL'][:3]
     repeat_frames = []
     for frame in offaxis_frames:
         repeat = frame.copy()
