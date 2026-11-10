@@ -1040,6 +1040,28 @@ def test_ct_cal_order_independent():
     print(f"FPAMNAME is '{ct_cal_psf_first.ext_hdr['FPAMNAME']}' regardless of frame ordering")
     print('Tests about CT cal order independence passed')
 
+def test_combine_frames_fsm_tolerance():
+    """Repeats of one dither whose reported FSM position scatters are combined into one PSF."""
+    pupil_frames = [frame for frame in dataset_ct if frame.ext_hdr['DPAMNAME'] == 'PUPIL']
+    offaxis_frames = [frame for frame in dataset_ct if frame.ext_hdr['DPAMNAME'] != 'PUPIL']
+    repeat_frames = []
+    for frame in offaxis_frames:
+        repeat = frame.copy()
+        repeat.ext_hdr['FSMX'] += 2.
+        repeat.ext_hdr['FSMY'] -= 2.
+        repeat_frames.append(repeat)
+
+    ct_cal_single = corethroughput.generate_ct_cal(Dataset(offaxis_frames + pupil_frames), combine_frames=True)
+    ct_cal_repeated = corethroughput.generate_ct_cal(Dataset(offaxis_frames + repeat_frames + pupil_frames),
+                                                     combine_frames=True)
+    assert ct_cal_repeated.data.shape == ct_cal_single.data.shape
+    assert np.allclose(ct_cal_repeated.ct_excam, ct_cal_single.ct_excam)
+
+    # a tolerance below the scatter keeps the repeats apart
+    ct_cal_split = corethroughput.generate_ct_cal(Dataset(offaxis_frames + repeat_frames + pupil_frames),
+                                                  combine_frames=True, fsm_tolerance=1.)
+    assert ct_cal_split.data.shape[0] == 2 * ct_cal_single.data.shape[0]
+
 def test_generate_psf_cube_edge_padding():
     """
     Regression test for PR #893. PSFs near the field-stop / detector edge
@@ -1181,5 +1203,6 @@ if __name__ == '__main__':
     test_ct_map()
     test_psf_interp()
     test_ct_cal_order_independent()
+    test_combine_frames_fsm_tolerance()
     test_generate_psf_cube_edge_padding()
     test_psf_cube_subpixel_centered()
