@@ -13,7 +13,8 @@
         {
             "name" : "generate_ct_cal",
             "keywords" : {
-                "combine_frames" : true
+                "combine_frames" : true,
+                "fsm_tolerance" : 5.0
             }
         },
         {
