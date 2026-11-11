@@ -31,7 +31,10 @@
                 "KGain" : "AUTOMATIC"
             },
             "keywords" : {
-                "dataset_copy" : false
+                "dataset_copy" : false,
+                "cosm_filter" : 3,
+                "cosm_box" : 4,
+                "cosm_tail" : "auto"
             }
         },
         {

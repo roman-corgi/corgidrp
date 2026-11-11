@@ -52,7 +52,9 @@
             "keywords" : {
                 "mode" : "full",
                 "dataset_copy" : false,
-                "cosm_filter" : 1
+                "cosm_filter" : 1,
+                "cosm_box" : 4,
+                "cosm_tail" : "auto"
             }
         },
         {
