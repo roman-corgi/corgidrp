@@ -1,6 +1,26 @@
 Change Log
 ==========
 
+v5.1.2
+------
+
+New features:
+
+* Astrometric reference catalog replaced with an HST + Gaia DR3 catalog, including proper motions, uncertainties, and provenance (@m-samland)
+* Star positions in astrometric calibration propagated to each observation's ``MJDSRT`` using catalog proper motions, with propagation recorded in calibration HISTORY (@m-samland)
+
+Bug fixes:
+
+* Boresight frame grouping tolerates telemetry scatter in ``RA_APER``/``DEC_APER`` and ``FSMX``/``FSMY`` with configurable pointing and FSM tolerances (defaults: 0.5 arcsec and 5 mas) (@m-samland)
+* Plate scale and north angle calculations use all star pairs up to a configurable limit (default: 500), or a reproducible seeded subset without replacement (@m-samland)
+* Core throughput frame combining groups FSM positions within a configurable tolerance (default: 5 mas), exposed in the default recipe (@m-samland)
+
+
+Backwards Compatibility Note:
+
+* The bundled ``JWST_CALFIELD2020.csv`` has been replaced by ``lmc_astrometric_reference.ecsv``. Update any explicit paths to the former catalog. User-supplied catalogs with ``RA``, ``DEC``, and ``VMAG`` columns remain supported. Positions are left unchanged with a warning when proper motions or epoch metadata are unavailable (neither avaiable in old ``JWST_CALFIELD2020.csv``).
+
+
 v5.1.1
 ------
 

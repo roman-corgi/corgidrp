@@ -7,6 +7,7 @@ import numpy as np
 from astropy.io import fits
 import astropy
 from astropy.coordinates import SkyCoord
+from astropy.time import Time
 
 import corgidrp
 import corgidrp.data as data
@@ -53,11 +54,29 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     l2b_outputdir = os.path.join(test_outputdir, "l2b_results")
     os.makedirs(l2b_outputdir)
 
+    # the astrom_sims were rendered without proper motions, i.e. with the stars at the catalogue
+    # epoch, so shift the dates of copies of them to that epoch (keeping the relative timing);
+    # the pipeline then has nothing to propagate
+    catalog_meta = astrom.read_field_catalog(astrom.default_field_path).meta
+    catalog_epoch_mjd = Time(catalog_meta["epoch"], format=catalog_meta["epoch_format"],
+                             scale=catalog_meta["epoch_scale"]).utc.mjd
+    l1_dated_dir = os.path.join(test_outputdir, "l1_at_catalog_epoch")
+    os.makedirs(l1_dated_dir)
+    l1_dated_list = []
+    date_shift = catalog_epoch_mjd - min(fits.getval(l1_path, 'MJDSRT', ext=1) for l1_path in l1_input_data_list)
+    for l1_path in l1_input_data_list:
+        with fits.open(l1_path) as hdulist:
+            exthdr = hdulist[1].header
+            exthdr['MJDSRT'] += date_shift
+            exthdr['MJDEND'] += date_shift
+            l1_dated_list.append(os.path.join(l1_dated_dir, os.path.basename(l1_path)))
+            hdulist.writeto(l1_dated_list[-1])
+
     # run pipeline
     with warnings.catch_warnings():
         # suppress warnings about the three input field having different EM gain configurations
         warnings.simplefilter("ignore", category=RuntimeWarning)
-        walker.walk_corgidrp(l1_input_data_list, "", l2b_outputdir)
+        walker.walk_corgidrp(l1_dated_list, "", l2b_outputdir)
 
     # load in an l2b to get the target RA, Dec values from the header
     l2b_filenames = sorted(glob.glob(l2b_outputdir+'/*_l2b.fits'))
