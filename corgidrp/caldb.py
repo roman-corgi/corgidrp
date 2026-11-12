@@ -126,6 +126,9 @@ class CalDB:
         # fill any NA values with defaults and enforce column types
         for col, dtype in column_dtypes.items():
             if col in self._db.columns:
+                # Empty text columns can be inferred as float64 when reading CSVs.
+                if dtype is str:
+                    self._db[col] = self._db[col].astype("string")
                 self._db[col] = self._db[col].fillna(default_values[dtype]).astype(dtype)
 
     def save(self):
@@ -598,6 +601,33 @@ class CalDB:
         
         return filtered_calibdf
 
+def _save_default_calibration(calibration, filename, date_valid):
+    """Save a default calibration with consistent synthetic observation times.
+
+    Normalize timestamps after construction because calibration constructors can
+    replace supplied headers with headers merged from their mock input frames.
+    Creation times remain the current UTC time, while observation times and the
+    filename describe the fixed pre-launch validity date.
+
+    Args:
+        calibration (corgidrp.data.Image): Default calibration to save.
+        filename (str): Fixed filename encoding the synthetic observation time.
+        date_valid (astropy.time.Time): Synthetic observation start time.
+    """
+    date_end = date_valid + time.TimeDelta(60.0, format="sec")
+    creation_time = time.Time.now().isot
+    calibration.ext_hdr["SCTSRT"] = date_valid.isot
+    calibration.ext_hdr["SCTEND"] = date_end.isot
+    calibration.ext_hdr["MJDSRT"] = float(date_valid.mjd)
+    calibration.ext_hdr["MJDEND"] = float(date_end.mjd)
+    calibration.ext_hdr["DATETIME"] = date_valid.isot
+    calibration.ext_hdr["FTIMEUTC"] = date_valid.isot
+    calibration.ext_hdr["DRPCTIME"] = creation_time
+    calibration.pri_hdr["FILETIME"] = creation_time
+    calibration.pri_hdr["FILENAME"] = filename
+    calibration.save(filedir=corgidrp.default_cal_dir, filename=filename)
+
+
 def initialize():
     """
     Creates default calibrations and caldb if it doesn't exist
@@ -610,49 +640,28 @@ def initialize():
     # Add default detector_params calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00.00.00.000.fits")):
         date_valid = time.Time("2023-11-01 00:00:00", scale='utc')
-        sctsrt_str = date_valid.to_datetime().strftime("%Y-%m-%dT%H:%M:%S")
         default_detparams = data.DetectorParams({}, date_valid=date_valid)
-        default_detparams.ext_hdr['SCTSRT'] = sctsrt_str
-        default_detparams.ext_hdr['SCTEND'] = sctsrt_str
-        default_detparams.save(filedir=corgidrp.default_cal_dir, filename="DetectorParams_2023-11-01T00.00.00.000.fits")
+        _save_default_calibration(default_detparams, "DetectorParams_2023-11-01T00.00.00.000.fits", date_valid)
         rescan_needed = True
     # Add default FpamFsamCal calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00.00.00.000.fits")):
         date_valid = time.Time("2024-02-10 00:00:00", scale='utc')
-        sctsrt_str = date_valid.to_datetime().strftime("%Y-%m-%dT%H:%M:%S")
         fpamfsam_2excam = data.FpamFsamCal([], date_valid=date_valid)
-        fpamfsam_2excam.ext_hdr['MJDSRT'] = float(date_valid.mjd)
-        fpamfsam_2excam.ext_hdr['SCTSRT'] = sctsrt_str
-        fpamfsam_2excam.ext_hdr['SCTEND'] = sctsrt_str
-        fpamfsam_2excam.save(filedir=corgidrp.default_cal_dir)
+        _save_default_calibration(fpamfsam_2excam, "FpamFsamCal_2024-02-10T00.00.00.000.fits", date_valid)
         rescan_needed = True
     # Add default SpecFilterOffset calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "SpecFilterOffset_2025-12-10T00.00.00.000.fits")):
         date_valid = time.Time("2025-12-10 00:00:00", scale='utc')
-        sctsrt_str = date_valid.to_datetime().strftime("%Y-%m-%dT%H:%M:%S")
         spec_filter = data.SpecFilterOffset({}, date_valid=date_valid)
-        spec_filter.ext_hdr['MJDSRT'] = float(date_valid.mjd)
-        spec_filter.ext_hdr['SCTSRT'] = sctsrt_str
-        spec_filter.ext_hdr['SCTEND'] = sctsrt_str
-        spec_filter.save(filedir=corgidrp.default_cal_dir)
+        _save_default_calibration(spec_filter, "SpecFilterOffset_2025-12-10T00.00.00.000.fits", date_valid)
         rescan_needed = True
     # Add default DispersionModel calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, 'cgi_0200001001001001001_20240210t0000000_dpm_cal.fits')):
         spec_datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
-        output_dir = corgidrp.default_cal_dir
         prihdr, exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
         dt_time = time.Time("2024-02-10 00:00:00", scale='utc')
-        dt = dt_time.to_datetime()
-        dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
-        ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-        disp_filename = f"cgi_{prihdr['VISITID']}_{ftime}_dpm_cal.fits"
-        prihdr['FILETIME'] = dt_str
+        disp_filename = 'cgi_0200001001001001001_20240210t0000000_dpm_cal.fits'
         prihdr['FILENAME'] = disp_filename
-        exthdr['DATETIME'] = dt_str
-        exthdr['FTIMEUTC'] = dt_str
-        exthdr['MJDSRT'] = float(dt_time.mjd)
-        exthdr['SCTSRT'] = dt_str
-        exthdr['SCTEND'] = dt_str
         # not physically relevant since we are just constructing the calibration product for the dispersion model, not 
         # the observations that produced it, but just to avoid confusion, we set the values to something sensible
         exthdr['DPAMNAME'] = 'PRISM3' 
@@ -676,26 +685,16 @@ def initialize():
                     'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
         
         disp_model = data.DispersionModel(disp_dict, pri_hdr = prihdr, ext_hdr = exthdr)
-        disp_model.save(output_dir, disp_model.filename)
+        _save_default_calibration(disp_model, disp_filename, dt_time)
         rescan_needed = True
 
     # Add default PRISM2 DispersionModel calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, 'cgi_0200001001001001001_20240211t0000000_dpm_cal.fits')):
         spec_datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
-        output_dir = corgidrp.default_cal_dir
         prihdr, exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
         dt_time = time.Time("2024-02-11 00:00:00", scale='utc')
-        dt = dt_time.to_datetime()
-        dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
-        ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-        disp_filename = f"cgi_{prihdr['VISITID']}_{ftime}_dpm_cal.fits"
-        prihdr['FILETIME'] = dt_str
+        disp_filename = 'cgi_0200001001001001001_20240211t0000000_dpm_cal.fits'
         prihdr['FILENAME'] = disp_filename
-        exthdr['DATETIME'] = dt_str
-        exthdr['FTIMEUTC'] = dt_str
-        exthdr['MJDSRT'] = float(dt_time.mjd)
-        exthdr['SCTSRT'] = dt_str
-        exthdr['SCTEND'] = dt_str
         # The only supported spectroscopy science filter is Band 3 (3F)
         exthdr['DPAMNAME'] = 'PRISM2'
         exthdr['CFAMNAME'] = '3F'
@@ -719,11 +718,11 @@ def initialize():
                     'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
 
         disp_model = data.DispersionModel(disp_dict, pri_hdr = prihdr, ext_hdr = exthdr)
-        disp_model.save(output_dir, disp_model.filename)
+        _save_default_calibration(disp_model, disp_filename, dt_time)
         rescan_needed = True
 
     # Add default ones-flat FlatField calibration file
-    fixed_ones_flat_filename = "cgi_0000000000000000000_20000101t0000000_flt_cal.fits"
+    fixed_ones_flat_filename = "cgi_0000000000000000000_20260101t0000000_flt_cal.fits"
     fixed_ones_flat_filepath = os.path.join(corgidrp.default_cal_dir, fixed_ones_flat_filename)
 
     if not os.path.exists(fixed_ones_flat_filepath):
@@ -731,11 +730,8 @@ def initialize():
         ones_flat_dataset[0].data[:] = 1.0
         ones_flat = flat.create_flatfield(ones_flat_dataset)
         ones_flat.ext_hdr["FPAMNAME"] = "ONES"
-        ones_flat.ext_hdr["MJDSRT"] = float(time.Time("2026-01-01").mjd)
         # Write to a fixed CGI-formatted filename so there's no need to search for the latest ones-flat
-        ones_flat.filename = fixed_ones_flat_filename
-        ones_flat.pri_hdr["FILENAME"] = fixed_ones_flat_filename
-        ones_flat.save(filedir=corgidrp.default_cal_dir, filename=fixed_ones_flat_filename)
+        _save_default_calibration(ones_flat, fixed_ones_flat_filename, time.Time("2026-01-01", scale="utc"))
         rescan_needed = True
 
     # Add TVAC default calibration files built from raw TVAC data packaged in corgidrp/data/default_calibs/.
@@ -763,13 +759,14 @@ def initialize():
 
     if tvac_cals_missing:
         pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
-        mjd_2026 = float(time.Time("2026-01-01").mjd)
-        isot_2026 = "2026-01-01T00:00:00.000"
-        ext_hdr["MJDSRT"] = mjd_2026
-        ext_hdr["DATETIME"] = isot_2026
-        ext_hdr["FTIMEUTC"] = isot_2026
-        ext_hdr["DRPCTIME"] = isot_2026
-        ext_hdr["DRPVERSN"] = corgidrp.__version__
+        # Each fixed filename encodes a different tenth of a second after the
+        # synthetic default start. Apply these times after construction so merged
+        # mock headers cannot replace them.
+        default_start = time.Time("2026-01-01", scale="utc")
+        default_dates = {
+            filename: default_start + time.TimeDelta(index / 10.0, format="sec")
+            for index, filename in enumerate(tvac_cal_filenames)
+        }
         # Minimal mock input dataset for bookkeeping requirements in calibration constructors
         mock_dataset = mocks.create_flatfield_dummy(numfiles=2)
 
@@ -781,10 +778,7 @@ def initialize():
                 nonlin_dat, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr.copy(),
                 input_dataset=mock_dataset,
             )
-            nonlinear_cal.ext_hdr["MJDSRT"] = mjd_2026
-            nonlinear_cal.ext_hdr["DATETIME"] = isot_2026
-            nonlinear_cal.ext_hdr["FTIMEUTC"] = isot_2026
-            nonlinear_cal.save(filedir=corgidrp.default_cal_dir, filename=tvac_nln_filename)
+            _save_default_calibration(nonlinear_cal, tvac_nln_filename, default_dates[tvac_nln_filename])
 
         # KGain — 8.7 e/DN and read noise from TVAC measurements
         if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_krn_filename)):
@@ -799,10 +793,7 @@ def initialize():
                 kgain_val, ptc=ptc, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr_krn,
                 input_dataset=mock_dataset,
             )
-            kgain.ext_hdr["MJDSRT"] = mjd_2026
-            kgain.ext_hdr["DATETIME"] = isot_2026
-            kgain.ext_hdr["FTIMEUTC"] = isot_2026
-            kgain.save(filedir=corgidrp.default_cal_dir, filename=tvac_krn_filename)
+            _save_default_calibration(kgain, tvac_krn_filename, default_dates[tvac_krn_filename])
 
         # DetectorNoiseMaps from packaged TVAC noise component files.
         # The 1024x1024 science-image data is embedded in the full detector frame.
@@ -837,11 +828,8 @@ def initialize():
                 dq=noise_map_dq,
                 err_hdr=noise_err_hdr,
             )
-            noise_map.ext_hdr["MJDSRT"] = mjd_2026
-            noise_map.ext_hdr["DATETIME"] = isot_2026
-            noise_map.ext_hdr["FTIMEUTC"] = isot_2026
             noise_map.ext_hdr["DRPNFILE"] = 96
-            noise_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_dnm_filename)
+            _save_default_calibration(noise_map, tvac_dnm_filename, default_dates[tvac_dnm_filename])
 
         # FlatField — all-ones array for the default imaging configuration.
         # FPAMNAME='OPEN_12' and CFAMNAME='1F' match the caldb lookup for
@@ -854,10 +842,7 @@ def initialize():
             tvac_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
             tvac_flat.ext_hdr["CFAMNAME"] = "1F"
             tvac_flat.ext_hdr["DPAMNAME"] = "IMAGING"
-            tvac_flat.ext_hdr["MJDSRT"] = mjd_2026
-            tvac_flat.ext_hdr["DATETIME"] = isot_2026
-            tvac_flat.ext_hdr["FTIMEUTC"] = isot_2026
-            tvac_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt_filename)
+            _save_default_calibration(tvac_flat, tvac_flt_filename, default_dates[tvac_flt_filename])
 
         # BadPixelMap from packaged TVAC bad pixel data.
         # A synthetic Dark frame is required by BadPixelMap as the base header source.
@@ -868,9 +853,6 @@ def initialize():
             bp_dark_ext["EXPTIME"] = 1.0
             bp_dark_ext["EMGAIN_C"] = 1.0
             bp_dark_ext["DRPNFILE"] = 1
-            bp_dark_ext["MJDSRT"] = mjd_2026
-            bp_dark_ext["DATETIME"] = isot_2026
-            bp_dark_ext["FTIMEUTC"] = isot_2026
             bp_dark = data.Dark(
                 np.zeros_like(bp_dat, dtype=float),
                 pri_hdr=bp_dark_pri,
@@ -886,10 +868,7 @@ def initialize():
                 ext_hdr=ext_hdr.copy(),
                 input_dataset=data.Dataset([bp_dark]),
             )
-            bp_map.ext_hdr["MJDSRT"] = mjd_2026
-            bp_map.ext_hdr["DATETIME"] = isot_2026
-            bp_map.ext_hdr["FTIMEUTC"] = isot_2026
-            bp_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_bpm_filename)
+            _save_default_calibration(bp_map, tvac_bpm_filename, default_dates[tvac_bpm_filename])
 
         # POL0 FlatField — all-ones for the default polarimetry configuration.
         # FPAMNAME='OPEN_12', CFAMNAME='1F', DPAMNAME='POL0' for caldb lookup.
@@ -901,10 +880,7 @@ def initialize():
             pol0_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
             pol0_flat.ext_hdr["CFAMNAME"] = "1F"
             pol0_flat.ext_hdr["DPAMNAME"] = "POL0"
-            pol0_flat.ext_hdr["MJDSRT"] = mjd_2026
-            pol0_flat.ext_hdr["DATETIME"] = isot_2026
-            pol0_flat.ext_hdr["FTIMEUTC"] = isot_2026
-            pol0_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol0_flt_filename)
+            _save_default_calibration(pol0_flat, tvac_pol0_flt_filename, default_dates[tvac_pol0_flt_filename])
 
         # POL45 FlatField — all-ones for the default polarimetry configuration.
         # FPAMNAME='OPEN_12', CFAMNAME='1F', DPAMNAME='POL45' for caldb lookup.
@@ -916,10 +892,7 @@ def initialize():
             pol45_flat.ext_hdr["FPAMNAME"] = "OPEN_12"
             pol45_flat.ext_hdr["CFAMNAME"] = "1F"
             pol45_flat.ext_hdr["DPAMNAME"] = "POL45"
-            pol45_flat.ext_hdr["MJDSRT"] = mjd_2026
-            pol45_flat.ext_hdr["DATETIME"] = isot_2026
-            pol45_flat.ext_hdr["FTIMEUTC"] = isot_2026
-            pol45_flat.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol45_flt_filename)
+            _save_default_calibration(pol45_flat, tvac_pol45_flt_filename, default_dates[tvac_pol45_flt_filename])
 
         # Band-4 IMAGING FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='IMAGING'.
         if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_flt4_filename)):
@@ -930,10 +903,7 @@ def initialize():
             flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
             flt4.ext_hdr["CFAMNAME"] = "4F"
             flt4.ext_hdr["DPAMNAME"] = "IMAGING"
-            flt4.ext_hdr["MJDSRT"] = mjd_2026
-            flt4.ext_hdr["DATETIME"] = isot_2026
-            flt4.ext_hdr["FTIMEUTC"] = isot_2026
-            flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_flt4_filename)
+            _save_default_calibration(flt4, tvac_flt4_filename, default_dates[tvac_flt4_filename])
 
         # Band-4 POL0 FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='POL0'.
         if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol0_flt4_filename)):
@@ -944,10 +914,7 @@ def initialize():
             pol0_flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
             pol0_flt4.ext_hdr["CFAMNAME"] = "4F"
             pol0_flt4.ext_hdr["DPAMNAME"] = "POL0"
-            pol0_flt4.ext_hdr["MJDSRT"] = mjd_2026
-            pol0_flt4.ext_hdr["DATETIME"] = isot_2026
-            pol0_flt4.ext_hdr["FTIMEUTC"] = isot_2026
-            pol0_flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol0_flt4_filename)
+            _save_default_calibration(pol0_flt4, tvac_pol0_flt4_filename, default_dates[tvac_pol0_flt4_filename])
 
         # Band-4 POL45 FlatField — all-ones, FPAMNAME='OPEN_34', CFAMNAME='4F', DPAMNAME='POL45'.
         if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_pol45_flt4_filename)):
@@ -958,10 +925,7 @@ def initialize():
             pol45_flt4.ext_hdr["FPAMNAME"] = "OPEN_34"
             pol45_flt4.ext_hdr["CFAMNAME"] = "4F"
             pol45_flt4.ext_hdr["DPAMNAME"] = "POL45"
-            pol45_flt4.ext_hdr["MJDSRT"] = mjd_2026
-            pol45_flt4.ext_hdr["DATETIME"] = isot_2026
-            pol45_flt4.ext_hdr["FTIMEUTC"] = isot_2026
-            pol45_flt4.save(filedir=corgidrp.default_cal_dir, filename=tvac_pol45_flt4_filename)
+            _save_default_calibration(pol45_flt4, tvac_pol45_flt4_filename, default_dates[tvac_pol45_flt4_filename])
 
         rescan_needed = True
 
