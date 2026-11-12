@@ -9,6 +9,9 @@ import corgidrp.data as data
 import astropy.io.ascii as ascii
 from termcolor import cprint
 from astropy.coordinates import SkyCoord
+from astropy.table import Table, vstack
+import astropy.units as u
+from astropy.time import Time
 
 def print_fail():
     cprint(' FAIL ', "black", "on_red")
@@ -437,7 +440,7 @@ def test_boresight_combining_preserves_pointing_order(monkeypatch, num_pointings
         return None
 
     monkeypatch.setattr(astrom, "find_source_locations", find_sources)
-    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: None)
+    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: Table())
     monkeypatch.setattr(astrom, "compute_platescale_and_northangle",
                         lambda *args, **kwargs: (21.8, -45.))
     monkeypatch.setattr(astrom, "compute_boresight", lambda *args, **kwargs: (0., 0.))
@@ -501,7 +504,7 @@ def _measured_groups(monkeypatch, dataset, **keywords):
     measured_images = []
     monkeypatch.setattr(astrom, "find_source_locations",
                         lambda image, **kwargs: measured_images.append(image.copy()))
-    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: None)
+    monkeypatch.setattr(astrom, "match_sources", lambda *args, **kwargs: Table())
     monkeypatch.setattr(astrom, "compute_platescale_and_northangle", lambda *args, **kwargs: (21.8, -45.))
     monkeypatch.setattr(astrom, "compute_boresight", lambda *args, **kwargs: (0., 0.))
     astrom_cal = astrom.boresight_calibration(dataset, frames_to_combine=True, **keywords)
@@ -559,6 +562,268 @@ def test_boresight_history_reports_groups(monkeypatch):
     _, astrom_cal = _measured_groups(monkeypatch, dataset)
     history = "".join(astrom_cal.ext_hdr["HISTORY"])
     assert "from 6 frames (grouped by header keywords) combined into 2 groups of 3, 3 frames" in history
+
+
+CATALOG_EPOCH = Time(2015.5, format="jyear", scale="tcb")
+MJD_2026 = Time("2026-07-01T00:00:00", scale="utc").mjd
+
+
+def _moving_star_catalog(meta=True):
+    """One star at the LMC field with a large proper motion, epoch J2015.5.
+
+    Args:
+        meta (bool): whether to record the catalogue epoch in the table metadata
+
+    Returns:
+        astropy.table.Table: the catalogue
+    """
+    table = Table({"RA": [80.55], "DEC": [-69.51], "VMAG": [18.0], "PMRA": [100.0], "PMDEC": [-50.0]})
+    if meta:
+        table.meta.update({"epoch": 2015.5, "epoch_format": "jyear", "epoch_scale": "tcb"})
+    return table
+
+
+def test_catalog_at_epoch_leaves_positions_at_catalog_epoch():
+    """At the catalogue epoch nothing moves."""
+    field = _moving_star_catalog()
+    moved = astrom.catalog_at_epoch(field, CATALOG_EPOCH.utc.mjd)
+    np.testing.assert_allclose(moved["RA"], field["RA"], rtol=0, atol=1e-12)
+    np.testing.assert_allclose(moved["DEC"], field["DEC"], rtol=0, atol=1e-12)
+
+
+def test_catalog_at_epoch_moves_stars_by_proper_motion():
+    """After ten years a star has moved by pmra and pmdec times ten years on the sky."""
+    field = _moving_star_catalog()
+    later = Time(2025.5, format="jyear", scale="tcb").utc.mjd
+    moved = astrom.catalog_at_epoch(field, later)
+    start = SkyCoord(field["RA"][0], field["DEC"][0], unit="deg")
+    end = SkyCoord(moved["RA"][0], moved["DEC"][0], unit="deg")
+    east, north = start.spherical_offsets_to(end)
+    assert east.to_value("mas") == pytest.approx(1000.0, abs=0.01)
+    assert north.to_value("mas") == pytest.approx(-500.0, abs=0.01)
+    assert field["RA"][0] == 80.55  # the input table is not changed
+
+
+def test_catalog_at_epoch_records_new_epoch_and_does_not_move_twice():
+    """The propagated copy carries the time of observation as its epoch, so a second call is harmless."""
+    later = Time(2025.5, format="jyear", scale="tcb").utc.mjd
+    moved = astrom.catalog_at_epoch(_moving_star_catalog(), later)
+    assert (moved.meta["epoch"], moved.meta["epoch_format"], moved.meta["epoch_scale"]) == (later, "mjd", "utc")
+    again = astrom.catalog_at_epoch(moved, later)
+    np.testing.assert_allclose(again["RA"], moved["RA"], rtol=0, atol=1e-12)
+    np.testing.assert_allclose(again["DEC"], moved["DEC"], rtol=0, atol=1e-12)
+
+
+def test_create_astrom_data_timestamps_follow_mjd():
+    """All time keywords and the filename of the mock frames come from the requested observation time."""
+    dataset = mocks.create_astrom_data(field_path=astrom.default_field_path, vignette_radius=None,
+                                       dither_pointings=2, mjd=MJD_2026)
+    starts = []
+    for frame in dataset:
+        hdr = frame.ext_hdr
+        start = Time(hdr["MJDSRT"], format="mjd", scale="utc")
+        for key in ("SCTSRT", "DATETIME", "FTIMEUTC"):
+            assert abs((Time(hdr[key], scale="utc") - start).to_value("s")) < 0.01, key
+        assert abs((Time(hdr["SCTEND"], scale="utc") - start).to_value("s") - hdr["EXPTIME"]) < 0.01
+        assert (hdr["MJDEND"] - hdr["MJDSRT"]) * 86400 == pytest.approx(hdr["EXPTIME"], abs=0.01)
+        assert data.format_ftimeutc(hdr["FTIMEUTC"]) in frame.filename
+        assert frame.pri_hdr["FILENAME"] == frame.filename
+        starts.append(hdr["MJDSRT"])
+    assert starts[0] == MJD_2026
+    assert len(set(frame.filename for frame in dataset)) == len(dataset)
+
+
+def test_catalog_at_epoch_without_proper_motions_warns_and_keeps_positions():
+    """User catalogues without proper motions or epoch are used as they are, with a warning."""
+    field = _moving_star_catalog(meta=False)
+    with pytest.warns(UserWarning, match="proper motion"):
+        moved = astrom.catalog_at_epoch(field, MJD_2026)
+    np.testing.assert_array_equal(moved["RA"], field["RA"])
+    field.remove_columns(["PMRA", "PMDEC"])
+    field.meta.update({"epoch": 2015.5, "epoch_format": "jyear", "epoch_scale": "tcb"})
+    with pytest.warns(UserWarning, match="proper motion"):
+        moved = astrom.catalog_at_epoch(field, MJD_2026)
+    np.testing.assert_array_equal(moved["DEC"], field["DEC"])
+    assert moved.meta["propagated_to_mjd"] is None
+
+
+def test_catalog_at_epoch_without_epoch_details_or_date_warns_and_keeps_positions():
+    """An epoch without format and scale, or a frame without MJDSRT, is not propagated."""
+    field = _moving_star_catalog(meta=False)
+    field.meta["epoch"] = 2015.5
+    with pytest.warns(UserWarning, match="lack epoch_format, epoch_scale"):
+        moved = astrom.catalog_at_epoch(field, MJD_2026)
+    np.testing.assert_array_equal(moved["RA"], field["RA"])
+    with pytest.warns(UserWarning, match="time of observation"):
+        moved = astrom.catalog_at_epoch(_moving_star_catalog(), None)
+    np.testing.assert_array_equal(moved["RA"], _moving_star_catalog()["RA"])
+    assert moved.meta["propagated_to_mjd"] is None
+
+
+def test_catalog_at_epoch_uses_proper_motion_column_units():
+    """A catalogue with proper motions in arcsec/yr moves the stars as far as the same motion in mas/yr."""
+    later = Time(2025.5, format="jyear", scale="tcb").utc.mjd
+    in_mas = _moving_star_catalog()
+    in_arcsec = _moving_star_catalog()
+    for name in ("PMRA", "PMDEC"):
+        in_mas[name].unit = u.mas / u.yr
+        in_arcsec[name] = in_arcsec[name] / 1000.
+        in_arcsec[name].unit = u.arcsec / u.yr
+    moved_mas = astrom.catalog_at_epoch(in_mas, later)
+    moved_arcsec = astrom.catalog_at_epoch(in_arcsec, later)
+    unitless = astrom.catalog_at_epoch(_moving_star_catalog(), later)
+    for name in ("RA", "DEC"):
+        np.testing.assert_allclose(moved_arcsec[name], moved_mas[name], rtol=0, atol=1e-12)
+        np.testing.assert_allclose(unitless[name], moved_mas[name], rtol=0, atol=1e-12)
+
+
+def test_catalog_at_epoch_keeps_stars_without_finite_proper_motion():
+    """A star with a NaN proper motion keeps its catalogue position instead of becoming NaN."""
+    field = vstack([_moving_star_catalog(), _moving_star_catalog()])
+    field["PMRA"][1] = np.nan
+    with pytest.warns(UserWarning, match="1 reference catalogue star"):
+        moved = astrom.catalog_at_epoch(field, MJD_2026)
+    assert moved["RA"][0] != field["RA"][0]
+    assert (moved["RA"][1], moved["DEC"][1]) == (field["RA"][1], field["DEC"][1])
+
+
+def test_boresight_history_counts_frames_with_propagated_catalogue():
+    """If one frame has no MJDSRT, HISTORY says how many measured frames were propagated."""
+    dataset = mocks.create_astrom_data(field_path=astrom.default_field_path, rotation=20, vignette_radius=None,
+                                       dither_pointings=1, mjd=MJD_2026)
+    del dataset[1].ext_hdr["MJDSRT"]
+    with pytest.warns(UserWarning, match="time of observation"):
+        astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=astrom.default_field_path,
+                                                  find_threshold=25)
+    history = "".join(str(card) for card in astrom_cal.ext_hdr["HISTORY"])
+    assert "to the MJDSRT of 1 of the 2 measured frames" in history
+
+
+def test_boresight_with_catalog_without_proper_motions_does_not_claim_propagation(tmp_path):
+    """With a user CSV catalogue (no proper motions) HISTORY does not say the positions were propagated."""
+    catalog = astrom.read_field_catalog(astrom.default_field_path)
+    near = (np.abs(catalog["RA"] - 80.553) < 0.03) & (np.abs(catalog["DEC"] + 69.514) < 0.03)
+    csv_path = str(tmp_path / "field.csv")
+    catalog[near]["VMAG", "RA", "DEC"].write(csv_path, format="ascii.csv")
+    # rendered at the catalogue epoch, so the unpropagated CSV positions are the true ones
+    dataset = mocks.create_astrom_data(field_path=astrom.default_field_path, rotation=20, vignette_radius=None,
+                                       mjd=CATALOG_EPOCH.utc.mjd)
+    with pytest.warns(UserWarning, match="proper motion"):
+        astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=csv_path, find_threshold=25)
+    east, north = _boresight_error_mas(astrom_cal, dataset)
+    assert east == pytest.approx(0, abs=3) and north == pytest.approx(0, abs=3)
+    history = "".join(str(card) for card in astrom_cal.ext_hdr["HISTORY"])
+    assert "Boresight calibration completed" in history
+    assert "propagated" not in history
+
+
+def _boresight_error_mas(astrom_cal, dataset):
+    """Offset of the measured boresight from the mock's true pointing.
+
+    Args:
+        astrom_cal (corgidrp.data.AstrometricCalibration): the calibration
+        dataset (corgidrp.data.Dataset): the mock data it was measured on
+
+    Returns:
+        tuple: east and north offset of the measured boresight [mas]
+    """
+    truth = SkyCoord(dataset[0].pri_hdr["RA"], dataset[0].pri_hdr["DEC"], unit="deg")
+    measured = SkyCoord(*astrom_cal.boresight, unit="deg")
+    east, north = truth.spherical_offsets_to(measured)
+    return east.to_value("mas"), north.to_value("mas")
+
+
+def test_boresight_with_proper_motions():
+    """Mock data observed in 2026 are calibrated correctly only if the catalogue is propagated.
+
+    The same frames labelled with the catalogue epoch are not propagated, so the boresight is off
+    by the proper motion of the field, i.e. the LMC bulk motion recorded in the catalogue.
+    """
+    field_path = astrom.default_field_path
+    dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, vignette_radius=None, mjd=MJD_2026)
+    assert dataset[0].ext_hdr["MJDSRT"] == MJD_2026
+
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=25)
+    east, north = _boresight_error_mas(astrom_cal, dataset)
+    assert east == pytest.approx(0, abs=3)
+    assert north == pytest.approx(0, abs=3)
+    history = "".join(str(card) for card in astrom_cal.ext_hdr["HISTORY"])  # long entries span cards
+    assert "propagated with proper motions to the MJDSRT" in history
+
+    unpropagated = dataset.copy()
+    for frame in unpropagated:
+        frame.ext_hdr["MJDSRT"] = CATALOG_EPOCH.utc.mjd
+    astrom_cal_unpropagated = astrom.boresight_calibration(input_dataset=unpropagated, field_path=field_path,
+                                                           find_threshold=25)
+    east_u, north_u = _boresight_error_mas(astrom_cal_unpropagated, unpropagated)
+
+    # stars that moved by +d look like a pointing error of -d when the motion is ignored
+    bulk = astrom.read_field_catalog(field_path).meta["proper_motions"]["bulk"]
+    years = (Time(MJD_2026, format="mjd") - CATALOG_EPOCH).to_value("yr")
+    assert east_u - east == pytest.approx(-bulk["pmra"] * years, abs=2)
+    assert north_u - north == pytest.approx(-bulk["pmdec"] * years, abs=2)
+
+
+def test_platescale_pairs_reproducible(monkeypatch):
+    """Use every star pair up to max_pairs and a seeded subset beyond it, without the global random state.
+
+    Args:
+        monkeypatch (pytest.MonkeyPatch): Fixture for replacing the pair offset fit.
+    """
+    from astropy.table import Table
+    from astropy.wcs import WCS
+
+    rng = np.random.default_rng(1)
+    num_stars = 40
+    num_pairs = num_stars * (num_stars - 1) // 2
+    x, y = rng.uniform(100, 900, num_stars), rng.uniform(100, 900, num_stars)
+    wcs = WCS(naxis=2)
+    wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN']
+    wcs.wcs.crval = [80.5, -69.5]
+    wcs.wcs.crpix = [512, 512]
+    wcs.wcs.cdelt = [-21.8 / 3.6e6, 21.8 / 3.6e6]
+    sky = wcs.pixel_to_world(x, y)
+    # measured positions scatter around the true ones, so that different subsets of pairs give different results
+    sources = Table({'x': x + rng.normal(0, 0.1, num_stars), 'y': y + rng.normal(0, 0.1, num_stars),
+                     'RA': sky.ra.deg, 'DEC': sky.dec.deg})
+    image = np.zeros((1024, 1024))
+
+    fitted_pairs = []
+
+    def offset_from_guess(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess, **kwargs):
+        """Return the guessed offset instead of fitting it, and record the pair.
+
+        Args:
+            frame (numpy.ndarray): Image, unused.
+            xstar_guess (float): x of the first star.
+            ystar_guess (float): y of the first star.
+            xoffset_guess (float): x offset to the second star.
+            yoffset_guess (float): y offset to the second star.
+            kwargs (dict): Further keywords of measure_offset, unused.
+
+        Returns:
+            tuple: ((x offset, y offset), None)
+        """
+        fitted_pairs.append((xstar_guess, ystar_guess, xoffset_guess, yoffset_guess))
+        return (xoffset_guess, yoffset_guess), None
+
+    monkeypatch.setattr(astrom, "measure_offset", offset_from_guess)
+
+    astrom.compute_platescale_and_northangle(image, sources, max_pairs=num_pairs)
+    assert len(set(fitted_pairs)) == len(fitted_pairs) == num_pairs
+
+    fitted_pairs.clear()
+    np.random.seed(0)
+    first = astrom.compute_platescale_and_northangle(image, sources, max_pairs=200)
+    assert len(set(fitted_pairs)) == len(fitted_pairs) == 200
+    state_after_call = np.random.get_state()[1]
+    np.random.seed(0)
+    assert np.array_equal(state_after_call, np.random.get_state()[1])
+
+    np.random.seed(5)
+    assert astrom.compute_platescale_and_northangle(image, sources, max_pairs=200) == first
+    assert astrom.compute_platescale_and_northangle(image, sources, max_pairs=200, seed=1) != first
+    assert first[0] == pytest.approx(21.8, abs=0.05)
 
 
 if __name__ == "__main__":
