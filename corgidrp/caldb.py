@@ -742,7 +742,7 @@ def initialize():
     # Fixed filenames encode the synthetic timestamp (20260101) so the existence check is stable across runs.
     tvac_raw_dir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "default_calibs")
     tvac_nln_filename = "cgi_0000000000000000000_20260101t0000000_nln_cal.fits"
-    tvac_krn_filename = "cgi_0000000000999000000_20260101t0000001_krn_cal.fits" # using 999 for segment number to indicate manually manipulated
+    tvac_krn_filename = "cgi_0000000000000000000_20260101t0000001_krn_cal.fits" # using 999 for segment number to indicate manually manipulated
     tvac_dnm_filename = "cgi_0000000000000000000_20260101t0000002_dnm_cal.fits"
     tvac_flt_filename = "cgi_0000000000000000000_20260101t0000003_flt_cal.fits"
     tvac_bpm_filename = "cgi_0000000000000000000_20260101t0000004_bpm_cal.fits"
@@ -793,25 +793,55 @@ def initialize():
             noise_array = np.sqrt(signal_array)
             ptc = np.column_stack([signal_array, noise_array]) #TODO: replace with actual PTC curve so add_shot_noise_to_err() works as intended
             ext_hdr_krn = ext_hdr.copy()
-            ext_hdr_krn["RN"] = 178.6     # read noise in electrons; value here from CAR61 (read out sequence tuning);used to be from TVAC measurement: 121.76
+            ext_hdr_krn["RN"] = 121.76     # read noise in electrons; value from TVAC measurement
             ext_hdr_krn["RN_ERR"] = 2.0    # read noise uncertainty in electrons
             kgain = data.KGain(
                 kgain_val, ptc=ptc, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr_krn,
                 input_dataset=mock_dataset,
             )
-            kgain.ext_hdr["MJDSRT"] = float(time.Time("2026-11-11").mjd) # newer date so that caldb prefers this one over older ones
-            kgain.ext_hdr["MJDEND"] = float(time.Time("2026-11-11").mjd) # newer date so that caldb prefers this one over older ones
-            sct_start = time.Time("2026-11-11T00:00:00").to_datetime()
-            kgain.ext_hdr['SCTSRT'] = sct_start.strftime("%Y-%m-%dT%H:%M:%S")
-            kgain.ext_hdr['SCTEND'] = (sct_start + datetime.timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%S")
-            kgain.ext_hdr["DATETIME"] = "2026-11-11T00:00:00.000"
-            kgain.ext_hdr["FTIMEUTC"] = "2026-11-11T00:00:00.000"
+            kgain.ext_hdr["MJDSRT"] = mjd_2026
+            kgain.ext_hdr["DATETIME"] = isot_2026
+            kgain.ext_hdr["FTIMEUTC"] = isot_2026
             kgain.save(filedir=corgidrp.default_cal_dir, filename=tvac_krn_filename)
 
-        # DetectorNoiseMaps from CAR119 results.  '999' in the filename's segment number indicates a non-standard processing 
-        # as the dark current map was manipulated by hand.
-            noise_map = data.DetectorNoiseMaps(os.path.join(tvac_raw_dir, 'cgi_0110001002999001001_20261023t0820051_dnm_cal.fits'))
-            noise_map.save(filedir=corgidrp.default_cal_dir)
+        # DetectorNoiseMaps from packaged TVAC noise component files.
+        # The 1024x1024 science-image data is embedded in the full detector frame.
+        if not os.path.exists(os.path.join(corgidrp.default_cal_dir, tvac_dnm_filename)):
+            with fits.open(os.path.join(tvac_raw_dir, "fpn_20240322.fits")) as hdulist:
+                fpn_dat = hdulist[0].data.astype(float)
+            with fits.open(os.path.join(tvac_raw_dir, "cic_20240322.fits")) as hdulist:
+                cic_dat = hdulist[0].data.astype(float)
+            with fits.open(os.path.join(tvac_raw_dir, "dark_current_20240322.fits")) as hdulist:
+                dark_dat = hdulist[0].data.astype(float)
+            frame_rows = detector.detector_areas["SCI"]["frame_rows"]
+            frame_cols = detector.detector_areas["SCI"]["frame_cols"]
+            img_rows, img_cols, r0c0 = detector.unpack_geom("SCI", "image")
+            r0, c0 = r0c0
+            noise_map_dat = np.zeros((3, frame_rows, frame_cols))
+            noise_map_dat[0, r0:r0 + img_rows, c0:c0 + img_cols] = fpn_dat
+            noise_map_dat[1, r0:r0 + img_rows, c0:c0 + img_cols] = cic_dat
+            noise_map_dat[2, r0:r0 + img_rows, c0:c0 + img_cols] = dark_dat
+            noise_map_err = np.zeros((1,) + noise_map_dat.shape)
+            noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+            noise_err_hdr = fits.Header()
+            noise_err_hdr["BUNIT"] = "detected electron"
+            ext_hdr_dnm = ext_hdr.copy()
+            ext_hdr_dnm["B_O"] = 0.0
+            ext_hdr_dnm["B_O_ERR"] = 0.0
+            noise_map = data.DetectorNoiseMaps(
+                noise_map_dat,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr_dnm,
+                input_dataset=mock_dataset,
+                err=noise_map_err,
+                dq=noise_map_dq,
+                err_hdr=noise_err_hdr,
+            )
+            noise_map.ext_hdr["MJDSRT"] = mjd_2026
+            noise_map.ext_hdr["DATETIME"] = isot_2026
+            noise_map.ext_hdr["FTIMEUTC"] = isot_2026
+            noise_map.ext_hdr["DRPNFILE"] = 96
+            noise_map.save(filedir=corgidrp.default_cal_dir, filename=tvac_dnm_filename)
 
         # FlatField — all-ones array for the default imaging configuration.
         # FPAMNAME='OPEN_12' and CFAMNAME='1F' match the caldb lookup for

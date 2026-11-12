@@ -1991,14 +1991,14 @@ class DetectorParams(Image):
         'NEMGAIN': 604,         # number of EM gain register stages
         'TELRSTRT': -1,         # slice of rows that are used for telemetry
         'TELREND': None,        #goes to the end, in other words
-        'CRHITRT': 35731,       # cosmic ray hit rate (hits/m**2/sec) from CAR151
+        'CRHITRT': 5.0e4,       # cosmic ray hit rate (hits/m**2/sec)   
         'PIXAREA': 1.69e-10,    # pixel area (m**2/pixel)
         'GAINMAX': 7500.0,      # Maximum allowable EM gain
         'DELCNST': 1.0e-4,      # tolerance in exposure time calculator
         'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
         'PCECNTMX': 0.25,       # Maximum allowed electrons/pixel/frame for photon counting
         'TFACTOR': 5,           # number of read noise standard deviations at which to set the photon-counting threshold
-        'READ_N': 178.6               # current best estimate from CAR61
+        'READ_N': 165               # current best estimate
     }
 
     back_compat_mapping = {
