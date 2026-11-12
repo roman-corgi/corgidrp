@@ -537,7 +537,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                             arrtype=arrtype
                             ) * cr_dqval
         # add in record of cosmic ray threshold; used in calibrate_darks_lsq() if available
-        crmasked_dataset[i].ext_hdr['HISTORY'] = 'Cosmic ray threshold of {0} used.'.format(cosm_sat_fwc)
+        crmasked_dataset[i].ext_hdr['HISTORY'] = 'Cosmic ray threshold of {0} DN used.'.format(cosm_sat_fwc)
     # add the two masks to the all_dq mask
     new_all_dq = np.bitwise_or(crmasked_dataset.all_dq, m1)
     new_all_dq =  np.bitwise_or(new_all_dq, m2.astype(int))
