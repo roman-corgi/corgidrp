@@ -742,7 +742,7 @@ def initialize():
     # Fixed filenames encode the synthetic timestamp (20260101) so the existence check is stable across runs.
     tvac_raw_dir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "default_calibs")
     tvac_nln_filename = "cgi_0000000000000000000_20260101t0000000_nln_cal.fits"
-    tvac_krn_filename = "cgi_0000000000000000000_20260101t0000001_krn_cal.fits"
+    tvac_krn_filename = "cgi_0000000000999000000_20260101t0000001_krn_cal.fits" # using 999 for segment number to indicate manually manipulated
     tvac_dnm_filename = "cgi_0000000000000000000_20260101t0000002_dnm_cal.fits"
     tvac_flt_filename = "cgi_0000000000000000000_20260101t0000003_flt_cal.fits"
     tvac_bpm_filename = "cgi_0000000000000000000_20260101t0000004_bpm_cal.fits"
@@ -799,9 +799,13 @@ def initialize():
                 kgain_val, ptc=ptc, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr_krn,
                 input_dataset=mock_dataset,
             )
-            kgain.ext_hdr["MJDSRT"] = mjd_2026
-            kgain.ext_hdr["DATETIME"] = isot_2026
-            kgain.ext_hdr["FTIMEUTC"] = isot_2026
+            kgain.ext_hdr["MJDSRT"] = float(time.Time("2026-11-11").mjd) # newer date so that caldb prefers this one over older ones
+            kgain.ext_hdr["MJDEND"] = float(time.Time("2026-11-11").mjd) # newer date so that caldb prefers this one over older ones
+            sct_start = time.Time("2026-11-11T00:00:00").to_datetime()
+            kgain.ext_hdr['SCTSRT'] = sct_start.strftime("%Y-%m-%dT%H:%M:%S")
+            kgain.ext_hdr['SCTEND'] = (sct_start + datetime.timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%S")
+            kgain.ext_hdr["DATETIME"] = "2026-11-11T00:00:00.000"
+            kgain.ext_hdr["FTIMEUTC"] = "2026-11-11T00:00:00.000"
             kgain.save(filedir=corgidrp.default_cal_dir, filename=tvac_krn_filename)
 
         # DetectorNoiseMaps from CAR119 results.  '999' in the filename's segment number indicates a non-standard processing 

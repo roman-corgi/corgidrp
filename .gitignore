@@ -86,6 +86,8 @@ tests/e2e_tests/pc_sim_test_data/*.json
 # data files
 *.FITS
 *.fits
+!cgi_0110001002999001001_20261023t0820051_dnm_cal.fits
+
 
 # Output figures
 figures/
