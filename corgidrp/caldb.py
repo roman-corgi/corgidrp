@@ -126,6 +126,9 @@ class CalDB:
         # fill any NA values with defaults and enforce column types
         for col, dtype in column_dtypes.items():
             if col in self._db.columns:
+                # Empty text columns can be inferred as float64 when reading CSVs.
+                if dtype is str:
+                    self._db[col] = self._db[col].astype("string")
                 self._db[col] = self._db[col].fillna(default_values[dtype]).astype(dtype)
 
     def save(self):

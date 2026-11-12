@@ -3,6 +3,7 @@ import glob
 import numpy as np
 import pytest
 import shutil
+import warnings
 from astropy.io import fits
 from astropy.time import Time, TimeDelta
 import corgidrp
@@ -52,6 +53,17 @@ def test_caldb_create_default():
     assert(testcaldb.filepath == testcaldb_filepath)
     assert(os.path.exists(testcaldb_filepath))
     assert(len(testcaldb._db.index) == 0)
+
+    # CSV readers infer an entirely empty text column as float64.
+    with open(testcaldb_filepath, "w") as calib_csv:
+        calib_csv.write("Type,OPMODE,MJD,NAXIS1\nDark,,,\n")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=".*fill value.*")
+        testcaldb.load()
+    assert testcaldb._db.loc[0, "Type"] == "Dark"
+    assert testcaldb._db.loc[0, "OPMODE"] == ""
+    assert np.isnan(testcaldb._db.loc[0, "MJD"])
+    assert testcaldb._db.loc[0, "NAXIS1"] == -1
 
     # remove db and restore path
     os.remove(testcaldb_filepath)
