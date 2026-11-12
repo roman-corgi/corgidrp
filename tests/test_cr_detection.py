@@ -623,7 +623,7 @@ def test_mask_box_corners():
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
     dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
-                        plat_thresh, cosm_filter=2, cosm_box=2, pct_oversat_lim=50)
+                        plat_thresh, cosm_filter=2, cosm_box=2, pct_oversat_lim=50, cosm_tail=10)
 
     if not np.array_equal(np.where(dataset_masked.all_dq>0,1,0)[0], check_mask):
         raise Exception("Incorrect pixels were masked.")
