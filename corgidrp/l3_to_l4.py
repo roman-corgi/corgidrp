@@ -60,6 +60,7 @@ def replace_bad_pixels(input_dataset, kernelsize=3, dq_thresh=1, vectorized_thre
 
     TODO: Add additional options for bad pixel replacement (e.g. 2d interpolation that
     can handle nans, constant value, etc.)
+    
     Args:
         input_dataset (corgidrp.data.Dataset): input L3 dataset with bad pixels
         kernelsize (int, optional): Size of median filter window in pixels. Defaults to 3.
