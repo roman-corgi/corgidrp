@@ -8,17 +8,32 @@ New features:
 
 * Astrometric reference catalog replaced with an HST + Gaia DR3 catalog, including proper motions, uncertainties, and provenance (@m-samland)
 * Star positions in astrometric calibration propagated to each observation's ``MJDSRT`` using catalog proper motions, with propagation recorded in calibration HISTORY (@m-samland)
+* ``combine_frames_per_visit`` accepts per-keyword ``split_tolerances`` for grouping frames (@maxwellmb)
+* Trap-pumping analysis accepts a configurable ``good_frame_opmode`` to select frames, defaulting to ``SPARE_9`` (@kjl0025)
 
 Bug fixes:
 
 * Boresight frame grouping tolerates telemetry scatter in ``RA_APER``/``DEC_APER`` and ``FSMX``/``FSMY`` with configurable pointing and FSM tolerances (defaults: 0.5 arcsec and 5 mas) (@m-samland)
 * Plate scale and north angle calculations use all star pairs up to a configurable limit (default: 500), or a reproducible seeded subset without replacement (@m-samland)
 * Core throughput frame combining groups FSM positions within a configurable tolerance (default: 5 mas), exposed in the default recipe (@m-samland)
+* Cosmic ray detection defaults updated to ``cosm_filter=3``, ``cosm_box=4``, and ``cosm_tail='auto'``; traditional dark and noise map recipes use ``cosm_thresh=0.066`` and ``plat_thresh=0.066`` (@kjl0025)
+* Default ``DetectorParams`` gain-register full-well capacity updated to 100,000 electrons and maximum EM gain to 7,500 (@kjl0025)
+* ``replace_bad_pixels`` fills remaining image and error NaNs after interpolation with a configurable ``fill_value`` (default: 0), including NaNs without DQ flags (@semaphoreP)
+* Mueller matrix calibration combines frames by visit, target, roll, polarization state, and FSM position before splitting polarization beams, with a 4 mas FSM tolerance (@maxwellmb)
+* Polarization beam crop coordinates rounded to integer pixels to handle non-integer beam centers (@maxwellmb)
+* Generated default calibration observation timestamps consistently match the fixed pre-launch dates encoded in their filenames, while creation timestamps record the actual generation time (@semaphoreP)
+* Empty calibration database text columns loaded without pandas dtype warnings (@semaphoreP)
+
+Testing:
+
+* Regression coverage for default calibration timestamps, empty calibration database text columns, and bad-pixel NaN filling in sparse and vectorized modes (@semaphoreP)
+* Polarization calibration end-to-end tests compare fitted Mueller matrix elements against their formal uncertainties (@maxwellmb)
 
 
 Backwards Compatibility Note:
 
-* The bundled ``JWST_CALFIELD2020.csv`` has been replaced by ``lmc_astrometric_reference.ecsv``. Update any explicit paths to the former catalog. User-supplied catalogs with ``RA``, ``DEC``, and ``VMAG`` columns remain supported. Positions are left unchanged with a warning when proper motions or epoch metadata are unavailable (neither avaiable in old ``JWST_CALFIELD2020.csv``).
+* The bundled ``JWST_CALFIELD2020.csv`` has been replaced by ``lmc_astrometric_reference.ecsv``. Update any explicit paths to the former catalog. User-supplied catalogs with ``RA``, ``DEC``, and ``VMAG`` columns remain supported. Positions are left unchanged with a warning when proper motions or epoch metadata are unavailable (neither available in old ``JWST_CALFIELD2020.csv``).
+* Trap-pumping frames using ``OPMODE='SPARE9'`` now require ``good_frame_opmode='SPARE9'``; ``TRAP_PUMPING`` remains accepted automatically.
 
 
 v5.1.1
