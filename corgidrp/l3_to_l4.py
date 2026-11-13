@@ -50,11 +50,16 @@ def _nanmedian_filter_vectorized(arr, kernelsize):
         return np.nanmedian(flat, axis=-1)
 
 
-def replace_bad_pixels(input_dataset, kernelsize=3, dq_thresh=1, vectorized_threshold=0.01):
-    """Interpolate over bad pixels in image and error arrays using a median filter.
+def replace_bad_pixels(input_dataset, kernelsize=3, dq_thresh=1, vectorized_threshold=0.01,
+                       fill_value=0):
+    """Interpolate over bad pixels and fill any remaining NaNs.
+
+    Image and error values are interpolated using a local median filter. If the
+    window contains no usable values or if the pixel is not flagged in DQ map, 
+    the remaining NaNs use ``fill_value``.
+
     TODO: Add additional options for bad pixel replacement (e.g. 2d interpolation that
     can handle nans, constant value, etc.)
-
     Args:
         input_dataset (corgidrp.data.Dataset): input L3 dataset with bad pixels
         kernelsize (int, optional): Size of median filter window in pixels. Defaults to 3.
@@ -63,10 +68,13 @@ def replace_bad_pixels(input_dataset, kernelsize=3, dq_thresh=1, vectorized_thre
             full-array vectorized nanmedian filter is used instead of a sparse
             per-pixel loop. The vectorized path is faster when many pixels are
             bad; the sparse path is faster when very few are. Defaults to 0.01.
+        fill_value (float, optional): Value used for all NaNs remaining in the
+            image and error arrays after interpolation, including pre-existing
+            NaNs. Defaults to 0.
 
     Returns:
-        corgidrp.data.Dataset: A copy of the dataset with the bad pixels and error values interpolated over.
-        The bad pixel map is unchanged.
+        corgidrp.data.Dataset: A copy with bad image and error values interpolated
+            where possible and remaining NaNs filled. The bad pixel map is unchanged.
     """
 
     dataset = input_dataset.copy()
@@ -123,7 +131,19 @@ def replace_bad_pixels(input_dataset, kernelsize=3, dq_thresh=1, vectorized_thre
                             im_err[err_prefix][r0:r1, c0:c1]
                         )
 
+    image_nan_mask = np.isnan(im_replaced)
+    error_nan_mask = np.isnan(err_replaced)
+    image_fill_count = int(np.count_nonzero(image_nan_mask))
+    error_fill_count = int(np.count_nonzero(error_nan_mask))
+    im_replaced[image_nan_mask] = fill_value
+    err_replaced[error_nan_mask] = fill_value
+
     history_msg = f"Interpolated over {bp_count} bad pixels with median filter size {kernelsize}."
+    if image_fill_count or error_fill_count:
+        history_msg += (
+            f" Filled {image_fill_count} remaining image NaNs and "
+            f"{error_fill_count} remaining error NaNs with {fill_value}."
+        )
     dataset.update_after_processing_step(history_msg,
                                          new_all_data=im_replaced,
                                          new_all_err=err_replaced)
