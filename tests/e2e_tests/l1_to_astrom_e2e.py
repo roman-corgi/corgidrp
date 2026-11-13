@@ -56,7 +56,9 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
 
     # the astrom_sims were rendered without proper motions, i.e. with the stars at the catalogue
     # epoch, so shift the dates of copies of them to that epoch (keeping the relative timing);
-    # the pipeline then has nothing to propagate
+    # the pipeline then has nothing to propagate. They were also rendered at a north angle of
+    # -45 deg but have PA_APER = 0, which the source matching checks against, so the copies get
+    # PA_APER = -45
     catalog_meta = astrom.read_field_catalog(astrom.default_field_path).meta
     catalog_epoch_mjd = Time(catalog_meta["epoch"], format=catalog_meta["epoch_format"],
                              scale=catalog_meta["epoch_scale"]).utc.mjd
@@ -69,6 +71,7 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
             exthdr = hdulist[1].header
             exthdr['MJDSRT'] += date_shift
             exthdr['MJDEND'] += date_shift
+            hdulist[0].header['PA_APER'] = -45.
             l1_dated_list.append(os.path.join(l1_dated_dir, os.path.basename(l1_path)))
             hdulist.writeto(l1_dated_list[-1])
 
