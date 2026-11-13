@@ -191,7 +191,7 @@ def test_tpump_analysis():
                         pc_min=0, pc_max=2,
                         cs_fit_thresh = cs_fit_thresh, 
                         input_T=input_T,
-                        bins_E=bins_E, bins_cs=bins_cs)
+                        bins_E=bins_E, bins_cs=bins_cs, metadata_opmode=None)
     # filename check
     sctsrt_values = [frame.ext_hdr.get('SCTSRT') for frame in emgain_divided_dataset
                      if frame.ext_hdr.get('SCTSRT') is not None]

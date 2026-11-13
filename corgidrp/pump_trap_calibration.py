@@ -2140,7 +2140,8 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     cs_fit_thresh = 0.8, E_min = 0, E_max = 1, cs_min = 0,
     cs_max = 50, bins_E = 100, bins_cs = 10, input_T = 180,
     sample_data = False,
-    verbose=False, bin_size=10, bias_tolerance=10, good_frame_opmode='SPARE_9'):
+    verbose=False, bin_size=10, bias_tolerance=10, metadata_opmode='SPARE_8', 
+    good_frame_opmode='SPARE_9'):
     """This function analyzes trap-pumped frames and outputs the location of
     each radiation trap (pixel and sub-electrode location within the pixel),
     everything needed to determine the release time constant at any temperature
@@ -2227,6 +2228,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             this function could be run several times with decreasing bin size until the maximum number of traps have been detected.
         bias_tolerance (float, optional): Used for filtering out legacy frames. Legacy frames have no illumination except for in the last few rows, so the average of a central region of the imaging area should be close to 0 since bias was 
             already subtracted out (and the average takes care of read noise). Even if a legacy frame slips through, it will not cause any harm to the processing since no dipoles would be found in such a frame. Defaults to 10.
+        metadata_opmode (str, optional): The value of the OPMODE keyword that identifies metadata frames. Defaults to 'SPARE_8'. If None, all metadata assumed to be from good_frame_opmode frames.
         good_frame_opmode (str, optional): The value of the OPMODE keyword that identifies good frames to keep. Defaults to 'SPARE_9'.
     
     Returns:
@@ -2237,18 +2239,37 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     working_dataset = input_dataset.copy()
 
     dsets, vals = working_dataset.split_dataset(exthdr_keywords=['OPMODE', 'FRMTYPE'])
-    good_inds = []
+    data_inds = []
+    metadata_inds = []
     for val in vals:
-        if val[0] == 'TRAP_PUMPING' and val[1] == 'NUM':
-            good_inds.append(vals.index(val))
-        if (val[0] == good_frame_opmode) and val[1] == 'NUM':
-            good_inds.append(vals.index(val))
+        if val[0] == 'TRAP_PUMPING':# and val[1] == 'NUM':
+            data_inds.append(vals.index(val))
+        if (val[0] == good_frame_opmode):# and val[1] == 'NUM':
+            data_inds.append(vals.index(val))
+        if (metadata_opmode is not None and val[0] == metadata_opmode):# and val[1] == 'NUM':
+            metadata_inds.append(vals.index(val))
     frames_to_keep = []
-    for ind in good_inds:
+    metadata_frames = []
+    for ind in data_inds:
         for fr in dsets[ind]:
             if 'LEGACY' in fr.pri_hdr['AUXFILE'].upper():
                 continue
             frames_to_keep.append(fr)
+    for ind in metadata_inds:
+        for fr in dsets[ind]:
+            if 'LEGACY' in fr.pri_hdr['AUXFILE'].upper():
+                continue
+            metadata_frames.append(fr)
+    # update data frames' header values with those from metatdata frames
+    # first sort both sets by MJDSRT, then match up by time to assign the header values for 
+    # TPSCHEM1, TPSCHEM2, TPSCHEM3, TPSHEM4, TPTAU, and TPINJCYC
+    frames_to_keep.sort(key=lambda fr: fr.ext_hdr['MJDSRT'])
+    metadata_frames.sort(key=lambda fr: fr.ext_hdr['MJDSRT'])
+    if len(frames_to_keep) != len(metadata_frames) and metadata_opmode is not None:
+        raise ValueError('Number of data frames and metadata frames must match.')
+    for i, data_frame in enumerate(frames_to_keep):
+        for key in ['TPSCHEM1', 'TPSCHEM2', 'TPSCHEM3', 'TPSHEM4', 'TPTAU', 'TPINJCYC']:
+            data_frame.ext_hdr[key] = metadata_frames[i].ext_hdr[key]
     # overwrite working_dataset
     working_dataset = data.Dataset(frames_to_keep)
 

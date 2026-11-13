@@ -298,6 +298,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
             if step['name'] == "calibrate_trap_pump":
                 step['keywords'] = {}
                 step['keywords']['bin_size'] = None
+                step['keywords']['metadata_opmode'] = None
         output_filepaths = walker.run_recipe(recipe[0], save_recipe_file=True)
         recipe[1]['inputs'] = output_filepaths
         walker.run_recipe(recipe[1], save_recipe_file=True) 
