@@ -738,7 +738,7 @@ def initialize():
     # Fixed filenames encode the synthetic timestamp (20260101) so the existence check is stable across runs.
     tvac_raw_dir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "default_calibs")
     tvac_nln_filename = "cgi_0000000000000000000_20260101t0000000_nln_cal.fits"
-    tvac_krn_filename = "cgi_0000000000000000000_20260101t0000001_krn_cal.fits"
+    tvac_krn_filename = "cgi_0000000000000000000_20260101t0000001_krn_cal.fits" # using 999 for segment number to indicate manually manipulated
     tvac_dnm_filename = "cgi_0000000000000000000_20260101t0000002_dnm_cal.fits"
     tvac_flt_filename = "cgi_0000000000000000000_20260101t0000003_flt_cal.fits"
     tvac_bpm_filename = "cgi_0000000000000000000_20260101t0000004_bpm_cal.fits"
@@ -785,9 +785,9 @@ def initialize():
             kgain_val = 8.7
             signal_array = np.linspace(0, 50)
             noise_array = np.sqrt(signal_array)
-            ptc = np.column_stack([signal_array, noise_array])
+            ptc = np.column_stack([signal_array, noise_array]) #TODO: replace with actual PTC curve so add_shot_noise_to_err() works as intended
             ext_hdr_krn = ext_hdr.copy()
-            ext_hdr_krn["RN"] = 121.76     # read noise in electrons from TVAC measurement
+            ext_hdr_krn["RN"] = 121.76     # read noise in electrons; value from TVAC measurement
             ext_hdr_krn["RN_ERR"] = 2.0    # read noise uncertainty in electrons
             kgain = data.KGain(
                 kgain_val, ptc=ptc, pri_hdr=pri_hdr.copy(), ext_hdr=ext_hdr_krn,
