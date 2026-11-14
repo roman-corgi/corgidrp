@@ -166,7 +166,53 @@ def test_create_flatfield_uranus():
 
     return
 
+def test_covered_radius_ignores_interior_holes():
+    """
+    An uncovered pixel inside the raster coverage must not truncate the flat.
+
+    A single cosmic-ray-flagged pixel near the centre of the coverage used to
+    set the characterized radius all by itself, cutting a r=149 flat down to
+    r=38 and discarding 93% of the measured pixels.
+    """
+    from scipy import ndimage
+    from corgidrp.flat import covered_radius
+
+    n = 420
+    cen = (n - 1) / 2.0
+    yy, xx = np.indices((n, n))
+    rr = np.hypot(xx - cen, yy - cen)
+
+    true_rad = 149
+    coverage = rr <= true_rad
+
+    # a clean coverage disk is measured back to its own radius
+    clean = covered_radius(ndimage.binary_fill_holes(coverage), (cen, cen))
+    assert clean == pytest.approx(true_rad, abs=2)
+
+    # punching a single pixel near the centre must not change that
+    for radius in (10.0, 39.3, 80.0):
+        holed = coverage.copy()
+        iy, ix = np.unravel_index(np.argmin(np.abs(rr - radius)), rr.shape)
+        holed[iy, ix] = False
+        got = covered_radius(ndimage.binary_fill_holes(holed), (cen, cen))
+        assert got == clean, f"a hole at r={radius} truncated the flat to {got}"
+
+    # nor should a cluster of them
+    blob = coverage.copy()
+    blob[200:204, 180:184] = False
+    assert covered_radius(ndimage.binary_fill_holes(blob), (cen, cen)) == clean
+
+    # a genuinely smaller coverage disk is still reported small, not inflated
+    small = covered_radius(ndimage.binary_fill_holes(rr <= 40), (cen, cen))
+    assert small == pytest.approx(40, abs=2)
+
+    # half-covered annuli are not accepted as characterized
+    half = coverage.copy()
+    half[xx < cen] = False
+    assert covered_radius(ndimage.binary_fill_holes(half), (cen, cen)) < 10
+
+
 if __name__ == "__main__":
     test_create_flatfield_uranus()
     test_create_flatfield_neptune()
-    
+    test_covered_radius_ignores_interior_holes()
