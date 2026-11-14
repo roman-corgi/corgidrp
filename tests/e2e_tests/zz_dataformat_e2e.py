@@ -1343,7 +1343,7 @@ def test_mueller_matrix_dataformat_e2e(e2edata_path, e2eoutput_path):
     
     validate_cgi_filename(polcal_data_file, 'mmx_cal')
     
-    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "l1_to_ND_polcal_e2e", "l2b_results", "mmx_cal_documentation.xlsx"))
+    generate_fits_excel_documentation(polcal_data_file, os.path.join(e2eoutput_path, "l1_to_polcal_e2e", "l2b_results", "mmx_cal_documentation.xlsx"))
     
     doc_dir = os.path.join(e2eoutput_path, "data_format_docs")
     if not os.path.exists(doc_dir):
