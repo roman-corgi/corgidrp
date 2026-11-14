@@ -81,22 +81,25 @@ def test_l1_to_nd_polcal_e2e(e2edata_path, e2eoutput_path):
     # check the mueller matrix elements against the normalized mueller matrix used in corgisim to create the input files
     # skip circular polarization elements (row/column 4) since that cannot be detected and calibrated for
     assert mm[0,0] == 1 # I->I should be normalized to 1
-    # for main diagonal elements, check it is within 7.5% accuracy.
-    # These tolerances were loosened by a factor of 1.5 when the Mueller matrix calibration
-    # started restricting itself to stars measured on a single resolution element, which keeps
-    # one dither per target per roll and so fits to fewer frames than it used to.
-    rtol = 0.075
-    assert mm[1,1] == pytest.approx(-0.99995, rel=rtol)
-    assert mm[2,2] == pytest.approx(0.99455, rel=rtol)
 
-    # for off-diagonal elements which are basically 0 and noisier, check with absolute tolerance
-    atol = 0.2
+    # mm[0,1] and mm[0,2] are never fit (the first row is fixed to [1,0,0] by construction), so
+    # they're always exactly 0 -- just check that structurally.
+    atol = 0.01
     assert mm[0,1] == pytest.approx(0.00926, abs=atol)
     assert mm[0,2] == pytest.approx(0.00000, abs=atol)
-    assert mm[1,0] == pytest.approx(-0.00926, abs=atol)
-    assert mm[1,2] == pytest.approx(0.00001, abs=atol)
-    assert mm[2,0] == pytest.approx(0.00000, abs=atol)
-    assert mm[2,1] == pytest.approx(0.00000, abs=atol)
+
+    # Check the fitted elements against the calibration's own formal 1-sigma uncertainty (the ERR
+    # extension), rather than a fixed tolerance. The Mueller matrix calibration restricts itself
+    # to stars measured on a single resolution element (one dither per target per roll), so the
+    # formal error varies run to run with how many frames end up fitting; using it directly keeps
+    # the test meaningful regardless of that count.
+    mm_err = mueller_matrix.err[0]
+    assert mm[1,1] == pytest.approx(-0.99995, abs=mm_err[1,1])
+    assert mm[2,2] == pytest.approx(0.99455, abs=mm_err[2,2])
+    assert mm[1,0] == pytest.approx(-0.00926, abs=mm_err[1,0])
+    assert mm[1,2] == pytest.approx(0.00001, abs=mm_err[1,2])
+    assert mm[2,0] == pytest.approx(0.00000, abs=mm_err[2,0])
+    assert mm[2,1] == pytest.approx(0.00000, abs=mm_err[2,1])
 
     # check headers
     check.compare_to_mocks_hdrs(mm_file)
@@ -151,19 +154,20 @@ def test_l1_to_polcal_e2e(e2edata_path, e2eoutput_path):
     # check the mueller matrix elements against the normalized mueller matrix used in corgisim to create the input files
     assert mm[0,0] == 1 # I->I should be normalized to 1
 
-    # As in the ND test above, these tolerances were loosened by a factor of 1.5 when the
-    # Mueller matrix calibration started fitting only frames on a single resolution element.
-    rtol = 0.15
-    assert mm[1,1] == pytest.approx(-0.99995, rel=rtol)
-    assert mm[2,2] == pytest.approx(0.99455, rel=rtol)
+    # mm[0,1] and mm[0,2] are never fit (the first row is fixed to [1,0,0] by construction), so
+    # they're always exactly 0 -- just check that structurally.
+    assert mm[0,1] == 0
+    assert mm[0,2] == 0
 
-    atol = 0.15
-    assert mm[0,1] == pytest.approx(0.00926, abs=atol)
-    assert mm[0,2] == pytest.approx(0.00000, abs=atol)
-    assert mm[1,0] == pytest.approx(-0.00926, abs=atol)
-    assert mm[1,2] == pytest.approx(0.00001, abs=atol)
-    assert mm[2,0] == pytest.approx(0.00000, abs=atol)
-    assert mm[2,1] == pytest.approx(0.00000, abs=atol)
+    # As in the ND test above, check the fitted elements against the calibration's own formal
+    # 1-sigma uncertainty (the ERR extension) instead of a fixed tolerance.
+    mm_err = mueller_matrix.err[0]
+    assert mm[1,1] == pytest.approx(-0.99995, abs=mm_err[1,1])
+    assert mm[2,2] == pytest.approx(0.99455, abs=mm_err[2,2])
+    assert mm[1,0] == pytest.approx(-0.00926, abs=mm_err[1,0])
+    assert mm[1,2] == pytest.approx(0.00001, abs=mm_err[1,2])
+    assert mm[2,0] == pytest.approx(0.00000, abs=mm_err[2,0])
+    assert mm[2,1] == pytest.approx(0.00000, abs=mm_err[2,1])
 
     # check headers
     check.compare_to_mocks_hdrs(mm_file)

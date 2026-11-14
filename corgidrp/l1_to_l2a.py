@@ -169,7 +169,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     return output_dataset
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.95,
-                       plat_thresh=0.85, cosm_filter=2, cosm_box=3, cosm_tail=10, cosm_tail_auto_factor=40/1000,
+                       plat_thresh=0.85, cosm_filter=3, cosm_box=4, cosm_tail='auto', cosm_tail_auto_factor=40/1000,
                        mode='image', detector_regions=None, pct_oversat_lim=20,
                        dataset_copy=True, discard_oversat=False, skip_coronagraph_iwa=True,
                        platescale=0.0218, pol_beams_sep_diam=7.5, 
@@ -195,12 +195,12 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             plateau. Interval 0 to 1, defaults to 0.85. Lower numbers are more aggressive in flagging cosmic
             ray hits.
         cosm_filter (int):
-            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 2.
+            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 3.
         cosm_box (int):
             Number of pixels out from an identified cosmic head (i.e., beginning of
             the plateau) to mask out.
             For example, if cosm_box is 3, a 7x7 box is masked,
-            with the cosmic head as the center pixel of the box. Defaults to 3.
+            with the cosmic head as the center pixel of the box. Defaults to 4.
         cosm_tail (int or 'auto'):
             Number of pixels in the row downstream of the end of a cosmic plateau
             to mask.  If cosm_tail is greater than the number of
@@ -209,7 +209,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             tail length is determined automatically in proportion to the EM gain: tail length = EM gain * cosm_tail_auto_factor (see below).
             In median_filter_mode (1 or 2; see below for that parameter), the tail length is applied at the end of each streak, not at the cosmic head as is done in 
             the "usual" method (threshold based on cosm_box, cosm_tail, etc).
-            Defaults to 10. For EM gain = 1, no serial streaking occurs, so this is internally set to 0 
+            Defaults to 'auto'. For EM gain = 1, no serial streaking occurs, so this is internally set to 0 
             in that case regardless of the input value here.
         cosm_tail_auto_factor (float): 
             Factor of proportionality to EM gain for cosm_tail.  Only relevant when cosm_tail is 'auto'.  
@@ -537,7 +537,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                             arrtype=arrtype
                             ) * cr_dqval
         # add in record of cosmic ray threshold; used in calibrate_darks_lsq() if available
-        crmasked_dataset[i].ext_hdr['HISTORY'] = 'Cosmic ray threshold of {0} used.'.format(cosm_sat_fwc)
+        crmasked_dataset[i].ext_hdr['HISTORY'] = 'Cosmic ray threshold of {0} DN used.'.format(cosm_sat_fwc)
     # add the two masks to the all_dq mask
     new_all_dq = np.bitwise_or(crmasked_dataset.all_dq, m1)
     new_all_dq =  np.bitwise_or(new_all_dq, m2.astype(int))
