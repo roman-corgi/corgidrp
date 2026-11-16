@@ -1986,19 +1986,19 @@ class DetectorParams(Image):
     default_values = {
         'KGAINPAR' : 8.7,
         'FWC_PP_E' : 90000.,    # full-well capacity in electrons for image area (before gain register)
-        'FWC_EM_E' : 105000.,   # full-well capacity in electrons for gain register
+        'FWC_EM_E' : 100000.,   # full-well capacity in electrons for gain register
         'ROWREADT' : 223.5e-6,  # seconds
         'NEMGAIN': 604,         # number of EM gain register stages
         'TELRSTRT': -1,         # slice of rows that are used for telemetry
         'TELREND': None,        #goes to the end, in other words
-        'CRHITRT': 5.0e+04,     # cosmic ray hit rate (hits/m**2/sec)
+        'CRHITRT': 5.0e4,       # cosmic ray hit rate (hits/m**2/sec)   
         'PIXAREA': 1.69e-10,    # pixel area (m**2/pixel)
-        'GAINMAX': 8000.0,      # Maximum allowable EM gain
+        'GAINMAX': 7500.0,      # Maximum allowable EM gain
         'DELCNST': 1.0e-4,      # tolerance in exposure time calculator
         'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
         'PCECNTMX': 0.25,       # Maximum allowed electrons/pixel/frame for photon counting
         'TFACTOR': 5,           # number of read noise standard deviations at which to set the photon-counting threshold
-        'READ_N': 165.               # current best estimate
+        'READ_N': 165               # current best estimate
     }
 
     back_compat_mapping = {

@@ -623,7 +623,7 @@ def test_mask_box_corners():
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
     dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
-                        plat_thresh, cosm_filter=2, cosm_box=2, pct_oversat_lim=50)
+                        plat_thresh, cosm_filter=2, cosm_box=2, pct_oversat_lim=50, cosm_tail=10)
 
     if not np.array_equal(np.where(dataset_masked.all_dq>0,1,0)[0], check_mask):
         raise Exception("Incorrect pixels were masked.")
@@ -1080,10 +1080,10 @@ def test_median_filter_mode():
     assert (np.array_equal(dataset_masked1[0].dq[6:, :3], check_mask[6:, :3]))
     assert not (np.array_equal(dataset_masked1[0].dq[-2, 3:5], check_mask[-2, 3:5]))
 
-    # all will get caught this time
+    # all will get caught this time 
     dataset_masked2 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh=0.99,
                             plat_thresh=0.85, cosm_filter=2, cosm_box=1, median_filter_mode=2,
-                            cosm_tail=2, cosm_thresh=1/13, median_filter_size=(3,3))
+                            cosm_tail=2, cosm_thresh=1/14, median_filter_size=(3,3))
 
     # these will match despite cosm_tail=2 since that doesn't apply to median_filter_mode=2 when it is catching non-saturating CRs which have no tail
     assert np.array_equal(dataset_masked2[0].dq, check_mask)

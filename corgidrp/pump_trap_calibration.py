@@ -2140,7 +2140,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     cs_fit_thresh = 0.8, E_min = 0, E_max = 1, cs_min = 0,
     cs_max = 50, bins_E = 100, bins_cs = 10, input_T = 180,
     sample_data = False,
-    verbose=False, bin_size=10, bias_tolerance=10):
+    verbose=False, bin_size=10, bias_tolerance=10, good_frame_opmode='SPARE_9'):
     """This function analyzes trap-pumped frames and outputs the location of
     each radiation trap (pixel and sub-electrode location within the pixel),
     everything needed to determine the release time constant at any temperature
@@ -2227,6 +2227,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
             this function could be run several times with decreasing bin size until the maximum number of traps have been detected.
         bias_tolerance (float, optional): Used for filtering out legacy frames. Legacy frames have no illumination except for in the last few rows, so the average of a central region of the imaging area should be close to 0 since bias was 
             already subtracted out (and the average takes care of read noise). Even if a legacy frame slips through, it will not cause any harm to the processing since no dipoles would be found in such a frame. Defaults to 10.
+        good_frame_opmode (str, optional): The value of the OPMODE keyword that identifies good frames to keep. Defaults to 'SPARE_9'.
     
     Returns:
         corgidrp.data.TrapCalibration: An object containing the results of the trap calibration. The trap densities are appended as an extension HDU, and several other parameters are stored as header keywords in the ext_hdr header.
@@ -2240,7 +2241,7 @@ def tpump_analysis(input_dataset, time_head = 'TPTAU',
     for val in vals:
         if val[0] == 'TRAP_PUMPING' and val[1] == 'NUM':
             good_inds.append(vals.index(val))
-        if (val[0] == 'SPARE_9' or val[0] == 'SPARE9') and val[1] == 'NUM':
+        if (val[0] == good_frame_opmode) and val[1] == 'NUM':
             good_inds.append(vals.index(val))
     frames_to_keep = []
     for ind in good_inds:
