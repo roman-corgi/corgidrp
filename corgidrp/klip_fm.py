@@ -279,7 +279,10 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                 iwa_mas = 425.9             
             case 'SPC12_R1C':
                 owa_mas = 1008.8
-                iwa_mas = 296.1  
+                iwa_mas = 296.1
+            case 'SPC12_R2C':
+                owa_mas = 1008.8
+                iwa_mas = 296.1
             case 'HLC12_C2R':
                 owa_mas = 450.0
                 iwa_mas = 140.0
