@@ -59,7 +59,17 @@ def measure_companions(
             will look in the header for detections from l4_to_tda.find_source 
     
     Returns:
-        result_table (astropy.table.Table): Table containing companion measurements.
+        result_table (astropy.table.Table): One row per companion. For
+            ``thrp_corr="L4"``, ``x`` and ``y`` are the Gaussian-fitted
+            ``x_comp`` and ``y_comp`` in pixels, and ``fwhm`` is the fitted
+            FWHM in pixels. ``snr`` is the fitted peak divided by the RMS in
+            an annulus of full width one FWHM at the fitted separation, with
+            known companions masked using ``klip_fm.measure_noise``. No
+            small-sample correction is applied. SNR is NaN if the RMS is
+            unavailable or zero. Otherwise x/y retain the candidate positions
+            and fwhm/snr are NaN. ``dmag`` is the companion-minus-host
+            magnitude difference, ``-2.5 * log10(counts_ratio)``, or NaN for
+            a nonpositive/non-finite ratio. Other magnitude definitions are unchanged.
     """
     # Measure counts of the host star image
     guess_index = np.unravel_index(np.nanargmax(host_star_image.data), host_star_image.data.shape)
@@ -129,6 +139,10 @@ def measure_companions(
                                                         guess_index[1], guess_index[0], searchrad=7, guessfwhm=ct_psf_fwhm, 
                                                         guesspeak=np.nanmax(scaled_host_psf_at_planet_location), refinefit=True)
 
+        x_comp, y_comp = x_psf, y_psf
+        comp_fwhm = np.nan
+        snr = np.nan
+
         # Which approach to use for KLIP throughput correction.
         if thrp_corr == "L4":
             # use the klip throughput stored from PSF subtraction
@@ -143,6 +157,22 @@ def measure_companions(
                                                                                refinefit=True)
             meas_sep_pix = np.sqrt((x_comp - x_star)**2 + (y_comp - y_star)**2)
             psf_sub_counts = np.pi * comp_peakflux * comp_fwhm**2 / 4. / np.log(2.) # total integrated flux for saving
+            
+            #####calculate SNR using annular RMS at the measured separation, with known companions masked
+            if np.isfinite(comp_fwhm) and comp_fwhm > 0 and np.isfinite(meas_sep_pix):
+                noise_locs = [
+                    (np.hypot(comp['x'] - x_star, comp['y'] - y_star),
+                     -np.degrees(np.arctan2(comp['x'] - x_star, comp['y'] - y_star)) % 360)
+                    for comp in companions
+                ]
+                noise_locs[i] = (meas_sep_pix,
+                                 -np.degrees(np.arctan2(x_comp - x_star, y_comp - y_star)) % 360)
+                annular_rms = klip_fm.measure_noise(
+                    psf_sub_image, [meas_sep_pix], comp_fwhm / 2,
+                    klmode_index=kl_mode_idx, cand_locs=noise_locs,
+                )[0]
+                if np.isfinite(annular_rms) and annular_rms > 0:
+                    snr = comp_peakflux / annular_rms
 
             # interpolate algorithm throhgput from L4 data product 
             algo_thrp_data = psf_sub_image.hdu_list['KL_THRU'].data
@@ -218,8 +248,11 @@ def measure_companions(
             companion_mag = -2.5 * np.log10(psf_sub_counts) + zero_point
 
         # Append the results for this companion.
+        dmag = (-2.5 * np.log10(companion_host_ratio)
+                if np.isfinite(companion_host_ratio) and companion_host_ratio > 0 else np.nan)
         results.append((
-            comp_sub['id'], x_psf, y_psf, psf_sub_counts, companion_host_ratio, companion_mag
+            comp_sub['id'], x_comp, y_comp, psf_sub_counts, companion_host_ratio, companion_mag,
+            comp_fwhm, snr, dmag
         ))
         i+=1
 
@@ -230,7 +263,8 @@ def measure_companions(
             'id', 'x', 'y',
             'measured companion counts',
             'counts_ratio',
-            'companion estimated mag'
+            'companion estimated mag',
+            'fwhm', 'snr', 'dmag'
         ]
     )
 
