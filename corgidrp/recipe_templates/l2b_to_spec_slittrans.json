@@ -18,7 +18,8 @@
 		  },
          "keywords": {
 			"subtract_no_offset_frames": false,
-			"additional_frame_sep_extkeys": ["FSAMNAME", "FSMX", "FSMY"]
+			"additional_frame_sep_extkeys": ["FSAMNAME", "FSMX", "FSMY"],
+			"tolerance": {"FSMX": 5, "FSMY":5}
 		  }
       },
       {
@@ -37,7 +38,8 @@
 		"name": "slit_transmission",
 		"keywords": {
 			"x_range": [39, 89],
-			"y_range": [65, 71]
+			"y_range": [65, 71],
+			"tolerance": {"FSMX": 5, "FSMY": 5}
 		}
 	  },
 	  {
