@@ -168,6 +168,46 @@ def flatfield_residuals(dataset, N=None):
     
     return(matched_residuals_dataset)
 	    
+def covered_radius(covered, center, min_coverage=0.90, run=3):
+    """Largest radius about `center` out to which `covered` stays filled.
+
+    Used to size the region of the flat that the rasters actually characterized.
+    The radius is set by a coverage fraction per annulus rather than by the
+    nearest uncovered pixel: a single uncovered pixel (a cosmic ray flagged in
+    one frame, say) is a negligible fraction of its annulus and so cannot
+    truncate the flat, while the true edge of the raster coverage drops the
+    fraction to zero across every annulus beyond it.
+
+    Args:
+        covered (np.array): 2-D boolean mask, True where a pixel was measured.
+        center (tuple): (y, x) center to measure about.
+        min_coverage (float): fraction of an annulus that must be covered for
+            that radius to count as characterized. Annuli near the centre hold
+            only tens of pixels, so a few uncovered pixels move the fraction by
+            percent; 0.9 leaves room for that while still rejecting a genuinely
+            half-covered annulus (which 0.5 would accept).
+        run (int): number of consecutive annuli that must fall below
+            min_coverage to mark the edge, so one ragged annulus does not end
+            the disk early.
+
+    Returns:
+        int: radius in pixels.
+    """
+    cy, cx = center
+    yy, xx = np.indices(covered.shape)
+    r_int = np.hypot(xx - cx, yy - cy).astype(int)
+    nbins = int(r_int.max()) + 1
+    total = np.bincount(r_int.ravel(), minlength=nbins)
+    filled = np.bincount(r_int.ravel(), weights=covered.ravel().astype(float),
+                         minlength=nbins)
+    frac = np.divide(filled, total, out=np.zeros(nbins), where=total > 0)
+    good = frac >= min_coverage
+    for r0 in range(nbins - run + 1):
+        if not good[r0:r0 + run].any():
+            return max(r0 - 1, 1)
+    return nbins - 1
+
+
 def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=None,im_size=420,rad_mask=None,  planet_rad=None, n_pix=165, n_pad=302,image_center_x=512,image_center_y=512):
     """combine the dataset of residual image frames of neptune or uranus and create flat field 
     	and associated error
@@ -180,16 +220,17 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
             im_size (int): x-dimension of the planet image (in pixels= 420 for the HST images)
             rad_mask (float): radius in pixels used for creating a mask for band (band 1 =1.25, band 4=1.75)
             planet_rad (int): radius of the planet in pixels (planet_rad=54 for neptune, planet_rad=65)
-            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV defaults to 165 pixels
+            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV defaults to 165 pixels. When None, sized from the data to the radius the rasters cover (see covered_radius).
             n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to 302 pixels)
-            image_center_x (int): x coordinate of the center pixel of the final image 
-            image_center_y (int): y coordinate of the center pixel of the final image 
+            image_center_x (int): x coordinate of the center pixel of the final image
+            image_center_y (int): y coordinate of the center pixel of the final image
 
-        	
+
     	Returns:
         	full_residuals (np.array): flat field created from uranus or neptune images
         	err_residuals (np.array):  Error in the flatfield estimated using the ideal flat field
             cent_n (np.array): centroid of the combined image
+            n_pix (int): diameter in pixels of the characterized region
     """
     n = im_size
     
@@ -262,18 +303,48 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
     nx = np.arange(0,full_residuals_resel.shape[1])
     ny = np.arange(0,full_residuals_resel.shape[0])
     nxx,nyy = np.meshgrid(ny,nx)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=AstropyUserWarning) 
-        cent_n=centr.centroid_com(p_flat)
+    # center of the covered region, measured from the coverage mask rather than
+    # from the pixel values: the flat is ~1 everywhere it is measured, so a
+    # flux-weighted centroid of the values carries no position information
+    covered = ~np.isnan(p_flat)
+    if covered.any():
+        cent_com = ndimage.center_of_mass(covered)
+        cent_n = (cent_com[1], cent_com[0])  # (x, y), as centroid_com returned
+    else:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=AstropyUserWarning)
+            cent_n=centr.centroid_com(p_flat)
     nrr = np.sqrt((nxx-cent_n[0])**2 + (nyy-cent_n[1])**2)
-    if n_pix is None:
-        # keep all real data, force only true gaps/background (beyond it) to 1
-        holes = np.isnan(p_flat)
-        n_pix = int(2*(np.floor(np.nanmin(nrr[holes]))-1)) if holes.any() else int(2*np.ceil(np.nanmax(nrr)))
+    auto_sized = n_pix is None
+    if auto_sized:
+        # Size the characterized region to the radius the rasters actually
+        # cover. Holes enclosed by real data are filled first so they read as
+        # covered; covered_radius then measures the edge by annulus coverage,
+        # so neither an interior cosmic-ray hole nor one ragged annulus
+        # truncates the flat.
+        solid = ndimage.binary_fill_holes(covered)
+        n_pix = 2 * covered_radius(solid, (cent_n[1], cent_n[0]))
         n_pix = max(n_pix, 2)
-    p_flat[nrr>n_pix//2]= 1
-    p_flat_err[nrr>n_pix//2]=0
-    
+    in_disk = nrr <= n_pix//2
+    # Pixels inside the kept disk that were never measured (interior holes) get
+    # no correction, flagged by err=0 so downstream cuts on ERR>0 skip them.
+    holes_in_disk = in_disk & ~covered
+    p_flat[holes_in_disk] = 1
+    p_flat_err[holes_in_disk] = 0
+    p_flat[~in_disk]= 1
+    p_flat_err[~in_disk]=0
+
+    # Only warn when the radius was derived here; an explicit n_pix is a
+    # deliberate crop to a known FOV, so discarding data outside it is intended.
+    n_kept = int(np.count_nonzero(in_disk & covered))
+    n_covered = int(np.count_nonzero(covered))
+    if auto_sized and n_covered and n_kept < 0.5 * n_covered:
+        warnings.warn(
+            f"Flat auto-sizing kept {n_kept} of {n_covered} measured pixels "
+            f"(r={n_pix//2} px). Check for uncovered pixels near the centre of "
+            f"the raster coverage.", RuntimeWarning)
+
+
     full_residuals=np.pad(p_flat, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(1))
     err_residuals=np.pad(p_flat_err, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(0))
 
