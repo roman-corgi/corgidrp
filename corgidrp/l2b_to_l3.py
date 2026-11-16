@@ -219,8 +219,8 @@ def split_image_by_polarization_state(input_dataset,
         
         # find starting point for cropping
         image_radius = image_size // 2
-        start_left = (center_left[0] - image_radius, center_left[1] - image_radius)
-        start_right = (center_right[0] - image_radius, center_right[1] - image_radius)
+        start_left = (int(round(center_left[0] - image_radius)), int(round(center_left[1] - image_radius)))
+        start_right = (int(round(center_right[0] - image_radius)), int(round(center_right[1] - image_radius)))
 
         # check that cropped image doesn't exceed full image bounds
         if start_left[0] < 0 or start_left[1] < 0 or start_right[0] < 0 or start_right[1] < 0\

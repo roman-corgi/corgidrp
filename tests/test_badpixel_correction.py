@@ -4,6 +4,7 @@ import pytest
 import corgidrp
 import numpy as np
 import corgidrp.mocks as mocks
+from scipy.ndimage import map_coordinates
 from corgidrp.mocks import create_default_calibration_product_headers
 from corgidrp.l2a_to_l2b import correct_bad_pixels
 from corgidrp.data import Image, Dataset, BadPixelMap
@@ -312,6 +313,53 @@ def test_replace_bps_pol_4frames():
         raise Exception("Cleaned error array does not match input error array for pol uniform data.")
     if not cleaned_dataset.all_dq == pytest.approx(input_dataset_bad.all_dq):
         raise Exception("Output DQ array does not match input DQ array for pol uniform data.")
+
+
+@pytest.mark.parametrize("vectorized_threshold", [1.0, 0.0], ids=["sparse", "vectorized"])
+@pytest.mark.parametrize("fill_value", [0, -1.0])
+def test_replace_bps_fill_value(vectorized_threshold, fill_value):
+    """Use the fill value only where a bad-pixel patch cannot be interpolated.
+
+    Args:
+        vectorized_threshold (float): Threshold selecting the interpolation path.
+        fill_value (float): Fallback value for the unsupported center pixel.
+    """
+    image_data = np.ones((7, 7))
+    image_dq = np.zeros((7, 7), dtype=np.uint16)
+    image_dq[2:5, 2:5] = 128
+    pri_hdr, ext_hdr, _, _ = mocks.create_default_L3_headers()
+    input_dataset = Dataset([Image(image_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                                   err=image_data.copy(), dq=image_dq)])
+
+    cleaned_dataset = replace_bad_pixels(input_dataset, fill_value=fill_value,
+                                         vectorized_threshold=vectorized_threshold)
+
+    # The patch border has good neighbors; only its center needs the fallback.
+    expected = np.ones((7, 7))
+    expected[3, 3] = fill_value
+    np.testing.assert_array_equal(cleaned_dataset[0].data, expected)
+    np.testing.assert_array_equal(cleaned_dataset[0].err[0], expected)
+    np.testing.assert_array_equal(cleaned_dataset[0].dq, image_dq)
+    np.testing.assert_array_equal(input_dataset[0].data, np.ones((7, 7)))
+    np.testing.assert_array_equal(input_dataset[0].err[0], np.ones((7, 7)))
+    assert np.isfinite(map_coordinates(cleaned_dataset[0].data, np.indices((7, 7)))).all()
+
+
+def test_replace_bps_unflagged_nans():
+    """Default to zero for pre-existing NaNs when no pixels are DQ-flagged."""
+    pri_hdr, ext_hdr, _, _ = mocks.create_default_L3_headers()
+    image_data = np.ones((3, 3))
+    image_data[1, 1] = np.nan
+    input_dataset = Dataset([Image(image_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                                   err=image_data.copy())])
+
+    cleaned_dataset = replace_bad_pixels(input_dataset)
+
+    expected = np.ones((3, 3))
+    expected[1, 1] = 0
+    np.testing.assert_array_equal(cleaned_dataset[0].data, expected)
+    np.testing.assert_array_equal(cleaned_dataset[0].err[0], expected)
+    assert not cleaned_dataset.all_dq.any()
 
 
 

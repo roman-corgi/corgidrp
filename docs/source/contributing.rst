@@ -124,7 +124,7 @@ End-to-end (e2e) testing processes data as one would with real telescope data, s
 5. **Upload your L1 data to Sharepoint**: put your simulated L1 data into the "DRP E2E Test Data v2" folder. Ask Jason for access to the sharepoint. 
 7. **Open a PR.**
 
-To run the existing e2e tests locally, download the DRP E2E Test Data from sharepoint. You can also download the latest release from `Zenodo <https://zenodo.org/records/20634613>`_, although this will not have potential new L1 data added since the last release. After you have the necessary data downloaded, you can run all the necessary e2e tests by running:
+To run the existing e2e tests locally, download the DRP E2E Test Data from sharepoint. You can also download the latest release from `Zenodo <https://zenodo.org/records/22681036>`_, although this will not have potential new L1 data added since the last release. After you have the necessary data downloaded, you can run all the necessary e2e tests by running:
 
 .. code-block:: bash
 
