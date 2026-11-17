@@ -202,7 +202,7 @@ def _append_unique(default_keywords, input_keywords):
 
 def combine_frames_per_visit(input_dataset, collapse="mean", num_frames_per_group=None, num_frames_scaling=False,
                              combine_other_hdus=False, max_combined=100, pri_split_keywords=['VISITID'],
-                             ext_split_keywords=['DPAMNAME'],split_tolerances=None):
+                             ext_split_keywords=['DPAMNAME']):
     """
     Combines frames in the input dataset by calling combine_subexposures on each
     unique split of VISITID and polarization state (DPAMNAME). The combination is done 
@@ -237,8 +237,6 @@ def combine_frames_per_visit(input_dataset, collapse="mean", num_frames_per_grou
                             for splitting the dataset into subsets. The default split
                             keyword ['DPAMNAME'] is always included, and input values
                             are appended. (default: ['DPAMNAME'])
-        split_tolerances (dictorionary): Tolerances for the header keywords used in splitting.
-                                              If not provided, no tolerance is applied. (default: None)
 
     Returns:
         corgidrp.data.Dataset: dataset of combined frames. If
@@ -274,8 +272,7 @@ def combine_frames_per_visit(input_dataset, collapse="mean", num_frames_per_grou
     split_description = "/".join(split_keywords) if split_keywords else "input"
 
     # Combine each split subset independently.
-    split_datasets, _ = input_dataset.split_dataset(prihdr_keywords=pri_split_keywords, exthdr_keywords=ext_split_keywords,
-                                                    tolerances=split_tolerances)
+    split_datasets, _ = input_dataset.split_dataset(prihdr_keywords=pri_split_keywords, exthdr_keywords=ext_split_keywords)
     combined_frames = []
     any_auto_override = False
     for split_dataset in split_datasets:
