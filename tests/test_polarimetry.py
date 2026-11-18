@@ -841,9 +841,11 @@ def test_mueller_matrix_cal_ref_errors_shared_across_rolls(tmp_path, n_trials=30
         fitted[trial] = [mueller_matrix.data[idx] for idx in elements]
     empirical_ref_var = np.var(fitted, axis=0, ddof=1)
 
-    # the sample standard deviation is good to about 1/sqrt(2*n_trials), 4% here
+    # The sample standard deviation is good to about 1/sqrt(2*n_trials), 4% for 300 trials.
+    # Allow 4 sigma of that scatter, so the tolerance follows the number of trials.
+    tolerance = 4. / np.sqrt(2 * n_trials)
     sigma_ratio = np.sqrt(empirical_ref_var / reported_ref_var)
-    assert np.all(np.abs(sigma_ratio - 1.) < 0.15), \
+    assert np.all(np.abs(sigma_ratio - 1.) < tolerance), \
         f"empirical/reported reference sigma for MM elements {elements}: {np.round(sigma_ratio, 3)}"
 
 
