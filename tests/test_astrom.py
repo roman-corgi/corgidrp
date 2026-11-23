@@ -822,6 +822,10 @@ def test_match_sources_rejects_north_angle_contradicting_pa_aper(offset_frame):
     wrong_pa.pri_hdr["PA_APER"] = 50.
     with pytest.raises(ValueError, match="found no match"):
         _match(wrong_pa, sources, comparison_threshold=20)
+    just_outside = frame.copy()
+    just_outside.pri_hdr["PA_APER"] = frame.pri_hdr["PA_APER"] + 3.
+    with pytest.raises(ValueError, match="found no match"):
+        _match(just_outside, sources, comparison_threshold=20)
 
     rng = np.random.default_rng(3)
     random_sources = Table({"x": rng.uniform(100, 900, 25), "y": rng.uniform(100, 900, 25)})
@@ -883,6 +887,23 @@ def test_match_sources_header_window_covers_larger_pointing_errors(far_offset_fr
         narrow = _match(frame, sources, comparison_threshold=20, max_pointing_offset=3)
     assert narrow.meta["match_method"] == "triangle"
     assert list(narrow["RA"]) == list(matches["RA"])
+
+
+def test_median_angle_across_the_wrap():
+    """Angles on both sides of +-180 deg have a median near 180, not near 0."""
+    assert abs(abs(astrom.median_angle([179.9, -179.9, 179.8, -179.7])) - 180) < 0.3
+    assert astrom.median_angle([10., 12., 11., 50.]) == pytest.approx(11.5)
+
+
+def test_matched_north_angle_near_180_with_noise():
+    """With noisy positions at a north angle of 180 deg the pair angles straddle the wrap; the north angle stays at 180."""
+    rng = np.random.default_rng(4)
+    sky = SkyCoord(80.55 + rng.uniform(-3, 3, 8) / 3600 / np.cos(np.radians(-69.51)), -69.51 + rng.uniform(-3, 3, 8) / 3600, unit="deg")
+    exact = astrom.project_to_pixels(sky, sky[0], (512, 512), 21.8, 180.)
+    for _ in range(50):
+        noisy = exact + rng.normal(0, 0.1, exact.shape)
+        platescale, northangle = astrom.matched_platescale_and_northangle(noisy, sky)
+        assert abs(abs(northangle) - 180) < 0.5
 
 
 def test_match_method_triangle_alone_gives_the_header_match(offset_frame):
