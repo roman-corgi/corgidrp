@@ -112,6 +112,7 @@
                 "max_pointing_offset" : 10.0,
                 "northangle_tol" : 2.0,
                 "min_match_fraction" : 0.25,
+                "min_matches" : 4,
                 "match_radius" : 2.0,
                 "platescale_guess" : 21.8,
                 "platescale_tol" : 0.1,

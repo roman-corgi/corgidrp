@@ -624,6 +624,25 @@ def refine_matches(detections, predicted, match_radius):
     det_ind = np.array(det_ind, dtype=int)
     return det_ind, ind[det_ind]
 
+def median_angle(angles):
+    '''
+    Median of angles that may straddle the +-180 deg wrap.
+
+    The angles are wrapped about their circular mean before the median is taken, so that a north angle near 180 deg,
+    whose pair angles fall partly just below +180 and partly just above -180, does not give a median near 0.
+
+    Args:
+        angles (np.ndarray): Angles [deg]
+
+    Returns:
+        median (float): Median angle [deg], in (-180, 180]
+    '''
+    angles = np.radians(np.asarray(angles, dtype=float))
+    reference = np.arctan2(np.mean(np.sin(angles)), np.mean(np.cos(angles)))
+    offsets = np.arctan2(np.sin(angles - reference), np.cos(angles - reference))
+    median = reference + np.median(offsets)
+    return float(np.degrees(np.arctan2(np.sin(median), np.cos(median))))
+
 def matched_platescale_and_northangle(positions, skycoords):
     '''
     Median plate scale and north angle over all pairs of matched stars, as a check of a match.
@@ -640,7 +659,7 @@ def matched_platescale_and_northangle(positions, skycoords):
     sep_pix = np.hypot(*(positions[j] - positions[i]).T)
     platescale = np.median(skycoords[i].separation(skycoords[j]).mas / sep_pix)
     dtheta = skycoords[i].position_angle(skycoords[j]).deg - angle_between(positions[i].T, positions[j].T)
-    northangle = np.degrees(np.median(np.arctan2(np.sin(np.radians(dtheta)), np.cos(np.radians(dtheta)))))
+    northangle = median_angle(dtheta)
     return platescale, northangle
 
 def triangle_solutions(sources, brightest_field, platescale_guess, platescale_tol):
@@ -731,7 +750,8 @@ def triangle_solutions(sources, brightest_field, platescale_guess, platescale_to
         # use arctan2 to handle angle wrapping when calculating the difference between the reference field angle and the image
         dtheta1 = np.arctan2(np.sin(np.radians(rot_field[0] - rot_image[0])), np.cos(np.radians(rot_field[0] - rot_image[0])))
         dtheta2 = np.arctan2(np.sin(np.radians(rot_field[1] - rot_image[1])), np.cos(np.radians(rot_field[1] - rot_image[1])))
-        initial_northangle = np.degrees(np.mean([dtheta1, dtheta2]))
+        # circular mean, so that two angles on either side of +-180 deg do not average to about 0
+        initial_northangle = np.degrees(np.arctan2(np.sin(dtheta1) + np.sin(dtheta2), np.cos(dtheta1) + np.cos(dtheta2)))
 
         solutions.append((initial_platescale, initial_northangle, (short_star['x'], short_star['y']), short_coord))
 
@@ -745,11 +765,15 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
 
     Two methods are available. The header match predicts the catalogue positions from the header: the pointing
     RA/DEC, PA_APER as north angle and platescale_guess. The shift between these predictions and the sources is
-    found by counting matches, within max_pointing_offset of the header pointing. The triangle search matches the
-    triangle of the three brightest sources to triangles of the comparison_threshold brightest catalogue stars
-    within rad, trying candidate triangles from the best match on; it needs no pointing or PA_APER. With
-    match_method 'auto' the header match is tried first and the triangle search is used if it fails or the
-    header has no PA_APER.
+    found by counting matches, within max_pointing_offset of the header pointing. It assumes that RA/DEC falls on
+    the image centre, so any offset of the pointing from the centre, dithers included, must fit within
+    max_pointing_offset. Because the predictions use PA_APER and platescale_guess exactly, the vote finds the shift only
+    if they are close to the truth (on the mock data within about 1 deg and 2 %), well inside northangle_tol and
+    platescale_tol, which only judge the final match. The triangle search matches the triangle of the three brightest
+    sources to triangles of the comparison_threshold brightest catalogue stars within rad of RA/DEC, trying candidate
+    triangles from the best match on; it uses PA_APER only to reject candidates and works without it. With
+    match_method 'auto' the header match is tried first and the triangle search is used if it fails or the header
+    has no PA_APER.
 
     Either way the match is refined with an affine fit, and every catalogue star is matched to at most one source
     within match_radius. A match is valid if it has at least min_matches stars, matches at least the fraction
@@ -861,11 +885,12 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
         tried = {'auto': "neither the header pointing (RA/DEC, PA_APER {0}) nor the triangle search gave",
                  'header': "the header pointing (RA/DEC, PA_APER {0}) did not give",
                  'triangle': "the triangle search did not give"}[match_method].format(pa_aper)
+        angle_check = " and a north angle within {0} deg of PA_APER".format(northangle_tol) if pa_aper is not None else ""
         raise ValueError("match_sources found no match between the {0} sources and the catalogue: {1} at least {2} stars, "
                          "{3} of them among the brightest {4} sources, within {5} pixels with a plate scale within {6:.0%} of "
-                         "{7} mas/pixel and a north angle within {8} deg of PA_APER"
+                         "{7} mas/pixel{8}"
                          .format(len(sources), tried, min_matches, needed_bright, n_bright, match_radius, platescale_tol,
-                                 platescale_guess, northangle_tol))
+                                 platescale_guess, angle_check))
     match_method, det_ind, matched_skycoords = found
 
     matched_image_to_field = astropy.table.Table()
@@ -1077,7 +1102,7 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1, max_p
         dtheta = np.arctan2(np.sin(np.radians(pa_sky - pa_image)), np.cos(np.radians(pa_sky - pa_image)))
         angle_diffs[i] = np.degrees(dtheta)
 
-    north_angle = np.median(angle_diffs)
+    north_angle = median_angle(angle_diffs)
     
     return platescale, north_angle
 
@@ -1411,7 +1436,7 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
                           pa_tolerance=0.1, keywords_to_split_dataset_by=None, pointing_tolerance=0.5, fsm_tolerance=5.,
-                          match_radius=2., max_pointing_offset=10., northangle_tol=2., min_match_fraction=0.25, match_method='auto',
+                          match_radius=2., max_pointing_offset=10., northangle_tol=2., min_match_fraction=0.25, match_method='auto', min_matches=4,
                           clip_sigma=5., clip_max_iterations=10):
     """
     Perform the boresight calibration of a dataset.
@@ -1452,6 +1477,7 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         northangle_tol (float, optional): Both methods. Largest difference between the north angle of a match and PA_APER [deg] (Default: 2)
         min_match_fraction (float, optional): Both methods. Smallest fraction of the brightest 30 detected sources (or of all, if fewer)
             that must be matched to catalogue stars for a valid match (Default: 0.25)
+        min_matches (int, optional): Both methods. Smallest number of matched stars for a valid match (Default: 4)
         clip_sigma (float, optional): Distortion fit only. Star pairs whose residual exceeds clip_sigma times the robust scatter of the
             residuals are rejected and the fit is repeated; None keeps all pairs (see compute_distortion) (Default: 5)
         clip_max_iterations (int, optional): Distortion fit only. Largest number of times the pairs are selected and the distortion fit
@@ -1628,7 +1654,8 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
             found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
             matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol,
                                             match_radius=match_radius, max_pointing_offset=max_pointing_offset, northangle_tol=northangle_tol,
-                                            min_match_fraction=min_match_fraction, match_method=match_method)
+                                            min_match_fraction=min_match_fraction, match_method=match_method,
+                                            min_matches=min_matches)
         hold_matches.append(matched_sources)
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
