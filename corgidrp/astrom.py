@@ -1181,15 +1181,19 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
         input_dataset (corgidrp.data.dataset): corgidrp dataset object with images to compute the distortion from
         source_matches (list of astropy.table.Table() objects): List of length N for N frames in the input dataset. Tables must columns 'x','y','RA','DEC' as pixel locations and corresponding sky positons
         # ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference position to compute pairs with
-        position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
-                        Should be changed later to accept non-uniform errors
+        position_error (NoneType or float): If given, the uniform error [pixels] assumed for the offset between pairs of stars in both x and y;
+                        must be positive. If None, the errors of the PSF fits of measure_offset are used
         
     Returns:
         first_stars (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
         offsets (np.array): 2D array of the (delta_x, delta_y) values for each star from the first star position
-        true_offsets (np.array): 2D array of the (delta_ra, delta_dec) offsets between the matched stars in the reference field
+        true_offsets (np.array): 2D array of the (separation [mas], position angle [deg, east of north]) of the second star from the
+            first, from the matched catalogue positions
         errs (np.array): 2D array of the (x_err, y_err) error in the measured pixel positions
     '''
+    if position_error is not None and not position_error > 0:
+        raise ValueError("format_distortion_inputs: position_error must be positive or None, not {0}".format(position_error))
+
     ## Create arrays to store values in
     dxs, dys = np.array([]), np.array([])
     xerrs, yerrs = np.array([]), np.array([])
@@ -1296,8 +1300,12 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
     The pairs must determine every non-constant term of the polynomial of fitorder (see distortion_design_matrix).
     For stars spread over the field this needs at least (fitorder + 1)**2 stars in one frame, or the sum over frames
     of the number of stars minus one to reach (fitorder + 1)**2 - 1, because a pair offset does not depend on where
-    the stars of a frame are as a whole. Stars along a line or in a few columns can fall short even with more stars.
-    With exactly that many stars the fit has no residuals left to clip.
+    the stars of a frame are as a whole; frames repeated at the same pointing count once, since they place the stars
+    at the same detector positions. Stars along a line or in a few columns can fall short even with more stars.
+    This is the minimum for a fit with one solution, not for a precise one: at the minimum the fit has no residuals
+    left to clip and amplifies the position errors strongly, so use well over (fitorder + 1)**2 stars. A warning is
+    given when the stars give fewer than 2 ((fitorder + 1)**2 - 1) independent pair offsets, i.e. for one frame fewer
+    than about twice the minimum number of stars.
 
     Args:
         pos1 (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
@@ -1340,10 +1348,24 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
 
     keep = np.ones(npairs, dtype=bool)
     if not determined(keep):
-        raise ValueError("compute_distortion: the {0} star pairs determine only {1} of the {2} non-constant terms of a distortion "
-                         "of order {3}; with stars spread over the field this needs at least {4} stars in one frame, and more "
-                         "for the clipping. Use a lower fitorder or more stars."
-                         .format(npairs, np.linalg.matrix_rank(design) if npairs > 0 else 0, fitparams - 1, fitorder, fitparams))
+        rank = np.linalg.matrix_rank(design) if npairs > 0 else 0
+        if rank < fitparams - 1:
+            reason = "determine only {0} of the {1} non-constant terms".format(rank, fitparams - 1)
+        else:
+            reason = "give {0} residuals for {1} coefficients".format(2 * npairs, 2 * fitparams)
+        raise ValueError("compute_distortion: the {0} star pairs {1} of a distortion of order {2}; with stars spread over the "
+                         "field this needs at least {3} stars in one frame, and more for the clipping. Use a lower fitorder or "
+                         "more stars.".format(npairs, reason, fitorder, fitparams))
+
+    # format_distortion_inputs pairs every star of a frame with every later one, so every star but the last of each
+    # frame is the first star of some pair, and the distinct first-star positions number sum_f (N_f - 1), the
+    # independent pair offsets. With fewer than about twice as many as there are terms, the fit has the solution the
+    # rank check asks for but amplifies the position errors strongly.
+    constraining = len(np.unique(pos1.T, axis=0))
+    if constraining < 2 * (fitparams - 1):
+        warnings.warn("compute_distortion: the stars give {0} independent pair offsets for the {1} non-constant terms of a "
+                      "distortion of order {2}; with fewer than {3} the fitted map amplifies the position errors strongly. "
+                      "Use more stars or a lower fitorder.".format(constraining, fitparams - 1, fitorder, 2 * (fitparams - 1)))
 
     def fit(pairs, start):
         coeffs, _, _, message, ier = optimize.leastsq(fit_distortion_solution, start,
@@ -1360,14 +1382,24 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
         pair_residuals = np.hypot(residuals[:npairs], residuals[npairs:])
         # for 2D gaussian residuals the median of their length is 1.1774 sigma
         scatter = np.median(pair_residuals[keep]) / 1.1774
-        if not scatter > 0:
-            # an exactly determined fit leaves no residuals to judge the pairs by
+        # the residuals are in units of the pair errors, so a real fit scatters by about 1; an exactly determined fit
+        # leaves only rounding errors (about 1e-13), which give nothing to judge the pairs by
+        if scatter < 1e-6:
             break
         new_keep = pair_residuals <= clip_sigma * scatter
-        if np.array_equal(new_keep, keep) or not determined(new_keep):
+        if np.array_equal(new_keep, keep):
+            break
+        if not determined(new_keep):
+            warnings.warn("compute_distortion: the clipping stopped with {0} of {1} star pairs, because rejecting the next {2} "
+                          "would leave the fit undetermined; the kept pairs may include outliers"
+                          .format(np.sum(keep), npairs, np.sum(keep & ~new_keep)))
             break
         keep = new_keep
         distortion_coeffs = fit(keep, distortion_coeffs)
+    else:
+        if clip_sigma is not None and clip_max_iterations > 0:
+            warnings.warn("compute_distortion: the clipping reached clip_max_iterations ({0}) with {1} of {2} star pairs kept, "
+                          "while the selection was still changing".format(clip_max_iterations, np.sum(keep), npairs))
 
     if np.allclose(distortion_coeffs, initial_guess):
         warnings.warn("The distortion fit returned its initial guess; check the star pairs and their errors")
@@ -1397,7 +1429,8 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         find_distortion (boolean): Used to determine if distortion map coeffs will be computed (default: False)
         fitorder (int): The order of legendre polynomials used to fit the distortion map; the matched stars must determine it,
             which for stars spread over the field needs at least (fitorder + 1)**2 of them in one frame (see compute_distortion) (default: 3)
-        position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
+        position_error (NoneType or float): If given, the uniform error [pixels] assumed for the offset between pairs of stars in both x and y;
+            must be positive. If None, the errors of the PSF fits are used
         initial_dist_guess (np.array): An initial guess of legendre coefficients used for fitting distortion, if None will use coeffs associated with no distortion (default: None)
         pa_tolerance (float, optional): Maximum allowed difference in PA_APER (deg) to group frames together when frames_to_combine is True (Default: 0.1)
         keywords_to_split_dataset_by (list, optional): List of additional header keywords to split the input dataset by for frame combining in addition default keywords the function uses for target, roll, and dither (default: None)

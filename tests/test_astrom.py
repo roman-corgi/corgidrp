@@ -883,6 +883,7 @@ def _undistorted_pairs(stars_by_frame, platescale=21.8):
 
 # the pairs carry no distortion, so the determined fits correctly return the initial guess
 @pytest.mark.filterwarnings("ignore:The distortion fit returned its initial guess:UserWarning")
+@pytest.mark.filterwarnings("ignore:compute_distortion. the stars give:UserWarning")
 @pytest.mark.parametrize("order, stars_per_frame, determined", [
     (1, [3], False), (1, [4], True), (2, [8], False), (2, [9], True), (2, [5, 5], True), (3, [15], False), (3, [10, 7], True)])
 def test_distortion_needs_enough_stars_for_its_order(order, stars_per_frame, determined):
@@ -899,6 +900,57 @@ def test_distortion_needs_enough_stars_for_its_order(order, stars_per_frame, det
     else:
         with pytest.raises(ValueError, match="determine only"):
             astrom.compute_distortion(*pairs, platescale=21.8, northangle=0., fitorder=order)
+
+
+@pytest.mark.filterwarnings("ignore:The distortion fit returned its initial guess:UserWarning")
+def test_distortion_warns_when_few_stars_constrain_the_order():
+    """A fit with just enough stars for its order runs but warns; one with plenty of stars does not."""
+    rng = np.random.default_rng(3)
+    with pytest.warns(UserWarning, match="15 independent pair offsets for the 15 non-constant terms"):
+        astrom.compute_distortion(*_undistorted_pairs([rng.uniform(50, 970, (16, 2))]), platescale=21.8, northangle=0., fitorder=3)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        astrom.compute_distortion(*_undistorted_pairs([rng.uniform(50, 970, (40, 2))]), platescale=21.8, northangle=0., fitorder=2)
+    assert not any("independent pair offsets" in str(w.message) for w in caught)
+
+
+def test_distortion_names_too_few_residuals():
+    """Pairs that determine every term but give fewer residuals than coefficients are refused for that reason."""
+    rng = np.random.default_rng(1)
+    pairs = _undistorted_pairs([rng.uniform(50, 970, (2, 2)) for _ in range(3)])
+    with pytest.raises(ValueError, match="give 6 residuals for 8 coefficients"):
+        astrom.compute_distortion(*pairs, platescale=21.8, northangle=0., fitorder=1)
+
+
+def test_distortion_recovers_a_known_distortion():
+    """A distortion put into the star positions comes back out of compute_distortion and transform_coeff_to_map."""
+    order, n = 2, 9
+    true = np.zeros(2 * n)
+    true[[order + 1, n + 1]] = 500                       # identity: L_1(x) for x, L_1(y) for y
+    true[2 * (order + 1)] = 0.6                          # x term L_2(x)
+    true[n + 1 * (order + 1) + 1] = 500 - 0.8            # y term L_1(x) L_1(y) on top of a slightly smaller y scale
+    true[n + 2] = 0.4                                    # y term L_2(y)
+    scale = 500. ** (np.arange(order + 1)[:, None] + np.arange(order + 1)[None, :])
+    cx, cy = true[:n].reshape(order + 1, order + 1) / scale, true[n:].reshape(order + 1, order + 1) / scale
+
+    rng = np.random.default_rng(2)
+    stars = rng.uniform(30, 990, (40, 2))
+    corrected = np.column_stack([np.polynomial.legendre.legval2d(stars[:, 0] - 512, stars[:, 1] - 512, c) for c in (cx, cy)])
+    first, offsets, sky = [], [], []
+    for i in range(len(stars)):
+        for j in range(i + 1, len(stars)):
+            d = corrected[j] - corrected[i]
+            first.append(stars[i])
+            offsets.append(stars[j] - stars[i])
+            sky.append([np.hypot(*d) * 21.8, np.degrees(np.arctan2(-d[0], d[1]))])
+    first, offsets, sky = np.array(first).T, np.array(offsets).T, np.array(sky).T
+
+    coeffs, _ = astrom.compute_distortion(first, offsets, sky, np.ones_like(first), platescale=21.8, northangle=0., fitorder=order)
+    fitted_maps = astrom.transform_coeff_to_map(coeffs, order, (1024, 1024))
+    true_maps = astrom.transform_coeff_to_map(true, order, (1024, 1024))
+    assert np.max(np.abs(true_maps[0])) > 0.3
+    for fitted, expected in zip(fitted_maps, true_maps):
+        np.testing.assert_allclose(fitted, expected, atol=1e-3)
 
 
 def test_distortion_rejects_stars_along_a_line():
