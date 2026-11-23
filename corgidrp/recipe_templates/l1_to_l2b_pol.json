@@ -28,6 +28,9 @@
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC",
                 "KGain" : "AUTOMATIC, OPTIONAL"
+            },
+            "keywords" : {
+                "dataset_copy" : false
             }
         },
         {

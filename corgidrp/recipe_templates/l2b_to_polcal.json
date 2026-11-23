@@ -17,6 +17,15 @@
             "name": "divide_by_exptime"
         },
         {
+            "name": "combine_frames_per_visit",
+            "keywords": {
+                "pri_split_keywords": ["VISITID", "TARGET", "PA_APER"],
+                "ext_split_keywords": ["DPAMNAME","FSMX","FSMY"],
+                "combine_other_hdus": true,
+                "split_tolerances": {"FSMX": 4.0, "FSMY": 4.0}
+            }
+        },
+        {
             "name" : "split_image_by_polarization_state"
         },
         {

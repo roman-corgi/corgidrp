@@ -167,8 +167,9 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
         new_image.ext_hdr['DATALVL'] = "L2b"
         new_image.ext_hdr['BUNIT'] = "photoelectron"
         new_image.ext_hdr['EXPTIME'] = 1.0
-        # since simulations doesn't set FSMX/FSMY, set it to some unique value here so the pipeline can tell different dithers apart
-        new_image.ext_hdr['FSMX'] = fsm_idx
+        # since simulations doesn't set FSMX/FSMY, set it to some unique value here so the pipeline can tell different dithers apart.
+        # The values are spaced 20 mas apart, the smallest commanded CT dither step, so the recipe's FSM tolerance must stay below it.
+        new_image.ext_hdr['FSMX'] = 20. * fsm_idx
         fsm_idx += 1
         ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])
         new_image.filename = f'cgi_{new_image.pri_hdr["VISITID"]}_{ftimeutc}_l2b.fits'

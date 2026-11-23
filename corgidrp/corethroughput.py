@@ -445,7 +445,8 @@ def generate_ct_cal(
     roi_radius=3,
     cfam_version=0,
     spline_order=3,
-    combine_frames=False
+    combine_frames=False,
+    fsm_tolerance=5.
     ):
     """
     Generate the elements needed to create a core throughput calibration file.
@@ -472,6 +473,8 @@ def generate_ct_cal(
         stamps. Default 3. Use 1 for linear interpolation.
       combine_frames (boolean): Combine frames of the same FSMX/Y position, 
         pupil images are unaffected.
+      fsm_tolerance (float): Maximum gap [mas] between FSMX/FSMY values that are
+        still combined as one dither position when combine_frames is True. Default 5.
 
     Returns:
       PSF cube, data quality cube, HDU list with the CT array measurements,
@@ -490,8 +493,10 @@ def generate_ct_cal(
                 pupil_frames.append(frame)
             else:
                 img_frames.append(frame)
-        # split the non-pupil frames by FSM dither position
-        dither_datasets, _ = corgidrp.data.Dataset(img_frames).split_dataset(exthdr_keywords=["FSMX", "FSMY"])
+        # split the non-pupil frames by FSM dither position, within a tolerance because the
+        # reported FSM position scatters from frame to frame
+        dither_datasets, _ = corgidrp.data.Dataset(img_frames).split_dataset(
+            exthdr_keywords=["FSMX", "FSMY"], tolerances={"FSMX": fsm_tolerance, "FSMY": fsm_tolerance})
         # median combine the frames in each dither group
         combined_img_frames = []
         # add the pupil dataset back into the datasets split by dither
