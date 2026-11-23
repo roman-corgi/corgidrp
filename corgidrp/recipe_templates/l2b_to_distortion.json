@@ -12,7 +12,16 @@
             "keywords" : {
                 "find_threshold" : 25,
                 "find_distortion" : true,
-                "position_error" : 0.5
+                "position_error" : 0.5,
+                "match_method" : "auto",
+                "max_pointing_offset" : 10.0,
+                "northangle_tol" : 2.0,
+                "min_match_fraction" : 0.25,
+                "match_radius" : 2.0,
+                "platescale_guess" : 21.8,
+                "platescale_tol" : 0.1,
+                "comparison_threshold" : 50,
+                "search_rad" : 0.012
             }
         },
         {
