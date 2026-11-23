@@ -108,6 +108,7 @@
             "keywords" : {
                 "frames_to_combine" : true,
                 "find_threshold" : 30,
+                "fit_pair_offsets" : false,
                 "match_method" : "auto",
                 "max_pointing_offset" : 10.0,
                 "northangle_tol" : 2.0,
