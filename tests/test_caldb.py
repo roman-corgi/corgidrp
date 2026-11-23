@@ -3,7 +3,9 @@ import glob
 import numpy as np
 import pytest
 import shutil
+import warnings
 from astropy.io import fits
+from astropy.time import Time, TimeDelta
 import corgidrp
 import corgidrp.caldb as caldb
 import corgidrp.data as data
@@ -51,6 +53,17 @@ def test_caldb_create_default():
     assert(testcaldb.filepath == testcaldb_filepath)
     assert(os.path.exists(testcaldb_filepath))
     assert(len(testcaldb._db.index) == 0)
+
+    # CSV readers infer an entirely empty text column as float64.
+    with open(testcaldb_filepath, "w") as calib_csv:
+        calib_csv.write("Type,OPMODE,MJD,NAXIS1\nDark,,,\n")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=".*fill value.*")
+        testcaldb.load()
+    assert testcaldb._db.loc[0, "Type"] == "Dark"
+    assert testcaldb._db.loc[0, "OPMODE"] == ""
+    assert np.isnan(testcaldb._db.loc[0, "MJD"])
+    assert testcaldb._db.loc[0, "NAXIS1"] == -1
 
     # remove db and restore path
     os.remove(testcaldb_filepath)
@@ -295,6 +308,56 @@ def test_default_calibs():
     shutil.rmtree(temp_dir)
     shutil.copy2(os.path.join(corgidrp.config_folder, "temp_caldb.csv"), corgidrp.caldb_filepath)
     os.remove(os.path.join(corgidrp.config_folder, "temp_caldb.csv"))
+
+def test_default_calibration_dates(tmp_path, monkeypatch):
+    """Check that generated default calibrations have the expected dates.
+
+    Args:
+        tmp_path (pathlib.Path): Scratch directory for default calibrations.
+        monkeypatch (pytest.MonkeyPatch): Redirect calibration database paths.
+    """
+    expected_starts = {
+        "DetectorParams_2023-11-01T00.00.00.000.fits": "2023-11-01T00:00:00.000",
+        "FpamFsamCal_2024-02-10T00.00.00.000.fits": "2024-02-10T00:00:00.000",
+        "SpecFilterOffset_2025-12-10T00.00.00.000.fits": "2025-12-10T00:00:00.000",
+        "cgi_0200001001001001001_20240210t0000000_dpm_cal.fits": "2024-02-10T00:00:00.000",
+        "cgi_0200001001001001001_20240211t0000000_dpm_cal.fits": "2024-02-11T00:00:00.000",
+        "cgi_0000000000000000000_20260101t0000000_flt_cal.fits": "2026-01-01T00:00:00.000",
+        "cgi_0000000000000000000_20260101t0000000_nln_cal.fits": "2026-01-01T00:00:00.000",
+        "cgi_0000000000000000000_20260101t0000001_krn_cal.fits": "2026-01-01T00:00:00.100",
+        "cgi_0000000000000000000_20260101t0000002_dnm_cal.fits": "2026-01-01T00:00:00.200",
+        "cgi_0000000000000000000_20260101t0000003_flt_cal.fits": "2026-01-01T00:00:00.300",
+        "cgi_0000000000000000000_20260101t0000004_bpm_cal.fits": "2026-01-01T00:00:00.400",
+        "cgi_0000000000000000000_20260101t0000005_flt_cal.fits": "2026-01-01T00:00:00.500",
+        "cgi_0000000000000000000_20260101t0000006_flt_cal.fits": "2026-01-01T00:00:00.600",
+        "cgi_0000000000000000000_20260101t0000007_flt_cal.fits": "2026-01-01T00:00:00.700",
+        "cgi_0000000000000000000_20260101t0000008_flt_cal.fits": "2026-01-01T00:00:00.800",
+        "cgi_0000000000000000000_20260101t0000009_flt_cal.fits": "2026-01-01T00:00:00.900",
+    }
+    default_dir = tmp_path / "default_calibs"
+    default_dir.mkdir()
+    monkeypatch.setattr(corgidrp, "config_folder", str(tmp_path))
+    monkeypatch.setattr(corgidrp, "default_cal_dir", str(default_dir))
+    monkeypatch.setattr(corgidrp, "caldb_filepath", str(tmp_path / "caldb.csv"))
+    generation_start = Time.now()
+    caldb.initialize()
+    generation_end = Time.now()
+
+    for filename, start_isot in expected_starts.items():
+        expected_start = Time(start_isot, scale="utc")
+        expected_end = expected_start + TimeDelta(60, format="sec")
+        with fits.open(default_dir / filename) as hdulist:
+            header = hdulist[1].header
+            for keyword in ("SCTSRT", "DATETIME", "FTIMEUTC"):
+                assert header[keyword] == expected_start.isot
+            assert header["SCTEND"] == expected_end.isot
+            assert header["MJDSRT"] == pytest.approx(expected_start.mjd, rel=0, abs=1e-10)
+            assert header["MJDEND"] == pytest.approx(expected_end.mjd, rel=0, abs=1e-10)
+            for saved_time in (hdulist[0].header["FILETIME"], header["DRPCTIME"]):
+                creation_time = Time(saved_time)
+                assert (creation_time - generation_start).sec >= -1
+                assert (creation_time - generation_end).sec <= 1
+
 
 def test_dispersion_model_dpam_match():
     """

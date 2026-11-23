@@ -87,6 +87,7 @@ tests/e2e_tests/pc_sim_test_data/*.json
 *.FITS
 *.fits
 
+
 # Output figures
 figures/
 tests/figures/

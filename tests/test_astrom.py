@@ -1,5 +1,6 @@
 import os
 import pickle
+import warnings
 import numpy as np
 import pytest
 import corgidrp
@@ -936,6 +937,46 @@ def test_match_sources_header_window_covers_larger_pointing_errors(far_offset_fr
         narrow = _match(frame, sources, comparison_threshold=20, max_pointing_offset=3)
     assert narrow.meta["match_method"] == "triangle"
     assert list(narrow["RA"]) == list(matches["RA"])
+
+
+def test_match_method_triangle_alone_gives_the_header_match(offset_frame):
+    """match_method='triangle' skips the header match, without the fallback warning, and finds the same stars."""
+    frame, sources = offset_frame
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        matches = _match(frame, sources, comparison_threshold=20, match_method="triangle")
+    assert not any("triangle search was used instead" in str(w.message) for w in caught)
+    assert matches.meta["match_method"] == "triangle"
+    assert set(matches["RA"]) == set(_match(frame, sources)["RA"])
+
+
+def test_match_method_header_does_not_fall_back(offset_frame, far_offset_frame):
+    """match_method='header' raises where the header match fails, instead of falling back to the triangle search."""
+    frame, sources = offset_frame
+    no_pa = frame.copy()
+    del no_pa.pri_hdr["PA_APER"]
+    with pytest.raises(ValueError, match="needs PA_APER"):
+        _match(no_pa, sources, match_method="header")
+    far_frame, far_sources = far_offset_frame
+    with pytest.raises(ValueError, match="found no match .* the header pointing"):
+        _match(far_frame, far_sources, max_pointing_offset=3, match_method="header")
+    with pytest.raises(ValueError, match="found no match .* the header pointing"):
+        astrom.boresight_calibration(data.Dataset([far_frame.copy()]), field_path=astrom.default_field_path, find_threshold=25,
+                                     max_pointing_offset=3, match_method="header")
+    with pytest.raises(ValueError, match="match_method must be"):
+        _match(frame, sources, match_method="old")
+
+
+def test_header_match_catalogue_does_not_depend_on_search_rad(far_offset_frame):
+    """The header match takes its catalogue radius from max_pointing_offset, so a search_rad smaller than the field is enough.
+
+    The stars are 7" from the header pointing and reach about 18" from it, beyond a search_rad of 0.003 deg (11").
+    """
+    frame, sources = far_offset_frame
+    wide = _match(frame, sources)
+    narrow = astrom.match_sources(frame.copy(), sources, astrom.default_field_path, rad=0.003, match_method="header")
+    assert narrow.meta["match_method"] == "header"
+    assert set(narrow["RA"]) == set(wide["RA"])
 
 
 def test_platescale_pairs_reproducible(monkeypatch):

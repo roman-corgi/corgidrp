@@ -567,10 +567,13 @@ def find_common_shift(detections, predicted, max_shift, radius):
     Returns:
         shift (np.ndarray): (dx, dy) to add to the predicted positions [pixels], or None if no candidate was found
     '''
+    # every detection minus every predicted position is a candidate shift; the true shift lines up all detections of
+    # catalogue stars at once, any other shift lines up only a few of them by chance
     offsets = (detections[:, None, :] - predicted[None, :, :]).reshape(-1, 2)
     offsets = offsets[np.hypot(offsets[:, 0], offsets[:, 1]) <= max_shift]
     if len(offsets) == 0:
         return None
+    # score a candidate by the number of detections that have a predicted position within radius after the shift
     tree = cKDTree(predicted)
     scores = [np.sum(np.isfinite(tree.query(detections - offset, distance_upper_bound=radius)[0])) for offset in offsets]
     return offsets[np.argmax(scores)]
@@ -595,6 +598,12 @@ def refine_matches(detections, predicted, match_radius):
     empty = np.array([], dtype=int), np.array([], dtype=int)
     if len(detections) < 3 or len(predicted) < 3:
         return empty
+    # Three fixed passes with a shrinking radius. Each pass pairs every detection with the nearest transformed
+    # predicted position within the radius and fits, by linear least squares, the affine map from predicted to
+    # detected positions, detected = [x_pred, y_pred, 1] @ affine with a 3 x 2 matrix: scale in x and y, rotation,
+    # shear and shift. The wide first radius tolerates the errors of the starting prediction; the narrower later
+    # radii drop the wrong pairs it let in. This needs most true pairs to start within the first radius, which the
+    # shift vote or the triangle match provides; a match that locks onto wrong pairs fails the checks of the caller.
     transformed = predicted
     for radius in (4 * match_radius, 2 * match_radius, match_radius):
         dist, ind = cKDTree(transformed).query(detections, distance_upper_bound=radius)
@@ -605,6 +614,7 @@ def refine_matches(detections, predicted, match_radius):
         affine = np.linalg.lstsq(design, detections[matched], rcond=None)[0]
         transformed = np.column_stack([predicted, np.ones(len(predicted))]) @ affine
 
+    # keep only the closest detection of each catalogue star, so that repeated detections of a bright star are dropped
     dist, ind = cKDTree(transformed).query(detections, distance_upper_bound=match_radius)
     det_ind = []
     for i in np.where(np.isfinite(dist))[0]:
@@ -636,7 +646,8 @@ def matched_platescale_and_northangle(positions, skycoords):
 def triangle_solutions(sources, brightest_field, platescale_guess, platescale_tol):
     '''
     Plate scale, north angle and anchor of the catalogue triangles that match the triangle of the three
-    brightest sources, best match first.
+    brightest sources, best match first. Only triangles whose side lengths imply a plate scale within
+    platescale_tol of platescale_guess are returned.
 
     Args:
         sources (astropy.table.Table): Astropy table with columns 'x', 'y', brightest source first
@@ -644,11 +655,12 @@ def triangle_solutions(sources, brightest_field, platescale_guess, platescale_to
         platescale_guess (float): An initial guess for the platescale value [mas/ pixel]
         platescale_tol (float): Fractional tolerance on platescale_guess
 
-    Yields:
-        platescale (float): Plate scale implied by the triangle [mas/ pixel]
-        northangle (float): North angle implied by the triangle [deg]
-        anchor_pix (tuple): (x, y) of the source that anchors the triangle [pixels]
-        anchor_coord (astropy.coordinates.SkyCoord): Sky position of the matching catalogue star
+    Returns:
+        solutions (list of tuple): One tuple per catalogue triangle, best match first, of
+            platescale (float, plate scale implied by the triangle [mas/ pixel]),
+            northangle (float, north angle implied by the triangle [deg]),
+            anchor_pix (tuple, (x, y) of the source that anchors the triangle [pixels]) and
+            anchor_coord (astropy.coordinates.SkyCoord, sky position of the matching catalogue star)
     '''
     # gather the pixel locations for the (3) brightest sources in the image
     source1, source2, source3 = sources[0], sources[1], sources[2]
@@ -693,9 +705,10 @@ def triangle_solutions(sources, brightest_field, platescale_guess, platescale_to
 
         lstsqs[i] = (a - ap)**2 + (b - bp)**2 + (c - cp)**2
 
+    solutions = []
     for best_ind in np.argsort(lstsqs):
         if not np.isfinite(lstsqs[best_ind]):
-            return
+            break
         # keep track of which best fit skycoord is the farthest from the other two
         j, k, l = combos[best_ind]
         coord1, coord2, coord3 = skycoords[j], skycoords[k], skycoords[l]
@@ -720,40 +733,53 @@ def triangle_solutions(sources, brightest_field, platescale_guess, platescale_to
         dtheta2 = np.arctan2(np.sin(np.radians(rot_field[1] - rot_image[1])), np.cos(np.radians(rot_field[1] - rot_image[1])))
         initial_northangle = np.degrees(np.mean([dtheta1, dtheta2]))
 
-        yield initial_platescale, initial_northangle, (short_star['x'], short_star['y']), short_coord
+        solutions.append((initial_platescale, initial_northangle, (short_star['x'], short_star['y']), short_coord))
+
+    return solutions
 
 def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012, platescale_guess=21.8, platescale_tol=0.1,
-                  match_radius=2., max_pointing_offset=10., northangle_tol=2., min_matches=4, min_match_fraction=0.25):
+                  match_radius=2., max_pointing_offset=10., northangle_tol=2., min_matches=4, min_match_fraction=0.25,
+                  match_method='auto'):
     '''
     Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
-    The catalogue positions are first predicted from the header: the pointing RA/DEC, PA_APER as north angle and
-    platescale_guess. The shift between these predictions and the sources is found by counting matches, within
-    max_pointing_offset of the header pointing. If this does not give a valid match, or the header has no
-    PA_APER, the triangle of the three brightest sources is matched to the catalogue instead, trying candidate
-    triangles from the best match on. Either way the match is refined with an affine fit, and every catalogue
-    star is matched to at most one source within match_radius. A match is valid if it has at least min_matches
-    stars, matches at least the fraction min_match_fraction of the brightest 30 sources (or of all sources, if
-    there are fewer), and has a plate scale within platescale_tol of platescale_guess and a north angle within
-    northangle_tol of PA_APER. The fraction matters when there are many sources: some shift always lines up a
-    few of them with catalogue stars by chance, and the affine refinement pulls these within match_radius, so a
-    number of stars alone does not reject such a match. It is taken of the brightest sources because the faintest
-    detections of a long source list are often noise.
+    Two methods are available. The header match predicts the catalogue positions from the header: the pointing
+    RA/DEC, PA_APER as north angle and platescale_guess. The shift between these predictions and the sources is
+    found by counting matches, within max_pointing_offset of the header pointing. The triangle search matches the
+    triangle of the three brightest sources to triangles of the comparison_threshold brightest catalogue stars
+    within rad, trying candidate triangles from the best match on; it needs no pointing or PA_APER. With
+    match_method 'auto' the header match is tried first and the triangle search is used if it fails or the
+    header has no PA_APER.
+
+    Either way the match is refined with an affine fit, and every catalogue star is matched to at most one source
+    within match_radius. A match is valid if it has at least min_matches stars, matches at least the fraction
+    min_match_fraction of the brightest 30 sources (or of all sources, if there are fewer), and has a plate scale
+    within platescale_tol of platescale_guess and a north angle within northangle_tol of PA_APER (if the header
+    has PA_APER). The fraction matters when there are many sources: some shift always lines up a few of them with
+    catalogue stars by chance, and the affine refinement pulls these within match_radius, so a number of stars
+    alone does not reject such a match. It is taken of the brightest sources because the faintest detections of a
+    long source list are often noise.
 
     Args:
         image (corgidrp.data.Image): Image data as a corgidrp Image object
         sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations of sources to match, brightest first
         field_path (str): Full path to the reference catalogue (see read_field_catalog)
-        comparison_threshold (int): How many stars in the field to consider for the triangle match
-        rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
-        platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
-        platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
-        match_radius (float): Largest distance between a source and the matched catalogue position (default: 2 [pixels])
-        max_pointing_offset (float): Largest offset of the stars from their positions predicted by the header (default: 10 [arcsec]);
-            rad must cover the illuminated field plus this offset
-        northangle_tol (float): Largest difference between the north angle of a match and PA_APER (default: 2 [deg])
-        min_matches (int): Smallest number of matched stars for a valid match (default: 4)
-        min_match_fraction (float): Smallest fraction of the brightest 30 sources that must be matched for a valid match (default: 0.25)
+        match_method (str): 'auto' (header match, then the triangle search if it fails), 'header' (header match only)
+            or 'triangle' (triangle search only) (default: 'auto')
+        max_pointing_offset (float): Header match only. Largest offset of the stars from their positions predicted by the header
+            (default: 10 [arcsec]). It also sets the catalogue radius of the header match, the distance from the reference pixel to
+            the farthest detector corner plus this offset, so rad does not need to cover it
+        comparison_threshold (int): Triangle search only. How many of the brightest catalogue stars within rad form the triangles (default: 50)
+        rad (float): Triangle search only. The radius [deg] around the header pointing of the catalogue stars it uses (default: 0.012)
+        platescale_guess (float): Both methods. An initial guess for the platescale value (default: 21.8 [mas/ pixel])
+        platescale_tol (float): Both methods. Largest fractional difference between the plate scale of a match (and, for the triangle
+            search, of a candidate triangle) and platescale_guess (default: 0.1)
+        match_radius (float): Both methods. Largest distance between a source and the matched catalogue position (default: 2 [pixels])
+        northangle_tol (float): Both methods. Largest difference between the north angle of a match (and, for the triangle search, of a
+            candidate triangle) and PA_APER; not applied if the header has no PA_APER (default: 2 [deg])
+        min_matches (int): Both methods. Smallest number of matched stars for a valid match (default: 4)
+        min_match_fraction (float): Both methods. Smallest fraction of the brightest 30 sources (or of all, if fewer) that must be
+            matched for a valid match (default: 0.25)
 
     Returns:
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations of the matched sources
@@ -761,28 +787,30 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
             were not propagated, and meta['match_method'] is 'header' or 'triangle'
 
     '''
+    if match_method not in ('auto', 'header', 'triangle'):
+        raise ValueError("match_method must be 'auto', 'header' or 'triangle', not {0!r}".format(match_method))
+    pa_aper = image.pri_hdr.get('PA_APER')
+    if match_method == 'header' and pa_aper is None:
+        raise ValueError("match_sources: match_method 'header' needs PA_APER in the primary header")
+
     # load the reference catalogue (checks for the columns RA, DEC and VMAG) and move the whole
     # catalogue to the time of observation, so that stars near the edge of the subfield are cut
     # at their current positions
     field = catalog_at_epoch(read_field_catalog(field_path), image.ext_hdr.get('MJDSRT'))
-
-    # define a search field around the commanded pointing
     target = SkyCoord(ra=image.pri_hdr['RA'], dec=image.pri_hdr['DEC'], unit='deg')
     field_skycoords = SkyCoord(ra=field['RA'], dec=field['DEC'], unit='deg')
-    subfield = field[field_skycoords.separation(target).deg <= rad]
-    subfield_skycoords = SkyCoord(ra=subfield['RA'], dec=subfield['DEC'], unit='deg')
+    field_separation = field_skycoords.separation(target).deg
 
     detections = np.array([sources['x'], sources['y']], dtype=float).T
-    pa_aper = image.pri_hdr.get('PA_APER')
 
     # sources are sorted brightest first; the fraction is counted among the brightest of them
     n_bright = min(len(sources), 30)
     needed_bright = int(np.ceil(min_match_fraction * n_bright))
 
-    def valid(det_ind, pred_ind):
+    def valid(det_ind, pred_ind, skycoords):
         if len(det_ind) < min_matches or np.sum(det_ind < n_bright) < needed_bright:
             return False
-        platescale, northangle = matched_platescale_and_northangle(detections[det_ind], subfield_skycoords[pred_ind])
+        platescale, northangle = matched_platescale_and_northangle(detections[det_ind], skycoords[pred_ind])
         if abs(platescale / platescale_guess - 1) > platescale_tol:
             return False
         if pa_aper is not None:
@@ -791,18 +819,27 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
                 return False
         return True
 
-    match_method = None
-    if pa_aper is not None:
-        crpix = (np.shape(image.data)[1] // 2, np.shape(image.data)[0] // 2)
-        predicted = project_to_pixels(subfield_skycoords, target, crpix, platescale_guess, pa_aper)
-        shift = find_common_shift(detections, predicted, max_shift=max_pointing_offset * 1000 / platescale_guess,
-                                  radius=2 * match_radius)
+    found = None
+    if match_method in ('auto', 'header') and pa_aper is not None:
+        ny, nx = np.shape(image.data)
+        crpix = (nx // 2, ny // 2)
+        # a star on the detector is at most the distance to the farthest pixel corner plus the pointing error from
+        # the header pointing; both are bounds in pixels, and the true plate scale can be up to (1 + platescale_tol)
+        # times the guess
+        corner_px = max(np.hypot(cx - crpix[0], cy - crpix[1]) for cx in (-0.5, nx - 0.5) for cy in (-0.5, ny - 0.5))
+        max_shift_px = max_pointing_offset * 1000 / platescale_guess
+        header_rad = (corner_px + max_shift_px) * platescale_guess * (1 + platescale_tol) / 3.6e6
+        header_skycoords = field_skycoords[field_separation <= header_rad]
+        predicted = project_to_pixels(header_skycoords, target, crpix, platescale_guess, pa_aper)
+        shift = find_common_shift(detections, predicted, max_shift=max_shift_px, radius=2 * match_radius)
         if shift is not None:
             det_ind, pred_ind = refine_matches(detections, predicted + shift, match_radius)
-            if valid(det_ind, pred_ind):
-                match_method = 'header'
+            if valid(det_ind, pred_ind, header_skycoords):
+                found = ('header', det_ind, header_skycoords[pred_ind])
 
-    if match_method is None and len(sources) >= 3:
+    if found is None and match_method in ('auto', 'triangle') and len(sources) >= 3:
+        subfield = field[field_separation <= rad]
+        subfield_skycoords = SkyCoord(ra=subfield['RA'], dec=subfield['DEC'], unit='deg')
         bright_order_subfield = subfield.copy()
         bright_order_subfield.sort(keys='VMAG')
         brightest_field = bright_order_subfield[:comparison_threshold]
@@ -813,24 +850,29 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
                     continue
             predicted = project_to_pixels(subfield_skycoords, anchor_coord, anchor_pix, platescale, northangle)
             det_ind, pred_ind = refine_matches(detections, predicted, match_radius)
-            if valid(det_ind, pred_ind):
-                match_method = 'triangle'
-                warnings.warn("match_sources: the stars could not be matched from the header pointing and PA_APER, "
-                              "the triangle search was used instead")
+            if valid(det_ind, pred_ind, subfield_skycoords):
+                found = ('triangle', det_ind, subfield_skycoords[pred_ind])
+                if match_method == 'auto':
+                    warnings.warn("match_sources: the stars could not be matched from the header pointing and PA_APER, "
+                                  "the triangle search was used instead")
                 break
 
-    if match_method is None:
-        raise ValueError("match_sources found no match between the {0} sources and the catalogue: neither the header pointing "
-                         "(RA/DEC, PA_APER {1}) nor the triangle search gave at least {2} stars, {3} of them among the brightest {4} sources, within {5} pixels "
-                         "with a plate scale within {6:.0%} of {7} mas/pixel and a north angle within {8} deg of PA_APER"
-                         .format(len(sources), pa_aper, min_matches, needed_bright, n_bright, match_radius, platescale_tol,
+    if found is None:
+        tried = {'auto': "neither the header pointing (RA/DEC, PA_APER {0}) nor the triangle search gave",
+                 'header': "the header pointing (RA/DEC, PA_APER {0}) did not give",
+                 'triangle': "the triangle search did not give"}[match_method].format(pa_aper)
+        raise ValueError("match_sources found no match between the {0} sources and the catalogue: {1} at least {2} stars, "
+                         "{3} of them among the brightest {4} sources, within {5} pixels with a plate scale within {6:.0%} of "
+                         "{7} mas/pixel and a north angle within {8} deg of PA_APER"
+                         .format(len(sources), tried, min_matches, needed_bright, n_bright, match_radius, platescale_tol,
                                  platescale_guess, northangle_tol))
+    match_method, det_ind, matched_skycoords = found
 
     matched_image_to_field = astropy.table.Table()
     matched_image_to_field['x'] = np.asarray(sources['x'])[det_ind]
     matched_image_to_field['y'] = np.asarray(sources['y'])[det_ind]
-    matched_image_to_field['RA'] = subfield_skycoords[pred_ind].ra.value
-    matched_image_to_field['DEC'] = subfield_skycoords[pred_ind].dec.value
+    matched_image_to_field['RA'] = matched_skycoords.ra.value
+    matched_image_to_field['DEC'] = matched_skycoords.dec.value
     matched_image_to_field.meta['propagated_to_mjd'] = field.meta['propagated_to_mjd']
     matched_image_to_field.meta['match_method'] = match_method
 
@@ -1273,7 +1315,7 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
                           comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
                           pa_tolerance=0.1, keywords_to_split_dataset_by=None, pointing_tolerance=0.5, fsm_tolerance=5.,
-                          match_radius=2., max_pointing_offset=10., northangle_tol=2., min_match_fraction=0.25):
+                          match_radius=2., max_pointing_offset=10., northangle_tol=2., min_match_fraction=0.25, match_method='auto'):
     """
     Perform the boresight calibration of a dataset.
     
@@ -1284,10 +1326,6 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         find_threshold (int): Number of sources to find, brightest first; about 30 covers the stars of the LMC field without adding noise detections (default 30)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
-        comparison_threshold (int): How many stars in the field to consider for the triangle match, which is only used if the match from the header pointing and PA_APER fails (default: 50)
-        search_rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to; it only needs to cover the illuminated field plus max_pointing_offset
-        platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
-        platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
         center_radius (float): Percent of the image to compute plate scale and north angle from, centered around the image center (default: 0.9 -- ie: 90% of the image is used)
         frames_to_combine (boolean or int): If True or 1, median combine all frames of the same target and instrument configuration into a singular frame.
             If it is an integer value N > 1, the dataset is split into sequences of N frames to be median combined regardless of header keywords. (default: False)
@@ -1299,10 +1337,22 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
         keywords_to_split_dataset_by (list, optional): List of additional header keywords to split the input dataset by for frame combining in addition default keywords the function uses for target, roll, and dither (default: None)
         pointing_tolerance (float, optional): Maximum gap [arcsec on the sky] between RA_APER/DEC_APER values that are still grouped together when frames_to_combine is True; these keywords scatter with telemetry noise (Default: 0.5)
         fsm_tolerance (float, optional): Maximum gap [mas] between FSMX/FSMY values that are still grouped together when frames_to_combine is True (Default: 5)
-        match_radius (float, optional): Largest distance between a detected source and the matched catalogue star [pixels] (Default: 2)
-        max_pointing_offset (float, optional): Largest offset of the stars from their positions predicted by the header pointing [arcsec]; search_rad must cover the illuminated field plus this offset (Default: 10)
-        northangle_tol (float, optional): Largest difference between the north angle of a match and PA_APER [deg] (Default: 2)
-        min_match_fraction (float, optional): Smallest fraction of the brightest 30 detected sources that must be matched to catalogue stars for a valid match (Default: 0.25)
+        match_method (str, optional): How the sources are matched to the catalogue (see match_sources): 'auto' (the header pointing and
+            PA_APER, then the triangle search if that fails), 'header' (header only) or 'triangle' (triangle search only); not used if
+            field_matches is given (Default: 'auto')
+        max_pointing_offset (float, optional): Header match only. Largest offset of the stars from their positions predicted by the header
+            pointing [arcsec]; it also sets the catalogue radius of the header match, so search_rad does not need to cover it (Default: 10)
+        comparison_threshold (int, optional): Triangle search only. How many of the brightest catalogue stars within search_rad form the
+            triangles (Default: 50)
+        search_rad (float, optional): Triangle search only. The radius [deg] around the header pointing of the catalogue stars it uses
+            (Default: 0.012)
+        platescale_guess (float, optional): Both methods. An initial guess for the platescale value [mas/ pixel] (Default: 21.8)
+        platescale_tol (float, optional): Both methods. Largest fractional difference between the plate scale of a match and
+            platescale_guess (Default: 0.1)
+        match_radius (float, optional): Both methods. Largest distance between a detected source and the matched catalogue star [pixels] (Default: 2)
+        northangle_tol (float, optional): Both methods. Largest difference between the north angle of a match and PA_APER [deg] (Default: 2)
+        min_match_fraction (float, optional): Both methods. Smallest fraction of the brightest 30 detected sources (or of all, if fewer)
+            that must be matched to catalogue stars for a valid match (Default: 0.25)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -1475,7 +1525,7 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
             found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
             matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol,
                                             match_radius=match_radius, max_pointing_offset=max_pointing_offset, northangle_tol=northangle_tol,
-                                            min_match_fraction=min_match_fraction)
+                                            min_match_fraction=min_match_fraction, match_method=match_method)
         hold_matches.append(matched_sources)
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
