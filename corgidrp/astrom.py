@@ -1275,9 +1275,16 @@ def distortion_design_matrix(pos1, meas_offset, fitorder):
     '''
     pos1 = np.asarray(pos1, dtype=float) - 512.
     pos2 = pos1 + np.asarray(meas_offset, dtype=float)
+    # The corrected x of a star is sum_k c_k * term_k(x, y), and the fit compares the corrected offset of the two stars
+    # of a pair, sum_k c_k * (term_k(star 2) - term_k(star 1)). Each pair is thus one linear equation in the c_k, whose
+    # factors are the changes of the terms between its two stars; one row per pair, one column per term. The corrected
+    # y uses the same terms with its own coefficients, so the same matrix decides both.
+    # legvander2d evaluates every term L_i(x) * L_j(y) at once, with column i * (fitorder + 1) + j, the order in which
+    # fit_distortion_solution reshapes the coefficients; the division matches its 500**(i + j) scaling.
     total_orders = (np.arange(fitorder + 1)[:, None] + np.arange(fitorder + 1)[None, :]).ravel()
     scale = 500. ** total_orders
     terms = [np.polynomial.legendre.legvander2d(pos[0], pos[1], [fitorder, fitorder]) / scale for pos in (pos1, pos2)]
+    # column 0 is the constant term L_0 * L_0 = 1, whose change is zero for every pair, so it is dropped
     return (terms[1] - terms[0])[:, 1:]
 
 
@@ -1323,7 +1330,12 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
     design = distortion_design_matrix(pos1, meas_offset, fitorder)
 
     def determined(pairs):
-        # leastsq also needs at least as many residuals (two per pair) as coefficients
+        # The rank of the design matrix is the number of independent equations the pairs give. Pairs add no
+        # independent rows beyond (number of stars - 1) per frame, because the row of A->C is the row of A->B plus
+        # that of B->C, and stars in a degenerate layout (on a line, in a few columns) give even fewer, because
+        # there some terms change between stars exactly like a combination of others. Full rank, one less than the
+        # number of terms since the constant is never determined, means every other coefficient has one best value.
+        # leastsq also needs at least as many residuals (two per pair) as coefficients.
         return 2 * np.sum(pairs) >= 2 * fitparams and np.linalg.matrix_rank(design[pairs]) == fitparams - 1
 
     keep = np.ones(npairs, dtype=bool)
