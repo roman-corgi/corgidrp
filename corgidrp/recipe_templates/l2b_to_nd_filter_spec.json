@@ -18,8 +18,7 @@
         },
         "keywords" : {
           "subtract_no_offset_frames": false,
-          "additional_frame_sep_extkeys": ["FSMX","FSMY"],
-		  "tolerance": {"FSMX": 5, "FSMY": 5}
+          "additional_frame_sep_extkeys": ["FSMX","FSMY"]
         }
       },
       {
@@ -34,8 +33,7 @@
       {
         "name": "create_nd_filter_cal_spec",
         "keywords": {
-          "outputdir": "AUTOMATIC",
-		  "tolerance": {"FSMX": 5, "FSMY": 5}
+          "outputdir": "AUTOMATIC"
         }
       },
       {

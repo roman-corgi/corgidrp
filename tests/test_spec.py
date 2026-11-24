@@ -510,17 +510,34 @@ def test_determine_zeropoint():
             )
             psf_images.append(image_copy)
 
-    # Load the filter-to-filter image offsets to correct for the location of the narrowband centroid
-    # with respect to the broadband filter.
-    (xoff_nb, yoff_nb) = (steps.read_cent_wave('3D')[2], steps.read_cent_wave('3D')[3])
-    (xoff_bb, yoff_bb) = (steps.read_cent_wave('3')[2], steps.read_cent_wave('3')[3])
-
     #test it with optional initial guess and with three satspot frames
     spec_filter_offset = SpecFilterOffset({})
     input_dataset = Dataset(psf_images)
     dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset, xcent_guess = 40., ycent_guess = 32.)
-
     assert len(dataset_guess) < len(input_dataset)
+    
+    #we want to test the tolerance against a FSM jitter of 5 mas
+    fsm_offset_x = np.random.uniform(-2, 2, len(psf_images))
+    fsm_offset_y = np.random.uniform(-2, 2, len(psf_images))
+    fsmx = ext_hdr['FSMX'] + fsm_offset_x
+    fsmy = ext_hdr['FSMY'] + fsm_offset_y
+    
+    psf_images2 =[]
+    for i, frame in enumerate(psf_images):
+        frame.ext_hdr['FSMX'] = fsmx[i]
+        frame.ext_hdr['FSMY'] = fsmy[i]
+        psf_images2.append(frame)
+
+    input_dataset2 = Dataset(psf_images2)
+    dataset_guess2 = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset, additional_frame_sep_extkeys=["FSMX", "FSMY"], xcent_guess = 40., ycent_guess = 32.)
+    assert len(dataset_guess2) == len(dataset_guess)    
+    
+    
+    # Load the filter-to-filter image offsets to correct for the location of the narrowband centroid
+    # with respect to the broadband filter.
+    (xoff_nb, yoff_nb) = (steps.read_cent_wave('3D')[2], steps.read_cent_wave('3D')[3])
+    (xoff_bb, yoff_bb) = (steps.read_cent_wave('3')[2], steps.read_cent_wave('3')[3])
+    
     for frame in dataset_guess:
         assert frame.ext_hdr["SATSPOTS"] == False
         assert frame.ext_hdr["WAVLEN0"] == 753.83
@@ -660,6 +677,113 @@ def test_determine_zeropoint_subbands():
         assert 'WV0_X' in frame.ext_hdr and 'WV0_Y' in frame.ext_hdr
         assert frame.ext_hdr['WAVLEN0'] == pytest.approx(753.83, abs=0.5)
 
+def test_determine_zeropoint_fsmsplit():
+    """
+    test the calculation of the wavelength zeropoint position of narrowband/satspot data with fsm dithered dataset
+    """
+    errortol_pix = 0.5
+    filepath = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
+    pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
+    
+    with fits.open(filepath) as hdul:
+        psf_array = hdul[0].data
+        psf_table = Table(hdul[1].data)
+ 
+    assert psf_array.ndim == 3, "Expected 3D PSF array"
+    assert "xcent" in psf_table.colnames and "ycent" in psf_table.colnames, "Missing centroid columns"
+
+    initial_cent = {
+        "xcent": np.array(psf_table["xcent"]),
+        "ycent": np.array(psf_table["ycent"])
+    }
+    offset_cent = {
+        "xoffset": np.array(psf_table["xoffset"]),
+        "yoffset": np.array(psf_table["yoffset"])
+    }
+    # Use the position for the zero-offset PSF template to set the projected,
+    # vertical slit position on the image array. This should be in the exact
+    # center of the array. 
+    # the zero offset template image is our fake satspot observation in the slit center
+    assert(offset_cent.get("xoffset")[12] == 0.)
+    assert(offset_cent.get("yoffset")[12] == 0.)
+    slit_x = initial_cent.get("xcent")[12]
+    slit_y = initial_cent.get("ycent")[12]
+
+    #we want to test the tolerance against a FSM jitter of 5 mas
+    fsm_offset_x = np.random.uniform(-2.5, 2.5, psf_array.shape[0])
+    fsm_offset_y = np.random.uniform(-2.5, 2.5, psf_array.shape[0])
+    fsmx = ext_hdr['FSMX'] + fsm_offset_x
+    fsmy = ext_hdr['FSMY'] + fsm_offset_y
+    frame_time = datetime(2024, 1, 1, 0, 0, 0)
+    ext_hdr['DPAMNAME'] = 'PRISM3'
+    ext_hdr['FSAMNAME'] = 'R1C2'
+    psf_images = []
+    for i in range(psf_array.shape[0]):
+        data_2d = np.copy(psf_array[i])
+        frame_time += timedelta(seconds=3)
+        ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
+        ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
+        ext_hdr['CFAMNAME'] = '3'
+        ext_hdr['FSMX'] = fsmx[i]
+        ext_hdr['FSMY'] = fsmy[i]
+        ext_hdr['SCTSRT'] = frame_time.isoformat()
+        # We need three satspot frames, with no offset/+offset/-offset. Test dataset has just one satspot frame, which has +offset (possibly).
+        # We create a fake no_offset (background) satspot frame using np.zeros and a second offset satspot frame by duplicating the pre-existing satspot frame in the test dataset
+        # In next few lines, we only create the data_2d_copy needed for frame faking/duplication
+        if i == 11: 
+            #data_2d_copy = np.zeros_like(data_2d)
+            data_2d_copy = np.copy(data_2d)
+        if i == 12:
+            ext_hdr["SATSPOTS"] = True
+            ext_hdr['CFAMNAME'] = '3D'
+            data_2d_copy = np.copy(data_2d)
+        else:
+            ext_hdr["SATSPOTS"] = False
+        err = np.zeros_like(data_2d)
+        dq = np.zeros_like(data_2d, dtype=int)
+        image = Image(
+            data_or_filepath=data_2d,
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
+            err=err,
+            dq=dq
+        )
+        psf_images.append(image)
+        if i in [11,12]: # Actually generating the additional satspot frames using data_2d_copy
+            frame_time += timedelta(seconds=3)
+            ext_hdr['SCTSRT'] = frame_time.isoformat()
+            ext_hdr["SATSPOTS"] = True
+            ext_hdr['CFAMNAME'] = '3D'
+            image_copy = Image(
+                data_or_filepath=data_2d_copy,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr.copy(),
+                err=err,
+                dq=dq
+            )
+            psf_images.append(image_copy)
+
+    #test it with optional initial guess and with three satspot frames
+    spec_filter_offset = SpecFilterOffset({})
+    input_dataset = Dataset(psf_images)
+    dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset, subtract_no_offset_frames=False, additional_frame_sep_extkeys=["FSMX", "FSMY"], xcent_guess = 40., ycent_guess = 32.)
+    assert len(dataset_guess) < len(input_dataset)
+    
+    #we want to test the tolerance against a FSM jitter of 5 mas
+    fsm_offset_x = np.random.uniform(-5, 5, len(psf_images))
+    fsm_offset_y = np.random.uniform(-5, 5, len(psf_images))
+    fsmx = ext_hdr['FSMX'] + fsm_offset_x
+    fsmy = ext_hdr['FSMY'] + fsm_offset_y
+
+    psf_images2 =[]
+    for i, frame in enumerate(psf_images):
+        frame.ext_hdr['FSMX'] = fsmx[i]
+        frame.ext_hdr['FSMY'] = fsmy[i]
+        psf_images2.append(frame)
+
+    input_dataset2 = Dataset(psf_images2)
+    dataset_guess2 = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset, subtract_no_offset_frames=False, additional_frame_sep_extkeys=["FSMX", "FSMY"], xcent_guess = 40., ycent_guess = 32.)
+    assert len(dataset_guess2) < len(input_dataset2)    
 
 def test_star_spec_registration():
     """ Test the star spectrum registration """
@@ -875,7 +999,7 @@ def test_star_spec_registration():
                 dataset_fsm,
                 pathfiles_template,
                 slit_align_err=slit_align_err,
-                tolerance = {"FSMY" : 0.5})
+                fsm_tolerance = 0.5)
 
             # Collect all input files
             fsm_filenames = []
@@ -1289,12 +1413,15 @@ def test_slit_trans():
         basetime = datetime.now()
         for idx_x in range(n_fsm):
             for idx_y in range(n_fsm):
+                #add a random offset to fsm values to simulate the fsm jitter and test the applied tolerance.
+                offset_x = np.random.uniform(-0.2, 0.2)
+                offset_y = np.random.uniform(-0.2, 0.2)
                 # Each different FSM position is a new set of data
                 spec_slit_cp = spec_slit.copy()
                 # Associate different FSM positions to each distinct FSM case
                 spec_slit_cp.ext_hdr["MJDSRT"] = time.Time(spec_slit_cp.ext_hdr["DRPCTIME"]).mjd
-                spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0]
-                spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1]
+                spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0] + offset_x
+                spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1] + offset_y
                 spec_slit_cp.ext_hdr['WV0_X'] = (spec_slit.ext_hdr['WV0_X']
                 + idx_x * fsm[0])
                 spec_slit_cp.ext_hdr['WV0_Y'] = (spec_slit.ext_hdr['WV0_Y']
@@ -1387,10 +1514,12 @@ def test_slit_trans():
             for idx_y in range(n_fsm):
                 # Each different FSM position is a new set of data
                 spec_open_cp = spec_open.copy()
+                offset_x = np.random.uniform(-0.2, 0.2)
+                offset_y = np.random.uniform(-0.2, 0.2)
                 # Associate different FSM positions to each distinct FSM case
                 # They can be different to the frames with the slit in
-                spec_open_cp.ext_hdr['FSMX'] = idx_x * fsm[0] + n_fsm**2
-                spec_open_cp.ext_hdr['FSMY'] = idx_y * fsm[1] + n_fsm**2
+                spec_open_cp.ext_hdr['FSMX'] = idx_x * fsm[0] + n_fsm**2 + offset_x
+                spec_open_cp.ext_hdr['FSMY'] = idx_y * fsm[1] + n_fsm**2 + offset_y
                 # Create NFRAMES
                 n_frames_fsm_now = n_frames_fsm[idx_x + n_fsm*idx_y]
                 # Change the spectrum by a known factor so that the slit
@@ -1468,7 +1597,7 @@ def test_slit_trans():
             spec_slit_ds, spec_open_ds,
             x_range=[xrange0, xrange1],
             y_range=[yrange0, yrange1],
-            tolerance = {'FSMX': 0.5, 'FSMY': 0.5}
+            fsm_tolerance = 0.5
         )
         slit_trans_out = slit_trans.data
         slit_pos_x = slit_trans.x_offset
@@ -1488,7 +1617,7 @@ def test_slit_trans():
             all_dataset,
             x_range=[xrange0, xrange1],
             y_range=[yrange0, yrange1],
-            tolerance = {'FSMX': 0.5, 'FSMY': 0.5}
+            fsm_tolerance = 0.5
         )
         assert slit_trans_without.slitname == fsam_expected
         assert np.array_equal (slit_trans.data, slit_trans_without.data)

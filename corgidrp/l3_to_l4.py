@@ -1215,7 +1215,8 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
         three-group structure assumed. Defaults to True.
         additional_frame_sep_prikeys (list of str, optional): Additional primary header keywords (apart from VISITID) used to separate frames before zeropoint calculation. Default is None.
         additional_frame_sep_extkeys (list of str, optional): Extension header keywords used to separate frames before zeropoint calculation. Default is None.
-        tolerance (dict): if we split the dataset according to the FSMX/Y dithering, so tolerance = {'FSMX': x , FSMY': y } [mas]
+        tolerance (dict): we can split the dataset with a certain tolerance, if we split the dataset according to the FSMX/Y dithering, 
+                          we use a tolerance, default is 5 mas. 
         xcent_guess (float): initial x guess for the centroid fit for all frames
         ycent_guess (float): initial y guess for the centroid fit for all frames
         bb_nb_dx (float): horizontal image offset between the narrowband and broadband filters, in EXCAM pixels. 
@@ -1302,17 +1303,34 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
     # Default is split satspot/science dataset according to VISITID
     pri_keys = ["VISITID"]
     ext_keys = additional_frame_sep_extkeys
-    #in case the dataset is split according to FSM values there should be a tolerance added
-    if ext_keys is not None and ('FSMX' in ext_keys or 'FSMY' in ext_keys):
-        if isinstance(tolerance, dict):
-            if tolerance.get("FSMX") is None and tolerance.get("FSMY") is None:
-                raise ValueError("tolerance must relate to FSMX/Y header keyword")
+                
     if additional_frame_sep_prikeys is not None:
         pri_keys = ["VISITID"] + additional_frame_sep_prikeys
+    #in case the dataset is split according to FSM values there should be a tolerance added, default is 5 mas
+    with_fsm = [False, None, None]
+    if ext_keys is not None and ('FSMX' in ext_keys or 'FSMY' in ext_keys):
+        if 'FSMX' in ext_keys:
+           indx = ext_keys.index('FSMX') + len(pri_keys)
+        if 'FSMY' in ext_keys:
+           indy = ext_keys.index('FSMY') + len(pri_keys)
+        with_fsm = [True, indx, indy]
+        if 'FSMX' in ext_keys:
+            if tolerance is None:
+                tolerance = {"FSMX": 5}
+            else:
+                if tolerance.get("FSMX") is None:   
+                   tolerance["FSMX"] = 5
+        if 'FSMY' in ext_keys:
+            if tolerance is None:
+                tolerance = {"FSMY": 5}
+            else:
+                if tolerance.get("FSMY") is None:   
+                   tolerance["FSMY"] = 5
+    
     satspot_dataset, keywords_sat = sat_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys, tolerances = tolerance)
     if with_science:
         science_dataset, keywords_sci = sci_dataset.split_dataset(prihdr_keywords=pri_keys, exthdr_keywords=ext_keys, tolerances = tolerance)
-
+        
     all_science_frames = []
     matched_sci_keywords = []
 
@@ -1363,15 +1381,37 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             offset_dataset, group_template, nb_filter, use_model_template, spec_filter_offset,
             xcent_guess = xcent_guess, ycent_guess = ycent_guess, bb_nb_dx = bb_nb_dx, bb_nb_dy = bb_nb_dy,
             halfheight = zeropoint_halfheight)
-
         if return_all or with_science == False:
             science_subset = offset_dataset
 
         if with_science:
-            matched_index_sci = [i for i, key in enumerate(keywords_sci) if key == keyword]
+            # we also have to check whether the visitid is the same and the FSM values are within the tolerance
+            if with_fsm[0]:
+                matched_index_sci = []
+                for i, key in enumerate(keywords_sci):
+                    is_match = []
+                    for k, ks in enumerate(key):
+                        if k == with_fsm[1]:
+                            if np.abs(float(ks) - float(keyword[k])) < list(tolerance.values())[0]:
+                                is_match.append(True)
+                            else:
+                                is_match.append(False)
+                        elif k == with_fsm[2]:
+                            if np.abs(float(ks) - float(keyword[k])) < list(tolerance.values())[1]:
+                                is_match.append(True)
+                            else:
+                                is_match.append(False)
+                        else:
+                            if ks == keyword[k]:
+                                is_match.append(True)
+                            else:
+                                is_match.append(False)
+                    if not False in is_match:
+                        matched_index_sci.append(i)
+            else:
+                matched_index_sci = [i for i, key in enumerate(keywords_sci) if key == keyword]
             science_subset = science_dataset[int(matched_index_sci[0])]
             matched_sci_keywords.append(keyword)
-
 
         science_frames = []
         for frame in science_subset:
@@ -1410,7 +1450,6 @@ def determine_wave_zeropoint(input_dataset, spec_filter_offset, template_dataset
             model_templates_used.append((os.path.basename(str(group_template[0].filepath)), group_sptype))
 
     sci_dataset = data.Dataset(all_science_frames)
-
     history_msg = "wavelength zeropoint values added to header"
     if len(model_templates_used) > 0:
         history_msg += ("; frames without matching narrowband frames were registered against the broadband "

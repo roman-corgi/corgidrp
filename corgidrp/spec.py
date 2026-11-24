@@ -1124,7 +1124,7 @@ def star_spec_registration(
     pathfiles_template,
     slit_align_err=0,
     halfheight=40,
-    tolerance = None):
+    fsm_tolerance = 5):
     """ This function addresses:
 
     CGI-REQT-5465 – Given (1) a series of cleaned images of a prism-dispersed
@@ -1155,7 +1155,7 @@ def star_spec_registration(
             in units of mas. It is determined after each observation by
             looking at the data.
         halfheight: 1/2 the height of the box used for the fit.
-        tolerance (dict): we split the dataset according to the FSMY dithering, so tolerance = {'FSMY': x [mas]} 
+        fsm_tolerance (float): we split the dataset according to the FSMY dithering within a tolerance, default is 5 mas 
 
         Returns:
             list: Filenames with the star image whose PSF-to-FSAM slit alignment most
@@ -1232,11 +1232,7 @@ def star_spec_registration(
         raise ValueError(f'WV0_Y missing from {pathfiles_template[slit_idx]:s}')
     
     # Split FSM dataset according to their FSMY values
-    if isinstance(tolerance, dict):
-        if tolerance.get("FSMY") is None:
-            raise ValueError("tolerance must relate to FSMY header keyword")
-    
-    dataset_list, fsm_values = dataset_fsm.split_dataset(exthdr_keywords=['FSMY'],  tolerances = tolerance)
+    dataset_list, fsm_values = dataset_fsm.split_dataset(exthdr_keywords=['FSMY'],  tolerances = {'FSMY' : fsm_tolerance})
     
     # Combine frames with the same FSMY to increase SNR before the analysis
     fsm_combined = []
@@ -1376,7 +1372,7 @@ def slit_transmission(
     n_gridy=10,
     kind='linear',
     average='mean',
-    tolerance = None
+    fsm_tolerance = 5
     ):
     """ This step function addresses:
   
@@ -1415,7 +1411,7 @@ def slit_transmission(
         of spectra. The slitless spectra are all averaged at once regardless of
         their FSMX, FSMY values. The spectra with the slit in are averaged over
         subsets with the same FSMX, FSMY values. Options are 'mean' and 'median'.
-      tolerance (dict): we split the dataset according to the FSMX/Y dithering, so tolerance = {'FSMX': x [mas], 'FSMY': y [mas]}
+      fsm_tolerance (float): we split the dataset according to the FSMX/Y dithering within a tolerance, default tolerance is 5 mas
       
     Returns:
       SlitTransmission calibration product containing:
@@ -1439,7 +1435,6 @@ def slit_transmission(
         # fsam_name = []
     else:
         raise ValueError(f'{cfam_name} is not a spectroscopy filter')
-    
     # if dataset_open is None, split dataset_slit and find slitless frames
     if dataset_open == None:
         dataset_split, uniqfsam = dataset_slit.split_dataset(exthdr_keywords=['FSAMNAME'])
@@ -1495,11 +1490,7 @@ def slit_transmission(
         assert exthdr['FSAMNAME'].upper() == 'OPEN', f"FSAMNAME={exthdr['FSAMNAME']} differs from expected value: OPEN"
 
     # Split each subset with the slit in by FSMX/Y values (FSM values are not used)
-    if isinstance(tolerance, dict):
-        if tolerance.get('FSMX') is None and tolerance.get('FSMY') is None:
-            raise ValueError("tolerance must relate to FSMX/Y header keyword")
-
-    dataset_slit_subsets=dataset_slit.split_dataset(exthdr_keywords=['FSMX','FSMY'], tolerances = tolerance)[0]
+    dataset_slit_subsets=dataset_slit.split_dataset(exthdr_keywords=['FSMX','FSMY'], tolerances = {'FSMX' : fsm_tolerance, 'FSMY': fsm_tolerance})[0]
     # Average all spectra of the images with FSAM=OPEN
     if average.lower() == 'mean': 
         spec_open = np.mean([ds.hdu_list["SPEC"].data for ds in dataset_open], axis=0)
