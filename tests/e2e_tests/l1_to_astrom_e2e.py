@@ -76,8 +76,8 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     new_hdr['CD1_2'] = cdmatrix[0,1]
     new_hdr['CD2_1'] = cdmatrix[1,0]
     new_hdr['CD2_2'] = cdmatrix[1,1]
-    new_hdr['CRPIX1'] = 533.    # true pixel value at the target pointing
-    new_hdr['CRPIX2'] = 506.
+    new_hdr['CRPIX1'] = 532.    # true pixel value at the target pointing
+    new_hdr['CRPIX2'] = 505.
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
     new_hdr['CDELT1'] = (expected_platescale * 0.001) / 3600.
@@ -87,7 +87,8 @@ def test_l1_to_astrom_e2e(e2edata_path, e2eoutput_path):
     w = astropy.wcs.WCS(new_hdr)
 
     # use astropy wcs to find the true coordinate value of the reference pixel (default: (512., 512.))
-    reference_pixel = (512., 512.)
+    # reference_pixel = (512., 512.)
+    reference_pixel = (500.0, 450.0)
     expected_center_skycoord = astropy.wcs.utils.pixel_to_skycoord(reference_pixel[0], reference_pixel[1], wcs=w, origin=1)
 
     # check that the recovered platescale, north angle, and offsets match up
