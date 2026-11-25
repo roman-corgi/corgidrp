@@ -34,7 +34,7 @@
                 "cosm_filter" : 3,
                 "cosm_box" : 4,
                 "cosm_tail" : "auto",
-                "median_filter_mode": 1
+                "median_filter_mode": 0
             }
         },
         {
@@ -66,18 +66,25 @@
             }
         },
         {
+            "name" : "save"
+        },
+        {
             "name": "get_pc_mean",
             "calibs" : {
                 "Dark" : "AUTOMATIC, OPTIONAL"
             },
             "keywords" : {
-                "dataset_copy" : false
+                "dataset_copy" : false,
+                "T_factor" : 5
             }
         },
         {
             "name" : "desmear",
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "auto_decide" : true
             }
         },
         {

@@ -4,9 +4,12 @@ count array with photometric corrections.
 """
 import warnings
 import numpy as np
+from scipy.integrate import quad_vec
 from astropy.io import fits
 import corgidrp.data as data
 from corgidrp import check
+
+from emccd_detect.partial_CIC_MLE import _PoissonPartCIC_W, _PoissonPartCIC_W_deriv, _infsum
 
 def varL23(g, L, T, N):
     '''Expected variance after photometric correction.  
@@ -521,7 +524,7 @@ def calc_lam_approx(nobs, nfr, t, g):
     return lam1
 
 
-def lam_newton_fit(nobs, nfr, t, g, lam0, niter, mask_indices):
+def lam_newton_fit(nobs, nfr, t, g, lam0, niter, mask_indices, T=200, tol=1e-6, max_num_terms=50):
     """Newton fit for finding lambda.
 
     Args:
@@ -532,6 +535,9 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter, mask_indices):
         lam0 (array_like): Initial guess for lambda.
         niter (int): Number of Newton's fit iterations to take.
         mask_indices (array-like): indices of pixel positions to use.
+        T (int, optional): collection size of terms in the infinite sum calculation. Default is 200.
+        tol (float, optional): tolerance for the infinite sum calculation. Default is 1e-3.
+        max_num_terms (int, optional): maximum number of terms to include in the infinite sum. Default is 4.
 
     Returns:
         lam (array_like): Mean expected (lambda).
@@ -543,8 +549,8 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter, mask_indices):
 
     # Iterate Newton's method
     for i in range(niter):
-        func = _calc_func(nobs_m, nfr, t, g, lam_est_m)
-        dfunc = _calc_dfunc(nfr, t, g, lam_est_m)
+        func = _calc_func(nobs_m, nfr, t, g, lam_est_m, T=T, tol=tol, max_num_terms=max_num_terms)
+        dfunc = _calc_dfunc(nfr, t, g, lam_est_m, T=T, tol=tol, max_num_terms=max_num_terms)
         lam_est_m -= func / dfunc
 
     if np.nanmin(lam_est_m.data[mask_indices]) < 0:
@@ -556,7 +562,7 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter, mask_indices):
 
     return lam
 
-def _calc_func(nobs, nfr, t, g, lam):
+def _calc_func(nobs, nfr, t, g, lam, T=200, tol=1e-6, max_num_terms=50):
     """Objective function for lambda for Newton's method for all applying photometric correction.
     
     Args:
@@ -565,24 +571,29 @@ def _calc_func(nobs, nfr, t, g, lam):
         t (float): threshold for photon counting
         g (float): EM gain
         lam (array-like): estimated mean expected electron count
+        T (int, optional): collection size of terms in the infinite sum calculation. Default is 200.
+        tol (float, optional): tolerance for the infinite sum calculation. Default is 1e-3.
+                max_num_terms (int, optional): maximum number of terms to include in the infinite sum. Default is 4.
 
     Returns:
         func (array-like): objective function
 
     """
-    epsilon_prime = (lam*(2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + 
-            lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam))))
+    epsilonPrime = epsilon_prime(lam, t, g, T=T, tol=tol, max_num_terms=max_num_terms)
+
+    # epsilon_prime = ((6*g**3*(24 + lam*(12 + lam*(4 + lam))) + 6*g**2*lam*(12 + lam*(4 + lam))*t + 3*g*lam**2*(4 + lam)*t**2 + lam**3*t**3)/
+    #     - (6.*np.e**(t/g)*g**3*(24 + 12*lam + 4*lam**2 + lam**3)))
 
     #if (nfr * epsilon_prime).any() > nobs.any():
     #    warnings.warn('Input photon flux is too high; decrease frametime')
     # This warning isn't necessary; could have a negative func but still
     # close enough to 0 for Newton's method
-    func = nfr * epsilon_prime - nobs
+    func = nfr * epsilonPrime - nobs
 
     return func
 
 
-def _calc_dfunc(nfr, t, g, lam):
+def _calc_dfunc(nfr, t, g, lam, T=200, tol=1e-6, max_num_terms=50, Q=0.0076, M=604, l=3):
     """Derivative with respect to lambda of objective function.
     
     Args:
@@ -590,15 +601,66 @@ def _calc_dfunc(nfr, t, g, lam):
         t (float): threshold for photon counting
         g (float): EM gain
         lam (array-like): estimated mean expected electron count
-    
+        T (int, optional): collection size of terms in the infinite sum calculation. Default is 200.
+        tol (float, optional): tolerance for the infinite sum calculation. Default is 1e-3.
+        max_num_terms (int, optional): maximum number of terms to include in the infinite sum. Default is 4.
+        Q (float): partial CIC stage probability.  Default is 0.001.
+        M (int, optional): number of gain register stages.  Default is 604.
+        l (int, optional): number of terms in composition of EM gain+partial CIC and Poisson to keep (i.e., highest number of ungained electrons at which to truncate PDF).  Default is 3.
+
     Returns:
         dfunc (array-like): derivative with respect to lambda of objective function
     """
-    dfunc = (lam*nfr*(2*g**2*(3 + 2*lam) + 2*g*lam*t + 2*g*(3 + lam)*t + 
-            2*lam*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam)))) - (lam*(6 + 
-            lam*(3 + lam) + lam*(3 + 2*lam))*nfr*
-         (2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + 
-        lam*(6 + lam*(3 + lam)))**2) + (nfr*(2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + 
-        lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam))))
+    if Q == 0: # no partial CIC
+        dfunc = (lam*nfr*(2*g**2*(3 + 2*lam) + 2*g*lam*t + 2*g*(3 + lam)*t + 
+                2*lam*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam)))) - (lam*(6 + 
+                lam*(3 + lam) + lam*(3 + 2*lam))*nfr*
+            (2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + 
+            lam*(6 + lam*(3 + lam)))**2) + (nfr*(2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + 
+            lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam))))
+    else:
+        # dfunc, err = quad_vec(
+        #     lambda x: _PoissonPartCIC_W_deriv(lam, Q, g, M, x, l, Pn=False), t, np.inf
+        # )
+        # get normalization constant (x in _infsum always starts at 0)
+        #norm, _ = _infsum(lambda x: _PoissonPartCIC_W_deriv(lam, Q, g, M, x, l), T, tol, max_num_terms)
+        norm = 1 # should be 1 by construction; don't need to calculate it above
+        # now sum from threshold t to infinity 
+        deriv, _ = _infsum(lambda x: _PoissonPartCIC_W_deriv(lam, Q, g, M, x+t, l), T, tol, max_num_terms) #XXX add in conditional if norm is 0
+        dfunc = nfr * deriv/norm
+    # dfunc = nfr*((2*t*(36*g**2*(12 + lam*(8 + 3*lam)) + 18*g*lam*(8 + lam*(5 + lam))*t + lam**2*(18 + lam*(6 + lam))*t**2))/
+    #     -  (3.*np.e**(t/g)*g**3*(24 + lam*(12 + lam*(4 + lam)))**2))
 
     return dfunc
+
+def epsilon_prime(lam, t, g, Q=0.0076, M=604, l=3, T=200, tol=1e-6, max_num_terms=50):
+    """Calculate epsilon prime for photon counting.
+    
+    Args:
+        lam (array-like): estimated mean expected electron count
+        t (float): threshold for photon counting
+        g (float): EM gain
+        Q (float): partial CIC stage probability.  Default is 0.001.
+        M (int, optional): number of gain register stages.  Default is 604.
+        l (int, optional): number of terms in composition of EM gain+partial CIC and Poisson to keep (i.e., highest number of ungained electrons at which to truncate PDF).  Default is 3.
+        T (int, optional): collection size of terms in the infinite sum calculation. Default is 100.
+        tol (float, optional): tolerance for the infinite sum calculation. Default is 1e-3.
+        max_num_terms (int, optional): maximum number of terms to include in the infinite sum. Default is 4.
+
+    Returns:
+        epsilon_prime (array-like): epsilon prime value
+    """
+    if Q == 0: #no partial CIC
+        epsilon_prime = (lam*(2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + 
+            lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam))))
+    else:
+        # epsilon_prime, err = quad_vec(
+        #     lambda x: _PoissonPartCIC_W(lam, Q, g, M, x, l, Pn=False), t, np.inf
+        # )# just use M=302 in _PoissonPartCIC_W for speed approximation?  
+        # get normalization constant (x in _infsum always starts at 0)
+        norm, last_term = _infsum(lambda x: _PoissonPartCIC_W(lam, Q, g, M, x, l), T, tol, max_num_terms)
+        #norm = 1 # should be 1 by construction; don't need to calculate it above
+        # now sum from threshold t to infinity 
+        epsilon_prime, last_term_eps = _infsum(lambda x: _PoissonPartCIC_W(lam, Q, g, M, x+t, l), T, tol, max_num_terms) #XXX add in conditional if norm is 0
+
+    return epsilon_prime/norm

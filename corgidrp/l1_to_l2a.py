@@ -446,6 +446,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
                 image_data = flag_cr_input
             med_mask = median_filter(image_data, size=median_filter_size)
             diff = image_data - med_mask
+            # Icount, IbinEdges = np.histogram(diff, bins=int(median_filter_histogram_nbins))
             Icount, IbinEdges = np.histogram(diff, bins=int(median_filter_histogram_nbins))
 
             # find the minima in the histogram
@@ -467,8 +468,11 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
             if np.size(binCenter[1:-1][bVmax]) > 0:
                 binValmax = np.argmax(Icount[1:-1][bVmax])
                 IcountMaxInd = np.where(Icount[1:-1] == Icount[1:-1][bVmax][binValmax])[0]
-                # take first max in case there are identical max values
-                bV[:int(IcountMaxInd[0])+1] = False
+                # take first max in case there are identical max values XXX take 2nd max
+                if False: #XXX len(IcountMaxInd) > 1:
+                    bV[:int(IcountMaxInd[1])+1] = False
+                else:
+                    bV[:int(IcountMaxInd[0])+1] = False
 
             # List of bin values where the histogram has a miminum
             binVal = binCenter[1:-1][bV]

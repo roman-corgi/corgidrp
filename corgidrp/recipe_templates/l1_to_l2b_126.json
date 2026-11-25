@@ -34,7 +34,8 @@
                 "cosm_filter" : 3,
                 "cosm_box" : 4,
                 "cosm_tail" : "auto",
-                "median_filter_mode": 1
+                "median_filter_mode": 0,
+                "median_filter_histogram_nbins" : 64
             }
         },
         {
@@ -81,6 +82,9 @@
             "name" : "desmear",
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "auto_decide" : true
             }
         },
         {
