@@ -510,17 +510,34 @@ def test_determine_zeropoint():
             )
             psf_images.append(image_copy)
 
-    # Load the filter-to-filter image offsets to correct for the location of the narrowband centroid
-    # with respect to the broadband filter.
-    (xoff_nb, yoff_nb) = (steps.read_cent_wave('3D')[2], steps.read_cent_wave('3D')[3])
-    (xoff_bb, yoff_bb) = (steps.read_cent_wave('3')[2], steps.read_cent_wave('3')[3])
-
     #test it with optional initial guess and with three satspot frames
     spec_filter_offset = SpecFilterOffset({})
     input_dataset = Dataset(psf_images)
     dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset, xcent_guess = 40., ycent_guess = 32.)
-
     assert len(dataset_guess) < len(input_dataset)
+    
+    #we want to test the a FSM jitter of max 4 mas against the default tolerance of 5 mas
+    fsm_offset_x = np.random.uniform(-2, 2, len(psf_images))
+    fsm_offset_y = np.random.uniform(-2, 2, len(psf_images))
+    fsmx = ext_hdr['FSMX'] + fsm_offset_x
+    fsmy = ext_hdr['FSMY'] + fsm_offset_y
+    
+    psf_images2 =[]
+    for i, frame in enumerate(psf_images):
+        frame.ext_hdr['FSMX'] = fsmx[i]
+        frame.ext_hdr['FSMY'] = fsmy[i]
+        psf_images2.append(frame)
+
+    input_dataset2 = Dataset(psf_images2)
+    dataset_guess2 = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset, additional_frame_sep_extkeys=["FSMX", "FSMY"], xcent_guess = 40., ycent_guess = 32.)
+    assert len(dataset_guess2) == len(dataset_guess)    
+    
+    
+    # Load the filter-to-filter image offsets to correct for the location of the narrowband centroid
+    # with respect to the broadband filter.
+    (xoff_nb, yoff_nb) = (steps.read_cent_wave('3D')[2], steps.read_cent_wave('3D')[3])
+    (xoff_bb, yoff_bb) = (steps.read_cent_wave('3')[2], steps.read_cent_wave('3')[3])
+    
     for frame in dataset_guess:
         assert frame.ext_hdr["SATSPOTS"] == False
         assert frame.ext_hdr["WAVLEN0"] == 753.83
@@ -659,7 +676,6 @@ def test_determine_zeropoint_subbands():
     for frame in result:
         assert 'WV0_X' in frame.ext_hdr and 'WV0_Y' in frame.ext_hdr
         assert frame.ext_hdr['WAVLEN0'] == pytest.approx(753.83, abs=0.5)
-
 
 def test_star_spec_registration():
     """ Test the star spectrum registration """
@@ -874,7 +890,8 @@ def test_star_spec_registration():
             list_of_best_fsm = steps.star_spec_registration(
                 dataset_fsm,
                 pathfiles_template,
-                slit_align_err=slit_align_err)
+                slit_align_err=slit_align_err,
+                fsm_tolerance = 0.5)
 
             # Collect all input files
             fsm_filenames = []
@@ -1288,12 +1305,15 @@ def test_slit_trans():
         basetime = datetime.now()
         for idx_x in range(n_fsm):
             for idx_y in range(n_fsm):
+                #add a random offset to fsm values to simulate the fsm jitter and test the applied tolerance.
+                offset_x = np.random.uniform(-0.2, 0.2)
+                offset_y = np.random.uniform(-0.2, 0.2)
                 # Each different FSM position is a new set of data
                 spec_slit_cp = spec_slit.copy()
                 # Associate different FSM positions to each distinct FSM case
                 spec_slit_cp.ext_hdr["MJDSRT"] = time.Time(spec_slit_cp.ext_hdr["DRPCTIME"]).mjd
-                spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0]
-                spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1]
+                spec_slit_cp.ext_hdr['FSMX'] = idx_x * fsm[0] + offset_x
+                spec_slit_cp.ext_hdr['FSMY'] = idx_y * fsm[1] + offset_y
                 spec_slit_cp.ext_hdr['WV0_X'] = (spec_slit.ext_hdr['WV0_X']
                 + idx_x * fsm[0])
                 spec_slit_cp.ext_hdr['WV0_Y'] = (spec_slit.ext_hdr['WV0_Y']
@@ -1386,10 +1406,12 @@ def test_slit_trans():
             for idx_y in range(n_fsm):
                 # Each different FSM position is a new set of data
                 spec_open_cp = spec_open.copy()
+                offset_x = np.random.uniform(-0.2, 0.2)
+                offset_y = np.random.uniform(-0.2, 0.2)
                 # Associate different FSM positions to each distinct FSM case
                 # They can be different to the frames with the slit in
-                spec_open_cp.ext_hdr['FSMX'] = idx_x * fsm[0] + n_fsm**2
-                spec_open_cp.ext_hdr['FSMY'] = idx_y * fsm[1] + n_fsm**2
+                spec_open_cp.ext_hdr['FSMX'] = idx_x * fsm[0] + n_fsm**2 + offset_x
+                spec_open_cp.ext_hdr['FSMY'] = idx_y * fsm[1] + n_fsm**2 + offset_y
                 # Create NFRAMES
                 n_frames_fsm_now = n_frames_fsm[idx_x + n_fsm*idx_y]
                 # Change the spectrum by a known factor so that the slit
@@ -1467,6 +1489,7 @@ def test_slit_trans():
             spec_slit_ds, spec_open_ds,
             x_range=[xrange0, xrange1],
             y_range=[yrange0, yrange1],
+            fsm_tolerance = 0.5
         )
         slit_trans_out = slit_trans.data
         slit_pos_x = slit_trans.x_offset
@@ -1486,6 +1509,7 @@ def test_slit_trans():
             all_dataset,
             x_range=[xrange0, xrange1],
             y_range=[yrange0, yrange1],
+            fsm_tolerance = 0.5
         )
         assert slit_trans_without.slitname == fsam_expected
         assert np.array_equal (slit_trans.data, slit_trans_without.data)
