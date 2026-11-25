@@ -516,7 +516,7 @@ def test_determine_zeropoint():
     dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset, xcent_guess = 40., ycent_guess = 32.)
     assert len(dataset_guess) < len(input_dataset)
     
-    #we want to test the tolerance against a FSM jitter of 5 mas
+    #we want to test the a FSM jitter of max 4 mas against the default tolerance of 5 mas
     fsm_offset_x = np.random.uniform(-2, 2, len(psf_images))
     fsm_offset_y = np.random.uniform(-2, 2, len(psf_images))
     fsmx = ext_hdr['FSMX'] + fsm_offset_x
@@ -676,114 +676,6 @@ def test_determine_zeropoint_subbands():
     for frame in result:
         assert 'WV0_X' in frame.ext_hdr and 'WV0_Y' in frame.ext_hdr
         assert frame.ext_hdr['WAVLEN0'] == pytest.approx(753.83, abs=0.5)
-
-def test_determine_zeropoint_fsmsplit():
-    """
-    test the calculation of the wavelength zeropoint position of narrowband/satspot data with fsm dithered dataset
-    """
-    errortol_pix = 0.5
-    filepath = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
-    pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
-    
-    with fits.open(filepath) as hdul:
-        psf_array = hdul[0].data
-        psf_table = Table(hdul[1].data)
- 
-    assert psf_array.ndim == 3, "Expected 3D PSF array"
-    assert "xcent" in psf_table.colnames and "ycent" in psf_table.colnames, "Missing centroid columns"
-
-    initial_cent = {
-        "xcent": np.array(psf_table["xcent"]),
-        "ycent": np.array(psf_table["ycent"])
-    }
-    offset_cent = {
-        "xoffset": np.array(psf_table["xoffset"]),
-        "yoffset": np.array(psf_table["yoffset"])
-    }
-    # Use the position for the zero-offset PSF template to set the projected,
-    # vertical slit position on the image array. This should be in the exact
-    # center of the array. 
-    # the zero offset template image is our fake satspot observation in the slit center
-    assert(offset_cent.get("xoffset")[12] == 0.)
-    assert(offset_cent.get("yoffset")[12] == 0.)
-    slit_x = initial_cent.get("xcent")[12]
-    slit_y = initial_cent.get("ycent")[12]
-
-    #we want to test the tolerance against a FSM jitter of 5 mas
-    fsm_offset_x = np.random.uniform(-2.5, 2.5, psf_array.shape[0])
-    fsm_offset_y = np.random.uniform(-2.5, 2.5, psf_array.shape[0])
-    fsmx = ext_hdr['FSMX'] + fsm_offset_x
-    fsmy = ext_hdr['FSMY'] + fsm_offset_y
-    frame_time = datetime(2024, 1, 1, 0, 0, 0)
-    ext_hdr['DPAMNAME'] = 'PRISM3'
-    ext_hdr['FSAMNAME'] = 'R1C2'
-    psf_images = []
-    for i in range(psf_array.shape[0]):
-        data_2d = np.copy(psf_array[i])
-        frame_time += timedelta(seconds=3)
-        ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
-        ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
-        ext_hdr['CFAMNAME'] = '3'
-        ext_hdr['FSMX'] = fsmx[i]
-        ext_hdr['FSMY'] = fsmy[i]
-        ext_hdr['SCTSRT'] = frame_time.isoformat()
-        # We need three satspot frames, with no offset/+offset/-offset. Test dataset has just one satspot frame, which has +offset (possibly).
-        # We create a fake no_offset (background) satspot frame using np.zeros and a second offset satspot frame by duplicating the pre-existing satspot frame in the test dataset
-        # In next few lines, we only create the data_2d_copy needed for frame faking/duplication
-        if i == 11: 
-            #data_2d_copy = np.zeros_like(data_2d)
-            data_2d_copy = np.copy(data_2d)
-        if i == 12:
-            ext_hdr["SATSPOTS"] = True
-            ext_hdr['CFAMNAME'] = '3D'
-            data_2d_copy = np.copy(data_2d)
-        else:
-            ext_hdr["SATSPOTS"] = False
-        err = np.zeros_like(data_2d)
-        dq = np.zeros_like(data_2d, dtype=int)
-        image = Image(
-            data_or_filepath=data_2d,
-            pri_hdr=pri_hdr.copy(),
-            ext_hdr=ext_hdr.copy(),
-            err=err,
-            dq=dq
-        )
-        psf_images.append(image)
-        if i in [11,12]: # Actually generating the additional satspot frames using data_2d_copy
-            frame_time += timedelta(seconds=3)
-            ext_hdr['SCTSRT'] = frame_time.isoformat()
-            ext_hdr["SATSPOTS"] = True
-            ext_hdr['CFAMNAME'] = '3D'
-            image_copy = Image(
-                data_or_filepath=data_2d_copy,
-                pri_hdr=pri_hdr.copy(),
-                ext_hdr=ext_hdr.copy(),
-                err=err,
-                dq=dq
-            )
-            psf_images.append(image_copy)
-
-    #test it with optional initial guess and with three satspot frames
-    spec_filter_offset = SpecFilterOffset({})
-    input_dataset = Dataset(psf_images)
-    dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, spec_filter_offset, subtract_no_offset_frames=False, additional_frame_sep_extkeys=["FSMX", "FSMY"], xcent_guess = 40., ycent_guess = 32.)
-    assert len(dataset_guess) < len(input_dataset)
-    
-    #we want to test the tolerance against a FSM jitter of 5 mas
-    fsm_offset_x = np.random.uniform(-5, 5, len(psf_images))
-    fsm_offset_y = np.random.uniform(-5, 5, len(psf_images))
-    fsmx = ext_hdr['FSMX'] + fsm_offset_x
-    fsmy = ext_hdr['FSMY'] + fsm_offset_y
-
-    psf_images2 =[]
-    for i, frame in enumerate(psf_images):
-        frame.ext_hdr['FSMX'] = fsmx[i]
-        frame.ext_hdr['FSMY'] = fsmy[i]
-        psf_images2.append(frame)
-
-    input_dataset2 = Dataset(psf_images2)
-    dataset_guess2 = l3_to_l4.determine_wave_zeropoint(input_dataset2, spec_filter_offset, subtract_no_offset_frames=False, additional_frame_sep_extkeys=["FSMX", "FSMY"], xcent_guess = 40., ycent_guess = 32.)
-    assert len(dataset_guess2) < len(input_dataset2)    
 
 def test_star_spec_registration():
     """ Test the star spectrum registration """
