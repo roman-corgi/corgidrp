@@ -332,8 +332,8 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     w = astropy.wcs.WCS(new_hdr)
 
     # use astropy wcs to find the true coordinate value of the reference pixel
-    # assume an arbitrary reference pixel location [500., 450.] which is specified in the recipe
-    reference_pixel = (500., 450.)
+    # use the default reference pixel (512., 512.)
+    reference_pixel = (512., 512.)
     expected_center_skycoord = astropy.wcs.utils.pixel_to_skycoord(reference_pixel[0], reference_pixel[1], wcs=w, origin=1)
 
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
