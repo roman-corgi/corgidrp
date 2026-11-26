@@ -1,6 +1,8 @@
 # Place to put flatfield-related utility functions
 import warnings
 import numpy as np
+from astropy.units import plate_scale
+from pyklip.instruments.STIS import PLATESCALE
 from scipy import interpolate
 from scipy.ndimage import median_filter
 from scipy.ndimage import gaussian_filter as gauss
@@ -315,16 +317,25 @@ def combine_flatfield_rasters(resi_images_dataset,cent=None,planet=None,band=Non
             warnings.filterwarnings("ignore", category=AstropyUserWarning)
             cent_n=centr.centroid_com(p_flat)
     nrr = np.sqrt((nxx-cent_n[0])**2 + (nyy-cent_n[1])**2)
-    auto_sized = n_pix is None
-    if auto_sized:
-        # Size the characterized region to the radius the rasters actually
-        # cover. Holes enclosed by real data are filled first so they read as
-        # covered; covered_radius then measures the edge by annulus coverage,
-        # so neither an interior cosmic-ray hole nor one ragged annulus
-        # truncates the flat.
-        solid = ndimage.binary_fill_holes(covered)
-        n_pix = 2 * covered_radius(solid, (cent_n[1], cent_n[0]))
-        n_pix = max(n_pix, 2)
+
+    # auto_sized = n_pix is None
+    # if auto_sized:
+    #     # Size the characterized region to the radius the rasters actually
+    #     # cover. Holes enclosed by real data are filled first so they read as
+    #     # covered; covered_radius then measures the edge by annulus coverage,
+    #     # so neither an interior cosmic-ray hole nor one ragged annulus
+    #     # truncates the flat.
+    #     solid = ndimage.binary_fill_holes(covered)
+    #     n_pix = 2 * covered_radius(solid, (cent_n[1], cent_n[0]))
+    #     n_pix = max(n_pix, 2)
+
+    # TODO: find cleaner way to do this, ideally would like to pass in n_pix and if it is not provided uses auto_sized (auto_sized makes it robust to if we don't get all the dither positions)
+    auto_sized = False
+    if n_pix is None and len(resi_images_dataset) > 30:
+        n_pix = np.floor(6400 / 22) # approximately 6.4", platescale is ~22mas/pix
+    else:
+        n_pix = np.floor(1000 / 22) # approximately 1.0", platescale is ~22mas/pix
+
     in_disk = nrr <= n_pix//2
     # Pixels inside the kept disk that were never measured (interior holes) get
     # no correction, flagged by err=0 so downstream cuts on ERR>0 skip them.
