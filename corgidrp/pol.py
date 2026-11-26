@@ -485,7 +485,7 @@ def generate_mueller_matrix_cal(input_dataset,
         target = image.pri_hdr["TARGET"]
         pol_row = pol_ref[pol_ref["TARGET"] == target]
         P = pol_row["P"].values[0] / 100.0 # convert from percent to fraction
-        PA = pol_row["PA"].values[0] + rotation_angles[i] # in degrees
+        PA = pol_row["PA"].values[0] - rotation_angles[i] # in degrees
 
         # calculate the Stokes parameters Q and U from P and PA
         Q, U = get_qu_from_p_theta(P, PA)

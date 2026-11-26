@@ -5509,7 +5509,7 @@ def create_mock_polarization_l3_dataset(
     cubes_out_err = []
 
     for pa_aper_deg, prism in zip(pa_aper_degs, prisms):
-        theta_obs = np.radians(theta_deg + pa_aper_deg)
+        theta_obs = np.radians(theta_deg - pa_aper_deg)
         Q_map = I_map * p * np.cos(2 * theta_obs)
         U_map = I_map * p * np.sin(2 * theta_obs)
 
@@ -5661,7 +5661,7 @@ observing_mode='NFOV', left_image_value=0, right_image_value=0)
         pol45.pri_hdr['PA_APER'] = random_rotation_angle
 
         #get the q and u values from the reference polarization degree and angle
-        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]+random_rotation_angle)
+        q, u = pol.get_qu_from_p_theta(pol_ref["P"].values[i]/100.0, pol_ref["PA"].values[i]-random_rotation_angle)
         q_meas = q * q_eff + u * uq_ct + q_inst/100.0
         u_meas = u * u_eff + q * qu_ct + u_inst/100.0
         # generate four gaussians scaled appropriately for the target's polarization,
