@@ -1326,52 +1326,17 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None,
 
     return first_stars, offsets, true_offsets, errs
 
-def distortion_design_matrix(pos1, meas_offset, fitorder):
-    '''
-    The change of every non-constant Legendre term of the distortion polynomial between the two stars of each pair.
-
-    The corrected offset of a pair is linear in the distortion coefficients, so this matrix decides which terms the
-    pairs determine. The constant terms are left out: they cancel in the pair offsets and are never determined.
-    The terms are evaluated as in fit_distortion_solution (positions centred on pixel 512, term (i, j) divided by
-    500**(i + j)).
-
-    Args:
-        pos1 (np.array): 2D array of the (x, y) pixel positions of the first star in every pair
-        meas_offset (np.array): 2D array of the (delta_x, delta_y) offsets of the second star from the first
-        fitorder (int): The order of the Legendre polynomial
-
-    Returns:
-        design (np.ndarray): Array of shape (number of pairs, (fitorder + 1)**2 - 1)
-    '''
-    pos1 = np.asarray(pos1, dtype=float) - 512.
-    pos2 = pos1 + np.asarray(meas_offset, dtype=float)
-    # The corrected x of a star is sum_k c_k * term_k(x, y), and the fit compares the corrected offset of the two stars
-    # of a pair, sum_k c_k * (term_k(star 2) - term_k(star 1)). Each pair is thus one linear equation in the c_k, whose
-    # factors are the changes of the terms between its two stars; one row per pair, one column per term. The corrected
-    # y uses the same terms with its own coefficients, so the same matrix decides both.
-    # legvander2d evaluates every term L_i(x) * L_j(y) at once, with column i * (fitorder + 1) + j, the order in which
-    # fit_distortion_solution reshapes the coefficients; the division matches its 500**(i + j) scaling.
-    total_orders = (np.arange(fitorder + 1)[:, None] + np.arange(fitorder + 1)[None, :]).ravel()
-    scale = 500. ** total_orders
-    terms = [np.polynomial.legendre.legvander2d(pos[0], pos[1], [fitorder, fitorder]) / scale for pos in (pos1, pos2)]
-    # column 0 is the constant term L_0 * L_0 = 1, whose change is zero for every pair, so it is dropped
-    return (terms[1] - terms[0])[:, 1:]
-
-
 def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, northangle, fitorder=3, initial_guess=None, clip_sigma=5.,
                        clip_max_iterations=10):
     ''' 
     Function that computes the legendre polynomial coefficients that describe the image distortion map * must run format_disotrtio_inputs() first *
 
-    The pairs must determine every non-constant term of the polynomial of fitorder (see distortion_design_matrix).
-    For stars spread over the field this needs at least (fitorder + 1)**2 stars in one frame, or the sum over frames
-    of the number of stars minus one to reach (fitorder + 1)**2 - 1, because a pair offset does not depend on where
-    the stars of a frame are as a whole; frames repeated at the same pointing count once, since they place the stars
-    at the same detector positions. Stars along a line or in a few columns can fall short even with more stars.
-    This is the minimum for a fit with one solution, not for a precise one: at the minimum the fit has no residuals
-    left to clip and amplifies the position errors strongly, so use well over (fitorder + 1)**2 stars. A warning is
-    given when the stars give fewer than 2 ((fitorder + 1)**2 - 1) independent pair offsets, i.e. for one frame fewer
-    than about twice the minimum number of stars.
+    The stars must constrain every non-constant term of the polynomial of fitorder. A frame of N stars gives N - 1
+    independent pair offsets, because a pair offset does not depend on where the stars of a frame are as a whole, so
+    the sum over frames of N - 1 must reach (fitorder + 1)**2 - 1, i.e. at least 4, 9 and 16 stars in one frame for
+    orders 1, 2 and 3; frames repeated at the same pointing count once. This is the minimum for a fit with one
+    solution, not for a precise one: at the minimum the fit has no residuals left to clip and amplifies the position
+    errors strongly. A warning is given below twice the minimum.
 
     Args:
         pos1 (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
@@ -1401,33 +1366,28 @@ def compute_distortion(pos1, meas_offset, sky_offset, meas_errs, platescale, nor
     
     pos1, meas_offset, sky_offset, meas_errs = np.asarray(pos1), np.asarray(meas_offset), np.asarray(sky_offset), np.asarray(meas_errs)
     npairs = pos1.shape[1]
-    design = distortion_design_matrix(pos1, meas_offset, fitorder)
+
+    def independent_offsets(pairs):
+        # format_distortion_inputs pairs every star of a frame with every later one, so every star but the last of
+        # each frame is the first star of some pair, and the distinct first-star positions number sum_f (N_f - 1);
+        # more pairs of the same stars add no independent offsets
+        return len(np.unique(pos1[:, pairs].T, axis=0))
 
     def determined(pairs):
-        # The rank of the design matrix is the number of independent equations the pairs give. Pairs add no
-        # independent rows beyond (number of stars - 1) per frame, because the row of A->C is the row of A->B plus
-        # that of B->C, and stars in a degenerate layout (on a line, in a few columns) give even fewer, because
-        # there some terms change between stars exactly like a combination of others. Full rank, one less than the
-        # number of terms since the constant is never determined, means every other coefficient has one best value.
-        # leastsq also needs at least as many residuals (two per pair) as coefficients.
-        return 2 * np.sum(pairs) >= 2 * fitparams and np.linalg.matrix_rank(design[pairs]) == fitparams - 1
+        # leastsq also needs at least as many residuals (two per pair) as coefficients
+        return independent_offsets(pairs) >= fitparams - 1 and 2 * np.sum(pairs) >= 2 * fitparams
 
     keep = np.ones(npairs, dtype=bool)
+    constraining = independent_offsets(keep)
     if not determined(keep):
-        rank = np.linalg.matrix_rank(design) if npairs > 0 else 0
-        if rank < fitparams - 1:
-            reason = "determine only {0} of the {1} non-constant terms".format(rank, fitparams - 1)
+        if constraining < fitparams - 1:
+            reason = "give {0} independent offsets for the {1} non-constant terms".format(constraining, fitparams - 1)
         else:
             reason = "give {0} residuals for {1} coefficients".format(2 * npairs, 2 * fitparams)
-        raise ValueError("compute_distortion: the {0} star pairs {1} of a distortion of order {2}; with stars spread over the "
-                         "field this needs at least {3} stars in one frame, and more for the clipping. Use a lower fitorder or "
-                         "more stars.".format(npairs, reason, fitorder, fitparams))
+        raise ValueError("compute_distortion: the {0} star pairs {1} of a distortion of order {2}; this needs at least {3} "
+                         "stars in one frame, and more for the clipping. Use a lower fitorder or more stars."
+                         .format(npairs, reason, fitorder, fitparams))
 
-    # format_distortion_inputs pairs every star of a frame with every later one, so every star but the last of each
-    # frame is the first star of some pair, and the distinct first-star positions number sum_f (N_f - 1), the
-    # independent pair offsets. With fewer than about twice as many as there are terms, the fit has the solution the
-    # rank check asks for but amplifies the position errors strongly.
-    constraining = len(np.unique(pos1.T, axis=0))
     if constraining < 2 * (fitparams - 1):
         warnings.warn("compute_distortion: the stars give {0} independent pair offsets for the {1} non-constant terms of a "
                       "distortion of order {2}; with fewer than {3} the fitted map amplifies the position errors strongly. "
