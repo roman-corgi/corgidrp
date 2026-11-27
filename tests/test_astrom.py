@@ -833,6 +833,143 @@ def test_match_sources_rejects_north_angle_contradicting_pa_aper(offset_frame):
         _match(frame, random_sources, comparison_threshold=10)
 
 
+def test_distortion_with_frames_to_combine(offset_frame):
+    """find_distortion works with frames_to_combine and recovers no distortion from undistorted mock frames."""
+    frame, _ = offset_frame
+    dataset = data.Dataset([frame.copy() for _ in range(3)])
+    astrom_cal = astrom.boresight_calibration(dataset, field_path=astrom.default_field_path, frames_to_combine=True,
+                                              find_threshold=15, find_distortion=True, fitorder=1)
+    no_distortion = [0, 0, 500, 0, 0, 500, 0, 0]  # order 1, x then y coefficients
+    np.testing.assert_allclose(astrom_cal.distortion_coeffs[:-1], no_distortion, atol=0.5)
+
+
+def test_distortion_inputs_without_usable_errors_use_uniform_weights(offset_frame, monkeypatch):
+    """If measure_offset gives no finite errors, the pairs are weighted uniformly instead of all dropping out of the fit."""
+    frame, sources = offset_frame
+    matches = _match(frame, sources[:6])
+    monkeypatch.setattr(astrom, "measure_offset", lambda *args, **kwargs: ((0., 0.), (np.inf, np.inf, np.inf)))
+    with pytest.warns(UserWarning, match="no usable errors"):
+        _, _, _, errs = astrom.format_distortion_inputs([frame], [matches])
+    assert np.all(errs == 1)
+
+
+def test_distortion_fit_rejects_wrong_matches(offset_frame):
+    """Pairs with a star matched to the wrong catalogue position are rejected, so the fit stays close to no distortion."""
+    frame, sources = offset_frame
+    matches = _match(frame, sources)
+    first, offsets, true_offsets, errs = astrom.format_distortion_inputs([frame], [matches], position_error=0.1)
+    wrong = matches.copy()
+    wrong["RA"][3] += 0.3 / 3600  # 0.3" east, about 14 pixels
+    _, _, wrong_true_offsets, _ = astrom.format_distortion_inputs([frame], [wrong], position_error=0.1)
+    kwargs = dict(platescale=21.8, northangle=20., fitorder=1)
+    clipped, _ = astrom.compute_distortion(first, offsets, wrong_true_offsets, errs, **kwargs)
+    unclipped, _ = astrom.compute_distortion(first, offsets, wrong_true_offsets, errs, clip_sigma=None, **kwargs)
+    reference, _ = astrom.compute_distortion(first, offsets, true_offsets, errs, **kwargs)
+    np.testing.assert_allclose(clipped, reference, atol=0.05)
+    assert np.max(np.abs(unclipped - reference)) > 10 * np.max(np.abs(clipped - reference))
+    no_rounds, _ = astrom.compute_distortion(first, offsets, wrong_true_offsets, errs, clip_max_iterations=0, **kwargs)
+    np.testing.assert_array_equal(no_rounds, unclipped)
+
+
+def _undistorted_pairs(stars_by_frame, platescale=21.8):
+    """All star pairs within each frame, with the sky offsets of an undistorted detector at north angle 0."""
+    first, offsets, sky = [], [], []
+    for stars in stars_by_frame:
+        for i in range(len(stars)):
+            for j in range(i + 1, len(stars)):
+                d = stars[j] - stars[i]
+                first.append(stars[i])
+                offsets.append(d)
+                sky.append([np.hypot(*d) * platescale, np.degrees(np.arctan2(-d[0], d[1]))])
+    first, offsets, sky = np.array(first).T, np.array(offsets).T, np.array(sky).T
+    return first, offsets, sky, np.ones_like(first)
+
+
+# the pairs carry no distortion, so the determined fits correctly return the initial guess
+@pytest.mark.filterwarnings("ignore:The distortion fit returned its initial guess:UserWarning")
+@pytest.mark.filterwarnings("ignore:compute_distortion. the stars give:UserWarning")
+@pytest.mark.parametrize("order, stars_per_frame, determined", [
+    (1, [3], False), (1, [4], True), (2, [8], False), (2, [9], True), (2, [5, 5], True), (3, [15], False), (3, [10, 7], True)])
+def test_distortion_needs_enough_stars_for_its_order(order, stars_per_frame, determined):
+    """The fit needs the stars to constrain every non-constant term: sum over frames of (stars - 1) >= (order + 1)**2 - 1."""
+    rng = np.random.default_rng(0)
+    pairs = _undistorted_pairs([rng.uniform(50, 970, (n, 2)) for n in stars_per_frame])
+    if determined:
+        coeffs, _ = astrom.compute_distortion(*pairs, platescale=21.8, northangle=0., fitorder=order)
+        n = (order + 1) ** 2
+        no_distortion = np.zeros(2 * n)
+        no_distortion[[order + 1, n + 1]] = 500
+        np.testing.assert_allclose(coeffs[[k for k in range(2 * n) if k not in (0, n)]],
+                                   no_distortion[[k for k in range(2 * n) if k not in (0, n)]], atol=1e-3)
+    else:
+        with pytest.raises(ValueError, match="independent offsets for the"):
+            astrom.compute_distortion(*pairs, platescale=21.8, northangle=0., fitorder=order)
+
+
+@pytest.mark.filterwarnings("ignore:The distortion fit returned its initial guess:UserWarning")
+def test_distortion_warns_when_few_stars_constrain_the_order():
+    """A fit with just enough stars for its order runs but warns; one with plenty of stars does not."""
+    rng = np.random.default_rng(3)
+    with pytest.warns(UserWarning, match="15 independent pair offsets for the 15 non-constant terms"):
+        astrom.compute_distortion(*_undistorted_pairs([rng.uniform(50, 970, (16, 2))]), platescale=21.8, northangle=0., fitorder=3)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        astrom.compute_distortion(*_undistorted_pairs([rng.uniform(50, 970, (40, 2))]), platescale=21.8, northangle=0., fitorder=2)
+    assert not any("independent pair offsets" in str(w.message) for w in caught)
+
+
+def test_distortion_names_too_few_residuals():
+    """Pairs that determine every term but give fewer residuals than coefficients are refused for that reason."""
+    rng = np.random.default_rng(1)
+    pairs = _undistorted_pairs([rng.uniform(50, 970, (2, 2)) for _ in range(3)])
+    with pytest.raises(ValueError, match="give 6 residuals for 8 coefficients"):
+        astrom.compute_distortion(*pairs, platescale=21.8, northangle=0., fitorder=1)
+
+
+def test_distortion_recovers_a_known_distortion():
+    """A distortion put into the star positions comes back out of compute_distortion and transform_coeff_to_map."""
+    order, n = 2, 9
+    true = np.zeros(2 * n)
+    true[[order + 1, n + 1]] = 500                       # identity: L_1(x) for x, L_1(y) for y
+    true[2 * (order + 1)] = 0.6                          # x term L_2(x)
+    true[n + 1 * (order + 1) + 1] = 500 - 0.8            # y term L_1(x) L_1(y) on top of a slightly smaller y scale
+    true[n + 2] = 0.4                                    # y term L_2(y)
+    scale = 500. ** (np.arange(order + 1)[:, None] + np.arange(order + 1)[None, :])
+    cx, cy = true[:n].reshape(order + 1, order + 1) / scale, true[n:].reshape(order + 1, order + 1) / scale
+
+    rng = np.random.default_rng(2)
+    stars = rng.uniform(30, 990, (40, 2))
+    corrected = np.column_stack([np.polynomial.legendre.legval2d(stars[:, 0] - 512, stars[:, 1] - 512, c) for c in (cx, cy)])
+    first, offsets, sky = [], [], []
+    for i in range(len(stars)):
+        for j in range(i + 1, len(stars)):
+            d = corrected[j] - corrected[i]
+            first.append(stars[i])
+            offsets.append(stars[j] - stars[i])
+            sky.append([np.hypot(*d) * 21.8, np.degrees(np.arctan2(-d[0], d[1]))])
+    first, offsets, sky = np.array(first).T, np.array(offsets).T, np.array(sky).T
+
+    coeffs, _ = astrom.compute_distortion(first, offsets, sky, np.ones_like(first), platescale=21.8, northangle=0., fitorder=order)
+    fitted_maps = astrom.transform_coeff_to_map(coeffs, order, (1024, 1024))
+    true_maps = astrom.transform_coeff_to_map(true, order, (1024, 1024))
+    assert np.max(np.abs(true_maps[0])) > 0.3
+    for fitted, expected in zip(fitted_maps, true_maps):
+        np.testing.assert_allclose(fitted, expected, atol=1e-3)
+
+
+def test_boresight_uses_field_matches(offset_frame, monkeypatch):
+    """Given field_matches, boresight_calibration uses them and does not search for sources itself."""
+    frame, sources = offset_frame
+    matches = _match(frame, sources)
+    automatic = astrom.boresight_calibration(data.Dataset([frame.copy()]), field_path=astrom.default_field_path,
+                                             find_threshold=25)
+    monkeypatch.setattr(astrom, "find_source_locations", lambda *args, **kwargs: pytest.fail("searched for sources"))
+    given = astrom.boresight_calibration(data.Dataset([frame.copy()]), field_path=astrom.default_field_path,
+                                         field_matches=matches)
+    assert given.platescale == pytest.approx(automatic.platescale, rel=1e-6)
+    assert given.northangle == pytest.approx(automatic.northangle, abs=1e-6)
+
+
 def test_match_sources_rejects_match_of_few_of_many_sources(offset_frame):
     """A match that explains only a few of many sources is rejected, although it has min_matches stars.
 
