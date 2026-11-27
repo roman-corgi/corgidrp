@@ -843,13 +843,61 @@ def test_distortion_with_frames_to_combine(offset_frame):
     np.testing.assert_allclose(astrom_cal.distortion_coeffs[:-1], no_distortion, atol=0.5)
 
 
+def test_measure_offset_recovers_a_known_offset():
+    """The PSF fit recovers the offset between two stars from a guess up to a pixel off, with errors that match its scatter."""
+    rng = np.random.default_rng(5)
+    y, x = np.mgrid[0:200, 0:200].astype(float)
+
+    def star(x0, y0, peak, sigma=1.4):
+        return peak * np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma ** 2))
+
+    errors, sigmas = [], []
+    for _ in range(20):
+        first = np.array([60.3, 70.6]) + rng.uniform(-0.5, 0.5, 2)
+        true = np.array([55.37, 41.82]) + rng.uniform(-1, 1, 2)
+        image = star(*first, 1000) + star(*(first + true), 600) + rng.normal(0, 3, x.shape)
+        offset, fit_errs = astrom.measure_offset(image, *first, *(true + rng.uniform(-0.8, 0.8, 2)))
+        errors.append(np.array(offset) - true)
+        sigmas.append(fit_errs[:2])
+    errors, sigmas = np.array(errors), np.array(sigmas)
+    assert np.all(np.isfinite(sigmas)) and np.all(sigmas > 0)
+    assert np.all(np.abs(errors) < 0.03)
+    # the fit errors describe the scatter of the offsets to within a factor of two
+    assert 0.5 < np.sqrt(np.mean(errors ** 2)) / np.median(sigmas) < 2
+
+
+def test_pair_offsets_come_from_matched_positions_by_default(offset_frame, monkeypatch):
+    """Without fit_pair_offsets, plate scale and distortion inputs use the matched positions and uniform weights, without a PSF fit."""
+    frame, sources = offset_frame
+    matches = _match(frame, sources[:8])
+    monkeypatch.setattr(astrom, "measure_offset", lambda *args, **kwargs: pytest.fail("fitted a pair offset"))
+    _, offsets, _, errs = astrom.format_distortion_inputs([frame], [matches])
+    pairs = [(i, j) for i in range(len(matches)) for j in range(i + 1, len(matches))]
+    matched = np.array([[matches["x"][j] - matches["x"][i], matches["y"][j] - matches["y"][i]] for i, j in pairs]).T
+    np.testing.assert_array_equal(offsets, matched)
+    assert np.all(errs == 1)
+    platescale, _ = astrom.compute_platescale_and_northangle(frame.data, matches)
+    assert platescale == pytest.approx(21.8, rel=1e-3)
+
+
+def test_distortion_inputs_measure_from_the_first_star(offset_frame):
+    """With fit_pair_offsets, the pair offsets are fitted, with finite errors, and agree with the matched positions."""
+    frame, sources = offset_frame
+    matches = _match(frame, sources[:8])
+    first, offsets, _, errs = astrom.format_distortion_inputs([frame], [matches], fit_pair_offsets=True)
+    pairs = [(i, j) for i in range(len(matches)) for j in range(i + 1, len(matches))]
+    matched = np.array([[matches["x"][j] - matches["x"][i], matches["y"][j] - matches["y"][i]] for i, j in pairs]).T
+    assert np.all(np.isfinite(errs)) and np.all(errs > 0)
+    np.testing.assert_allclose(offsets, matched, atol=0.05)
+
+
 def test_distortion_inputs_without_usable_errors_use_uniform_weights(offset_frame, monkeypatch):
     """If measure_offset gives no finite errors, the pairs are weighted uniformly instead of all dropping out of the fit."""
     frame, sources = offset_frame
     matches = _match(frame, sources[:6])
     monkeypatch.setattr(astrom, "measure_offset", lambda *args, **kwargs: ((0., 0.), (np.inf, np.inf, np.inf)))
     with pytest.warns(UserWarning, match="no usable errors"):
-        _, _, _, errs = astrom.format_distortion_inputs([frame], [matches])
+        _, _, _, errs = astrom.format_distortion_inputs([frame], [matches], fit_pair_offsets=True)
     assert np.all(errs == 1)
 
 
@@ -1128,20 +1176,20 @@ def test_platescale_pairs_reproducible(monkeypatch):
 
     monkeypatch.setattr(astrom, "measure_offset", offset_from_guess)
 
-    astrom.compute_platescale_and_northangle(image, sources, max_pairs=num_pairs)
+    astrom.compute_platescale_and_northangle(image, sources, max_pairs=num_pairs, fit_pair_offsets=True)
     assert len(set(fitted_pairs)) == len(fitted_pairs) == num_pairs
 
     fitted_pairs.clear()
     np.random.seed(0)
-    first = astrom.compute_platescale_and_northangle(image, sources, max_pairs=200)
+    first = astrom.compute_platescale_and_northangle(image, sources, max_pairs=200, fit_pair_offsets=True)
     assert len(set(fitted_pairs)) == len(fitted_pairs) == 200
     state_after_call = np.random.get_state()[1]
     np.random.seed(0)
     assert np.array_equal(state_after_call, np.random.get_state()[1])
 
     np.random.seed(5)
-    assert astrom.compute_platescale_and_northangle(image, sources, max_pairs=200) == first
-    assert astrom.compute_platescale_and_northangle(image, sources, max_pairs=200, seed=1) != first
+    assert astrom.compute_platescale_and_northangle(image, sources, max_pairs=200, fit_pair_offsets=True) == first
+    assert astrom.compute_platescale_and_northangle(image, sources, max_pairs=200, seed=1, fit_pair_offsets=True) != first
     assert first[0] == pytest.approx(21.8, abs=0.05)
 
 

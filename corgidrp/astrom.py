@@ -189,13 +189,18 @@ def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None, gaussia
 
 def shift_psf(frame, dx, dy, flux, fitsize=10, stampsize=10):
     """
-    Creates a template for matching psfs.
+    Creates a template for matching psfs: the central fitsize x fitsize pixels of a stampsize x stampsize stamp,
+    shifted by (dx, dy) and scaled by flux.
+
+    The stamp must be larger than the fitted region by more than twice the largest shift: where the shifted grid
+    leaves the stamp, map_coordinates returns zero, which makes the model jump as a function of the shift and stops
+    the fit at its starting point.
 
     Args:
-        frame (np.ndarray): 2D array 
+        frame (np.ndarray): 2D array, the psf stamp of shape (stampsize, stampsize)
         dx (float): Value to shift psf in 'x' direction
         dy (float): Value to shift psf in 'y' direction
-        flux (float): Peak flux value
+        flux (float): Flux scale of the template
         fitsize (float): (Optional) Width of square on frame to fit psf to
         stampsize (float): (Optional) Width of psf stamp to create
 
@@ -212,9 +217,15 @@ def shift_psf(frame, dx, dy, flux, fitsize=10, stampsize=10):
     
     return ndi.map_coordinates(frame * flux, [ystamp, xstamp], mode='constant', cval=0.0).ravel()
     
-def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess, guessflux=1, rad=5, stampsize=10):
+def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess, guessflux=None, rad=5, stampsize=10, max_shift=3):
     """
     Computes the relative offset between stars.
+
+    The image of the first star is the template for the second, so the result is only as good as the match between the
+    two PSFs: it degrades when the PSF changes across the field (for example with the distortion), when the template is
+    noisy, or when neighbours, background or pixel phase differ, and the returned errors, which assume the template is
+    exact, then underestimate the true offset errors. The calibration therefore uses the matched source positions by
+    default (fit_pair_offsets=False in boresight_calibration).
     
     Args:
         frame (np.ndarray): 2D array of data
@@ -222,9 +233,12 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
         ystar_guess (float): Estimate of first star 'y' coordinate
         xoffset_guess (float): Estimate of 'x' direction offset between stars
         yoffset_guess (float): Estimate of 'y' direction offset between stars
-        guessflux (float): (Optional) Peak flux of first star
+        guessflux (float): (Optional) Initial guess of the flux ratio of the second star to the first; if None, the ratio of
+            their peaks in the stamps
         rad (int): (Optional) Radius around first star to compute centroid on
-        stampsize (float): (Optional) Width of square psf stamp
+        stampsize (float): (Optional) Width of the square region fitted around the second star [pixels]
+        max_shift (float): (Optional) Largest correction to the offset guess the fit may find [pixels]; the template of the
+            first star is cut 2 * max_shift + 2 pixels wider than the fitted region, so that it covers every shift
 
     Returns:
         binary_offset (np.array): List of [x,y] offsets in respective directions
@@ -258,10 +272,11 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
     xstar += xmin
     ystar += ymin
     
-    ### Create a PSF stamp ###
-    ystamp, xstamp = np.indices([stampsize, stampsize], dtype=float)
-    xstamp -= float(stampsize//2)
-    ystamp -= float(stampsize//2)
+    ### Create a PSF stamp, wider than the fitted region so that every shift within max_shift stays inside it ###
+    templatesize = stampsize + 2 * int(np.ceil(max_shift)) + 2
+    ystamp, xstamp = np.indices([templatesize, templatesize], dtype=float)
+    xstamp -= float(templatesize//2)
+    ystamp -= float(templatesize//2)
     xstamp += xstar
     ystamp += ystar
     
@@ -286,9 +301,16 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
     stamp_clean[~np.isfinite(stamp)] = 0.0
     data_clean[~np.isfinite(data)] = 0.0
 
+    if guessflux is None:
+        guessflux = np.max(data_clean) / np.max(stamp_clean) if np.max(stamp_clean) > 0 else 1.
+
+    def model(template, dx, dy, flux):
+        return shift_psf(template, dx, dy, flux, fitsize=fitsize, stampsize=templatesize)
+
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=OptimizeWarning)
-        popt, pcov = optimize.curve_fit(shift_psf, stamp_clean, data_clean.ravel(), p0=(0,0,guessflux), maxfev=2000)
+        popt, pcov = optimize.curve_fit(model, stamp_clean, data_clean.ravel(), p0=(0, 0, guessflux), maxfev=2000,
+                                        bounds=([-max_shift, -max_shift, -np.inf], [max_shift, max_shift, np.inf]))
     tinyoffsets = popt[0:2]
     fit_errs = np.sqrt([pcov[0,0], pcov[1,1], pcov[2,2]])
 
@@ -1013,7 +1035,7 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
 
     return residuals
 
-def compute_platescale_and_northangle(image, source_info, center_radius=1, max_pairs=500, seed=0):
+def compute_platescale_and_northangle(image, source_info, center_radius=1, max_pairs=500, seed=0, fit_pair_offsets=False):
     """
     Used to find the platescale and north angle of the image. Calculates the platescale for each pair of stars in the image
     and returns the averged platescale. Calculates the north angle for pairs of stars with the center target
@@ -1028,6 +1050,12 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1, max_p
         center_radius (float): Percent of the image radius used to crop the image and compute plate scale and north angle from (default: 1 -- ie: the full image is used)
         max_pairs (int): Maximum number of star pairs to use. All pairs are used if there are no more than this, otherwise a random subset of this size, drawn without replacement (default: 500)
         seed (int): Seed for drawing the subset of pairs, so that the same input always gives the same result (default: 0)
+        fit_pair_offsets (bool): If True, refine each pair offset by fitting the PSF of the first star to the second with measure_offset. Off by
+            default, because the result depends on how well one star's image models another's: it degrades when the PSF changes
+            across the field (for example with the distortion), when the template star is noisy, or when neighbours, background
+            or pixel phase differ between the two stars, and the fit errors then underestimate the true offset errors. On real
+            calibration data the fitted offsets agreed less well with the catalogue than the matched positions. If False, the
+            offsets are the differences of the matched source positions (default: False)
 
     Returns:
         platescale (float): Platescale [mas/pixel]
@@ -1076,7 +1104,10 @@ def compute_platescale_and_northangle(image, source_info, center_radius=1, max_p
         xguess = star2['x'] - star1['x']
         yguess = star2['y'] - star1['y']
         
-        (xoff, yoff), _ = measure_offset(image, xstar_guess=star1['x'], ystar_guess=star1['y'], xoffset_guess= xguess, yoffset_guess= yguess)
+        if fit_pair_offsets:
+            (xoff, yoff), _ = measure_offset(image, xstar_guess=star1['x'], ystar_guess=star1['y'], xoffset_guess= xguess, yoffset_guess= yguess)
+        else:
+            xoff, yoff = xguess, yguess
         sep_pix = np.sqrt(np.power(xoff,2) + np.power(yoff,2))
 
         # calc the ratio of sky to pixel separation for each star pair
@@ -1199,7 +1230,7 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return ra_offset.deg, dec_offset.deg
 
-def format_distortion_inputs(input_dataset, source_matches, position_error=None):
+def format_distortion_inputs(input_dataset, source_matches, position_error=None, fit_pair_offsets=False):
     ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
     
     Args:
@@ -1207,7 +1238,13 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
         source_matches (list of astropy.table.Table() objects): List of length N for N frames in the input dataset. Tables must columns 'x','y','RA','DEC' as pixel locations and corresponding sky positons
         # ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference position to compute pairs with
         position_error (NoneType or float): If given, the uniform error [pixels] assumed for the offset between pairs of stars in both x and y;
-                        must be positive. If None, the errors of the PSF fits of measure_offset are used
+                        must be positive. If None, the errors of the PSF fits if fit_pair_offsets is True, otherwise 1 (uniform weights)
+        fit_pair_offsets (bool): If True, refine each pair offset by fitting the PSF of the first star to the second with measure_offset. Off by
+            default, because the result depends on how well one star's image models another's: it degrades when the PSF changes
+            across the field (for example with the distortion), when the template star is noisy, or when neighbours, background
+            or pixel phase differ between the two stars, and the fit errors then underestimate the true offset errors. On real
+            calibration data the fitted offsets agreed less well with the catalogue than the matched positions. If False, the
+            offsets are the differences of the matched source positions (default: False)
         
     Returns:
         first_stars (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
@@ -1243,7 +1280,11 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
             x_guess = star2['x'] - star1['x']
             y_guess = star2['y'] - star1['y']
         
-            (dx, dy), (xfit_err, yfit_err, _) = measure_offset(input_image, star2['x'], star2['y'], x_guess, y_guess, guessflux=10000)
+            if fit_pair_offsets:
+                # the fit takes the PSF of the first star as the template and fits it to the second star
+                (dx, dy), (xfit_err, yfit_err, _) = measure_offset(input_image, star1['x'], star1['y'], x_guess, y_guess)
+            else:
+                (dx, dy), (xfit_err, yfit_err) = (x_guess, y_guess), (1., 1.)
     
             # get the true sky offset [mas]
             true1 = skycoords[pair_ind[0]]  
@@ -1268,7 +1309,7 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
                 yerrs = np.append(yerrs, position_error)
    
     # measure_offset can return infinite (or zero) errors, which would remove those pairs from the fit or let them dominate it
-    if position_error is None:
+    if position_error is None and fit_pair_offsets:
         bad = ~(np.isfinite(xerrs) & np.isfinite(yerrs) & (xerrs > 0) & (yerrs > 0))
         if np.all(bad):
             warnings.warn("measure_offset gave no usable errors for any star pair, so the distortion is fitted with "
@@ -1397,7 +1438,7 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
                           frames_to_combine=False, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None, 
                           pa_tolerance=0.1, keywords_to_split_dataset_by=None, pointing_tolerance=0.5, fsm_tolerance=5.,
                           match_radius=2., max_pointing_offset=10., northangle_tol=2., min_match_fraction=0.25, match_method='auto', min_matches=4,
-                          clip_sigma=5., clip_max_iterations=10):
+                          clip_sigma=5., clip_max_iterations=10, fit_pair_offsets=False):
     """
     Perform the boresight calibration of a dataset.
     
@@ -1442,6 +1483,10 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
             residuals are rejected and the fit is repeated; None keeps all pairs (see compute_distortion) (Default: 5)
         clip_max_iterations (int, optional): Distortion fit only. Largest number of times the pairs are selected and the distortion fit
             repeated (Default: 10)
+        fit_pair_offsets (bool, optional): Plate scale and distortion. If True, refine each star pair offset with a PSF fit (measure_offset)
+            instead of taking it from the matched positions; experimental, see compute_platescale_and_northangle. It depends on how well
+            the image of one star models another (PSF changes across the field, noisy templates, neighbours) and its errors underestimate
+            the true ones (Default: False)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -1618,7 +1663,8 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
                                             min_matches=min_matches)
         hold_matches.append(matched_sources)
 
-        cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius)
+        cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_radius=center_radius,
+                                                            fit_pair_offsets=fit_pair_offsets)
         ra_off, dec_off = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
         # calculate the corrected target position based on ra, dec offsets using skycoord to account for spherical coord system
         corrected_center_coord = target_skycoord.spherical_offsets_by(ra_off * astropy.units.deg, dec_off * astropy.units.deg)
@@ -1642,7 +1688,8 @@ def boresight_calibration(input_dataset, field_path='lmc_astrometric_reference.e
     if find_distortion:
         # use the found matches for distortion
         # the matches belong to the (combined) frames in dataset
-        first_stars, offsets, true_offsets, errs = format_distortion_inputs(dataset, source_matches=hold_matches, position_error=position_error)
+        first_stars, offsets, true_offsets, errs = format_distortion_inputs(dataset, source_matches=hold_matches, position_error=position_error,
+                                                                             fit_pair_offsets=fit_pair_offsets)
         distortion_coeffs, order = compute_distortion(first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess,
                                                       clip_sigma=clip_sigma, clip_max_iterations=clip_max_iterations)
     else:

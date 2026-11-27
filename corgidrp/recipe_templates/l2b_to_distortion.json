@@ -16,6 +16,7 @@
                 "fitorder" : 3,
                 "clip_sigma" : 5.0,
                 "clip_max_iterations" : 10,
+                "fit_pair_offsets" : false,
                 "match_method" : "auto",
                 "max_pointing_offset" : 10.0,
                 "northangle_tol" : 2.0,
